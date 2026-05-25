@@ -104,7 +104,7 @@ export const conversations = pgTable(
   'conversations',
   {
     id: char('id', { length: 26 }).primaryKey(),
-    type: varchar('type', { length: 16 }).notNull(),
+    type: varchar('type', { length: 32 }).notNull(),
     name: varchar('name', { length: 255 }),
     created_by: char('created_by', { length: 26 })
       .notNull()
