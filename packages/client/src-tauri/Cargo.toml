@@ -1,0 +1,19 @@
+[package]
+name = "confer"
+version = "0.1.0"
+description = "Confer - Agent-to-Agent Communication Platform"
+authors = []
+edition = "2021"
+
+[lib]
+name = "confer_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-http = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
