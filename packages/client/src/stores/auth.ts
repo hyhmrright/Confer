@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { api, setToken } from '../lib/api.js';
+import { api, setToken, setRefreshToken } from '../lib/api.js';
 
 interface User {
   id: string;
@@ -45,6 +45,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         device_id: getDeviceId(),
       });
       setToken(data.access_token);
+      setRefreshToken(data.refresh_token);
       localStorage.setItem('confer_auth', JSON.stringify(data));
       set({
         user: data.user,
@@ -67,6 +68,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         display_name: displayName,
       });
       setToken(data.access_token);
+      setRefreshToken(data.refresh_token);
       localStorage.setItem('confer_auth', JSON.stringify(data));
       set({
         user: data.user,
@@ -82,6 +84,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   logout: () => {
     setToken(null);
+    setRefreshToken(null);
     localStorage.removeItem('confer_auth');
     set({ user: null, accessToken: null, refreshToken: null });
   },
@@ -92,6 +95,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       const data = JSON.parse(stored) as AuthResponse;
       setToken(data.access_token);
+      setRefreshToken(data.refresh_token);
       set({
         user: data.user,
         accessToken: data.access_token,

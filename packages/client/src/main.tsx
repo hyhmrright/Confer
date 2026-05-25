@@ -6,6 +6,8 @@ import LoginPage from './components/LoginPage.js';
 import ChatLayout from './components/ChatLayout.js';
 import './index.css';
 
+useAuthStore.getState().restoreSession();
+
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const token = useAuthStore((s) => s.accessToken);
   if (!token) return <Navigate to="/login" replace />;

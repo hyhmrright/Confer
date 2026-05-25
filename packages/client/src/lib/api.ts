@@ -1,13 +1,47 @@
 const BASE_URL = '/api/v1';
 
 let accessToken: string | null = null;
+let refreshToken: string | null = null;
+let refreshing: Promise<void> | null = null;
 
 export function setToken(token: string | null) {
   accessToken = token;
 }
 
+export function setRefreshToken(token: string | null) {
+  refreshToken = token;
+}
+
 export function getToken(): string | null {
   return accessToken;
+}
+
+async function tryRefresh(): Promise<boolean> {
+  if (!refreshToken) return false;
+
+  try {
+    const res = await fetch(`${BASE_URL}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+    if (!res.ok) return false;
+
+    const data = await res.json();
+    accessToken = data.access_token;
+    refreshToken = data.refresh_token;
+
+    const stored = localStorage.getItem('confer_auth');
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      parsed.access_token = data.access_token;
+      parsed.refresh_token = data.refresh_token;
+      localStorage.setItem('confer_auth', JSON.stringify(parsed));
+    }
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function request<T>(
@@ -27,6 +61,23 @@ async function request<T>(
     ...options,
     headers,
   });
+
+  if (res.status === 401 && refreshToken) {
+    if (!refreshing) {
+      refreshing = tryRefresh().then((ok) => {
+        refreshing = null;
+        if (!ok) throw new ApiError(401, 'Session expired', 'unauthorized');
+      });
+    }
+    await refreshing;
+    headers['Authorization'] = `Bearer ${accessToken}`;
+    const retry = await fetch(`${BASE_URL}${path}`, { ...options, headers });
+    if (!retry.ok) {
+      const body = await retry.json().catch(() => ({}));
+      throw new ApiError(retry.status, body?.error?.message ?? 'Request failed', body?.error?.code);
+    }
+    return retry.json();
+  }
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));

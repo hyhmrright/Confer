@@ -1,8 +1,10 @@
 import { useChatStore } from '../stores/chat.js';
+import { useContactsStore } from '../stores/contacts.js';
 
 export default function ConversationList() {
   const { conversations, activeConversationId, selectConversation, createConversation } =
     useChatStore();
+  const { openDialog } = useContactsStore();
 
   const handleNew = async () => {
     const id = await createConversation();
@@ -11,12 +13,18 @@ export default function ConversationList() {
 
   return (
     <aside className="w-72 border-r border-gray-200 bg-white flex flex-col">
-      <div className="p-3 border-b border-gray-100">
+      <div className="p-3 border-b border-gray-100 space-y-2">
         <button
           onClick={handleNew}
           className="w-full py-2 text-sm bg-primary-600 text-white rounded-md hover:bg-primary-700"
         >
           新对话
+        </button>
+        <button
+          onClick={openDialog}
+          className="w-full py-2 text-sm border border-gray-300 text-gray-600 rounded-md hover:bg-gray-50"
+        >
+          添加联系人
         </button>
       </div>
 
