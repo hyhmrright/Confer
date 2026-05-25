@@ -1,0 +1,19 @@
+{
+  "name": "@confer/agent-runtime",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "dev": "echo 'agent-runtime runs as library, no standalone dev server'",
+    "build": "bun build ./src/index.ts --outdir ./dist --target bun",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@confer/shared": "workspace:*",
+    "@confer/identity": "workspace:*",
+    "zod": "^3.24.0"
+  }
+}

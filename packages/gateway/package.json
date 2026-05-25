@@ -1,0 +1,24 @@
+{
+  "name": "@confer/gateway",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "build": "bun build ./src/index.ts --outdir ./dist --target bun",
+    "test": "bun test",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "bun run src/db/migrate.ts"
+  },
+  "dependencies": {
+    "@confer/shared": "workspace:*",
+    "hono": "^4.6.0",
+    "drizzle-orm": "^0.38.0",
+    "postgres": "^3.4.0",
+    "argon2": "^0.41.0",
+    "jose": "^6.0.0"
+  },
+  "devDependencies": {
+    "drizzle-kit": "^0.30.0",
+    "@types/bun": "latest"
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "declaration": true,
+    "sourceMap": true,
+    "noEmit": true,
+    "noUncheckedIndexedAccess": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "exactOptionalPropertyTypes": false,
+    "paths": {
+      "@confer/shared": ["./packages/shared/src/index.ts"],
+      "@confer/shared/*": ["./packages/shared/src/*"],
+      "@confer/identity": ["./packages/identity/src/index.ts"],
+      "@confer/identity/*": ["./packages/identity/src/*"],
+      "@confer/agent-runtime": ["./packages/agent-runtime/src/index.ts"],
+      "@confer/agent-runtime/*": ["./packages/agent-runtime/src/*"],
+      "@confer/conversation": ["./packages/conversation/src/index.ts"],
+      "@confer/conversation/*": ["./packages/conversation/src/*"]
+    }
+  },
+  "include": ["packages/*/src"],
+  "exclude": ["node_modules", "dist", "**/dist"]
+}

@@ -1,0 +1,28 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+
+*.log
+*.tsbuildinfo
+.DS_Store
+
+# Bun
+bun.lockb
+
+# Drizzle
+drizzle/meta/
+
+# Tauri
+packages/client/src-tauri/target/
+packages/client/src-tauri/gen/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Test
+coverage/

@@ -1,0 +1,18 @@
+{
+  "name": "@confer/conversation",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "dev": "echo 'conversation runs as library, no standalone dev server'",
+    "build": "bun build ./src/index.ts --outdir ./dist --target bun",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@confer/shared": "workspace:*",
+    "zod": "^3.24.0"
+  }
+}

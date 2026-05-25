@@ -1,0 +1,24 @@
+{
+  "name": "confer",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "bun run --filter '*' dev",
+    "build": "bun run --filter '*' build",
+    "test": "bun run --filter '*' test",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "db:generate": "bun run --filter @confer/gateway db:generate",
+    "db:migrate": "bun run --filter @confer/gateway db:migrate"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.0",
+    "@types/bun": "latest",
+    "typescript": "^5.7.0",
+    "zod": "^3.24.0"
+  }
+}
