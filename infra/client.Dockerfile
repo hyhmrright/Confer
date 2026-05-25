@@ -2,6 +2,10 @@ FROM oven/bun:1 AS build
 WORKDIR /app
 COPY package.json bun.lock tsconfig.json ./
 COPY packages/shared/package.json ./packages/shared/
+COPY packages/identity/package.json ./packages/identity/
+COPY packages/conversation/package.json ./packages/conversation/
+COPY packages/agent-runtime/package.json ./packages/agent-runtime/
+COPY packages/gateway/package.json ./packages/gateway/
 COPY packages/client/package.json ./packages/client/
 RUN bun install --frozen-lockfile
 

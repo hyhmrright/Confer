@@ -8,6 +8,7 @@ COPY packages/identity/package.json ./packages/identity/
 COPY packages/conversation/package.json ./packages/conversation/
 COPY packages/agent-runtime/package.json ./packages/agent-runtime/
 COPY packages/gateway/package.json ./packages/gateway/
+COPY packages/client/package.json ./packages/client/
 RUN bun install --frozen-lockfile
 
 FROM base AS release

@@ -55,9 +55,10 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    working_dir: /app/packages/gateway
     environment:
       DATABASE_URL: postgres://confer:${POSTGRES_PASSWORD:-confer}@postgres:5432/confer
-    command: ["bun", "run", "packages/gateway/src/db/migrate.ts"]
+    command: ["bun", "run", "src/db/migrate.ts"]
     restart: "no"
 
   gateway:
