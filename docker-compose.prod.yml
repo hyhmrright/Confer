@@ -50,7 +50,7 @@ services:
 
   migrate:
     build:
-      context: ..
+      context: .
       dockerfile: infra/gateway.Dockerfile
     depends_on:
       postgres:
@@ -63,7 +63,7 @@ services:
 
   gateway:
     build:
-      context: ..
+      context: .
       dockerfile: infra/gateway.Dockerfile
     restart: unless-stopped
     depends_on:
@@ -85,11 +85,11 @@ services:
 
   client:
     build:
-      context: ..
+      context: .
       dockerfile: infra/client.Dockerfile
     restart: unless-stopped
     ports:
-      - "${PORT:-80}:80"
+      - "${EXPOSE_PORT:-80}:80"
     depends_on:
       - gateway
 
