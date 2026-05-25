@@ -1,11 +1,12 @@
 import { create } from 'zustand';
-import { api } from '../lib/api.js';
+import { api, getToken } from '../lib/api.js';
 
 interface Citation {
   source: string;
   url?: string;
-  page?: string;
+  page?: number;
   passage?: string;
+  trust_level?: string;
 }
 
 interface Message {
@@ -18,6 +19,7 @@ interface Message {
   citations?: Citation[];
   created_at: string;
   in_reply_to?: string;
+  content_json?: unknown;
 }
 
 interface Conversation {
@@ -34,13 +36,16 @@ interface ChatState {
   messages: Message[];
   streaming: boolean;
   streamContent: string;
+  streamCitations: Citation[];
+  agentStatus: string | null;
 
   loadConversations: () => Promise<void>;
   selectConversation: (id: string) => Promise<void>;
-  createConversation: (name?: string) => Promise<string>;
+  createConversation: (peerId?: string, name?: string) => Promise<string>;
   sendMessage: (content: string) => Promise<void>;
   addMessage: (msg: Message) => void;
   setStreaming: (streaming: boolean, content?: string) => void;
+  setAgentStatus: (status: string | null) => void;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -49,6 +54,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   messages: [],
   streaming: false,
   streamContent: '',
+  streamCitations: [],
+  agentStatus: null,
 
   loadConversations: async () => {
     const data = await api.get<{ conversations: Conversation[] }>('/conversations');
@@ -56,16 +63,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   selectConversation: async (id) => {
-    set({ activeConversationId: id, messages: [], streaming: false, streamContent: '' });
+    set({
+      activeConversationId: id,
+      messages: [],
+      streaming: false,
+      streamContent: '',
+      streamCitations: [],
+      agentStatus: null,
+    });
     const data = await api.get<{ messages: Message[] }>(`/conversations/${id}/messages`);
     set({ messages: data.messages });
   },
 
-  createConversation: async (name) => {
-    const data = await api.post<{ conversation: Conversation }>('/conversations', {
-      type: 'direct_user_agent',
-      name,
-    });
+  createConversation: async (peerId, name) => {
+    const body: Record<string, unknown> = { type: 'direct_user_agent' };
+    if (name) body.name = name;
+    if (peerId) body.peer_id = peerId;
+    const data = await api.post<{ conversation: Conversation }>('/conversations', body);
     set((s) => ({ conversations: [data.conversation, ...s.conversations] }));
     return data.conversation.id;
   },
@@ -76,7 +90,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     const data = await api.post<{ id: string; stream_url: string }>(
       `/conversations/${activeConversationId}/messages`,
-      { content, content_type: 'text' },
+      { content, content_type: 'text', via: 'web' },
     );
 
     const userMsg: Message = {
@@ -90,12 +104,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
     };
     set((s) => ({ messages: [...s.messages, userMsg] }));
 
-    set({ streaming: true, streamContent: '' });
+    set({ streaming: true, streamContent: '', streamCitations: [], agentStatus: '正在思考...' });
+
     try {
-      const streamUrl = data.stream_url.replace('/api/v1/conversations/', '/stream/').replace('/messages/', '/');
-      const res = await fetch(`/api/v1${streamUrl}`);
+      const res = await fetch(data.stream_url, {
+        headers: { Authorization: `Bearer ${getToken() ?? ''}` },
+      });
       if (!res.ok || !res.body) {
-        set({ streaming: false });
+        set({ streaming: false, agentStatus: null });
         return;
       }
 
@@ -103,6 +119,28 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const decoder = new TextDecoder();
       let buffer = '';
       let fullContent = '';
+      const citations: Citation[] = [];
+
+      const finalizeAgent = (messageId?: string) => {
+        const agentMsg: Message = {
+          id: messageId ?? crypto.randomUUID(),
+          conversation_id: activeConversationId,
+          sender_type: 'own_agent',
+          sender_id: '',
+          content: fullContent,
+          content_type: 'text',
+          citations: citations.length > 0 ? citations : undefined,
+          created_at: new Date().toISOString(),
+          in_reply_to: data.id,
+        };
+        set((s) => ({
+          messages: [...s.messages, agentMsg],
+          streaming: false,
+          streamContent: '',
+          streamCitations: [],
+          agentStatus: null,
+        }));
+      };
 
       while (true) {
         const { done, value } = await reader.read();
@@ -113,48 +151,64 @@ export const useChatStore = create<ChatState>((set, get) => ({
         buffer = lines.pop() ?? '';
 
         for (const line of lines) {
-          if (line.startsWith('data:')) {
-            const jsonStr = line.slice(5).trim();
-            if (!jsonStr) continue;
-            try {
-              const event = JSON.parse(jsonStr);
-              if (event.text) {
-                fullContent += event.text;
-                set({ streamContent: fullContent });
-              }
-              if (event.message_id) {
-                const agentMsg: Message = {
-                  id: event.message_id,
-                  conversation_id: activeConversationId,
-                  sender_type: 'agent',
-                  sender_id: '',
-                  content: fullContent,
-                  content_type: 'text',
-                  created_at: new Date().toISOString(),
-                  in_reply_to: data.id,
-                };
-                set((s) => ({
-                  messages: [...s.messages, agentMsg],
-                  streaming: false,
-                  streamContent: '',
-                }));
-              }
-            } catch {
-              // skip malformed events
+          if (line.startsWith('event:')) {
+            continue;
+          }
+          if (!line.startsWith('data:')) continue;
+
+          const jsonStr = line.slice(5).trim();
+          if (!jsonStr) continue;
+
+          try {
+            const event = JSON.parse(jsonStr);
+
+            if (event.text) {
+              fullContent += event.text;
+              set({ streamContent: fullContent, agentStatus: null });
             }
+
+            if (event.source) {
+              citations.push(event);
+              set({ streamCitations: [...citations] });
+            }
+
+            if (event.tool) {
+              set({ agentStatus: `正在调用 ${event.tool}...` });
+            }
+
+            if (event.result !== undefined) {
+              set({ agentStatus: null });
+            }
+
+            if (event.finish_reason || event.message_id) {
+              finalizeAgent(event.message_id);
+            }
+          } catch {
+            // skip malformed events
           }
         }
       }
+
+      if (get().streaming) {
+        finalizeAgent();
+      }
     } catch {
-      set({ streaming: false, streamContent: '' });
+      set({ streaming: false, streamContent: '', agentStatus: null });
     }
   },
 
   addMessage: (msg) => {
-    set((s) => ({ messages: [...s.messages, msg] }));
+    set((s) => {
+      if (s.messages.some((m) => m.id === msg.id)) return s;
+      return { messages: [...s.messages, msg] };
+    });
   },
 
   setStreaming: (streaming, content) => {
     set({ streaming, streamContent: content ?? '' });
+  },
+
+  setAgentStatus: (status) => {
+    set({ agentStatus: status });
   },
 }));

@@ -7,3 +7,99 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
     sans-serif;
 }
+
+@layer components {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: theme('colors.gray.300') transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: theme('colors.gray.300');
+    border-radius: 3px;
+  }
+}
+
+.markdown-content p {
+  margin-bottom: 0.5em;
+}
+.markdown-content p:last-child {
+  margin-bottom: 0;
+}
+.markdown-content pre {
+  background: #1e293b;
+  color: #e2e8f0;
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+  overflow-x: auto;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  margin: 0.5em 0;
+}
+.markdown-content code {
+  font-family: 'SF Mono', 'Fira Code', 'Fira Mono', Menlo, monospace;
+  font-size: 0.875em;
+}
+.markdown-content :not(pre) > code {
+  background: rgba(0, 0, 0, 0.06);
+  padding: 0.15em 0.35em;
+  border-radius: 0.25rem;
+}
+.markdown-content ul,
+.markdown-content ol {
+  padding-left: 1.5em;
+  margin: 0.25em 0;
+}
+.markdown-content li {
+  margin: 0.15em 0;
+}
+.markdown-content blockquote {
+  border-left: 3px solid #cbd5e1;
+  padding-left: 0.75em;
+  margin: 0.5em 0;
+  color: #64748b;
+}
+.markdown-content a {
+  color: #2563eb;
+  text-decoration: underline;
+}
+.markdown-content table {
+  border-collapse: collapse;
+  margin: 0.5em 0;
+  font-size: 0.875em;
+}
+.markdown-content th,
+.markdown-content td {
+  border: 1px solid #e2e8f0;
+  padding: 0.35em 0.75em;
+}
+.markdown-content th {
+  background: #f8fafc;
+  font-weight: 600;
+}
+
+.agent-bubble .markdown-content :not(pre) > code {
+  background: rgba(0, 0, 0, 0.06);
+}
+.user-bubble .markdown-content :not(pre) > code {
+  background: rgba(255, 255, 255, 0.2);
+}
+.user-bubble .markdown-content a {
+  color: #bfdbfe;
+}
+.user-bubble .markdown-content blockquote {
+  border-left-color: rgba(255, 255, 255, 0.4);
+  color: rgba(255, 255, 255, 0.8);
+}
+.user-bubble .markdown-content th,
+.user-bubble .markdown-content td {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+.user-bubble .markdown-content th {
+  background: rgba(255, 255, 255, 0.1);
+}
