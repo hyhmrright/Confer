@@ -35,7 +35,7 @@ When in doubt about scope, default to **MVP scope (v0.1) in `docs/08-mvp-backlog
 - **LLM**: User-supplied API keys to Anthropic / OpenAI / DeepSeek / Qwen / Ollama
 - **Monorepo**: Bun workspaces
 
-## Repo layout (target)
+## Repo layout
 
 ```
 confer/
@@ -43,21 +43,23 @@ confer/
 ├── README.md
 ├── docs/                          # read these for design context
 ├── packages/
-│   ├── shared/                    # shared types and schemas
-│   ├── gateway/                   # Edge API gateway (Bun + Hono)
-│   ├── agent-runtime/             # per-user Agent worker
-│   ├── conversation/              # messaging service
-│   ├── identity/                  # DID, AgentFacts, A2A gateway
-│   ├── mcp-server/                # Claude Code MCP plugin
+│   ├── shared/                    # shared types and schemas (library)
+│   ├── gateway/                   # Edge API gateway (Bun + Hono) — the only runnable server
+│   ├── agent-runtime/             # per-user Agent worker (library, consumed by gateway)
+│   ├── conversation/              # messaging service (library, consumed by gateway)
+│   ├── identity/                  # DID, AgentFacts, A2A gateway (library, consumed by gateway)
 │   └── client/                    # Tauri 2.0 + React desktop/mobile app
 ├── infra/
-│   ├── docker-compose.yml         # local dev environment
-│   ├── docker-compose.prod.yml    # single-box production
-│   └── k8s/                       # cloud deployment manifests
-├── migrations/                    # SQL migrations (drizzle-kit)
-├── scripts/
-└── package.json
+│   ├── client.Dockerfile          # client container build
+│   ├── gateway.Dockerfile         # gateway container build
+│   └── nginx.conf                 # reverse proxy config
+├── .github/workflows/
+│   ├── ci.yml                     # typecheck + build on push/PR
+│   └── release.yml                # multi-platform release builds
+└── package.json                   # Bun workspaces root
 ```
+
+> `packages/mcp-server` is planned but not yet created — see `docs/06-claude-code-plugin.md` for design.
 
 ## Coding conventions
 
@@ -78,11 +80,27 @@ confer/
 - `PascalCase.tsx` for React components
 - Migration files: `NNNN_short_description.sql` (4-digit prefix)
 
+## Common commands
+
+```bash
+bun install                # install all workspace dependencies
+bun run dev                # start all services in parallel (gateway + client)
+bun run build              # build all packages
+bun run typecheck          # tsc --noEmit (backend; client excluded)
+bun run lint               # biome check .
+bun run lint:fix           # biome check --write .
+bun run test               # run tests across all packages (bun test)
+bun run db:generate        # generate drizzle migration (gateway)
+bun run db:migrate         # run migrations (gateway)
+```
+
+Package-specific: `cd packages/<name> && bun test` or `bun run --filter @confer/<name> test`.
+
 ## Testing
 
-- **Unit**: Vitest, colocated with source (`foo.ts` + `foo.test.ts`)
-- **Integration**: under `packages/{name}/integration-tests/`, use real Postgres via testcontainers
-- **E2E**: Playwright for client, custom HTTP test harness for backend
+- **Runner**: `bun test` (Bun's built-in test runner), colocated with source (`foo.ts` + `foo.test.ts`)
+- **Integration** (planned): under `packages/{name}/integration-tests/`, use real Postgres via testcontainers
+- **E2E** (planned): Playwright for client, custom HTTP test harness for backend
 - Aim for **>80% coverage on services** (gateway, identity, agent-runtime)
 
 ## Important contracts to preserve
@@ -135,18 +153,31 @@ When making changes, do **not** break these without an explicit decision:
 - Database schema: migration-numbered, never break-change in place
 - Client: separate version, gated to compatible server versions
 
+## Environment
+
+Copy `.env.example` to `.env` and fill in required values before running. See `.env.example` for the full list (database URLs, API keys, etc.).
+
+## CI
+
+GitHub Actions runs on every push/PR to `main` and `dev`:
+
+- **ci.yml**: `tsc --noEmit` (backend + client), Vite production build
+- **release.yml**: multi-platform desktop/mobile builds with Tauri (triggered on version tags)
+
 ## Getting started locally
 
 ```bash
 git clone <repo>
 cd confer
 bun install
-docker compose -f infra/docker-compose.yml up -d   # postgres, redis, nats, qdrant, minio
-bun run db:migrate
-bun run dev                                          # all services in parallel
+cp .env.example .env       # fill in required values
+bun run db:migrate          # requires a running PostgreSQL instance
+bun run dev                 # gateway + client in parallel
 ```
 
 Then open `http://localhost:1420` for the dev client.
+
+> Infrastructure containers (Postgres, Redis, NATS, Qdrant, MinIO) are not yet orchestrated via docker-compose — provision them manually or point `.env` at existing instances.
 
 ## Questions to ask the user before deviating
 
