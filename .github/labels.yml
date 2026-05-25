@@ -1,0 +1,136 @@
+# GitHub Labels — synced automatically on release
+# Run manually: gh label create --force -R owner/repo < labels.yml (use actions/labeler or gh cli loop)
+
+# ── Type ────────────────────────────────────────────────────────────────────
+- name: "bug"
+  color: "d73a4a"
+  description: "Something isn't working · 功能异常 · バグ"
+
+- name: "enhancement"
+  color: "a2eeef"
+  description: "Improvement to existing feature · 功能改进 · 機能改善"
+
+- name: "feature"
+  color: "0075ca"
+  description: "New feature request · 新功能 · 新機能"
+
+- name: "security"
+  color: "e4e669"
+  description: "Security vulnerability or hardening · 安全问题 · セキュリティ"
+
+- name: "performance"
+  color: "f9d0c4"
+  description: "Performance improvement · 性能优化 · パフォーマンス"
+
+- name: "refactor"
+  color: "cfd3d7"
+  description: "Code refactor, no behavior change · 重构 · リファクタリング"
+
+- name: "docs"
+  color: "0075ca"
+  description: "Documentation only · 文档 · ドキュメント"
+
+- name: "test"
+  color: "bfd4f2"
+  description: "Test coverage · 测试 · テスト"
+
+- name: "chore"
+  color: "ffffff"
+  description: "Build, CI, dependencies · 工程维护 · 雑務"
+
+- name: "breaking change"
+  color: "b60205"
+  description: "Breaking API or protocol change · 破坏性变更 · 破壊的変更"
+
+# ── Priority ─────────────────────────────────────────────────────────────────
+- name: "priority: critical"
+  color: "b60205"
+  description: "Must fix before next release · 必须修复 · 緊急"
+
+- name: "priority: high"
+  color: "e4e669"
+  description: "High priority · 高优先级 · 高優先度"
+
+- name: "priority: medium"
+  color: "0e8a16"
+  description: "Normal priority · 中优先级 · 中優先度"
+
+- name: "priority: low"
+  color: "cfd3d7"
+  description: "Nice to have · 低优先级 · 低優先度"
+
+# ── Status ───────────────────────────────────────────────────────────────────
+- name: "status: in-progress"
+  color: "fbca04"
+  description: "Actively being worked on · 进行中 · 作業中"
+
+- name: "status: needs-review"
+  color: "0075ca"
+  description: "Ready for review · 待审查 · レビュー待ち"
+
+- name: "status: blocked"
+  color: "d73a4a"
+  description: "Blocked by external dependency · 被阻塞 · ブロック中"
+
+- name: "status: wontfix"
+  color: "ffffff"
+  description: "Will not be fixed · 不予修复 · 対応しない"
+
+- name: "good first issue"
+  color: "7057ff"
+  description: "Good for newcomers · 适合新贡献者 · 初心者向け"
+
+- name: "help wanted"
+  color: "008672"
+  description: "Extra attention needed · 需要帮助 · 助けが必要"
+
+# ── Component ────────────────────────────────────────────────────────────────
+- name: "comp: gateway"
+  color: "1d76db"
+  description: "Backend gateway / API server"
+
+- name: "comp: client"
+  color: "1d76db"
+  description: "Tauri desktop client"
+
+- name: "comp: identity"
+  color: "1d76db"
+  description: "DID:web, HTTP signatures, keypairs"
+
+- name: "comp: a2a"
+  color: "1d76db"
+  description: "Agent-to-Agent protocol"
+
+- name: "comp: agent-runtime"
+  color: "1d76db"
+  description: "LLM loop, policy engine"
+
+- name: "comp: shared"
+  color: "1d76db"
+  description: "Shared types and utilities"
+
+# ── Platform ─────────────────────────────────────────────────────────────────
+- name: "platform: desktop"
+  color: "5319e7"
+  description: "macOS / Windows / Linux"
+
+- name: "platform: android"
+  color: "5319e7"
+  description: "Android"
+
+- name: "platform: ios"
+  color: "5319e7"
+  description: "iOS"
+
+# ── Protocol ─────────────────────────────────────────────────────────────────
+- name: "protocol: a2a"
+  color: "0e8a16"
+  description: "A2A interoperability"
+
+- name: "protocol: did-web"
+  color: "0e8a16"
+  description: "DID:web identity"
+
+- name: "protocol: mcp"
+  color: "0e8a16"
+  description: "Model Context Protocol integration"

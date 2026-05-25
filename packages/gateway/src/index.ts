@@ -9,6 +9,8 @@ import { userRoutes, agentRoutes } from './routes/users.js';
 import { wellKnownRoutes } from './routes/well-known.js';
 import { a2aRoutes } from './routes/a2a.js';
 import { streamRoutes } from './routes/stream.js';
+import { permissionRoutes } from './routes/permissions.js';
+import { agentFactsRoutes } from './routes/agent-facts.js';
 import { websocket } from './ws/handler.js';
 import { getEnv } from './env.js';
 import { bootstrap } from './bootstrap.js';
@@ -29,8 +31,10 @@ app.route('/api/v1/agents', agentRoutes);
 app.route('/api/v1/contacts', contactRoutes);
 app.route('/api/v1/conversations', conversationRoutes);
 app.route('/api/v1/stream', streamRoutes);
+app.route('/api/v1/permissions', permissionRoutes);
 
 app.route('/a2a/v1', a2aRoutes);
+app.route('/a2a/v1', agentFactsRoutes);
 
 const env = getEnv();
 
