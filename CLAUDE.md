@@ -40,6 +40,10 @@ TypeScript everywhere. Bun + Hono (server), Tauri 2.0 + React 18 + Zustand (clie
 - Adding/changing API, A2A, or MCP features → update corresponding `docs/` file
 - Outside MVP scope → check `docs/08-mvp-backlog.md`, ask before expanding
 
+## Release rules
+
+Every release (`git tag v*` → push): run `.github/scripts/gen-release-notes.sh <tag>`, review draft, **translate ZH/JA sections** before publishing. Workflow auto-updates GitHub About + labels on finalize. Never publish untranslated placeholder text.
+
 ## Pitfalls
 
 - MCP SDK tool schema validator is strict — test with real Claude Code connection

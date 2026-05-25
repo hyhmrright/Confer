@@ -4,12 +4,60 @@ on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g. v0.1.0)'
+        required: true
 
 permissions:
   contents: write
 
 jobs:
+  # ── 1. Generate trilingual release notes ──────────────────────────────────
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      body: ${{ steps.notes.outputs.body }}
+      tag: ${{ steps.tag.outputs.value }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve tag
+        id: tag
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          VALUE="${REF_NAME:-$INPUT_TAG}"
+          echo "value=$VALUE" >> "$GITHUB_OUTPUT"
+
+      - name: Find previous tag
+        id: prev
+        env:
+          CURRENT_TAG: ${{ steps.tag.outputs.value }}
+        run: |
+          PREV=$(git describe --tags --abbrev=0 "${CURRENT_TAG}^" 2>/dev/null || echo "")
+          echo "tag=$PREV" >> "$GITHUB_OUTPUT"
+
+      - name: Generate release notes
+        id: notes
+        env:
+          CURRENT_TAG: ${{ steps.tag.outputs.value }}
+          PREV_TAG: ${{ steps.prev.outputs.tag }}
+        run: |
+          chmod +x .github/scripts/gen-release-notes.sh
+          BODY=$(.github/scripts/gen-release-notes.sh "$CURRENT_TAG" "$PREV_TAG")
+          {
+            echo 'body<<RELEASE_BODY_EOF'
+            echo "$BODY"
+            echo 'RELEASE_BODY_EOF'
+          } >> "$GITHUB_OUTPUT"
+
+  # ── 2. Desktop builds (macOS / Linux / Windows) ───────────────────────────
   desktop:
+    needs: prepare
     strategy:
       fail-fast: false
       matrix:
@@ -73,14 +121,16 @@ jobs:
         with:
           projectPath: packages/client
           tauriScript: npx tauri
-          tagName: ${{ github.ref_name || 'dev-build' }}
-          releaseName: Confer ${{ github.ref_name || 'dev-build' }}
-          releaseBody: See the assets to download and install Confer.
+          tagName: ${{ needs.prepare.outputs.tag }}
+          releaseName: "Confer ${{ needs.prepare.outputs.tag }}"
+          releaseBody: ${{ needs.prepare.outputs.body }}
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
 
+  # ── 3. Android APK ────────────────────────────────────────────────────────
   android:
+    needs: prepare
     runs-on: ubuntu-latest
     name: Android
 
@@ -146,13 +196,15 @@ jobs:
           name: android-apk
           path: packages/client/src-tauri/gen/android/app/build/outputs/apk/**/*.apk
 
-      - name: Upload to release
+      - name: Attach APK to release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           draft: true
+          body: ${{ needs.prepare.outputs.body }}
           files: packages/client/src-tauri/gen/android/app/build/outputs/apk/**/*.apk
 
+  # ── 4. iOS (unsigned, artifact only) ─────────────────────────────────────
   ios:
     runs-on: macos-latest
     name: iOS
@@ -196,3 +248,70 @@ jobs:
         with:
           name: ios-build
           path: packages/client/src-tauri/gen/apple/build/**/*.app
+
+  # ── 5. Post-release: update GitHub About + sync labels ───────────────────
+  finalize:
+    needs: [desktop, android]
+    runs-on: ubuntu-latest
+    name: Finalize (About + Labels)
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update repository About
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh repo edit "$REPO" \
+            --description "A2A protocol platform — let your AI Agent speak for you · AI 代理通信平台 · AIエージェント間通信" \
+            --homepage "https://github.com/$REPO" \
+            --add-topic "a2a-protocol" \
+            --add-topic "ai-agents" \
+            --add-topic "did-web" \
+            --add-topic "tauri" \
+            --add-topic "bun" \
+            --add-topic "typescript" \
+            --add-topic "mcp" \
+            || echo "::warning::gh repo edit failed — token may need 'repo' write scope"
+
+      - name: Sync labels
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 - <<'PYEOF'
+          import subprocess, sys
+
+          try:
+              import yaml
+          except ImportError:
+              subprocess.run(["pip", "install", "-q", "pyyaml"], check=True)
+              import yaml
+
+          with open(".github/labels.yml") as f:
+              labels = yaml.safe_load(f)
+
+          failed = []
+          for label in labels:
+              name  = label["name"]
+              color = label["color"]
+              desc  = label.get("description", "")
+              r = subprocess.run(
+                  ["gh", "label", "edit", name, "--color", color, "--description", desc],
+                  capture_output=True, text=True
+              )
+              if r.returncode != 0:
+                  r2 = subprocess.run(
+                      ["gh", "label", "create", name,
+                       "--color", color, "--description", desc, "--force"],
+                      capture_output=True, text=True
+                  )
+                  if r2.returncode != 0:
+                      failed.append(f"{name}: {r2.stderr.strip()}")
+
+          if failed:
+              print("::warning::Label sync issues:\n" + "\n".join(failed), file=sys.stderr)
+          else:
+              print(f"Synced {len(labels)} labels.")
+          PYEOF
