@@ -238,7 +238,7 @@ jobs:
 
       - name: Build iOS (unsigned)
         working-directory: packages/client
-        run: bunx tauri ios build --export-method debug
+        run: bunx tauri ios build --export-method debugging
 
       - name: Upload iOS artifacts
         uses: actions/upload-artifact@v4
