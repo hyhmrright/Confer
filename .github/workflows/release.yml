@@ -1,0 +1,76 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            args: --target aarch64-apple-darwin
+            rust-targets: aarch64-apple-darwin
+          - platform: macos-latest
+            args: --target x86_64-apple-darwin
+            rust-targets: x86_64-apple-darwin
+          - platform: ubuntu-22.04
+            args: ''
+            rust-targets: ''
+          - platform: windows-latest
+            args: ''
+            rust-targets: ''
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-targets }}
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Generate placeholder icons (if missing)
+        shell: bash
+        run: |
+          ICON_DIR="packages/client/src-tauri/icons"
+          if [ ! -f "$ICON_DIR/icon.icns" ]; then
+            convert -size 1024x1024 xc:'#2563eb' \
+              -gravity center -pointsize 480 -fill white \
+              -font Helvetica-Bold -annotate 0 'C' \
+              "$ICON_DIR/icon.png"
+            cd packages/client
+            npx tauri icon src-tauri/icons/icon.png
+          fi
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: packages/client
+          tauriScript: npx tauri
+          tagName: ${{ github.ref_name || 'dev-build' }}
+          releaseName: Confer ${{ github.ref_name || 'dev-build' }}
+          releaseBody: See the assets to download and install Confer.
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}
