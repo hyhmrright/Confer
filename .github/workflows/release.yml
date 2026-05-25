@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  desktop:
     strategy:
       fail-fast: false
       matrix:
@@ -17,17 +17,22 @@ jobs:
           - platform: macos-latest
             args: --target aarch64-apple-darwin
             rust-targets: aarch64-apple-darwin
-          - platform: macos-latest
-            args: --target x86_64-apple-darwin
-            rust-targets: x86_64-apple-darwin
+            label: macOS-ARM64
           - platform: ubuntu-22.04
             args: ''
             rust-targets: ''
+            label: Linux-x64
           - platform: windows-latest
-            args: ''
-            rust-targets: ''
+            args: --target x86_64-pc-windows-msvc
+            rust-targets: x86_64-pc-windows-msvc
+            label: Windows-x64
+          - platform: windows-latest
+            args: --target aarch64-pc-windows-msvc
+            rust-targets: aarch64-pc-windows-msvc
+            label: Windows-ARM64
 
     runs-on: ${{ matrix.platform }}
+    name: Desktop (${{ matrix.label }})
 
     steps:
       - uses: actions/checkout@v4
@@ -74,3 +79,111 @@ jobs:
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
+
+  android:
+    runs-on: ubuntu-latest
+    name: Android
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android,i686-linux-android
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android NDK
+        run: sdkmanager "ndk;27.0.12077973"
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Generate placeholder icons (if missing)
+        run: |
+          ICON_DIR="packages/client/src-tauri/icons"
+          if [ ! -f "$ICON_DIR/icon.icns" ]; then
+            convert -size 1024x1024 xc:'#2563eb' \
+              -gravity center -pointsize 480 -fill white \
+              -font Helvetica-Bold -annotate 0 'C' \
+              "$ICON_DIR/icon.png"
+            cd packages/client
+            npx tauri icon src-tauri/icons/icon.png
+          fi
+
+      - name: Init Android project
+        working-directory: packages/client
+        run: npx tauri android init
+
+      - name: Build Android APK
+        working-directory: packages/client
+        env:
+          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973
+        run: npx tauri android build --apk
+
+      - name: Upload Android artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: packages/client/src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+
+      - name: Upload to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: packages/client/src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+
+  ios:
+    runs-on: macos-latest
+    name: iOS
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Generate placeholder icons (if missing)
+        run: |
+          ICON_DIR="packages/client/src-tauri/icons"
+          if [ ! -f "$ICON_DIR/icon.icns" ]; then
+            convert -size 1024x1024 xc:'#2563eb' \
+              -gravity center -pointsize 480 -fill white \
+              -font Helvetica-Bold -annotate 0 'C' \
+              "$ICON_DIR/icon.png"
+            cd packages/client
+            npx tauri icon src-tauri/icons/icon.png
+          fi
+
+      - name: Init iOS project
+        working-directory: packages/client
+        run: npx tauri ios init
+
+      - name: Build iOS (unsigned)
+        working-directory: packages/client
+        run: npx tauri ios build --export-method debug
+
+      - name: Upload iOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-build
+          path: packages/client/src-tauri/gen/apple/build/**/*.app
