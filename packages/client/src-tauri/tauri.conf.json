@@ -10,7 +10,6 @@
     "beforeBuildCommand": "bun run build"
   },
   "app": {
-    "title": "Confer",
     "windows": [
       {
         "title": "Confer",
