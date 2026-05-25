@@ -12,3 +12,15 @@ export { OpenAICompatibleProvider, createDeepSeekProvider } from './llm/openai-c
 export { registerProvider, getProvider, initProviders } from './llm/registry.js';
 export { runAgentLoop, streamAgentLoop } from './engine/agent-loop.js';
 export type { AgentContext } from './engine/agent-loop.js';
+export {
+  evaluatePolicy,
+  classifyPermissionLevel,
+  parsePolicyConfig,
+} from './policy/engine.js';
+export type {
+  PolicyConfig,
+  PolicyDecision,
+  PolicyRequest,
+  PolicyRule,
+  PermissionLevel,
+} from './policy/engine.js';

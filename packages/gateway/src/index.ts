@@ -7,6 +7,9 @@ import { conversationRoutes } from './routes/conversations.js';
 import { contactRoutes } from './routes/contacts.js';
 import { userRoutes, agentRoutes } from './routes/users.js';
 import { wellKnownRoutes } from './routes/well-known.js';
+import { a2aRoutes } from './routes/a2a.js';
+import { streamRoutes } from './routes/stream.js';
+import { websocket } from './ws/handler.js';
 import { getEnv } from './env.js';
 
 const app = new Hono();
@@ -24,10 +27,9 @@ app.route('/api/v1/users', userRoutes);
 app.route('/api/v1/agents', agentRoutes);
 app.route('/api/v1/contacts', contactRoutes);
 app.route('/api/v1/conversations', conversationRoutes);
+app.route('/api/v1/stream', streamRoutes);
 
-// TODO: A2A routes
-// TODO: WebSocket handler
-// TODO: SSE streaming handler
+app.route('/a2a/v1', a2aRoutes);
 
 const env = getEnv();
 console.log(`Confer gateway starting on ${env.HOST}:${env.PORT}`);
@@ -35,5 +37,16 @@ console.log(`Confer gateway starting on ${env.HOST}:${env.PORT}`);
 export default {
   port: env.PORT,
   hostname: env.HOST,
-  fetch: app.fetch,
+  fetch(req: Request, server: import('bun').Server<unknown>) {
+    const url = new URL(req.url);
+    if (url.pathname === '/ws' && req.headers.get('upgrade') === 'websocket') {
+      return websocket.upgrade(req, server);
+    }
+    return app.fetch(req, { ip: server.requestIP(req)?.address });
+  },
+  websocket: {
+    open: websocket.open,
+    message: websocket.message,
+    close: websocket.close,
+  },
 };
