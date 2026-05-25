@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/auth.js';
 import { Loader } from './Icons.js';
 
-export default function LoginPage() {
+export function LoginPage() {
   const [isRegister, setIsRegister] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');

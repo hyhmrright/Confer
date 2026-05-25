@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useContactsStore } from '../stores/contacts.js';
 import { X, Search, Bot, Loader } from './Icons.js';
 
-export default function AddContactDialog() {
+export function AddContactDialog() {
   const { dialogOpen, closeDialog, lookupByDomain, addContact, loading, error } =
     useContactsStore();
   const [domain, setDomain] = useState('');

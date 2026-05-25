@@ -3,7 +3,7 @@ import { useContactsStore } from '../stores/contacts.js';
 import { useChatStore } from '../stores/chat.js';
 import { Bot, Trash } from './Icons.js';
 
-export default function ContactList() {
+export function ContactList() {
   const { contacts, loadContacts, removeContact } = useContactsStore();
   const { createConversation, selectConversation } = useChatStore();
 

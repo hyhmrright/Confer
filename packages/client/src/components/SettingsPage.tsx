@@ -254,7 +254,7 @@ function KeysTab() {
   );
 }
 
-export default function SettingsPage() {
+export function SettingsPage() {
   const [tab, setTab] = useState<Tab>('profile');
   const navigate = useNavigate();
 

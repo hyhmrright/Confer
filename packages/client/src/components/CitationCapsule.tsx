@@ -15,7 +15,7 @@ const trustBadge: Record<string, { label: string; color: string }> = {
   unverified: { label: '未验证', color: 'bg-yellow-100 text-yellow-700' },
 };
 
-export default function CitationCapsule({ citations }: { citations: Citation[] }) {
+export function CitationCapsule({ citations }: { citations: Citation[] }) {
   const [expanded, setExpanded] = useState(false);
 
   if (citations.length === 0) return null;

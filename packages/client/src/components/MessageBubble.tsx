@@ -1,8 +1,18 @@
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { z } from 'zod';
 import { Bot, User } from './Icons.js';
-import CitationCapsule from './CitationCapsule.js';
-import PermissionCard from './PermissionCard.js';
+import { CitationCapsule } from './CitationCapsule.js';
+import { PermissionCard } from './PermissionCard.js';
+
+const permissionRequestSchema = z.object({
+  id: z.string(),
+  level: z.string(),
+  action: z.string(),
+  scope: z.record(z.unknown()),
+  description: z.string(),
+  requested_at: z.string(),
+});
 
 interface Citation {
   source: string;
@@ -44,19 +54,16 @@ function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
 }
 
-export default function MessageBubble({ message }: { message: Message }) {
+export function MessageBubble({ message }: { message: Message }) {
   const isUser = message.sender_type === 'user';
 
   if (message.content_type === 'permission_request') {
-    const req = message.content_json as {
-      id: string;
-      level: string;
-      action: string;
-      scope: Record<string, unknown>;
-      description: string;
-      requested_at: string;
-    };
-    if (req) {
+    const parsed = permissionRequestSchema.safeParse(message.content_json);
+    if (!parsed.success) {
+      console.warn('[MessageBubble] permission_request validation failed:', parsed.error.issues);
+    }
+    if (parsed.success) {
+      const req = parsed.data;
       return (
         <div className="flex justify-start gap-2 animate-fade-in">
           <Avatar type="system" />

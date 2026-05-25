@@ -1,4 +1,4 @@
-export default function TypingIndicator({ label }: { label?: string }) {
+export function TypingIndicator({ label }: { label?: string }) {
   return (
     <div className="flex items-center gap-2 animate-fade-in">
       <div className="flex gap-1">

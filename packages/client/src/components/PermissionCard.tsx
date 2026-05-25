@@ -23,15 +23,17 @@ const levelLabel: Record<string, string> = {
   L3: '高风险',
 };
 
-export default function PermissionCard({ request, onDecided }: {
+export function PermissionCard({ request, onDecided }: {
   request: PermissionRequest;
   onDecided?: () => void;
 }) {
   const [deciding, setDeciding] = useState(false);
   const [decided, setDecided] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const handleDecide = async (decision: string) => {
     setDeciding(true);
+    setError(null);
     try {
       await api.post(`/permissions/${request.id}/decide`, {
         decision,
@@ -41,6 +43,7 @@ export default function PermissionCard({ request, onDecided }: {
       onDecided?.();
     } catch {
       setDeciding(false);
+      setError('操作失败，请重试');
     }
   };
 
@@ -72,6 +75,7 @@ export default function PermissionCard({ request, onDecided }: {
           <p className="text-sm text-gray-700">{request.description}</p>
         </div>
       </div>
+      {error && <p className="text-xs text-red-500 ml-6 mb-1">{error}</p>}
       <div className="flex gap-2 ml-6">
         <button
           onClick={() => handleDecide('allow_once')}

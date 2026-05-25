@@ -2,11 +2,11 @@ import { useState } from 'react';
 import { useChatStore } from '../stores/chat.js';
 import { useContactsStore } from '../stores/contacts.js';
 import { MessageCircle, Users, Plus, Bot } from './Icons.js';
-import ContactList from './ContactList.js';
+import { ContactList } from './ContactList.js';
 
 type Tab = 'conversations' | 'contacts';
 
-export default function Sidebar() {
+export function Sidebar() {
   const [tab, setTab] = useState<Tab>('conversations');
   const {
     conversations,

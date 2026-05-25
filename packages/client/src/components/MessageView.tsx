@@ -3,11 +3,11 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useChatStore } from '../stores/chat.js';
 import { Send, Bot } from './Icons.js';
-import MessageBubble from './MessageBubble.js';
-import CitationCapsule from './CitationCapsule.js';
-import TypingIndicator from './TypingIndicator.js';
+import { MessageBubble } from './MessageBubble.js';
+import { CitationCapsule } from './CitationCapsule.js';
+import { TypingIndicator } from './TypingIndicator.js';
 
-export default function MessageView() {
+export function MessageView() {
   const {
     messages,
     sendMessage,
@@ -27,6 +27,7 @@ export default function MessageView() {
     scrollRaf.current = requestAnimationFrame(() => {
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
     });
+    return () => cancelAnimationFrame(scrollRaf.current);
   }, [messages, streamContent]);
 
   useEffect(() => {

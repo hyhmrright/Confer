@@ -2,9 +2,9 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './stores/auth.js';
-import LoginPage from './components/LoginPage.js';
-import ChatLayout from './components/ChatLayout.js';
-import SettingsPage from './components/SettingsPage.js';
+import { LoginPage } from './components/LoginPage.js';
+import { ChatLayout } from './components/ChatLayout.js';
+import { SettingsPage } from './components/SettingsPage.js';
 import './index.css';
 
 useAuthStore.getState().restoreSession();

@@ -38,7 +38,6 @@ interface ChatState {
   streamContent: string;
   streamCitations: Citation[];
   agentStatus: string | null;
-  typingUsers: Map<string, string>;
 
   loadConversations: () => Promise<void>;
   selectConversation: (id: string) => Promise<void>;
@@ -47,7 +46,6 @@ interface ChatState {
   addMessage: (msg: Message) => void;
   setStreaming: (streaming: boolean, content?: string) => void;
   setAgentStatus: (status: string | null) => void;
-  setTyping: (userId: string, name: string, typing: boolean) => void;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -58,7 +56,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
   streamContent: '',
   streamCitations: [],
   agentStatus: null,
-  typingUsers: new Map(),
 
   loadConversations: async () => {
     const data = await api.get<{ conversations: Conversation[] }>('/conversations');
@@ -213,17 +210,5 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   setAgentStatus: (status) => {
     set({ agentStatus: status });
-  },
-
-  setTyping: (userId, name, typing) => {
-    set((s) => {
-      const next = new Map(s.typingUsers);
-      if (typing) {
-        next.set(userId, name);
-      } else {
-        next.delete(userId);
-      }
-      return { typingUsers: next };
-    });
   },
 }));

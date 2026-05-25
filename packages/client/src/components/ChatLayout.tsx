@@ -1,15 +1,49 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { z } from 'zod';
 import { useAuthStore } from '../stores/auth.js';
 import { useChatStore } from '../stores/chat.js';
 import { usePermissionsStore } from '../stores/permissions.js';
 import { connectWs, disconnectWs, onWsMessage } from '../lib/ws.js';
 import { Settings, LogOut } from './Icons.js';
-import Sidebar from './Sidebar.js';
-import MessageView from './MessageView.js';
-import AddContactDialog from './AddContactDialog.js';
+import { Sidebar } from './Sidebar.js';
+import { MessageView } from './MessageView.js';
+import { AddContactDialog } from './AddContactDialog.js';
 
-export default function ChatLayout() {
+const wsCitationSchema = z.object({
+  source: z.string(),
+  url: z.string().optional(),
+  page: z.number().optional(),
+  passage: z.string().optional(),
+  trust_level: z.string().optional(),
+});
+
+const wsMessageSchema = z.object({
+  id: z.string(),
+  conversation_id: z.string(),
+  sender_type: z.string(),
+  sender_id: z.string(),
+  content: z.string().nullable(),
+  content_type: z.string().default('text'),
+  citations: z.array(wsCitationSchema).optional(),
+  in_reply_to: z.string().optional(),
+  content_json: z.unknown().optional(),
+});
+
+const wsPermissionSchema = z.object({
+  id: z.string(),
+  level: z.string(),
+  action: z.string(),
+  scope: z.record(z.unknown()),
+  description: z.string(),
+  requested_at: z.string(),
+});
+
+const wsAgentStatusSchema = z.object({
+  message: z.string().optional(),
+});
+
+export function ChatLayout() {
   const { user, logout } = useAuthStore();
   const { loadConversations, activeConversationId, addMessage, setAgentStatus } = useChatStore();
   const { addRequest: addPermissionRequest, loadPending } = usePermissionsStore();
@@ -22,46 +56,33 @@ export default function ChatLayout() {
 
     const unsubs = [
       onWsMessage('message.new', (data) => {
-        const msg = data as {
-          id: string;
-          conversation_id: string;
-          sender_type: string;
-          sender_id: string;
-          content: string;
-          content_type: string;
-          citations?: Array<{ source: string; url?: string; page?: number; passage?: string; trust_level?: string }>;
-          in_reply_to?: string;
-          content_json?: unknown;
-        };
+        const parsed = wsMessageSchema.safeParse(data);
+        if (!parsed.success) {
+          console.warn('[ws] message.new validation failed:', parsed.error.issues);
+          return;
+        }
         addMessage({
-          id: msg.id,
-          conversation_id: msg.conversation_id,
-          sender_type: msg.sender_type,
-          sender_id: msg.sender_id,
-          content: msg.content,
-          content_type: msg.content_type ?? 'text',
-          citations: msg.citations,
+          ...parsed.data,
           created_at: new Date().toISOString(),
-          in_reply_to: msg.in_reply_to,
-          content_json: msg.content_json,
         });
       }),
 
       onWsMessage('permission.request', (data) => {
-        const req = data as {
-          id: string;
-          level: string;
-          action: string;
-          scope: Record<string, unknown>;
-          description: string;
-          requested_at: string;
-        };
-        addPermissionRequest(req);
+        const parsed = wsPermissionSchema.safeParse(data);
+        if (!parsed.success) {
+          console.warn('[ws] permission.request validation failed:', parsed.error.issues);
+          return;
+        }
+        addPermissionRequest(parsed.data);
       }),
 
       onWsMessage('agent.status', (data) => {
-        const status = data as { message?: string };
-        setAgentStatus(status.message ?? null);
+        const parsed = wsAgentStatusSchema.safeParse(data);
+        if (!parsed.success) {
+          console.warn('[ws] agent.status validation failed:', parsed.error.issues);
+          return;
+        }
+        setAgentStatus(parsed.data.message ?? null);
       }),
     ];
 
