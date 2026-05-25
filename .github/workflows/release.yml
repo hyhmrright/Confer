@@ -125,10 +125,19 @@ jobs:
         working-directory: packages/client
         run: npx tauri android init
 
-      - name: Build Android APK
+      - name: Decode keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: echo "$KEYSTORE_BASE64" | base64 -d > /tmp/confer-release.jks
+
+      - name: Build Android APK (signed)
         working-directory: packages/client
         env:
           NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973
+          TAURI_ANDROID_KEYSTORE_PATH: /tmp/confer-release.jks
+          TAURI_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          TAURI_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          TAURI_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: npx tauri android build --apk
 
       - name: Upload Android artifacts
