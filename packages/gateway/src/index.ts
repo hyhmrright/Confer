@@ -11,6 +11,7 @@ import { a2aRoutes } from './routes/a2a.js';
 import { streamRoutes } from './routes/stream.js';
 import { websocket } from './ws/handler.js';
 import { getEnv } from './env.js';
+import { bootstrap } from './bootstrap.js';
 
 const app = new Hono();
 
@@ -32,6 +33,11 @@ app.route('/api/v1/stream', streamRoutes);
 app.route('/a2a/v1', a2aRoutes);
 
 const env = getEnv();
+
+bootstrap().catch((err) => {
+  console.error('Bootstrap failed:', err);
+});
+
 console.log(`Confer gateway starting on ${env.HOST}:${env.PORT}`);
 
 export default {

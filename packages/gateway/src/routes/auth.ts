@@ -1,8 +1,9 @@
 import { Hono } from 'hono';
 import * as jose from 'jose';
-import { registerRequestSchema, loginRequestSchema, AppError, newId } from '@confer/shared';
+import { registerRequestSchema, loginRequestSchema, AppError, newId, encrypt } from '@confer/shared';
+import { generateEd25519KeyPair, publicKeyToMultibase, exportPrivateKey } from '@confer/identity';
 import { getDb } from '../db/connection.js';
-import { users, sessions, agents } from '../db/schema.js';
+import { users, sessions, agents, keypairs } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
 import { getEnv } from '../env.js';
 import { rateLimit } from '../middleware/rate-limit.js';
@@ -74,6 +75,24 @@ authRoutes.post('/register', rateLimit(3, 3600_000), async (c) => {
     user_id: userId,
     did: `${did}:agent`,
     name: `${body.display_name ?? body.username}'s Agent`,
+  });
+
+  const keyPair = await generateEd25519KeyPair();
+  const pubMultibase = await publicKeyToMultibase(keyPair.publicKey);
+  const privJwk = await exportPrivateKey(keyPair.privateKey);
+  const env = getEnv();
+  const encryptedKey = await encrypt(JSON.stringify(privJwk), env.ENCRYPTION_KEY);
+  if (!encryptedKey.ok) {
+    throw new AppError('encryption_failed', 'Failed to encrypt keypair', 500);
+  }
+
+  await db.insert(keypairs).values({
+    id: newId(),
+    owner_type: 'user',
+    owner_id: userId,
+    key_id: `${did}#key-1`,
+    public_key_multibase: pubMultibase,
+    private_key_jwk_encrypted: encryptedKey.value,
   });
 
   const tokens = await issueTokens(userId, body.username);

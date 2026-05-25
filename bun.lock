@@ -32,6 +32,8 @@
       "name": "@confer/gateway",
       "version": "0.1.0",
       "dependencies": {
+        "@confer/agent-runtime": "workspace:*",
+        "@confer/identity": "workspace:*",
         "@confer/shared": "workspace:*",
         "argon2": "^0.41.0",
         "drizzle-orm": "^0.38.0",

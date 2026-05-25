@@ -255,6 +255,25 @@ export const threads = pgTable(
   (t) => [index('idx_threads_conversation').on(t.conversation_id)],
 );
 
+export const keypairs = pgTable(
+  'keypairs',
+  {
+    id: char('id', { length: 26 }).primaryKey(),
+    owner_type: varchar('owner_type', { length: 16 }).notNull(),
+    owner_id: char('owner_id', { length: 26 }).notNull(),
+    key_id: varchar('key_id', { length: 255 }).notNull().unique(),
+    public_key_multibase: text('public_key_multibase').notNull(),
+    private_key_jwk_encrypted: jsonb('private_key_jwk_encrypted').notNull(),
+    algorithm: varchar('algorithm', { length: 32 }).notNull().default('Ed25519'),
+    is_active: boolean('is_active').notNull().default(true),
+    created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    revoked_at: timestamp('revoked_at', { withTimezone: true }),
+  },
+  (t) => [
+    index('idx_keypairs_owner').on(t.owner_type, t.owner_id),
+  ],
+);
+
 export const projectMemory = pgTable(
   'project_memory',
   {

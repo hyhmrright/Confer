@@ -3,7 +3,7 @@ import { sendMessageRequestSchema, AppError, newId } from '@confer/shared';
 import { authMiddleware } from '../middleware/auth.js';
 import { getDb } from '../db/connection.js';
 import { conversations, conversationParticipants, messages } from '../db/schema.js';
-import { eq, desc, and, lt } from 'drizzle-orm';
+import { eq, desc, and, lt, inArray } from 'drizzle-orm';
 import type { AppEnv } from '../types.js';
 
 export const conversationRoutes = new Hono<AppEnv>();
@@ -27,9 +27,7 @@ conversationRoutes.get('/', async (c) => {
   const convs = await db
     .select()
     .from(conversations)
-    .where(
-      eq(conversations.id, convIds[0]!), // TODO: use inArray for multiple
-    )
+    .where(inArray(conversations.id, convIds))
     .orderBy(desc(conversations.updated_at))
     .limit(50);
 
