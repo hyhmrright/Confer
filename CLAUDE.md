@@ -42,7 +42,7 @@ TypeScript everywhere. Bun + Hono (server), Tauri 2.0 + React 18 + Zustand (clie
 
 ## Release rules
 
-Every release (`git tag v*` → push): run `.github/scripts/gen-release-notes.sh <tag>`, review draft, **translate ZH/JA sections** before publishing. Workflow auto-updates GitHub About + labels on finalize. Never publish untranslated placeholder text.
+Every release: merge to `main` first, then `git tag v* && git push origin v*` from main. Workflow rejects tags not reachable from `origin/main`. Run `.github/scripts/gen-release-notes.sh <tag>`, review draft, **translate ZH/JA sections** before publishing. Workflow auto-updates GitHub About + labels on finalize. Never publish untranslated placeholder text.
 
 ## Pitfalls
 
