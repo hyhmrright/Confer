@@ -1,36 +1,20 @@
-# CLAUDE.md
-
 ## Project: Confer
 
-A2A protocol platform for AI Agents to communicate on behalf of their owners. See `docs/01-product.md` for full product context.
+A2A protocol platform for AI Agents to communicate on behalf of their owners.
 
-## Docs index
+## Docs
 
-| Topic | File |
-|---|---|
-| Product vision | `docs/01-product.md` |
-| Architecture | `docs/02-architecture.md` |
-| A2A protocol | `docs/03-protocol.md` |
-| Data model | `docs/04-data-model.md` |
-| API surface | `docs/05-api.md` |
-| MCP plugin design | `docs/06-claude-code-plugin.md` |
-| Project memory format | `docs/07-project-memory.md` |
-| MVP backlog | `docs/08-mvp-backlog.md` |
-
-Default to **MVP scope (v0.1)** per `docs/08-mvp-backlog.md`.
+Design context in `docs/` — files 01 (product) through 08 (mvp-backlog). Default to **MVP scope (v0.1)** per `docs/08-mvp-backlog.md`.
 
 ## Tech stack
 
-TypeScript everywhere. Bun runtime + Hono (server), Tauri 2.0 + React 18 + Zustand (client). PostgreSQL 16, Redis, NATS, Qdrant, MinIO. Bun workspaces monorepo. Identity: DID:web + RFC 9421 HTTP signatures. MCP: `@modelcontextprotocol/sdk`.
+TypeScript everywhere. Bun + Hono (server), Tauri 2.0 + React 18 + Zustand (client). PostgreSQL 16, Redis, NATS, Qdrant, MinIO. Bun workspaces monorepo. DID:web + RFC 9421. MCP: `@modelcontextprotocol/sdk`.
 
-## Coding conventions
+## Conventions
 
-- Sentence case in headings/labels
-- 2-space indent, named exports, async/await, no `any` without comment
-- Zod schemas for all external inputs; ULID for entity IDs
-- `Result<T, E>` for expected failures; throw only for programmer errors
-- One responsibility per file
-- Files: `kebab-case.ts`, `kebab-case.test.ts`, `PascalCase.tsx`, migrations `NNNN_description.sql`
+- Sentence case headings; 2-space indent; named exports; async/await; no untyped `any`
+- Zod for external inputs; ULID for IDs; `Result<T,E>` for expected failures
+- One responsibility per file: `kebab-case.ts`, `PascalCase.tsx`, migrations `NNNN_desc.sql`
 
 ## Contracts (do not break)
 
@@ -49,21 +33,16 @@ TypeScript everywhere. Bun runtime + Hono (server), Tauri 2.0 + React 18 + Zusta
 - Auto-accepting L3 permissions
 - Logging full A2A request bodies (PII)
 
-## When generating code
+## Code generation rules
 
-- Read `docs/` for design intent before significant new logic
-- Read related existing code for patterns to follow
-- Use existing libraries for crypto/DID/HTTP signatures/MCP
-- LLM calls go through `LLMProvider` abstraction
-- Adding API endpoints → also update `docs/05-api.md`
-- Adding A2A features → also update `docs/03-protocol.md`
-- Adding MCP tools → also update `docs/06-claude-code-plugin.md`
+- Read `docs/` before significant new logic; read existing code for patterns
+- Use existing libraries for crypto/DID/HTTP signatures/MCP; LLM calls via `LLMProvider`
+- Adding/changing API, A2A, or MCP features → update corresponding `docs/` file
 - Outside MVP scope → check `docs/08-mvp-backlog.md`, ask before expanding
 
 ## Pitfalls
 
-- MCP SDK tool schema validator is strict — test with real Claude Code, not just unit tests
-- `Bun.serve` WebSocket API differs from Node `ws` — don't copy Node examples
-- HTTP signatures cover specific headers — adding headers invalidates unless in signing set
+- MCP SDK tool schema validator is strict — test with real Claude Code connection
+- `Bun.serve` WebSocket API ≠ Node `ws`
+- HTTP signatures: adding headers invalidates unless in signing set
 - DID document caching: respect TTL/ETag or auth breaks
-- Tauri 2.0 iOS: defer mobile debugging until v0.3
