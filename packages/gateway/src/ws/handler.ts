@@ -1,6 +1,9 @@
 import type { Server, ServerWebSocket } from 'bun';
 import * as jose from 'jose';
 import { wsClientMessageSchema, type WsServerMessage } from '@confer/shared';
+import { getDb } from '../db/connection.js';
+import { conversationParticipants, peerContacts, peerAgents, users } from '../db/schema.js';
+import { eq, and } from 'drizzle-orm';
 import { getEnv } from '../env.js';
 import type { AuthPayload } from '../middleware/auth.js';
 
@@ -77,6 +80,8 @@ export const websocket = {
       connectionsByUser.set(userId, set);
     }
     set.add(ws);
+
+    broadcastPresence(userId, ws.data.user.username, true).catch((e) => console.error('presence broadcast failed:', e));
   },
 
   message(ws: ServerWebSocket<WsData>, raw: string | Buffer) {
@@ -128,6 +133,7 @@ export const websocket = {
         break;
 
       case 'read.ack':
+        handleReadAck(ws.data.user.sub, msg.data.conversation_id).catch(() => {});
         break;
     }
   },
@@ -137,7 +143,45 @@ export const websocket = {
     const set = connectionsByUser.get(userId);
     if (set) {
       set.delete(ws);
-      if (set.size === 0) connectionsByUser.delete(userId);
+      if (set.size === 0) {
+        connectionsByUser.delete(userId);
+        broadcastPresence(userId, ws.data.user.username, false).catch((e) => console.error('presence broadcast failed:', e));
+      }
     }
   },
 };
+
+async function handleReadAck(userId: string, conversationId: string): Promise<void> {
+  const db = getDb();
+  await db
+    .update(conversationParticipants)
+    .set({ last_read_at: new Date() })
+    .where(
+      and(
+        eq(conversationParticipants.user_id, userId),
+        eq(conversationParticipants.conversation_id, conversationId),
+      ),
+    );
+}
+
+async function broadcastPresence(userId: string, username: string, online: boolean): Promise<void> {
+  const db = getDb();
+
+  const rows = await db
+    .select({ userId: users.id })
+    .from(peerContacts)
+    .innerJoin(peerAgents, eq(peerContacts.peer_id, peerAgents.id))
+    .innerJoin(users, eq(peerAgents.did, users.did))
+    .where(eq(peerContacts.user_id, userId));
+
+  if (rows.length === 0) return;
+
+  const message: WsServerMessage = {
+    type: 'presence.update',
+    data: { user_id: userId, username, online },
+  };
+
+  for (const row of rows) {
+    sendToUser(row.userId, message);
+  }
+}

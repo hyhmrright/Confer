@@ -1,10 +1,18 @@
 import { Hono } from 'hono';
 import { contactLookupSchema, AppError, newId } from '@confer/shared';
+import { resolveDID } from '@confer/identity';
 import { authMiddleware } from '../middleware/auth.js';
 import { getDb } from '../db/connection.js';
-import { peerContacts, peerAgents } from '../db/schema.js';
-import { eq, and } from 'drizzle-orm';
+import { peerContacts, peerAgents, agents } from '../db/schema.js';
+import { eq, and, like } from 'drizzle-orm';
 import type { AppEnv } from '../types.js';
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), ms)),
+  ]);
+}
 
 export const contactRoutes = new Hono<AppEnv>();
 
@@ -84,6 +92,48 @@ contactRoutes.delete('/:id', async (c) => {
 contactRoutes.post('/lookup', async (c) => {
   const body = contactLookupSchema.parse(await c.req.json());
 
-  // TODO: implement DID/domain resolution
+  if (body.method === 'domain') {
+    try {
+      const parsed = new URL(`https://${body.value}`);
+      const hostname = parsed.hostname;
+      if (/^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(hostname)) {
+        return c.json({ candidates: [], method: body.method, error: 'Private addresses not allowed' });
+      }
+      const res = await withTimeout(fetch(`https://${hostname}/.well-known/agents.json`), 5000);
+      const data = (await res.json()) as { agents?: unknown[] };
+      return c.json({ candidates: data.agents ?? [], method: body.method });
+    } catch (e) {
+      return c.json({ candidates: [], method: body.method, error: (e as Error).message });
+    }
+  }
+
+  if (body.method === 'did') {
+    try {
+      const result = await withTimeout(resolveDID(body.value), 5000);
+      if (!result.ok) {
+        return c.json({ candidates: [], method: body.method, error: result.error });
+      }
+      const doc = result.value;
+      return c.json({ candidates: [{ did: doc.id, service: doc.service }], method: body.method });
+    } catch (e) {
+      return c.json({ candidates: [], method: body.method, error: (e as Error).message });
+    }
+  }
+
+  if (body.method === 'username') {
+    const db = getDb();
+    const rows = await db
+      .select({
+        did: agents.did,
+        name: agents.name,
+        description: agents.description,
+        is_public: agents.is_public,
+      })
+      .from(agents)
+      .where(and(like(agents.did, `%${body.value.replace(/[%_\\]/g, (c) => `\\${c}`)}%`), eq(agents.is_public, true)))
+      .limit(20);
+    return c.json({ candidates: rows, method: body.method });
+  }
+
   return c.json({ candidates: [], method: body.method });
 });

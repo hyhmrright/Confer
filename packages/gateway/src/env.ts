@@ -8,6 +8,7 @@ const envSchema = z.object({
   JWT_ISSUER: z.string().default('confer'),
   PORT: z.coerce.number().default(3000),
   HOST: z.string().default('0.0.0.0'),
+  PUBLIC_HOST: z.string().default('localhost:3000'),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   ENCRYPTION_KEY: z.string().length(64),
 });
