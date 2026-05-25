@@ -125,7 +125,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: packages/client
-          tauriScript: npx tauri
+          tauriScript: bunx tauri
           tagName: ${{ needs.prepare.outputs.tag }}
           releaseName: "Confer ${{ needs.prepare.outputs.tag }}"
           releaseBody: ${{ needs.prepare.outputs.body }}
@@ -174,7 +174,7 @@ jobs:
 
       - name: Init Android project
         working-directory: packages/client
-        run: npx tauri android init
+        run: bunx tauri android init
 
       - name: Decode keystore
         env:
@@ -189,7 +189,7 @@ jobs:
           TAURI_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           TAURI_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           TAURI_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: npx tauri android build --apk
+        run: bunx tauri android build --apk
 
       - name: Upload Android artifacts
         uses: actions/upload-artifact@v4
@@ -234,11 +234,11 @@ jobs:
 
       - name: Init iOS project
         working-directory: packages/client
-        run: npx tauri ios init
+        run: bunx tauri ios init
 
       - name: Build iOS (unsigned)
         working-directory: packages/client
-        run: npx tauri ios build --export-method debug
+        run: bunx tauri ios build --export-method debug
 
       - name: Upload iOS artifacts
         uses: actions/upload-artifact@v4
