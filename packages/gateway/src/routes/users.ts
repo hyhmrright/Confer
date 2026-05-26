@@ -9,7 +9,7 @@ import { eq } from 'drizzle-orm';
 import { getEnv } from '../env.js';
 import type { AppEnv } from '../types.js';
 
-const PROVIDERS = ['anthropic', 'deepseek', 'openai'] as const;
+const PROVIDERS = ['anthropic', 'deepseek', 'openai', 'qwen', 'glm', 'ollama'] as const;
 type Provider = (typeof PROVIDERS)[number];
 
 type LlmKeysJson = Partial<Record<Provider, EncryptedValue>>;
