@@ -69,7 +69,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   saveLlmKey: async (provider, apiKey) => {
     set({ saving: true, error: null, success: null });
     try {
-      await api.patch('/agents/me/llm-keys', { provider, api_key: apiKey });
+      await api.put('/agents/me/llm-keys', { provider, api_key: apiKey });
       set((s) => ({
         saving: false,
         success: `${provider} 密钥已保存`,

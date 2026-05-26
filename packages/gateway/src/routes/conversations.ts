@@ -98,6 +98,33 @@ conversationRoutes.get('/:id/messages', async (c) => {
   return c.json({ messages: msgs.reverse() });
 });
 
+conversationRoutes.delete('/:id', async (c) => {
+  const user = c.get('user');
+  const db = getDb();
+  const convId = c.req.param('id');
+
+  const [participant] = await db
+    .select()
+    .from(conversationParticipants)
+    .where(
+      and(
+        eq(conversationParticipants.conversation_id, convId),
+        eq(conversationParticipants.user_id, user.sub),
+      ),
+    )
+    .limit(1);
+
+  if (!participant) {
+    throw new AppError('forbidden', 'Not a participant', 403);
+  }
+
+  await db.delete(conversationParticipants).where(eq(conversationParticipants.conversation_id, convId));
+  await db.delete(messages).where(eq(messages.conversation_id, convId));
+  await db.delete(conversations).where(eq(conversations.id, convId));
+
+  return c.json({ ok: true });
+});
+
 conversationRoutes.post('/:id/messages', async (c) => {
   const user = c.get('user');
   const db = getDb();

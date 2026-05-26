@@ -45,6 +45,7 @@ interface ChatState {
   loadConversations: () => Promise<void>;
   selectConversation: (id: string) => Promise<void>;
   createConversation: (peerId?: string, name?: string) => Promise<string>;
+  deleteConversation: (id: string) => Promise<void>;
   sendMessage: (content: string) => Promise<void>;
   addMessage: (msg: Message) => void;
   setStreaming: (streaming: boolean, content?: string) => void;
@@ -93,6 +94,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const data = await api.post<{ conversation: Conversation }>('/conversations', body);
     set((s) => ({ conversations: [data.conversation, ...s.conversations] }));
     return data.conversation.id;
+  },
+
+  deleteConversation: async (id) => {
+    await api.delete(`/conversations/${id}`);
+    set((s) => {
+      const filtered = s.conversations.filter((c) => c.id !== id);
+      const next = s.activeConversationId === id
+        ? (filtered[0]?.id ?? null)
+        : s.activeConversationId;
+      return {
+        conversations: filtered,
+        activeConversationId: next,
+        messages: s.activeConversationId === id ? [] : s.messages,
+      };
+    });
   },
 
   sendMessage: async (content) => {
