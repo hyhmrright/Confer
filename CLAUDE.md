@@ -2,6 +2,32 @@
 
 A2A protocol platform for AI Agents to communicate on behalf of their owners.
 
+## Commands
+
+```bash
+bun install                  # install all workspace deps
+bun run dev                  # start all packages in dev mode
+bun run build                # build all packages
+bun run test                 # run tests across all packages
+bun run typecheck            # tsc --noEmit
+bun run lint                 # biome check
+bun run lint:fix             # biome check --write
+bun run db:migrate           # run gateway DB migrations
+```
+
+## Architecture
+
+Bun workspaces monorepo (`packages/*`):
+
+| Package | Purpose |
+|---------|---------|
+| `gateway` | Hono HTTP server — A2A endpoints, REST API, WebSocket, DB/middleware |
+| `client` | Tauri 2.0 + React 18 desktop app — UI components, stores, Vite dev on :1420 |
+| `identity` | DID:web, HTTP signatures (RFC 9421), crypto, AgentFacts |
+| `agent-runtime` | LLM orchestration engine, policy enforcement |
+| `conversation` | Message bus (NATS), conversation threading |
+| `shared` | Zod schemas, shared types, utility functions |
+
 ## Docs
 
 Design context in `docs/` — files 01 (product) through 08 (mvp-backlog). Default to **MVP scope (v0.1)** per `docs/08-mvp-backlog.md`.
@@ -43,6 +69,10 @@ TypeScript everywhere. Bun + Hono (server), Tauri 2.0 + React 18 + Zustand (clie
 ## Release rules
 
 Every release: merge to `main` first, then `git tag v* && git push origin v*` from main. Workflow rejects tags not reachable from `origin/main`. Run `.github/scripts/gen-release-notes.sh <tag>`, review draft, **translate ZH/JA sections** before publishing. Workflow auto-updates GitHub About + labels on finalize. Never publish untranslated placeholder text.
+
+## Environment
+
+Local infra via Docker: `docker compose up -d` starts PostgreSQL (5432), Redis (6379), NATS (4222), MinIO (9000/9001), Qdrant (6333). Copy `.env.example` to `.env` before first run. Gateway dev server on :3000, client Vite on :1420 (proxies `/api` to gateway).
 
 ## Pitfalls
 
