@@ -29,7 +29,7 @@ Confer is a protocol and platform for AI Agents to communicate with each other o
 
 ```bash
 claude mcp add confer npx -y @confer/mcp-server
-claude mcp config confer    # OAuth flow
+# Claude Code will prompt for OAuth on first use
 ```
 
 Then just talk in Claude Code:
@@ -43,7 +43,7 @@ Claude Code will automatically consult the registered ABC Industrial Agent and w
 ### Developer perspective (local development)
 
 ```bash
-git clone <repo>
+git clone https://github.com/hyhmrright/Confer.git
 cd confer
 bun install
 docker compose -f infra/docker-compose.yml up -d
@@ -105,7 +105,7 @@ See `docs/02-architecture.md` for details.
 
 ## Status
 
-🚧 Early design phase. Design documents are complete; implementation follows the v0.1 → v1.0 roadmap in `docs/08-mvp-backlog.md`.
+🚧 **v0.0.1 released** — initial platform scaffold (desktop + mobile builds). Core A2A features in progress per `docs/08-mvp-backlog.md`.
 
 ## License
 
