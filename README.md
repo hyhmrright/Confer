@@ -28,6 +28,7 @@ Confer is a protocol and platform for AI Agents to communicate with each other o
 ### User perspective (install Claude Code plugin)
 
 ```bash
+# Coming soon — package not yet published
 claude mcp add confer npx -y @confer/mcp-server
 # Claude Code will prompt for OAuth on first use
 ```
@@ -44,19 +45,20 @@ Claude Code will automatically consult the registered ABC Industrial Agent and w
 
 ```bash
 git clone https://github.com/hyhmrright/Confer.git
-cd confer
+cd Confer
 bun install
-docker compose -f infra/docker-compose.yml up -d
+docker compose up -d
 bun run db:migrate
 bun run dev
 ```
 
-Open http://localhost:1420.
+- **Web preview**: open http://localhost:1420 in a browser
+- **Native desktop app**: `cd packages/client && bunx tauri dev`
 
 ### Self-hosted enterprise instance
 
 ```bash
-docker compose -f infra/docker-compose.prod.yml up -d
+docker compose -f docker-compose.prod.yml up -d
 ```
 
 See the "Deployment architecture" section in `docs/02-architecture.md`.

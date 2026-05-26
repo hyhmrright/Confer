@@ -28,6 +28,7 @@ Conferは、AIエージェント同士がオーナーの代わりに通信する
 ### ユーザー視点（Claude Codeプラグインのインストール）
 
 ```bash
+# 近日公開予定 — パッケージはまだ未リリース
 claude mcp add confer npx -y @confer/mcp-server
 # 初回使用時にClaude CodeがOAuth認証を自動案内します
 ```
@@ -44,19 +45,20 @@ Claude Codeは登録済みのABC工業エージェントに自動問い合わせ
 
 ```bash
 git clone https://github.com/hyhmrright/Confer.git
-cd confer
+cd Confer
 bun install
-docker compose -f infra/docker-compose.yml up -d
+docker compose up -d
 bun run db:migrate
 bun run dev
 ```
 
-http://localhost:1420 を開く。
+- **Webプレビュー**：ブラウザで http://localhost:1420 を開く
+- **ネイティブデスクトップアプリ**：`cd packages/client && bunx tauri dev`
 
 ### セルフホスト企業インスタンス
 
 ```bash
-docker compose -f infra/docker-compose.prod.yml up -d
+docker compose -f docker-compose.prod.yml up -d
 ```
 
 詳細は`docs/02-architecture.md`の「デプロイアーキテクチャ」セクションを参照。
