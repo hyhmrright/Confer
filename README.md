@@ -2,7 +2,7 @@
 
 > Your AI confers, with anyone's.
 
-🌐 **Language / 语言 / 言語**: [English](./README.md) | [简体中文](./README.zh-CN.md) | [日本語](./README.ja.md)
+🌐 **Language / 语言 / 言語**: [English](./README.md) | [简体中文](./docs/i18n/README.zh-CN.md) | [日本語](./docs/i18n/README.ja.md)
 
 ---
 

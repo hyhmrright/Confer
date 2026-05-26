@@ -2,7 +2,7 @@
 
 > あなたのAIが、誰とでも会議する。
 
-🌐 **Language / 语言 / 言語**: [English](./README.md) | [简体中文](./README.zh-CN.md) | [日本語](./README.ja.md)
+🌐 **Language / 语言 / 言語**: [English](../../README.md) | [简体中文](./README.zh-CN.md) | [日本語](./README.ja.md)
 
 ---
 
