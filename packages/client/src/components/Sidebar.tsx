@@ -1,18 +1,20 @@
 import { useState } from 'react';
 import { useChatStore } from '../stores/chat.js';
 import { useContactsStore } from '../stores/contacts.js';
-import { MessageCircle, Users, Plus, Bot } from './Icons.js';
+import { MessageCircle, Users, Plus, Bot, Trash } from './Icons.js';
 import { ContactList } from './ContactList.js';
 
 type Tab = 'conversations' | 'contacts';
 
 export function Sidebar() {
   const [tab, setTab] = useState<Tab>('conversations');
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
   const {
     conversations,
     activeConversationId,
     selectConversation,
     createConversation,
+    deleteConversation,
   } = useChatStore();
   const { openDialog } = useContactsStore();
 
@@ -81,30 +83,43 @@ export function Sidebar() {
             </div>
           ) : (
             conversations.map((conv) => (
-              <button
+              <div
                 key={conv.id}
-                onClick={() => selectConversation(conv.id)}
-                className={`w-full flex items-center gap-3 px-4 py-3 text-left border-b border-gray-50 hover:bg-gray-50 transition-colors ${
-                  conv.id === activeConversationId ? 'bg-primary-50 border-l-2 border-l-primary-500' : ''
-                }`}
+                className={`relative border-b border-gray-50 ${conv.id === activeConversationId ? 'bg-primary-50 border-l-2 border-l-primary-500' : 'hover:bg-gray-50'}`}
+                onMouseEnter={() => setHoveredId(conv.id)}
+                onMouseLeave={() => setHoveredId(null)}
               >
-                <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
-                  <Bot className="w-4.5 h-4.5 text-gray-500" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-gray-800 truncate">
-                    {conv.name ?? `对话 ${conv.id.slice(0, 8)}`}
+                <button
+                  onClick={() => selectConversation(conv.id)}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-left pr-10 transition-colors"
+                >
+                  <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
+                    <Bot className="w-[18px] h-[18px] text-gray-500" />
                   </div>
-                  <div className="text-xs text-gray-400 mt-0.5">
-                    {new Date(conv.updated_at).toLocaleString('zh-CN', {
-                      month: 'short',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-gray-800 truncate">
+                      {conv.name ?? `对话 ${conv.id.slice(0, 8)}`}
+                    </div>
+                    <div className="text-xs text-gray-400 mt-0.5">
+                      {new Date(conv.updated_at).toLocaleString('zh-CN', {
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </div>
                   </div>
-                </div>
-              </button>
+                </button>
+                {hoveredId === conv.id && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); deleteConversation(conv.id); }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-md text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+                    title="删除对话"
+                  >
+                    <Trash className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
             ))
           )}
         </div>

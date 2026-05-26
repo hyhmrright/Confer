@@ -149,7 +149,7 @@ export function MessageView() {
             disabled={!input.trim() || sending || streaming}
             className="p-2.5 bg-primary-600 text-white rounded-xl hover:bg-primary-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors shrink-0"
           >
-            <Send className="w-4.5 h-4.5" />
+            <Send className="w-[18px] h-[18px]" />
           </button>
         </div>
       </div>

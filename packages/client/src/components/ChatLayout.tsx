@@ -116,7 +116,7 @@ export function ChatLayout() {
             className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
             title="设置"
           >
-            <Settings className="w-4.5 h-4.5" />
+            <Settings className="w-[18px] h-[18px]" />
           </button>
 
           <div className="h-5 w-px bg-gray-200 mx-1" />
