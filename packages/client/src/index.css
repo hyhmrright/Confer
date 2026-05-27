@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -6,9 +6,9 @@
 
 body {
   margin: 0;
-  background: #100f14;
-  color: #e2dff0;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: #09090b;
+  color: #dedede;
+  font-family: 'Anthropic Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -16,7 +16,7 @@ body {
 @layer components {
   .scrollbar-thin {
     scrollbar-width: thin;
-    scrollbar-color: #2a2535 transparent;
+    scrollbar-color: #222226 transparent;
   }
   .scrollbar-thin::-webkit-scrollbar {
     width: 4px;
@@ -25,11 +25,11 @@ body {
     background: transparent;
   }
   .scrollbar-thin::-webkit-scrollbar-thumb {
-    background-color: #2a2535;
+    background-color: #222226;
     border-radius: 2px;
   }
   .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-    background-color: #3a3450;
+    background-color: #333337;
   }
 }
 
@@ -38,9 +38,9 @@ body {
 .markdown-content p:last-child { margin-bottom: 0; }
 
 .markdown-content pre {
-  background: #0d0b12;
-  color: #e2dff0;
-  border: 1px solid #2a2535;
+  background: #0b0c0e;
+  color: #dedede;
+  border: 1px solid #222226;
   border-radius: 0.5rem;
   padding: 0.75rem 1rem;
   overflow-x: auto;
@@ -56,11 +56,11 @@ body {
 }
 
 .markdown-content :not(pre) > code {
-  background: rgba(139, 92, 246, 0.1);
-  color: #c4b5fd;
+  background: rgba(212, 162, 127, 0.1);
+  color: #d4a27f;
   padding: 0.15em 0.4em;
   border-radius: 0.25rem;
-  border: 1px solid rgba(139, 92, 246, 0.18);
+  border: 1px solid rgba(212, 162, 127, 0.2);
 }
 
 .markdown-content ul,
@@ -68,15 +68,15 @@ body {
 .markdown-content li { margin: 0.15em 0; }
 
 .markdown-content blockquote {
-  border-left: 2px solid #8b5cf6;
+  border-left: 2px solid #b06844;
   padding-left: 0.75em;
   margin: 0.5em 0;
-  color: #9490a8;
+  color: #9e9e9e;
   font-style: italic;
 }
 
 .markdown-content a {
-  color: #a78bfa;
+  color: #d4a27f;
   text-decoration: underline;
   text-underline-offset: 2px;
 }
@@ -88,14 +88,14 @@ body {
   width: 100%;
 }
 .markdown-content th,
-.markdown-content td { border: 1px solid #2a2535; padding: 0.35em 0.75em; }
-.markdown-content th { background: #1e1b28; color: #e2dff0; font-weight: 600; }
-.markdown-content td { color: #9490a8; }
+.markdown-content td { border: 1px solid #222226; padding: 0.35em 0.75em; }
+.markdown-content th { background: #141417; color: #dedede; font-weight: 600; }
+.markdown-content td { color: #9e9e9e; }
 
 .markdown-content h1,
 .markdown-content h2,
 .markdown-content h3 {
-  color: #e2dff0;
+  color: #dedede;
   font-weight: 600;
   margin: 0.75em 0 0.25em;
   line-height: 1.3;
@@ -106,7 +106,7 @@ body {
 
 .markdown-content hr {
   border: none;
-  border-top: 1px solid #2a2535;
+  border-top: 1px solid #222226;
   margin: 0.75em 0;
 }
 
@@ -116,7 +116,7 @@ body {
   color: #fff;
   border-color: rgba(255, 255, 255, 0.2);
 }
-.user-bubble .markdown-content a { color: #bfdbfe; }
+.user-bubble .markdown-content a { color: #f9edd9; }
 .user-bubble .markdown-content blockquote {
   border-left-color: rgba(255, 255, 255, 0.4);
   color: rgba(255, 255, 255, 0.7);
