@@ -175,14 +175,14 @@ function ProfileTab() {
 }
 
 function AgentTab() {
-  const { agent, loading, saving, error, success, loadAgent, updateAgent, clearMessages } =
+  const { agent, loading, saving, error, success, loadAgent, updateAgent, fetchModels, clearMessages } =
     useSettingsStore();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [provider, setProvider] = useState('');
   const [model, setModel] = useState('');
   const [systemPrompt, setSystemPrompt] = useState('');
-  const [ollamaModels, setOllamaModels] = useState<{ value: string; label: string }[]>([]);
+  const [dynamicModels, setDynamicModels] = useState<{ value: string; label: string }[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
 
   useEffect(() => { loadAgent(); }, [loadAgent]);
@@ -208,22 +208,26 @@ function AgentTab() {
   const handleProviderChange = async (p: string) => {
     setProvider(p);
     setModel('');
-    if (p === 'ollama') {
-      setLoadingModels(true);
-      try {
+    setDynamicModels([]);
+    if (!p) return;
+
+    setLoadingModels(true);
+    try {
+      if (p === 'ollama') {
         const resp = await fetch('http://localhost:11434/api/tags');
         const data = await resp.json() as { models?: { name: string }[] };
-        const models = (data.models ?? []).map((m) => ({ value: m.name, label: m.name }));
-        setOllamaModels(models);
-      } catch {
-        setOllamaModels([]);
-      } finally {
-        setLoadingModels(false);
+        setDynamicModels((data.models ?? []).map((m) => ({ value: m.name, label: m.name })));
+      } else {
+        setDynamicModels(await fetchModels(p));
       }
+    } catch {
+      setDynamicModels([]);
+    } finally {
+      setLoadingModels(false);
     }
   };
 
-  const modelOptions = provider === 'ollama' ? ollamaModels : (STATIC_MODELS[provider] ?? []);
+  const modelOptions = dynamicModels.length > 0 ? dynamicModels : (STATIC_MODELS[provider] ?? []);
 
   const handleSave = () => {
     updateAgent({

@@ -39,6 +39,7 @@ interface SettingsState {
   loadLlmKeys: () => Promise<void>;
   saveLlmKey: (provider: string, apiKey: string) => Promise<void>;
   removeLlmKey: (provider: string) => Promise<void>;
+  fetchModels: (provider: string) => Promise<{ value: string; label: string }[]>;
   clearMessages: () => void;
 }
 
@@ -112,6 +113,15 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       }));
     } catch (e) {
       set({ saving: false, error: e instanceof Error ? e.message : '删除失败' });
+    }
+  },
+
+  fetchModels: async (provider) => {
+    try {
+      const data = await api.get<{ models: { id: string }[] }>(`/agents/me/llm-keys/${provider}/models`);
+      return (data.models ?? []).map((m) => ({ value: m.id, label: m.id }));
+    } catch {
+      return [];
     }
   },
 
