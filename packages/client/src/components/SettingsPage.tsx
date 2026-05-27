@@ -8,13 +8,24 @@ import { ArrowLeft, User, Bot, Key } from './Icons.js';
 type Tab = 'profile' | 'agent' | 'keys';
 
 const INPUT_CN =
-  'w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500';
+  'w-full px-3 py-2 bg-dark-input border border-dark-border rounded-lg text-sm text-ink-primary placeholder:text-ink-muted focus:outline-none focus:border-primary-600/40 transition-colors';
+
+const SELECT_CN =
+  'w-full px-3 py-2 bg-dark-input border border-dark-border rounded-lg text-sm text-ink-primary focus:outline-none focus:border-primary-600/40 transition-colors appearance-none';
 
 function StatusMsg({ error, success }: { error: string | null; success: string | null }) {
   return (
     <>
-      {error && <p className="text-sm text-red-500">{error}</p>}
-      {success && <p className="text-sm text-green-600">{success}</p>}
+      {error && (
+        <div className="px-3 py-2 bg-red-900/20 border border-red-800/40 rounded-lg">
+          <p className="text-red-400 text-xs">{error}</p>
+        </div>
+      )}
+      {success && (
+        <div className="px-3 py-2 bg-green-900/20 border border-green-800/40 rounded-lg">
+          <p className="text-green-400 text-xs">{success}</p>
+        </div>
+      )}
     </>
   );
 }
@@ -72,6 +83,10 @@ const STATIC_MODELS: Record<string, { value: string; label: string }[]> = {
   ollama: [],
 };
 
+function FieldLabel({ children }: { children: React.ReactNode }) {
+  return <label className="block text-xs font-medium text-ink-secondary mb-1.5">{children}</label>;
+}
+
 function ProfileTab() {
   const { user, refreshUser } = useAuthStore();
   const [displayName, setDisplayName] = useState('');
@@ -114,29 +129,29 @@ function ProfileTab() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">用户名</label>
+        <FieldLabel>用户名</FieldLabel>
         <input
           type="text"
           value={user?.username ?? ''}
           disabled
-          className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-500 text-sm"
+          className="w-full px-3 py-2 bg-dark-base border border-dark-border rounded-lg text-sm text-ink-muted font-mono opacity-60"
         />
-        <p className="text-xs text-gray-400 mt-1">用户名不可修改</p>
+        <p className="text-[11px] text-ink-muted mt-1">用户名不可修改</p>
       </div>
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">DID</label>
+        <FieldLabel>DID</FieldLabel>
         <input
           type="text"
           value={user?.did ?? ''}
           disabled
-          className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-500 text-sm font-mono"
+          className="w-full px-3 py-2 bg-dark-base border border-dark-border rounded-lg text-xs text-ink-muted font-mono opacity-60"
         />
-        <p className="text-xs text-gray-400 mt-1">去中心化身份标识，由系统生成，不可修改</p>
+        <p className="text-[11px] text-ink-muted mt-1">去中心化身份标识，由系统生成</p>
       </div>
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">显示名称</label>
+        <FieldLabel>显示名称</FieldLabel>
         <input
           type="text"
           value={displayName}
@@ -146,7 +161,7 @@ function ProfileTab() {
         />
       </div>
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">邮箱</label>
+        <FieldLabel>邮箱</FieldLabel>
         <input
           type="email"
           value={email}
@@ -156,7 +171,7 @@ function ProfileTab() {
         />
       </div>
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">手机号</label>
+        <FieldLabel>手机号</FieldLabel>
         <input
           type="tel"
           value={phone}
@@ -171,7 +186,7 @@ function ProfileTab() {
       <button
         onClick={handleSave}
         disabled={saving}
-        className="px-6 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-700 disabled:opacity-50 transition-colors"
+        className="px-5 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-500 disabled:opacity-40 transition-colors"
       >
         {saving ? '保存中...' : '保存'}
       </button>
@@ -247,13 +262,21 @@ function AgentTab() {
   };
 
   if (loading) {
-    return <div className="text-sm text-gray-400 py-8 text-center">加载中...</div>;
+    return (
+      <div className="flex justify-center pt-12">
+        <div className="flex gap-1.5">
+          {[0, 150, 300].map((d) => (
+            <span key={d} className="w-1.5 h-1.5 rounded-full bg-dark-border animate-bounce" style={{ animationDelay: `${d}ms` }} />
+          ))}
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Agent 名称</label>
+        <FieldLabel>Agent 名称</FieldLabel>
         <input
           type="text"
           value={name}
@@ -263,7 +286,7 @@ function AgentTab() {
         />
       </div>
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">描述</label>
+        <FieldLabel>描述</FieldLabel>
         <textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
@@ -273,11 +296,11 @@ function AgentTab() {
         />
       </div>
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">模型提供商</label>
+        <FieldLabel>模型提供商</FieldLabel>
         <select
           value={provider}
           onChange={(e) => handleProviderChange(e.target.value)}
-          className={INPUT_CN}
+          className={SELECT_CN}
         >
           <option value="">选择提供商</option>
           {LLM_PROVIDERS.map((p) => (
@@ -287,15 +310,15 @@ function AgentTab() {
       </div>
       {provider && (
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <FieldLabel>
             模型
-            {loadingModels && <span className="text-gray-400 font-normal ml-2">查询中...</span>}
-          </label>
+            {loadingModels && <span className="text-ink-muted font-normal ml-2 text-[11px]">查询中...</span>}
+          </FieldLabel>
           {modelOptions.length > 0 ? (
             <select
               value={model}
               onChange={(e) => setModel(e.target.value)}
-              className={INPUT_CN}
+              className={SELECT_CN}
             >
               <option value="">选择模型</option>
               {modelOptions.map((m) => (
@@ -314,13 +337,13 @@ function AgentTab() {
         </div>
       )}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">系统提示词</label>
+        <FieldLabel>系统提示词</FieldLabel>
         <textarea
           value={systemPrompt}
           onChange={(e) => setSystemPrompt(e.target.value)}
           placeholder="自定义 Agent 的行为和角色..."
-          rows={4}
-          className={`${INPUT_CN} resize-none font-mono`}
+          rows={5}
+          className={`${INPUT_CN} resize-none font-mono text-xs`}
         />
       </div>
 
@@ -329,7 +352,7 @@ function AgentTab() {
       <button
         onClick={handleSave}
         disabled={saving}
-        className="px-6 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-700 disabled:opacity-50 transition-colors"
+        className="px-5 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-500 disabled:opacity-40 transition-colors"
       >
         {saving ? '保存中...' : '保存'}
       </button>
@@ -366,13 +389,13 @@ function KeysTab() {
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-gray-500">
+      <p className="text-xs text-ink-muted leading-relaxed">
         配置 LLM API 密钥，密钥将被加密存储在服务端，绝不会发送到客户端。
       </p>
 
       <StatusMsg error={error} success={success} />
 
-      <div className="space-y-3">
+      <div className="space-y-2">
         {LLM_PROVIDERS.map((provider) => {
           const keyInfo = llmKeys.find((k) => k.provider === provider.id);
           const isConfigured = keyInfo?.configured ?? false;
@@ -380,23 +403,25 @@ function KeysTab() {
           const isOllama = provider.id === 'ollama';
 
           return (
-            <div key={provider.id} className="border border-gray-200 rounded-lg p-4">
+            <div key={provider.id} className="border border-dark-border rounded-xl p-3.5 bg-dark-card">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Key className="w-4 h-4 text-gray-400" />
-                  <span className="text-sm font-medium text-gray-700">{provider.name}</span>
+                <div className="flex items-center gap-2.5">
+                  <Key className="w-3.5 h-3.5 text-ink-muted" />
+                  <span className="text-sm font-medium text-ink-primary">{provider.name}</span>
                   {isConfigured && (
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">已配置</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-900/30 text-green-400 border border-green-800/30">
+                      已配置
+                    </span>
                   )}
                   {isOllama && !isConfigured && (
-                    <span className="text-xs text-gray-400">无需 API Key，填写服务地址</span>
+                    <span className="text-[11px] text-ink-muted">无需 API Key，填写服务地址</span>
                   )}
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-3">
                   {!isEditing && (
                     <button
                       onClick={() => handleEdit(provider.id)}
-                      className="text-xs text-primary-600 hover:text-primary-700"
+                      className="text-xs text-primary-400 hover:text-primary-300 transition-colors"
                     >
                       {isConfigured ? '更新' : '配置'}
                     </button>
@@ -405,7 +430,7 @@ function KeysTab() {
                     <button
                       onClick={() => removeLlmKey(provider.id)}
                       disabled={saving}
-                      className="text-xs text-red-500 hover:text-red-600"
+                      className="text-xs text-red-400 hover:text-red-300 transition-colors disabled:opacity-40"
                     >
                       移除
                     </button>
@@ -420,19 +445,19 @@ function KeysTab() {
                     value={keyValue}
                     onChange={(e) => setKeyValue(e.target.value)}
                     placeholder={isOllama ? 'http://localhost:11434' : 'sk-...'}
-                    className="flex-1 px-3 py-1.5 border border-gray-200 rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    className="flex-1 px-3 py-1.5 bg-dark-input border border-dark-border rounded-lg text-xs font-mono text-ink-primary placeholder:text-ink-muted focus:outline-none focus:border-primary-600/40 transition-colors"
                     autoFocus
                   />
                   <button
                     onClick={() => handleSave(provider.id)}
                     disabled={saving || !keyValue.trim()}
-                    className="px-3 py-1.5 bg-primary-600 text-white rounded-md text-xs hover:bg-primary-700 disabled:opacity-50"
+                    className="px-3 py-1.5 bg-primary-600 text-white rounded-lg text-xs hover:bg-primary-500 disabled:opacity-40 transition-colors"
                   >
                     保存
                   </button>
                   <button
                     onClick={() => { setEditing(null); setKeyValue(''); }}
-                    className="px-3 py-1.5 border border-gray-200 rounded-md text-xs text-gray-500 hover:bg-gray-50"
+                    className="px-3 py-1.5 border border-dark-border rounded-lg text-xs text-ink-muted hover:text-ink-secondary transition-colors"
                   >
                     取消
                   </button>
@@ -457,27 +482,27 @@ export function SettingsPage() {
   ];
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50">
-      <header className="h-14 bg-white border-b border-gray-200 flex items-center px-5 shrink-0">
+    <div className="h-screen flex flex-col bg-dark-base">
+      <header className="h-13 bg-dark-nav border-b border-dark-border flex items-center px-4 shrink-0">
         <button
           onClick={() => navigate('/')}
-          className="p-2 -ml-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+          className="p-1.5 -ml-1 text-ink-muted hover:text-ink-secondary hover:bg-dark-hover rounded-lg transition-colors"
         >
-          <ArrowLeft className="w-5 h-5" />
+          <ArrowLeft className="w-4 h-4" />
         </button>
-        <h1 className="font-semibold text-lg text-gray-800 ml-2">设置</h1>
+        <h1 className="font-semibold text-sm text-ink-primary ml-2">设置</h1>
       </header>
 
       <div className="flex-1 flex overflow-hidden">
-        <nav className="w-56 bg-white border-r border-gray-200 p-3 space-y-1 shrink-0">
+        <nav className="w-52 bg-dark-panel border-r border-dark-border p-2 space-y-0.5 shrink-0">
           {tabs.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               onClick={() => setTab(id)}
-              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-colors ${
+              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
                 tab === id
-                  ? 'bg-primary-50 text-primary-700 font-medium'
-                  : 'text-gray-600 hover:bg-gray-50'
+                  ? 'bg-primary-600/15 text-primary-400 font-medium'
+                  : 'text-ink-secondary hover:bg-dark-hover hover:text-ink-primary'
               }`}
             >
               <Icon className="w-4 h-4" />
@@ -486,9 +511,9 @@ export function SettingsPage() {
           ))}
         </nav>
 
-        <div className="flex-1 overflow-y-auto p-8">
+        <div className="flex-1 overflow-y-auto scrollbar-thin p-8 bg-dark-base">
           <div className="max-w-lg">
-            <h2 className="text-lg font-semibold text-gray-800 mb-6">
+            <h2 className="text-base font-semibold text-ink-primary mb-6">
               {tabs.find((t) => t.id === tab)?.label}
             </h2>
             {tab === 'profile' && <ProfileTab />}
