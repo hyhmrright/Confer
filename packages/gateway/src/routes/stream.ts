@@ -3,20 +3,26 @@ import { streamSSE } from 'hono/streaming';
 import { authMiddleware } from '../middleware/auth.js';
 import { getDb } from '../db/connection.js';
 import { messages, agents, conversationParticipants, users } from '../db/schema.js';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, lt, asc } from 'drizzle-orm';
 import { AppError, newId, decrypt } from '@confer/shared';
 import { createProvider } from '@confer/agent-runtime';
 import { getEnv } from '../env.js';
 import { broadcastToConversation } from '../ws/handler.js';
+import { tavilySearch, tavilyToolDefinition } from '../tools/tavily.js';
 import type { AppEnv } from '../types.js';
+import type { LLMMessage, LLMToolDefinition } from '@confer/agent-runtime';
 
 export const streamRoutes = new Hono<AppEnv>();
 
 streamRoutes.use('/*', authMiddleware);
 
+const DEFAULT_SYSTEM_PROMPT =
+  '你是一个智能助手，能够帮助用户回答问题、处理任务。你可以使用 web_search 工具搜索实时信息。回答时请用用户使用的语言。';
+
 streamRoutes.get('/:conversationId/:messageId', async (c) => {
   const user = c.get('user');
   const db = getDb();
+  const env = getEnv();
   const conversationId = c.req.param('conversationId');
   const messageId = c.req.param('messageId');
 
@@ -59,6 +65,7 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
     try {
       const modelConfig = agent.model_config_json as Record<string, unknown> | null;
       const providerName = (modelConfig?.provider as string) ?? 'anthropic';
+      const systemPrompt = (modelConfig?.system_prompt as string) ?? DEFAULT_SYSTEM_PROMPT;
 
       const [userRow] = await db
         .select({ llm_keys_json: users.llm_keys_json })
@@ -70,7 +77,7 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
       const encryptedKey = llmKeys[providerName] as import('@confer/shared').EncryptedValue | undefined;
       let apiKey = '';
       if (encryptedKey) {
-        const result = await decrypt(encryptedKey, getEnv().ENCRYPTION_KEY);
+        const result = await decrypt(encryptedKey, env.ENCRYPTION_KEY);
         if (result.ok) apiKey = result.value;
       }
 
@@ -80,23 +87,81 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
         return;
       }
 
-      const agentMessages = [
-        { role: 'user' as const, content: msg.content ?? '' },
+      // Load up to 20 messages before this one as conversation history
+      const historyRows = await db
+        .select()
+        .from(messages)
+        .where(
+          and(
+            eq(messages.conversation_id, conversationId),
+            lt(messages.id, messageId),
+          ),
+        )
+        .orderBy(asc(messages.created_at))
+        .limit(20);
+
+      const history: LLMMessage[] = historyRows.map((m) => ({
+        role: m.sender_type === 'user' ? 'user' : 'assistant',
+        content: m.content ?? '',
+      }));
+
+      const tools: LLMToolDefinition[] = env.TAVILY_API_KEY ? [tavilyToolDefinition] : [];
+      let agentMessages: LLMMessage[] = [
+        { role: 'system', content: systemPrompt },
+        ...history,
+        { role: 'user', content: msg.content ?? '' },
       ];
 
       let fullContent = '';
       const citations: unknown[] = [];
 
-      for await (const event of provider.stream(agentMessages)) {
-        switch (event.type) {
-          case 'token':
-            if (event.text) {
-              fullContent += event.text;
-              await stream.writeSSE({ event: 'token', data: JSON.stringify({ text: event.text }) });
+      // Agentic loop: up to 5 tool-call rounds
+      for (let round = 0; round < 5; round++) {
+        const pendingToolCalls: Array<{ id: string; name: string; arguments: string }> = [];
+        let turnContent = '';
+
+        for await (const event of provider.stream(agentMessages, { tools })) {
+          switch (event.type) {
+            case 'token':
+              if (event.text) {
+                turnContent += event.text;
+                fullContent += event.text;
+                await stream.writeSSE({ event: 'token', data: JSON.stringify({ text: event.text }) });
+              }
+              break;
+            case 'tool_call':
+              if (event.tool_call) pendingToolCalls.push(event.tool_call);
+              break;
+          }
+        }
+
+        if (pendingToolCalls.length === 0) break;
+
+        // Append assistant turn to history
+        agentMessages = [...agentMessages, { role: 'assistant', content: turnContent }];
+
+        for (const tc of pendingToolCalls) {
+          await stream.writeSSE({ event: 'tool', data: JSON.stringify({ tool: tc.name }) });
+
+          let result = '';
+          try {
+            if (tc.name === 'web_search') {
+              const args = JSON.parse(tc.arguments) as { query: string };
+              result = await tavilySearch(args.query, env.TAVILY_API_KEY);
+            } else {
+              result = `未知工具: ${tc.name}`;
             }
-            break;
-          case 'done':
-            break;
+          } catch (err) {
+            result = `工具调用失败: ${err instanceof Error ? err.message : String(err)}`;
+          }
+
+          await stream.writeSSE({ event: 'tool_result', data: JSON.stringify({ result: tc.name }) });
+
+          // Inject tool result as user context for next round
+          agentMessages = [
+            ...agentMessages,
+            { role: 'user', content: `[${tc.name} 搜索结果]\n${result}` },
+          ];
         }
       }
 

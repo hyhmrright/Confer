@@ -55,19 +55,28 @@ export class OpenAICompatibleProvider implements LLMProvider {
   async *stream(messages: LLMMessage[], options?: LLMChatOptions): AsyncIterable<LLMStreamEvent> {
     const model = options?.model ?? this.defaultModel;
 
+    const body: Record<string, unknown> = {
+      model,
+      messages: messages.map((m) => ({ role: m.role, content: m.content })),
+      temperature: options?.temperature,
+      max_tokens: options?.max_tokens ?? 4096,
+      stream: true,
+    };
+    if (options?.tools?.length) {
+      body.tools = options.tools.map((t) => ({
+        type: 'function',
+        function: { name: t.name, description: t.description, parameters: t.parameters },
+      }));
+      body.tool_choice = 'auto';
+    }
+
     const response = await fetch(`${this.baseUrl}${this.completionsPath}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${this.apiKey}`,
       },
-      body: JSON.stringify({
-        model,
-        messages: messages.map((m) => ({ role: m.role, content: m.content })),
-        temperature: options?.temperature,
-        max_tokens: options?.max_tokens ?? 4096,
-        stream: true,
-      }),
+      body: JSON.stringify(body),
     });
 
     if (!response.ok || !response.body) {
@@ -76,29 +85,49 @@ export class OpenAICompatibleProvider implements LLMProvider {
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
-    let buffer = '';
+    let buf = '';
+    const pendingCalls = new Map<number, { id: string; name: string; arguments: string }>();
 
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
 
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() ?? '';
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop() ?? '';
 
       for (const line of lines) {
         if (!line.startsWith('data: ')) continue;
-        const content = line.slice(6).trim();
-        if (content === '[DONE]') {
+        const chunk = line.slice(6).trim();
+        if (chunk === '[DONE]') {
+          for (const [, tc] of pendingCalls) {
+            yield { type: 'tool_call', tool_call: { id: tc.id, name: tc.name, arguments: tc.arguments } };
+          }
           yield { type: 'done' };
           return;
         }
 
-        const data = JSON.parse(content) as Record<string, unknown>;
+        const data = JSON.parse(chunk) as Record<string, unknown>;
         const choices = data.choices as Array<Record<string, unknown>>;
-        const delta = choices[0]?.delta as Record<string, string> | undefined;
+        const delta = choices[0]?.delta as Record<string, unknown> | undefined;
+
         if (delta?.content) {
-          yield { type: 'token', text: delta.content };
+          yield { type: 'token', text: delta.content as string };
+        }
+
+        const toolCalls = delta?.tool_calls as Array<Record<string, unknown>> | undefined;
+        if (toolCalls) {
+          for (const tc of toolCalls) {
+            const idx = (tc.index as number) ?? 0;
+            if (!pendingCalls.has(idx)) {
+              pendingCalls.set(idx, { id: '', name: '', arguments: '' });
+            }
+            const entry = pendingCalls.get(idx)!;
+            if (tc.id) entry.id = tc.id as string;
+            const fn = tc.function as Record<string, string> | undefined;
+            if (fn?.name) entry.name = fn.name;
+            if (fn?.arguments) entry.arguments += fn.arguments;
+          }
         }
       }
     }

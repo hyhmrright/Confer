@@ -297,3 +297,20 @@ export const projectMemory = pgTable(
     index('idx_project_memory_user_project').on(t.user_id, t.project_id),
   ],
 );
+
+export const agentMemories = pgTable(
+  'agent_memories',
+  {
+    id: char('id', { length: 26 }).primaryKey(),
+    user_id: char('user_id', { length: 26 })
+      .notNull()
+      .references(() => users.id),
+    title: varchar('title', { length: 255 }).notNull(),
+    content: text('content').notNull(),
+    tags: text('tags').array().default([]),
+    pinned: boolean('pinned').notNull().default(false),
+    created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('idx_agent_memories_user').on(t.user_id)],
+);

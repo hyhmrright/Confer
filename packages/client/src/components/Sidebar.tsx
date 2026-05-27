@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useChatStore } from '../stores/chat.js';
 import { useContactsStore } from '../stores/contacts.js';
-import { MessageCircle, Users, Plus, Bot, Trash } from './Icons.js';
+import { MessageCircle, Users, Plus, Bot, Trash, BookOpen } from './Icons.js';
 import { ContactList } from './ContactList.js';
+import { MemoryPage } from './MemoryPage.js';
 
-type Tab = 'conversations' | 'contacts';
+type Tab = 'conversations' | 'contacts' | 'memory';
 
 export function Sidebar() {
   const [tab, setTab] = useState<Tab>('conversations');
@@ -49,31 +50,46 @@ export function Sidebar() {
           <Users className="w-4 h-4" />
           联系人
         </button>
+        <button
+          onClick={() => setTab('memory')}
+          className={`flex-1 flex items-center justify-center gap-1.5 py-3 text-sm font-medium transition-colors ${
+            tab === 'memory'
+              ? 'text-primary-600 border-b-2 border-primary-600'
+              : 'text-gray-400 hover:text-gray-600'
+          }`}
+        >
+          <BookOpen className="w-4 h-4" />
+          记忆
+        </button>
       </div>
 
-      {/* Action bar */}
-      <div className="p-3 border-b border-gray-100">
-        {tab === 'conversations' ? (
-          <button
-            onClick={handleNewConversation}
-            className="w-full flex items-center justify-center gap-1.5 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            新对话
-          </button>
-        ) : (
-          <button
-            onClick={openDialog}
-            className="w-full flex items-center justify-center gap-1.5 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            添加联系人
-          </button>
-        )}
-      </div>
+      {/* Action bar — only for conversations and contacts */}
+      {tab !== 'memory' && (
+        <div className="p-3 border-b border-gray-100">
+          {tab === 'conversations' ? (
+            <button
+              onClick={handleNewConversation}
+              className="w-full flex items-center justify-center gap-1.5 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              新对话
+            </button>
+          ) : (
+            <button
+              onClick={openDialog}
+              className="w-full flex items-center justify-center gap-1.5 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              添加联系人
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Content */}
-      {tab === 'conversations' ? (
+      {tab === 'memory' ? (
+        <MemoryPage />
+      ) : tab === 'conversations' ? (
         <div className="flex-1 overflow-y-auto scrollbar-thin">
           {conversations.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-gray-400 p-6">

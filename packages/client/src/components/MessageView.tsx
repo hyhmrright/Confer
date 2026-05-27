@@ -2,10 +2,21 @@ import { useRef, useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useChatStore } from '../stores/chat.js';
-import { Send, Bot } from './Icons.js';
+import { Send, Bot, Paperclip, X } from './Icons.js';
 import { MessageBubble } from './MessageBubble.js';
 import { CitationCapsule } from './CitationCapsule.js';
 import { TypingIndicator } from './TypingIndicator.js';
+
+const MAX_FILE_CHARS = 40_000;
+
+function readFileAsText(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsText(file, 'utf-8');
+  });
+}
 
 export function MessageView() {
   const {
@@ -19,8 +30,10 @@ export function MessageView() {
   } = useChatStore();
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
+  const [attachedFile, setAttachedFile] = useState<{ name: string; content: string } | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRaf = useRef(0);
 
   useEffect(() => {
@@ -37,15 +50,36 @@ export function MessageView() {
     }
   }, [streaming]);
 
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    try {
+      let content = await readFileAsText(file);
+      if (content.length > MAX_FILE_CHARS) {
+        content = content.slice(0, MAX_FILE_CHARS) + '\n\n[内容已截断]';
+      }
+      setAttachedFile({ name: file.name, content });
+    } catch {
+      alert('无法读取该文件，请选择文本文件。');
+    }
+  };
+
   const handleSend = async () => {
     const text = input.trim();
-    if (!text || sending) return;
+    if (!text && !attachedFile || sending) return;
+
+    let fullText = text;
+    if (attachedFile) {
+      fullText = `${text ? text + '\n\n' : ''}[文件: ${attachedFile.name}]\n\`\`\`\n${attachedFile.content}\n\`\`\``;
+    }
 
     setInput('');
+    setAttachedFile(null);
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
     setSending(true);
     try {
-      await sendMessage(text);
+      await sendMessage(fullText);
     } finally {
       setSending(false);
     }
@@ -57,6 +91,8 @@ export function MessageView() {
       handleSend();
     }
   };
+
+  const canSend = (input.trim().length > 0 || attachedFile !== null) && !sending && !streaming;
 
   const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInput(e.target.value);
@@ -133,7 +169,33 @@ export function MessageView() {
 
       {/* Input */}
       <div className="p-3 border-t border-gray-200 bg-white">
+        {/* Attached file preview */}
+        {attachedFile && (
+          <div className="mb-2 flex items-center gap-2 px-3 py-1.5 bg-primary-50 border border-primary-200 rounded-lg text-sm text-primary-700">
+            <Paperclip className="w-3.5 h-3.5 shrink-0" />
+            <span className="flex-1 truncate">{attachedFile.name}</span>
+            <button onClick={() => setAttachedFile(null)} className="shrink-0 hover:text-red-500 transition-colors">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
         <div className="flex items-end gap-2">
+          {/* Hidden file input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".txt,.md,.csv,.json,.yaml,.yml,.toml,.xml,.html,.css,.js,.ts,.py,.go,.rs,.java,.c,.cpp,.sh"
+            className="hidden"
+            onChange={handleFileChange}
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={sending || streaming}
+            className="p-2.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-xl disabled:opacity-30 transition-colors shrink-0"
+            title="上传文件"
+          >
+            <Paperclip className="w-[18px] h-[18px]" />
+          </button>
           <textarea
             ref={textareaRef}
             value={input}
@@ -146,7 +208,7 @@ export function MessageView() {
           />
           <button
             onClick={handleSend}
-            disabled={!input.trim() || sending || streaming}
+            disabled={!canSend}
             className="p-2.5 bg-primary-600 text-white rounded-xl hover:bg-primary-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors shrink-0"
           >
             <Send className="w-[18px] h-[18px]" />

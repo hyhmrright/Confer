@@ -11,6 +11,7 @@ import { a2aRoutes } from './routes/a2a.js';
 import { streamRoutes } from './routes/stream.js';
 import { permissionRoutes } from './routes/permissions.js';
 import { agentFactsRoutes } from './routes/agent-facts.js';
+import { memoriesRoutes } from './routes/memories.js';
 import { websocket } from './ws/handler.js';
 import { getEnv } from './env.js';
 import { bootstrap } from './bootstrap.js';
@@ -32,6 +33,7 @@ app.route('/api/v1/contacts', contactRoutes);
 app.route('/api/v1/conversations', conversationRoutes);
 app.route('/api/v1/stream', streamRoutes);
 app.route('/api/v1/permissions', permissionRoutes);
+app.route('/api/v1/memories', memoriesRoutes);
 
 app.route('/a2a/v1', a2aRoutes);
 app.route('/a2a/v1', agentFactsRoutes);
