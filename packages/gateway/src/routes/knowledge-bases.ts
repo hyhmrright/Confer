@@ -81,7 +81,7 @@ knowledgeBasesRoutes.delete('/:kbId', async (c) => {
 
   if (!kb) throw new AppError('not_found', 'Knowledge base not found', 404);
 
-  await deleteByKbId(kbId);
+  await deleteByKbId(kbId).catch(() => {});
   await db.delete(knowledgeDocuments).where(eq(knowledgeDocuments.kb_id, kbId));
   await db.delete(knowledgeBases).where(eq(knowledgeBases.id, kbId));
 
@@ -176,7 +176,7 @@ knowledgeBasesRoutes.delete('/:kbId/documents/:docId', async (c) => {
     .limit(1);
   if (!doc) throw new AppError('not_found', 'Document not found', 404);
 
-  await deleteByDocId(docId);
+  await deleteByDocId(docId).catch(() => {});
   await db.delete(knowledgeDocuments).where(eq(knowledgeDocuments.id, docId));
   if (doc.storage_key) await removeObject(doc.storage_key).catch(() => {});
 
