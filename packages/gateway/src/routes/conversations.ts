@@ -155,7 +155,7 @@ conversationRoutes.post('/:id/messages', async (c) => {
     {
       id: msg!.id,
       delivery_status: 'queued',
-      stream_url: `/api/v1/conversations/${convId}/messages/${msgId}/stream`,
+      stream_url: `/api/v1/stream/${convId}/${msgId}`,
     },
     201,
   );
