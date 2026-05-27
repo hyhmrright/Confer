@@ -17,7 +17,7 @@ function statusBadge(status: string | null) {
   );
 }
 
-function DocRow({ doc, onDelete }: { doc: KnowledgeDocument; onDelete: () => void }) {
+function DocRow({ doc, onDelete, onRetry }: { doc: KnowledgeDocument; onDelete: () => void; onRetry?: () => void }) {
   return (
     <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-dark-input border border-dark-border text-xs group">
       <div className="flex items-center gap-2 min-w-0">
@@ -27,12 +27,22 @@ function DocRow({ doc, onDelete }: { doc: KnowledgeDocument; onDelete: () => voi
           <span className="text-ink-muted shrink-0">{doc.chunk_count}块</span>
         )}
       </div>
-      <button
-        onClick={onDelete}
-        className="text-ink-muted hover:text-red-400 hover:bg-red-900/20 p-0.5 rounded transition-colors ml-2 shrink-0 opacity-0 group-hover:opacity-100"
-      >
-        <Trash width={12} height={12} />
-      </button>
+      <div className="flex items-center gap-1 ml-2 shrink-0 opacity-0 group-hover:opacity-100">
+        {doc.status === 'failed' && onRetry && (
+          <button
+            onClick={onRetry}
+            className="text-[10px] px-1.5 py-0.5 rounded text-amber-400 hover:bg-amber-900/20 border border-amber-800/30 transition-colors"
+          >
+            重试
+          </button>
+        )}
+        <button
+          onClick={onDelete}
+          className="text-ink-muted hover:text-red-400 hover:bg-red-900/20 p-0.5 rounded transition-colors"
+        >
+          <Trash width={12} height={12} />
+        </button>
+      </div>
     </div>
   );
 }
@@ -42,6 +52,8 @@ function KbCard({ kbId }: { kbId: string }) {
   const kb = kbs.find((k) => k.id === kbId);
   const [expanded, setExpanded] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const retryRef = useRef<HTMLInputElement>(null);
+  const retryDocId = useRef<string | null>(null);
 
   if (!kb) return null;
 
@@ -58,6 +70,20 @@ function KbCard({ kbId }: { kbId: string }) {
     await uploadDocument(kbId, file);
     e.target.value = '';
     if (!expanded) setExpanded(true);
+  };
+
+  const handleRetrySelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    const docId = retryDocId.current;
+    if (!file || !docId) return;
+    e.target.value = '';
+    await uploadDocument(kbId, file);
+    await deleteDocument(kbId, docId);
+  };
+
+  const startRetry = (docId: string) => {
+    retryDocId.current = docId;
+    retryRef.current?.click();
   };
 
   return (
@@ -95,6 +121,7 @@ function KbCard({ kbId }: { kbId: string }) {
           </button>
         </div>
         <input ref={fileRef} type="file" accept=".txt,.md,.pdf" className="hidden" onChange={handleUpload} />
+        <input ref={retryRef} type="file" accept=".txt,.md,.pdf" className="hidden" onChange={handleRetrySelect} />
       </div>
 
       {expanded && (
@@ -105,7 +132,7 @@ function KbCard({ kbId }: { kbId: string }) {
             <p className="text-[10px] text-ink-muted py-1 text-center">暂无文档，点击"上传"导入 .txt / .md / .pdf</p>
           ) : (
             docs.map((doc) => (
-              <DocRow key={doc.id} doc={doc} onDelete={() => deleteDocument(kbId, doc.id)} />
+              <DocRow key={doc.id} doc={doc} onDelete={() => deleteDocument(kbId, doc.id)} onRetry={() => startRetry(doc.id)} />
             ))
           )}
         </div>
