@@ -1,0 +1,1 @@
+ALTER TABLE "knowledge_documents" ADD COLUMN "storage_key" varchar(512);

@@ -33,6 +33,7 @@ interface KbState {
   fetchDocuments: (kbId: string) => Promise<void>;
   uploadDocument: (kbId: string, file: File) => Promise<void>;
   deleteDocument: (kbId: string, docId: string) => Promise<void>;
+  retryDocument: (kbId: string, docId: string) => Promise<void>;
 }
 
 export const useKbStore = create<KbState>((set) => ({
@@ -92,6 +93,16 @@ export const useKbStore = create<KbState>((set) => ({
       documents: {
         ...s.documents,
         [kbId]: (s.documents[kbId] ?? []).filter((d) => d.id !== docId),
+      },
+    }));
+  },
+
+  retryDocument: async (kbId, docId) => {
+    const data = await api.post<{ document: KnowledgeDocument }>(`/knowledge-bases/${kbId}/documents/${docId}/retry`, {});
+    set((s) => ({
+      documents: {
+        ...s.documents,
+        [kbId]: (s.documents[kbId] ?? []).map((d) => (d.id === docId ? data.document : d)),
       },
     }));
   },

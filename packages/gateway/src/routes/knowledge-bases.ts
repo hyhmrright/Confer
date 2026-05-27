@@ -9,6 +9,7 @@ import { parseDocument, guessContentType } from '../lib/doc-parser.js';
 import { chunkText } from '../lib/chunker.js';
 import { embedTexts, type EmbeddingProvider, EMBEDDING_PROVIDER_PRIORITY } from '../lib/embedding.js';
 import { ensureCollection, upsertChunks, deleteByKbId, deleteByDocId } from '../lib/qdrant.js';
+import { putObject, getObject, removeObject } from '../lib/storage.js';
 import { getEnv } from '../env.js';
 import type { AppEnv } from '../types.js';
 
@@ -133,6 +134,10 @@ knowledgeBasesRoutes.post('/:kbId/documents', async (c) => {
   const buffer = await file.arrayBuffer();
 
   const docId = newId();
+  const storageKey = `${user.sub}/${kbId}/${docId}`;
+
+  await putObject(storageKey, Buffer.from(buffer), contentType);
+
   const [docRow] = await db
     .insert(knowledgeDocuments)
     .values({
@@ -143,6 +148,7 @@ knowledgeBasesRoutes.post('/:kbId/documents', async (c) => {
       content_type: contentType,
       size_bytes: file.size,
       status: 'processing',
+      storage_key: storageKey,
     })
     .returning();
 
@@ -172,8 +178,51 @@ knowledgeBasesRoutes.delete('/:kbId/documents/:docId', async (c) => {
 
   await deleteByDocId(docId);
   await db.delete(knowledgeDocuments).where(eq(knowledgeDocuments.id, docId));
+  if (doc.storage_key) await removeObject(doc.storage_key).catch(() => {});
 
   return c.json({ ok: true });
+});
+
+knowledgeBasesRoutes.post('/:kbId/documents/:docId/retry', async (c) => {
+  const user = c.get('user');
+  const db = getDb();
+  const { kbId, docId } = c.req.param();
+
+  const [doc] = await db
+    .select()
+    .from(knowledgeDocuments)
+    .where(and(eq(knowledgeDocuments.id, docId), eq(knowledgeDocuments.user_id, user.sub)))
+    .limit(1);
+  if (!doc) throw new AppError('not_found', 'Document not found', 404);
+  if (!doc.storage_key) throw new AppError('bad_request', 'Original file not available for retry', 400);
+  if (doc.status === 'processing') throw new AppError('bad_request', 'Document is already processing', 400);
+
+  const [kb] = await db
+    .select()
+    .from(knowledgeBases)
+    .where(and(eq(knowledgeBases.id, kbId), eq(knowledgeBases.user_id, user.sub)))
+    .limit(1);
+  if (!kb) throw new AppError('not_found', 'Knowledge base not found', 404);
+
+  const [updated] = await db
+    .update(knowledgeDocuments)
+    .set({ status: 'processing', chunk_count: 0 })
+    .where(eq(knowledgeDocuments.id, docId))
+    .returning();
+
+  const buffer = await getObject(doc.storage_key);
+  const contentType = doc.content_type ?? guessContentType(doc.filename);
+
+  await deleteByDocId(docId);
+  ingestDocument(docId, kbId, kb.name, user.sub, doc.filename, contentType, buffer.buffer as ArrayBuffer).catch((err) => {
+    console.error(`Retry ingestion failed for doc ${docId}:`, err);
+    db.update(knowledgeDocuments)
+      .set({ status: 'failed' })
+      .where(eq(knowledgeDocuments.id, docId))
+      .catch(() => {});
+  });
+
+  return c.json({ document: updated });
 });
 
 async function ingestDocument(

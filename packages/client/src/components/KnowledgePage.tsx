@@ -48,12 +48,10 @@ function DocRow({ doc, onDelete, onRetry }: { doc: KnowledgeDocument; onDelete: 
 }
 
 function KbCard({ kbId }: { kbId: string }) {
-  const { kbs, documents, fetchDocuments, uploadDocument, deleteDocument, deleteKb, uploading } = useKbStore();
+  const { kbs, documents, fetchDocuments, uploadDocument, deleteDocument, deleteKb, retryDocument, uploading } = useKbStore();
   const kb = kbs.find((k) => k.id === kbId);
   const [expanded, setExpanded] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
-  const retryRef = useRef<HTMLInputElement>(null);
-  const retryDocId = useRef<string | null>(null);
 
   if (!kb) return null;
 
@@ -70,20 +68,6 @@ function KbCard({ kbId }: { kbId: string }) {
     await uploadDocument(kbId, file);
     e.target.value = '';
     if (!expanded) setExpanded(true);
-  };
-
-  const handleRetrySelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    const docId = retryDocId.current;
-    if (!file || !docId) return;
-    e.target.value = '';
-    await uploadDocument(kbId, file);
-    await deleteDocument(kbId, docId);
-  };
-
-  const startRetry = (docId: string) => {
-    retryDocId.current = docId;
-    retryRef.current?.click();
   };
 
   return (
@@ -121,7 +105,6 @@ function KbCard({ kbId }: { kbId: string }) {
           </button>
         </div>
         <input ref={fileRef} type="file" accept=".txt,.md,.pdf" className="hidden" onChange={handleUpload} />
-        <input ref={retryRef} type="file" accept=".txt,.md,.pdf" className="hidden" onChange={handleRetrySelect} />
       </div>
 
       {expanded && (
@@ -132,7 +115,7 @@ function KbCard({ kbId }: { kbId: string }) {
             <p className="text-[10px] text-ink-muted py-1 text-center">暂无文档，点击"上传"导入 .txt / .md / .pdf</p>
           ) : (
             docs.map((doc) => (
-              <DocRow key={doc.id} doc={doc} onDelete={() => deleteDocument(kbId, doc.id)} onRetry={() => startRetry(doc.id)} />
+              <DocRow key={doc.id} doc={doc} onDelete={() => deleteDocument(kbId, doc.id)} onRetry={() => retryDocument(kbId, doc.id)} />
             ))
           )}
         </div>
