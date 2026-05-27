@@ -18,6 +18,13 @@ export const streamRoutes = new Hono<AppEnv>();
 
 streamRoutes.use('/*', authMiddleware);
 
+function buildSystemPrompt(base: string, hasKb: boolean): string {
+  const kbInstruction = hasKb
+    ? '当用户询问文档、资料、内部知识或你不确定的内容时，必须先调用 search_knowledge_base 工具搜索知识库，再基于搜索结果回答。'
+    : '';
+  return [base, kbInstruction].filter(Boolean).join('\n') ;
+}
+
 const DEFAULT_SYSTEM_PROMPT =
   '你是一个智能助手，能够帮助用户回答问题、处理任务。你可以使用 web_search 工具搜索实时信息。回答时请用用户使用的语言。';
 
@@ -124,8 +131,9 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
         ...(env.TAVILY_API_KEY ? [tavilyToolDefinition] : []),
         ...(userKbs.length > 0 ? [knowledgeBaseToolDefinition] : []),
       ];
+      const effectiveSystemPrompt = buildSystemPrompt(systemPrompt, userKbs.length > 0);
       let agentMessages: LLMMessage[] = [
-        { role: 'system', content: systemPrompt },
+        { role: 'system', content: effectiveSystemPrompt },
         ...history,
         { role: 'user', content: msg.content ?? '' },
       ];
@@ -155,8 +163,16 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
 
         if (pendingToolCalls.length === 0) break;
 
-        // Append assistant turn to history
-        agentMessages = [...agentMessages, { role: 'assistant', content: turnContent }];
+        // Append assistant turn with tool_calls in proper format
+        agentMessages = [...agentMessages, {
+          role: 'assistant',
+          content: turnContent || null,
+          tool_calls: pendingToolCalls.map((tc) => ({
+            id: tc.id,
+            type: 'function' as const,
+            function: { name: tc.name, arguments: tc.arguments },
+          })),
+        }];
 
         for (const tc of pendingToolCalls) {
           await stream.writeSSE({ event: 'tool', data: JSON.stringify({ tool: tc.name }) });
@@ -180,10 +196,9 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
 
           await stream.writeSSE({ event: 'tool_result', data: JSON.stringify({ result: tc.name }) });
 
-          // Inject tool result as user context for next round
           agentMessages = [
             ...agentMessages,
-            { role: 'user', content: `[${tc.name} 搜索结果]\n${result}` },
+            { role: 'tool', content: result, tool_call_id: tc.id },
           ];
         }
       }

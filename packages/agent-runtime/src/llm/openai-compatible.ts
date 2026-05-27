@@ -1,5 +1,15 @@
 import type { LLMProvider, LLMMessage, LLMResponse, LLMStreamEvent, LLMChatOptions } from './provider.js';
 
+function toOpenAIMessage(m: LLMMessage): Record<string, unknown> {
+  if (m.role === 'tool') {
+    return { role: 'tool', content: m.content ?? '', tool_call_id: m.tool_call_id };
+  }
+  if (m.tool_calls) {
+    return { role: 'assistant', content: m.content, tool_calls: m.tool_calls };
+  }
+  return { role: m.role, content: m.content ?? '' };
+}
+
 export class OpenAICompatibleProvider implements LLMProvider {
   readonly name: string;
   private apiKey: string;
@@ -26,7 +36,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
       },
       body: JSON.stringify({
         model,
-        messages: messages.map((m) => ({ role: m.role, content: m.content })),
+        messages: messages.map(toOpenAIMessage),
         temperature: options?.temperature,
         max_tokens: options?.max_tokens ?? 4096,
       }),
@@ -57,7 +67,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
 
     const body: Record<string, unknown> = {
       model,
-      messages: messages.map((m) => ({ role: m.role, content: m.content })),
+      messages: messages.map(toOpenAIMessage),
       temperature: options?.temperature,
       max_tokens: options?.max_tokens ?? 4096,
       stream: true,
