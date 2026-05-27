@@ -12,7 +12,8 @@ bun run test                 # run tests across all packages
 bun run typecheck            # tsc --noEmit
 bun run lint                 # biome check
 bun run lint:fix             # biome check --write
-bun run db:migrate           # run gateway DB migrations
+bun run db:generate          # generate Drizzle migration from schema changes
+bun run db:migrate           # run gateway DB migrations (apply generated files)
 ```
 
 ## Architecture
@@ -27,6 +28,7 @@ Bun workspaces monorepo (`packages/*`):
 | `agent-runtime` | LLM orchestration engine, policy enforcement |
 | `conversation` | Message bus (NATS), conversation threading |
 | `shared` | Zod schemas, shared types, utility functions |
+| `gateway/lib/` | RAG pipeline — MinIO file storage, Qdrant vector search, multi-provider embedding (OpenAI / GLM / Qwen) |
 
 ## Docs
 
@@ -48,6 +50,7 @@ TypeScript everywhere. Bun + Hono (server), Tauri 2.0 + React 18 + Zustand (clie
 2. DID documents must be valid W3C DID v1.0 — use the `did` library
 3. AgentFacts must validate against NANDA schema
 4. Migration files are immutable once merged
+6. Knowledge base embeddings use `EMBEDDING_PROVIDER_PRIORITY` order (openai → glm → qwen) — whichever key is configured first wins
 5. `.claude/peers/*` must stay human-readable Markdown
 
 ## Forbidden
@@ -94,3 +97,6 @@ Local infra via Docker: `docker compose up -d` starts PostgreSQL (5432), Redis (
 - `Bun.serve` WebSocket API ≠ Node `ws`
 - HTTP signatures: adding headers invalidates unless in signing set
 - DID document caching: respect TTL/ETag or auth breaks
+- Drizzle migrations: ALWAYS use `bun run db:generate`, never write SQL manually — the journal won't track it and schema gets out of sync requiring manual `ALTER TABLE` in prod
+- Qdrant point IDs must be UUID or uint64 — ULIDs are rejected with 400; convert via SHA-256 hash (`toUUID` in `lib/qdrant.ts`)
+- Docker inter-container networking: use service names (`qdrant:6333`, `minio:9000`), not `localhost` — localhost resolves to the container itself
