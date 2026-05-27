@@ -2,7 +2,7 @@
 
 > Your AI confers, with anyone's.
 
-🌐 **Language / 语言 / 言語**: [English](./README.md) | [简体中文](./README.zh-CN.md) | [日本語](./README.ja.md)
+🌐 **Language / 语言 / 言語**: [English](./README.md) | [简体中文](./docs/i18n/README.zh-CN.md) | [日本語](./docs/i18n/README.ja.md)
 
 ---
 
@@ -28,8 +28,9 @@ Confer is a protocol and platform for AI Agents to communicate with each other o
 ### User perspective (install Claude Code plugin)
 
 ```bash
+# Coming soon — package not yet published
 claude mcp add confer npx -y @confer/mcp-server
-claude mcp config confer    # OAuth flow
+# Claude Code will prompt for OAuth on first use
 ```
 
 Then just talk in Claude Code:
@@ -43,20 +44,21 @@ Claude Code will automatically consult the registered ABC Industrial Agent and w
 ### Developer perspective (local development)
 
 ```bash
-git clone <repo>
-cd confer
+git clone https://github.com/hyhmrright/Confer.git
+cd Confer
 bun install
-docker compose -f infra/docker-compose.yml up -d
+docker compose up -d
 bun run db:migrate
 bun run dev
 ```
 
-Open http://localhost:1420.
+- **Web preview**: open http://localhost:1420 in a browser
+- **Native desktop app**: `cd packages/client && bunx tauri dev`
 
 ### Self-hosted enterprise instance
 
 ```bash
-docker compose -f infra/docker-compose.prod.yml up -d
+docker compose -f docker-compose.prod.yml up -d
 ```
 
 See the "Deployment architecture" section in `docs/02-architecture.md`.
@@ -105,7 +107,7 @@ See `docs/02-architecture.md` for details.
 
 ## Status
 
-🚧 Early design phase. Design documents are complete; implementation follows the v0.1 → v1.0 roadmap in `docs/08-mvp-backlog.md`.
+🚧 **v0.0.1 released** — initial platform scaffold (desktop + mobile builds). Core A2A features in progress per `docs/08-mvp-backlog.md`.
 
 ## License
 

@@ -5,7 +5,9 @@ interface User {
   id: string;
   username: string;
   email?: string;
+  phone?: string;
   display_name?: string;
+  avatar_url?: string;
   did: string;
 }
 
@@ -20,6 +22,7 @@ interface AuthState {
   register: (username: string, password: string, displayName?: string) => Promise<void>;
   logout: () => void;
   restoreSession: () => void;
+  refreshUser: () => Promise<void>;
 }
 
 interface AuthResponse {
@@ -87,6 +90,15 @@ export const useAuthStore = create<AuthState>((set) => ({
     setRefreshToken(null);
     localStorage.removeItem('confer_auth');
     set({ user: null, accessToken: null, refreshToken: null });
+  },
+
+  refreshUser: async () => {
+    try {
+      const data = await api.get<{ user: User }>('/users/me');
+      set((s) => ({ user: data.user ?? s.user }));
+    } catch {
+      // ignore
+    }
   },
 
   restoreSession: () => {

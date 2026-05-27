@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { api, getToken } from '../lib/api.js';
+import { useAuthStore } from './auth.js';
 
 interface Citation {
   source: string;
@@ -39,9 +40,12 @@ interface ChatState {
   streamCitations: Citation[];
   agentStatus: string | null;
 
+  messagesLoading: boolean;
+
   loadConversations: () => Promise<void>;
   selectConversation: (id: string) => Promise<void>;
   createConversation: (peerId?: string, name?: string) => Promise<string>;
+  deleteConversation: (id: string) => Promise<void>;
   sendMessage: (content: string) => Promise<void>;
   addMessage: (msg: Message) => void;
   setStreaming: (streaming: boolean, content?: string) => void;
@@ -52,6 +56,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   conversations: [],
   activeConversationId: null,
   messages: [],
+  messagesLoading: false,
   streaming: false,
   streamContent: '',
   streamCitations: [],
@@ -66,22 +71,57 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({
       activeConversationId: id,
       messages: [],
+      messagesLoading: true,
       streaming: false,
       streamContent: '',
       streamCitations: [],
       agentStatus: null,
     });
-    const data = await api.get<{ messages: Message[] }>(`/conversations/${id}/messages`);
-    set({ messages: data.messages });
+    try {
+      const data = await api.get<{ messages: Array<Message & { citations_json?: unknown }> }>(`/conversations/${id}/messages`);
+      const mapped = data.messages.map((m) => {
+        if (!m.citations && m.citations_json) {
+          const raw = m.citations_json as Array<Record<string, unknown>>;
+          return {
+            ...m,
+            citations: raw.map((c) => ({
+              source: `${c['doc_name'] as string}（${c['kb_name'] as string}）`,
+              passage: c['excerpt'] as string | undefined,
+            })),
+          };
+        }
+        return m;
+      });
+      set({ messages: mapped, messagesLoading: false });
+    } catch {
+      set({ messagesLoading: false });
+    }
   },
 
   createConversation: async (peerId, name) => {
-    const body: Record<string, unknown> = { type: 'direct_user_agent' };
-    if (name) body.name = name;
+    const autoName = name ?? new Date().toLocaleString('zh-CN', {
+      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+    });
+    const body: Record<string, unknown> = { type: 'direct_user_agent', name: autoName };
     if (peerId) body.peer_id = peerId;
     const data = await api.post<{ conversation: Conversation }>('/conversations', body);
     set((s) => ({ conversations: [data.conversation, ...s.conversations] }));
     return data.conversation.id;
+  },
+
+  deleteConversation: async (id) => {
+    await api.delete(`/conversations/${id}`);
+    set((s) => {
+      const filtered = s.conversations.filter((c) => c.id !== id);
+      const next = s.activeConversationId === id
+        ? (filtered[0]?.id ?? null)
+        : s.activeConversationId;
+      return {
+        conversations: filtered,
+        activeConversationId: next,
+        messages: s.activeConversationId === id ? [] : s.messages,
+      };
+    });
   },
 
   sendMessage: async (content) => {
@@ -93,11 +133,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
       { content, content_type: 'text', via: 'web' },
     );
 
+    const { user } = useAuthStore.getState();
     const userMsg: Message = {
       id: data.id,
       conversation_id: activeConversationId,
       sender_type: 'user',
-      sender_id: '',
+      sender_id: user?.id ?? '',
       content,
       content_type: 'text',
       created_at: new Date().toISOString(),
@@ -199,6 +240,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   addMessage: (msg) => {
     set((s) => {
+      if (msg.conversation_id !== s.activeConversationId) return s;
       if (s.messages.some((m) => m.id === msg.id)) return s;
       return { messages: [...s.messages, msg] };
     });

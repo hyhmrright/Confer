@@ -1,11 +1,24 @@
 import { create } from 'zustand';
 import { api } from '../lib/api.js';
 
+interface ModelConfig {
+  provider?: string;
+  model?: string;
+  system_prompt?: string;
+}
+
 interface AgentConfig {
+  id?: string;
   name?: string;
   description?: string;
-  default_model?: string;
-  system_prompt?: string;
+  model_config_json?: ModelConfig;
+  is_public?: boolean;
+}
+
+interface AgentPatch {
+  name?: string;
+  description?: string;
+  model_config_json?: ModelConfig;
 }
 
 interface LlmKeyEntry {
@@ -22,10 +35,11 @@ interface SettingsState {
   success: string | null;
 
   loadAgent: () => Promise<void>;
-  updateAgent: (config: Partial<AgentConfig>) => Promise<void>;
+  updateAgent: (patch: AgentPatch) => Promise<void>;
   loadLlmKeys: () => Promise<void>;
   saveLlmKey: (provider: string, apiKey: string) => Promise<void>;
   removeLlmKey: (provider: string) => Promise<void>;
+  fetchModels: (provider: string) => Promise<{ value: string; label: string }[]>;
   clearMessages: () => void;
 }
 
@@ -41,17 +55,21 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     set({ loading: true });
     try {
       const data = await api.get<{ agent: AgentConfig }>('/agents/me');
-      set({ agent: data.agent, loading: false });
+      set({ agent: data.agent ?? null, loading: false });
     } catch {
       set({ loading: false });
     }
   },
 
-  updateAgent: async (config) => {
+  updateAgent: async (patch) => {
     set({ saving: true, error: null, success: null });
     try {
-      const data = await api.patch<{ agent: AgentConfig }>('/agents/me', config);
-      set({ agent: data.agent, saving: false, success: '保存成功' });
+      await api.patch('/agents/me', patch);
+      set((s) => ({
+        agent: s.agent ? { ...s.agent, ...patch } : s.agent,
+        saving: false,
+        success: '保存成功',
+      }));
     } catch (e) {
       set({ saving: false, error: e instanceof Error ? e.message : '保存失败' });
     }
@@ -62,14 +80,14 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       const data = await api.get<{ keys: LlmKeyEntry[] }>('/agents/me/llm-keys');
       set({ llmKeys: data.keys });
     } catch {
-      // endpoint might not exist yet
+      // ignore
     }
   },
 
   saveLlmKey: async (provider, apiKey) => {
     set({ saving: true, error: null, success: null });
     try {
-      await api.patch('/agents/me/llm-keys', { provider, api_key: apiKey });
+      await api.put('/agents/me/llm-keys', { provider, api_key: apiKey });
       set((s) => ({
         saving: false,
         success: `${provider} 密钥已保存`,
@@ -95,6 +113,15 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       }));
     } catch (e) {
       set({ saving: false, error: e instanceof Error ? e.message : '删除失败' });
+    }
+  },
+
+  fetchModels: async (provider) => {
+    try {
+      const data = await api.get<{ models: { id: string }[] }>(`/agents/me/llm-keys/${provider}/models`);
+      return (data.models ?? []).map((m) => ({ value: m.id, label: m.id }));
+    } catch {
+      return [];
     }
   },
 

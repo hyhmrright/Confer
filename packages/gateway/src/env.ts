@@ -11,6 +11,8 @@ const envSchema = z.object({
   PUBLIC_HOST: z.string().default('localhost:3000'),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   ENCRYPTION_KEY: z.string().length(64),
+  TAVILY_API_KEY: z.string().default(''),
+  QDRANT_URL: z.string().default('http://localhost:6333'),
 });
 
 export type Env = z.infer<typeof envSchema>;

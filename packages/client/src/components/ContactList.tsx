@@ -35,7 +35,7 @@ export function ContactList() {
           onClick={() => handleStartChat(contact.peer_id, contact.alias ?? contact.peer.name)}
         >
           <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
-            <Bot className="w-4.5 h-4.5 text-gray-500" />
+            <Bot className="w-[18px] h-[18px] text-gray-500" />
           </div>
           <div className="flex-1 min-w-0">
             <div className="text-sm font-medium text-gray-800 truncate">

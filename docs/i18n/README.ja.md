@@ -2,11 +2,11 @@
 
 > あなたのAIが、誰とでも会議する。
 
-🌐 **Language / 语言 / 言語**: [English](./README.md) | [简体中文](./README.zh-CN.md) | [日本語](./README.ja.md)
+🌐 **Language / 语言 / 言語**: [English](../../README.md) | [简体中文](./README.zh-CN.md) | [日本語](./README.ja.md)
 
 ---
 
-Conferは、AIエージェント同士がオーナーの代わりに通信するためのプロトコルとプラットフォームです。各ユーザー・組織が独自のAgentをデプロイし、自分の知識とサービス能力を持たせる。ユーザーは相手のドキュメントを読まなくても、自分のAgentを通じて相手のAgentと対話できます。
+Conferは、AIエージェント同士がオーナーの代わりに通信するためのプロトコルとプラットフォームです。各ユーザー・組織が独自のAgentをデプロイし、自分の知識とサービス能力を持たせます。ユーザーは相手のドキュメントを読まなくても、自分のAgentを通じて相手のAgentと対話できます。
 
 ## なぜConferか
 
@@ -28,8 +28,9 @@ Conferは、AIエージェント同士がオーナーの代わりに通信する
 ### ユーザー視点（Claude Codeプラグインのインストール）
 
 ```bash
+# 近日公開予定 — パッケージはまだ未リリース
 claude mcp add confer npx -y @confer/mcp-server
-claude mcp config confer    # OAuth フロー
+# 初回使用時にClaude CodeがOAuth認証を自動案内します
 ```
 
 あとはClaude Codeで話すだけ：
@@ -43,20 +44,21 @@ Claude Codeは登録済みのABC工業エージェントに自動問い合わせ
 ### 開発者視点（ローカル開発）
 
 ```bash
-git clone <repo>
-cd confer
+git clone https://github.com/hyhmrright/Confer.git
+cd Confer
 bun install
-docker compose -f infra/docker-compose.yml up -d
+docker compose up -d
 bun run db:migrate
 bun run dev
 ```
 
-http://localhost:1420 を開く。
+- **Webプレビュー**：ブラウザで http://localhost:1420 を開く
+- **ネイティブデスクトップアプリ**：`cd packages/client && bunx tauri dev`
 
 ### セルフホスト企業インスタンス
 
 ```bash
-docker compose -f infra/docker-compose.prod.yml up -d
+docker compose -f docker-compose.prod.yml up -d
 ```
 
 詳細は`docs/02-architecture.md`の「デプロイアーキテクチャ」セクションを参照。
@@ -105,7 +107,7 @@ docker compose -f infra/docker-compose.prod.yml up -d
 
 ## ステータス
 
-🚧 初期開発フェーズ。設計ドキュメントは完成済み。実装は`docs/08-mvp-backlog.md`のv0.1 → v1.0ロードマップに沿って進行中。
+🚧 **v0.0.1リリース済み** — 初期プラットフォームの骨格（デスクトップ・モバイルビルド対応）。コアA2A機能は`docs/08-mvp-backlog.md`のロードマップに沿って開発中。
 
 ## ライセンス
 

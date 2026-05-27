@@ -297,3 +297,55 @@ export const projectMemory = pgTable(
     index('idx_project_memory_user_project').on(t.user_id, t.project_id),
   ],
 );
+
+export const agentMemories = pgTable(
+  'agent_memories',
+  {
+    id: char('id', { length: 26 }).primaryKey(),
+    user_id: char('user_id', { length: 26 })
+      .notNull()
+      .references(() => users.id),
+    title: varchar('title', { length: 255 }).notNull(),
+    content: text('content').notNull(),
+    tags: text('tags').array().default([]),
+    pinned: boolean('pinned').notNull().default(false),
+    created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('idx_agent_memories_user').on(t.user_id)],
+);
+
+export const knowledgeBases = pgTable(
+  'knowledge_bases',
+  {
+    id: char('id', { length: 26 }).primaryKey(),
+    user_id: char('user_id', { length: 26 })
+      .notNull()
+      .references(() => users.id),
+    name: varchar('name', { length: 255 }).notNull(),
+    description: text('description'),
+    created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('idx_knowledge_bases_user').on(t.user_id)],
+);
+
+export const knowledgeDocuments = pgTable(
+  'knowledge_documents',
+  {
+    id: char('id', { length: 26 }).primaryKey(),
+    kb_id: char('kb_id', { length: 26 })
+      .notNull()
+      .references(() => knowledgeBases.id),
+    user_id: char('user_id', { length: 26 })
+      .notNull()
+      .references(() => users.id),
+    filename: varchar('filename', { length: 255 }).notNull(),
+    content_type: varchar('content_type', { length: 128 }),
+    size_bytes: integer('size_bytes'),
+    chunk_count: integer('chunk_count').default(0),
+    status: varchar('status', { length: 32 }).default('processing'),
+    created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('idx_knowledge_documents_kb').on(t.kb_id)],
+);

@@ -38,14 +38,14 @@ interface Message {
 function Avatar({ type }: { type: string }) {
   if (type === 'user') {
     return (
-      <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center shrink-0">
-        <User className="w-4 h-4 text-primary-600" />
+      <div className="w-8 h-8 rounded-full bg-primary-600/20 border border-primary-600/30 flex items-center justify-center shrink-0">
+        <User className="w-4 h-4 text-primary-400" />
       </div>
     );
   }
   return (
-    <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
-      <Bot className="w-4 h-4 text-gray-600" />
+    <div className="w-8 h-8 rounded-full bg-dark-card border border-dark-border flex items-center justify-center shrink-0">
+      <Bot className="w-4 h-4 text-ink-secondary" />
     </div>
   );
 }
@@ -59,17 +59,13 @@ export function MessageBubble({ message }: { message: Message }) {
 
   if (message.content_type === 'permission_request') {
     const parsed = permissionRequestSchema.safeParse(message.content_json);
-    if (!parsed.success) {
-      console.warn('[MessageBubble] permission_request validation failed:', parsed.error.issues);
-    }
     if (parsed.success) {
-      const req = parsed.data;
       return (
-        <div className="flex justify-start gap-2 animate-fade-in">
+        <div className="flex justify-start gap-3 animate-fade-in">
           <Avatar type="system" />
-          <div className="max-w-[75%]">
-            <PermissionCard request={req} />
-            <div className="text-[10px] text-gray-300 mt-1 ml-1">{formatTime(message.created_at)}</div>
+          <div className="max-w-[78%]">
+            <PermissionCard request={parsed.data} />
+            <p className="text-[10px] text-ink-muted mt-1 ml-1 font-mono">{formatTime(message.created_at)}</p>
           </div>
         </div>
       );
@@ -77,14 +73,14 @@ export function MessageBubble({ message }: { message: Message }) {
   }
 
   return (
-    <div className={`flex gap-2 animate-fade-in ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
+    <div className={`flex gap-3 animate-fade-in ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
       <Avatar type={message.sender_type} />
-      <div className={`max-w-[75%] ${isUser ? 'items-end' : 'items-start'}`}>
+      <div className={`max-w-[78%] flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
         <div
-          className={`rounded-2xl px-4 py-2.5 ${
+          className={`rounded-2xl px-4 py-3 ${
             isUser
-              ? 'user-bubble bg-primary-600 text-white rounded-tr-md'
-              : 'agent-bubble bg-white border border-gray-200 text-gray-800 rounded-tl-md shadow-sm'
+              ? 'user-bubble bg-gradient-to-br from-primary-600 to-primary-700 text-white rounded-tr-sm shadow-lg shadow-primary-900/30'
+              : 'agent-bubble bg-dark-card border border-dark-border text-ink-primary rounded-tl-sm'
           }`}
         >
           <div className="markdown-content text-sm leading-relaxed">
@@ -93,12 +89,14 @@ export function MessageBubble({ message }: { message: Message }) {
             </ReactMarkdown>
           </div>
         </div>
+
         {!isUser && message.citations && message.citations.length > 0 && (
           <CitationCapsule citations={message.citations} />
         )}
-        <div className={`text-[10px] text-gray-300 mt-1 ${isUser ? 'text-right mr-1' : 'ml-1'}`}>
+
+        <p className={`text-[10px] text-ink-muted mt-1 font-mono ${isUser ? 'mr-1' : 'ml-1'}`}>
           {formatTime(message.created_at)}
-        </div>
+        </p>
       </div>
     </div>
   );

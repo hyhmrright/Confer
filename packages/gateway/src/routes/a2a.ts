@@ -3,7 +3,7 @@ import type { MiddlewareHandler } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import { z } from 'zod';
 import * as jose from 'jose';
-import { AppError, newId } from '@confer/shared';
+import { AppError, newId, decrypt } from '@confer/shared';
 import {
   verifyRequestSignature,
   parseSignatureHeader,
@@ -11,7 +11,7 @@ import {
   multibaseToPublicKey,
 } from '@confer/identity';
 import {
-  getProvider,
+  createProvider,
   runAgentLoop,
   evaluatePolicy,
   classifyPermissionLevel,
@@ -19,6 +19,7 @@ import {
 } from '@confer/agent-runtime';
 import type { AgentContext } from '@confer/agent-runtime';
 import { getDb } from '../db/connection.js';
+import { getEnv } from '../env.js';
 import {
   messages,
   conversations,
@@ -27,6 +28,7 @@ import {
   agents,
   permissions,
   keypairs,
+  users,
 } from '../db/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { rateLimit } from '../middleware/rate-limit.js';
@@ -312,8 +314,23 @@ async function processA2AMessage(params: ProcessA2AMessageParams): Promise<void>
 
   const modelConfig = targetAgent.model_config_json as Record<string, unknown> | null;
   const providerName = (modelConfig?.provider as string) ?? 'anthropic';
-  const provider = getProvider(providerName);
 
+  const db = getDb();
+  const [userRow] = await db
+    .select({ llm_keys_json: users.llm_keys_json })
+    .from(users)
+    .where(eq(users.id, targetAgent.user_id))
+    .limit(1);
+
+  const llmKeys = (userRow?.llm_keys_json ?? {}) as Record<string, unknown>;
+  const encryptedKey = llmKeys[providerName] as import('@confer/shared').EncryptedValue | undefined;
+  let apiKey = '';
+  if (encryptedKey) {
+    const result = await decrypt(encryptedKey, getEnv().ENCRYPTION_KEY);
+    if (result.ok) apiKey = result.value;
+  }
+
+  const provider = createProvider(providerName, apiKey);
   if (!provider) {
     console.error(`No LLM provider configured for agent ${targetAgent.id} (provider: ${providerName})`);
     return;
@@ -329,7 +346,6 @@ async function processA2AMessage(params: ProcessA2AMessageParams): Promise<void>
 
   const replyContent = await runAgentLoop(agentCtx, messageContent);
 
-  const db = getDb();
   const replyId = newId();
 
   await db.insert(messages).values({

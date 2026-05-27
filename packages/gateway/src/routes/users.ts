@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { AppError, encrypt } from '@confer/shared';
+import { AppError, encrypt, decrypt } from '@confer/shared';
 import type { EncryptedValue } from '@confer/shared';
 import { authMiddleware } from '../middleware/auth.js';
 import { getDb } from '../db/connection.js';
@@ -9,7 +9,7 @@ import { eq } from 'drizzle-orm';
 import { getEnv } from '../env.js';
 import type { AppEnv } from '../types.js';
 
-const PROVIDERS = ['anthropic', 'deepseek', 'openai'] as const;
+const PROVIDERS = ['anthropic', 'deepseek', 'openai', 'qwen', 'glm', 'ollama'] as const;
 type Provider = (typeof PROVIDERS)[number];
 
 type LlmKeysJson = Partial<Record<Provider, EncryptedValue>>;
@@ -176,6 +176,66 @@ agentRoutes.delete('/me/llm-keys/:provider', async (c) => {
 
   return c.json({ ok: true });
 });
+
+agentRoutes.get('/me/llm-keys/:provider/models', async (c) => {
+  const user = c.get('user');
+  const db = getDb();
+  const provider = c.req.param('provider') as Provider;
+
+  if (!(PROVIDERS as readonly string[]).includes(provider)) {
+    throw new AppError('invalid_provider', `Unknown provider: ${provider}`, 400);
+  }
+
+  if (provider === 'ollama') {
+    return c.json({ models: [] });
+  }
+
+  const [row] = await db
+    .select({ llm_keys_json: users.llm_keys_json })
+    .from(users)
+    .where(eq(users.id, user.sub))
+    .limit(1);
+
+  const stored = (row?.llm_keys_json ?? {}) as LlmKeysJson;
+  const encryptedKey = stored[provider];
+  if (!encryptedKey) {
+    return c.json({ models: [] });
+  }
+
+  const decrypted = await decrypt(encryptedKey, getEnv().ENCRYPTION_KEY);
+  if (!decrypted.ok) {
+    return c.json({ models: [] });
+  }
+
+  const models = await fetchProviderModels(provider, decrypted.value);
+  return c.json({ models });
+});
+
+const PROVIDER_MODEL_URLS: Partial<Record<Provider, string>> = {
+  anthropic: 'https://api.anthropic.com/v1/models',
+  openai: 'https://api.openai.com/v1/models',
+  deepseek: 'https://api.deepseek.com/models',
+  qwen: 'https://dashscope.aliyuncs.com/compatible-mode/v1/models',
+};
+
+async function fetchProviderModels(provider: Provider, apiKey: string): Promise<{ id: string }[]> {
+  const url = PROVIDER_MODEL_URLS[provider];
+  if (!url) return [];
+  try {
+    const headers: Record<string, string> = provider === 'anthropic'
+      ? { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' }
+      : { Authorization: `Bearer ${apiKey}` };
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10_000);
+    const resp = await fetch(url, { headers, signal: controller.signal });
+    clearTimeout(timeout);
+    if (!resp.ok) return [];
+    const data = await resp.json() as { data?: { id: string }[] };
+    return data.data ?? [];
+  } catch {
+    return [];
+  }
+}
 
 agentRoutes.put('/me/policies', async (c) => {
   const user = c.get('user');
