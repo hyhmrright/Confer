@@ -2,10 +2,11 @@ import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import { authMiddleware } from '../middleware/auth.js';
 import { getDb } from '../db/connection.js';
-import { messages, agents, conversationParticipants } from '../db/schema.js';
+import { messages, agents, conversationParticipants, users } from '../db/schema.js';
 import { eq, and } from 'drizzle-orm';
-import { AppError, newId } from '@confer/shared';
-import { getProvider } from '@confer/agent-runtime';
+import { AppError, newId, decrypt } from '@confer/shared';
+import { createProvider } from '@confer/agent-runtime';
+import { getEnv } from '../env.js';
 import { broadcastToConversation } from '../ws/handler.js';
 import type { AppEnv } from '../types.js';
 
@@ -58,8 +59,22 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
     try {
       const modelConfig = agent.model_config_json as Record<string, unknown> | null;
       const providerName = (modelConfig?.provider as string) ?? 'anthropic';
-      const provider = getProvider(providerName);
 
+      const [userRow] = await db
+        .select({ llm_keys_json: users.llm_keys_json })
+        .from(users)
+        .where(eq(users.id, user.sub))
+        .limit(1);
+
+      const llmKeys = (userRow?.llm_keys_json ?? {}) as Record<string, unknown>;
+      const encryptedKey = llmKeys[providerName] as import('@confer/shared').EncryptedValue | undefined;
+      let apiKey = '';
+      if (encryptedKey) {
+        const result = await decrypt(encryptedKey, getEnv().ENCRYPTION_KEY);
+        if (result.ok) apiKey = result.value;
+      }
+
+      const provider = createProvider(providerName, apiKey);
       if (!provider) {
         await stream.writeSSE({ event: 'error', data: JSON.stringify({ message: 'No LLM provider configured' }) });
         return;

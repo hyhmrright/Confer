@@ -5,18 +5,20 @@ export class OpenAICompatibleProvider implements LLMProvider {
   private apiKey: string;
   private baseUrl: string;
   private defaultModel: string;
+  private completionsPath: string;
 
-  constructor(name: string, apiKey: string, baseUrl: string, defaultModel: string) {
+  constructor(name: string, apiKey: string, baseUrl: string, defaultModel: string, completionsPath = '/v1/chat/completions') {
     this.name = name;
     this.apiKey = apiKey;
     this.baseUrl = baseUrl;
     this.defaultModel = defaultModel;
+    this.completionsPath = completionsPath;
   }
 
   async chat(messages: LLMMessage[], options?: LLMChatOptions): Promise<LLMResponse> {
     const model = options?.model ?? this.defaultModel;
 
-    const response = await fetch(`${this.baseUrl}/v1/chat/completions`, {
+    const response = await fetch(`${this.baseUrl}${this.completionsPath}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -53,7 +55,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
   async *stream(messages: LLMMessage[], options?: LLMChatOptions): AsyncIterable<LLMStreamEvent> {
     const model = options?.model ?? this.defaultModel;
 
-    const response = await fetch(`${this.baseUrl}/v1/chat/completions`, {
+    const response = await fetch(`${this.baseUrl}${this.completionsPath}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -104,10 +106,22 @@ export class OpenAICompatibleProvider implements LLMProvider {
 }
 
 export function createDeepSeekProvider(apiKey: string): OpenAICompatibleProvider {
-  return new OpenAICompatibleProvider(
-    'deepseek',
-    apiKey,
-    'https://api.deepseek.com',
-    'deepseek-chat',
-  );
+  return new OpenAICompatibleProvider('deepseek', apiKey, 'https://api.deepseek.com', 'deepseek-chat');
+}
+
+export function createOpenAIProvider(apiKey: string): OpenAICompatibleProvider {
+  return new OpenAICompatibleProvider('openai', apiKey, 'https://api.openai.com', 'gpt-4o');
+}
+
+export function createQwenProvider(apiKey: string): OpenAICompatibleProvider {
+  return new OpenAICompatibleProvider('qwen', apiKey, 'https://dashscope.aliyuncs.com/compatible-mode', 'qwen-plus');
+}
+
+export function createGlmProvider(apiKey: string): OpenAICompatibleProvider {
+  // GLM API uses /chat/completions directly under its v4 base path
+  return new OpenAICompatibleProvider('glm', apiKey, 'https://open.bigmodel.cn/api/paas/v4', 'glm-4-flash', '/chat/completions');
+}
+
+export function createOllamaProvider(baseUrl = 'http://localhost:11434'): OpenAICompatibleProvider {
+  return new OpenAICompatibleProvider('ollama', '', baseUrl, 'llama3');
 }
