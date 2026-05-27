@@ -110,4 +110,16 @@ export const api = {
     request<T>(path, { method: 'PUT', body: JSON.stringify(body) }),
 
   delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
+
+  postForm: async <T>(path: string, form: FormData): Promise<T> => {
+    const headers: Record<string, string> = {};
+    if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+    const res = await fetch(`${BASE_URL}${path}`, { method: 'POST', headers, body: form });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({})) as Record<string, unknown>;
+      const err = body?.error as Record<string, unknown> | undefined;
+      throw new ApiError(res.status, (err?.message as string) ?? 'Upload failed', err?.code as string | undefined);
+    }
+    return res.json() as Promise<T>;
+  },
 };

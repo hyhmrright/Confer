@@ -2,13 +2,14 @@ import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import { authMiddleware } from '../middleware/auth.js';
 import { getDb } from '../db/connection.js';
-import { messages, agents, conversationParticipants, users } from '../db/schema.js';
+import { messages, agents, conversationParticipants, users, knowledgeBases } from '../db/schema.js';
 import { eq, and, lt, asc } from 'drizzle-orm';
 import { AppError, newId, decrypt } from '@confer/shared';
 import { createProvider } from '@confer/agent-runtime';
 import { getEnv } from '../env.js';
 import { broadcastToConversation } from '../ws/handler.js';
 import { tavilySearch, tavilyToolDefinition } from '../tools/tavily.js';
+import { searchKnowledgeBase, knowledgeBaseToolDefinition, type KbCitation } from '../tools/knowledge-base.js';
 import type { AppEnv } from '../types.js';
 import type { LLMMessage, LLMToolDefinition } from '@confer/agent-runtime';
 
@@ -105,7 +106,23 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
         content: m.content ?? '',
       }));
 
-      const tools: LLMToolDefinition[] = env.TAVILY_API_KEY ? [tavilyToolDefinition] : [];
+      // Check if user has any knowledge bases
+      let openAIKey = '';
+      {
+        const encryptedOpenAI = (llmKeys['openai'] ?? llmKeys['openai-compatible']) as import('@confer/shared').EncryptedValue | undefined;
+        if (encryptedOpenAI) {
+          const r = await decrypt(encryptedOpenAI, env.ENCRYPTION_KEY);
+          if (r.ok) openAIKey = r.value;
+        }
+      }
+      const userKbs = openAIKey
+        ? await db.select({ id: knowledgeBases.id }).from(knowledgeBases).where(eq(knowledgeBases.user_id, user.sub))
+        : [];
+
+      const tools: LLMToolDefinition[] = [
+        ...(env.TAVILY_API_KEY ? [tavilyToolDefinition] : []),
+        ...(userKbs.length > 0 ? [knowledgeBaseToolDefinition] : []),
+      ];
       let agentMessages: LLMMessage[] = [
         { role: 'system', content: systemPrompt },
         ...history,
@@ -113,7 +130,7 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
       ];
 
       let fullContent = '';
-      const citations: unknown[] = [];
+      const citations: KbCitation[] = [];
 
       // Agentic loop: up to 5 tool-call rounds
       for (let round = 0; round < 5; round++) {
@@ -148,6 +165,11 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
             if (tc.name === 'web_search') {
               const args = JSON.parse(tc.arguments) as { query: string };
               result = await tavilySearch(args.query, env.TAVILY_API_KEY);
+            } else if (tc.name === 'search_knowledge_base') {
+              const args = JSON.parse(tc.arguments) as { query: string; kb_ids?: string[] };
+              const kbResult = await searchKnowledgeBase(args.query, user.sub, openAIKey, args.kb_ids);
+              result = kbResult.text;
+              citations.push(...kbResult.citations);
             } else {
               result = `未知工具: ${tc.name}`;
             }

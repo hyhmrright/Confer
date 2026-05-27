@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useChatStore } from '../stores/chat.js';
 import { useContactsStore } from '../stores/contacts.js';
-import { MessageCircle, Users, Plus, Bot, Trash, BookOpen } from './Icons.js';
+import { MessageCircle, Users, Plus, Bot, Trash, BookOpen, Database } from './Icons.js';
 import { ContactList } from './ContactList.js';
 import { MemoryPage } from './MemoryPage.js';
+import { KnowledgePage } from './KnowledgePage.js';
 
-type Tab = 'conversations' | 'contacts' | 'memory';
+type Tab = 'conversations' | 'contacts' | 'memory' | 'knowledge';
 
 export function Sidebar() {
   const [tab, setTab] = useState<Tab>('conversations');
@@ -61,10 +62,21 @@ export function Sidebar() {
           <BookOpen className="w-4 h-4" />
           记忆
         </button>
+        <button
+          onClick={() => setTab('knowledge')}
+          className={`flex-1 flex items-center justify-center gap-1.5 py-3 text-sm font-medium transition-colors ${
+            tab === 'knowledge'
+              ? 'text-primary-600 border-b-2 border-primary-600'
+              : 'text-gray-400 hover:text-gray-600'
+          }`}
+        >
+          <Database className="w-4 h-4" />
+          知识库
+        </button>
       </div>
 
       {/* Action bar — only for conversations and contacts */}
-      {tab !== 'memory' && (
+      {tab !== 'memory' && tab !== 'knowledge' && (
         <div className="p-3 border-b border-gray-100">
           {tab === 'conversations' ? (
             <button
@@ -89,6 +101,8 @@ export function Sidebar() {
       {/* Content */}
       {tab === 'memory' ? (
         <MemoryPage />
+      ) : tab === 'knowledge' ? (
+        <KnowledgePage />
       ) : tab === 'conversations' ? (
         <div className="flex-1 overflow-y-auto scrollbar-thin">
           {conversations.length === 0 ? (

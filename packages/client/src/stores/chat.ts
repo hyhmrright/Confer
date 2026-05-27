@@ -78,8 +78,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
       agentStatus: null,
     });
     try {
-      const data = await api.get<{ messages: Message[] }>(`/conversations/${id}/messages`);
-      set({ messages: data.messages, messagesLoading: false });
+      const data = await api.get<{ messages: Array<Message & { citations_json?: unknown }> }>(`/conversations/${id}/messages`);
+      const mapped = data.messages.map((m) => {
+        if (!m.citations && m.citations_json) {
+          const raw = m.citations_json as Array<Record<string, unknown>>;
+          return {
+            ...m,
+            citations: raw.map((c) => ({
+              source: `${c['doc_name'] as string}（${c['kb_name'] as string}）`,
+              passage: c['excerpt'] as string | undefined,
+            })),
+          };
+        }
+        return m;
+      });
+      set({ messages: mapped, messagesLoading: false });
     } catch {
       set({ messagesLoading: false });
     }
