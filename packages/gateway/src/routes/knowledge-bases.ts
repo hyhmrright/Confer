@@ -7,7 +7,7 @@ import { eq, and } from 'drizzle-orm';
 import { AppError, newId, decrypt } from '@confer/shared';
 import { parseDocument, guessContentType } from '../lib/doc-parser.js';
 import { chunkText } from '../lib/chunker.js';
-import { embedTexts } from '../lib/embedding.js';
+import { embedTexts, type EmbeddingProvider, EMBEDDING_PROVIDER_PRIORITY } from '../lib/embedding.js';
 import { ensureCollection, upsertChunks, deleteByKbId, deleteByDocId } from '../lib/qdrant.js';
 import { getEnv } from '../env.js';
 import type { AppEnv } from '../types.js';
@@ -21,7 +21,7 @@ const createKbSchema = z.object({
   description: z.string().optional(),
 });
 
-async function getUserOpenAIKey(userId: string): Promise<string> {
+async function getEmbeddingConfig(userId: string): Promise<{ apiKey: string; provider: EmbeddingProvider }> {
   const env = getEnv();
   const db = getDb();
   const [userRow] = await db
@@ -31,12 +31,15 @@ async function getUserOpenAIKey(userId: string): Promise<string> {
     .limit(1);
 
   const llmKeys = (userRow?.llm_keys_json ?? {}) as Record<string, unknown>;
-  const encryptedKey = llmKeys['openai'] as import('@confer/shared').EncryptedValue | undefined;
-  if (!encryptedKey) throw new AppError('embedding_unavailable', 'OpenAI API key not configured — required for knowledge base embeddings', 400);
 
-  const result = await decrypt(encryptedKey, env.ENCRYPTION_KEY);
-  if (!result.ok) throw new AppError('embedding_unavailable', 'Failed to decrypt OpenAI API key', 400);
-  return result.value;
+  for (const provider of EMBEDDING_PROVIDER_PRIORITY) {
+    const encryptedKey = llmKeys[provider] as import('@confer/shared').EncryptedValue | undefined;
+    if (!encryptedKey) continue;
+    const result = await decrypt(encryptedKey, env.ENCRYPTION_KEY);
+    if (result.ok) return { apiKey: result.value, provider };
+  }
+
+  throw new AppError('embedding_unavailable', 'No embedding provider configured — please add an OpenAI, ZhipuAI (GLM), or Qwen API key in Settings', 400);
 }
 
 // --- Knowledge Base CRUD ---
@@ -183,7 +186,7 @@ async function ingestDocument(
   buffer: ArrayBuffer,
 ): Promise<void> {
   const db = getDb();
-  const apiKey = await getUserOpenAIKey(userId);
+  const { apiKey, provider } = await getEmbeddingConfig(userId);
 
   const text = await parseDocument(buffer, contentType);
   const chunks = chunkText(text, docId, filename, kbId, userId).map((c) => ({ ...c, kb_name: kbName }));
@@ -196,7 +199,7 @@ async function ingestDocument(
   }
 
   await ensureCollection();
-  const vectors = await embedTexts(chunks.map((c) => c.text), apiKey);
+  const vectors = await embedTexts(chunks.map((c) => c.text), apiKey, provider);
   const points = chunks.map((c, i) => ({ ...c, vector: vectors[i] as number[] }));
   await upsertChunks(points);
 

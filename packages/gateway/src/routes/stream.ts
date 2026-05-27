@@ -10,6 +10,7 @@ import { getEnv } from '../env.js';
 import { broadcastToConversation } from '../ws/handler.js';
 import { tavilySearch, tavilyToolDefinition } from '../tools/tavily.js';
 import { searchKnowledgeBase, knowledgeBaseToolDefinition, type KbCitation } from '../tools/knowledge-base.js';
+import { EMBEDDING_PROVIDER_PRIORITY, type EmbeddingProvider } from '../lib/embedding.js';
 import type { AppEnv } from '../types.js';
 import type { LLMMessage, LLMToolDefinition } from '@confer/agent-runtime';
 
@@ -106,16 +107,16 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
         content: m.content ?? '',
       }));
 
-      // Check if user has any knowledge bases
-      let openAIKey = '';
-      {
-        const encryptedOpenAI = (llmKeys['openai'] ?? llmKeys['openai-compatible']) as import('@confer/shared').EncryptedValue | undefined;
-        if (encryptedOpenAI) {
-          const r = await decrypt(encryptedOpenAI, env.ENCRYPTION_KEY);
-          if (r.ok) openAIKey = r.value;
-        }
+      // Resolve embedding provider for knowledge base search
+      let embeddingKey = '';
+      let embeddingProvider: EmbeddingProvider = 'openai';
+      for (const p of EMBEDDING_PROVIDER_PRIORITY) {
+        const encrypted = llmKeys[p] as import('@confer/shared').EncryptedValue | undefined;
+        if (!encrypted) continue;
+        const r = await decrypt(encrypted, env.ENCRYPTION_KEY);
+        if (r.ok) { embeddingKey = r.value; embeddingProvider = p; break; }
       }
-      const userKbs = openAIKey
+      const userKbs = embeddingKey
         ? await db.select({ id: knowledgeBases.id }).from(knowledgeBases).where(eq(knowledgeBases.user_id, user.sub))
         : [];
 
@@ -167,7 +168,7 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
               result = await tavilySearch(args.query, env.TAVILY_API_KEY);
             } else if (tc.name === 'search_knowledge_base') {
               const args = JSON.parse(tc.arguments) as { query: string; kb_ids?: string[] };
-              const kbResult = await searchKnowledgeBase(args.query, user.sub, openAIKey, args.kb_ids);
+              const kbResult = await searchKnowledgeBase(args.query, user.sub, embeddingKey, args.kb_ids, embeddingProvider);
               result = kbResult.text;
               citations.push(...kbResult.citations);
             } else {

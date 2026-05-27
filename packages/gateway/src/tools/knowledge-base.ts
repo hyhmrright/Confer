@@ -1,4 +1,4 @@
-import { embedTexts } from '../lib/embedding.js';
+import { embedTexts, type EmbeddingProvider } from '../lib/embedding.js';
 import { searchChunks, type SearchResult } from '../lib/qdrant.js';
 
 export interface KbCitation {
@@ -13,8 +13,9 @@ export async function searchKnowledgeBase(
   userId: string,
   apiKey: string,
   kbIds?: string[],
+  provider: EmbeddingProvider = 'openai',
 ): Promise<{ text: string; citations: KbCitation[] }> {
-  const vectors = await embedTexts([query], apiKey);
+  const vectors = await embedTexts([query], apiKey, provider);
   const vector = vectors[0] as number[];
   const results: SearchResult[] = await searchChunks(vector, userId, kbIds, 5);
 

@@ -32,10 +32,10 @@ function StatusMsg({ error, success }: { error: string | null; success: string |
 
 const LLM_PROVIDERS = [
   { id: 'anthropic', name: 'Anthropic (Claude)' },
-  { id: 'openai', name: 'OpenAI' },
+  { id: 'openai', name: 'OpenAI', supportsEmbedding: true },
   { id: 'deepseek', name: 'DeepSeek' },
-  { id: 'qwen', name: '通义千问 (Qwen)' },
-  { id: 'glm', name: '智谱 AI (GLM)' },
+  { id: 'qwen', name: '通义千问 (Qwen)', supportsEmbedding: true },
+  { id: 'glm', name: '智谱 AI (GLM)', supportsEmbedding: true },
   { id: 'ollama', name: 'Ollama (本地)', isLocal: true },
 ];
 
@@ -408,6 +408,11 @@ function KeysTab() {
                 <div className="flex items-center gap-2.5">
                   <Key className="w-3.5 h-3.5 text-ink-muted" />
                   <span className="text-sm font-medium text-ink-primary">{provider.name}</span>
+                  {provider.supportsEmbedding && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-900/30 text-blue-400 border border-blue-800/30">
+                      支持知识库
+                    </span>
+                  )}
                   {isConfigured && (
                     <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-900/30 text-green-400 border border-green-800/30">
                       已配置
