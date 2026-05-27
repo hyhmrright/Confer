@@ -1,5 +1,12 @@
+import { createHash } from 'crypto';
+
 const COLLECTION = 'knowledge_chunks';
 const VECTOR_SIZE = 1536;
+
+function toUUID(id: string): string {
+  const h = createHash('sha256').update(id).digest('hex');
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
+}
 
 export interface KnowledgeChunk {
   chunk_id: string;
@@ -56,7 +63,7 @@ export async function ensureCollection(): Promise<void> {
 export async function upsertChunks(chunks: KnowledgeChunk[]): Promise<void> {
   if (chunks.length === 0) return;
   const points = chunks.map((c) => ({
-    id: c.chunk_id,
+    id: toUUID(c.chunk_id),
     vector: c.vector,
     payload: {
       kb_id: c.kb_id,
