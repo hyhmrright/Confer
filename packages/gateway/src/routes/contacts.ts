@@ -2,10 +2,17 @@ import { resolveDID } from '@confer/identity';
 import { AppError, contactLookupSchema, newId } from '@confer/shared';
 import { and, eq, like } from 'drizzle-orm';
 import { Hono } from 'hono';
+import { z } from 'zod';
 import { getDb } from '../db/connection.js';
 import { agents, peerAgents, peerContacts } from '../db/schema.js';
 import { authMiddleware } from '../middleware/auth.js';
 import type { AppEnv } from '../types.js';
+
+const addContactSchema = z.object({
+  peer_id: z.string().length(26),
+  alias: z.string().max(128).optional(),
+  added_via: z.string().max(32).optional(),
+});
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return Promise.race([
@@ -39,10 +46,9 @@ contactRoutes.get('/', async (c) => {
 contactRoutes.post('/', async (c) => {
   const user = c.get('user');
   const db = getDb();
-  const body = await c.req.json();
+  const body = addContactSchema.parse(await c.req.json());
 
-  const peerId = body.peer_id as string;
-  const [peer] = await db.select().from(peerAgents).where(eq(peerAgents.id, peerId)).limit(1);
+  const [peer] = await db.select().from(peerAgents).where(eq(peerAgents.id, body.peer_id)).limit(1);
 
   if (!peer) {
     throw new AppError('not_found', 'Peer agent not found', 404);
@@ -54,7 +60,7 @@ contactRoutes.post('/', async (c) => {
     .values({
       id: contactId,
       user_id: user.sub,
-      peer_id: peerId,
+      peer_id: body.peer_id,
       alias: body.alias,
       added_via: body.added_via ?? 'manual',
     })

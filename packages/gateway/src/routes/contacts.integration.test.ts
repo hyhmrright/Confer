@@ -56,6 +56,11 @@ describe('contacts', () => {
     expect(res.status).toBe(404);
   });
 
+  test('rejects adding a contact without a peer_id with 400', async () => {
+    const res = await post(BASE, { token: user.token, body: { alias: 'no-peer' } });
+    expect(res.status).toBe(400);
+  });
+
   test('looks up public agents by username', async () => {
     await getDb().insert(agents).values({
       id: newId(),
