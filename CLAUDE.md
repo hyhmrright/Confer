@@ -51,7 +51,7 @@ TypeScript everywhere. Bun + Hono (server), Tauri 2.0 + React 18 + Zustand (clie
 3. AgentFacts must validate against NANDA schema
 4. Migration files are immutable once merged
 5. `.claude/peers/*` must stay human-readable Markdown
-6. Knowledge base embeddings use `EMBEDDING_PROVIDER_PRIORITY` order (openai → glm → qwen) — whichever key is configured first wins
+6. Embedding provider auto-selected by the `EMBEDDING_PROVIDER_PRIORITY` constant in `lib/embedding.ts` (openai → glm → qwen) — first provider with a user-configured key wins
 
 ## Forbidden
 
@@ -100,6 +100,7 @@ Local infra via Docker: `docker compose up -d` starts PostgreSQL (5432), Redis (
 - Drizzle migrations: ALWAYS use `bun run db:generate`, never write SQL manually — the journal won't track it and schema gets out of sync requiring manual `ALTER TABLE` in prod
 - Qdrant point IDs must be UUID or uint64 — ULIDs are rejected with 400; convert via SHA-256 hash (`toUUID` in `lib/qdrant.ts`)
 - Docker inter-container networking: use service names (`qdrant:6333`, `minio:9000`), not `localhost` — localhost resolves to the container itself
+- LLM / embedding / Tavily keys live encrypted in `users.llm_keys_json` (AES-256-GCM via `ENCRYPTION_KEY`), set per-user via the settings UI — **not** in `.env`. The `TAVILY_API_KEY` env var is only a fallback; `web_search` is offered only when a key resolves
 
 ## Claude Code automation
 
