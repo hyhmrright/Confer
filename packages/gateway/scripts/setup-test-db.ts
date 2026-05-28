@@ -1,8 +1,7 @@
 // Builds a fresh schema in the isolated test database for gateway integration
-// tests. Applies every Drizzle migration SQL file in order against a clean
-// `public` schema. This deliberately bypasses the migration journal (which is
-// out of sync — migrations 0002-0004 are untracked) so the test schema always
-// matches the current schema.ts.
+// tests by applying every Drizzle migration SQL file in order against a clean
+// `public` schema. Re-runnable: it drops and rebuilds the schema each time, so
+// it doesn't depend on the migration tracking table.
 import { readFile, readdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';

@@ -105,8 +105,7 @@ Local infra via Docker: `docker compose up -d` starts PostgreSQL (5432), Redis (
 - `Bun.serve` WebSocket API ≠ Node `ws`
 - HTTP signatures: adding headers invalidates unless in signing set
 - DID document caching: respect TTL/ETag or auth breaks
-- Drizzle migrations: ALWAYS use `bun run db:generate`, never write SQL manually — the journal won't track it and schema gets out of sync requiring manual `ALTER TABLE` in prod
-- ⚠️ The journal is **currently out of sync**: migrations `0002`-`0004` (agent_memories, knowledge_bases, knowledge_documents) exist as SQL but are **not** in `drizzle/meta/_journal.json`, so `bun run db:migrate` does NOT create those tables on a fresh DB. Regenerate the journal with `bun run db:generate` before trusting `db:migrate` for a clean deploy. (Tests sidestep this — `test:setup` applies all SQL directly.)
+- Drizzle migrations: ALWAYS use `bun run db:generate`, never write SQL manually — the journal won't track it and schema gets out of sync requiring manual `ALTER TABLE` in prod (this bit us once: migrations 0002-0004 were hand-written and untracked; the journal was repaired by regenerating a tracked, idempotent `0002` from `schema.ts`)
 - Qdrant point IDs must be UUID or uint64 — ULIDs are rejected with 400; convert via SHA-256 hash (`toUUID` in `lib/qdrant.ts`)
 - Docker inter-container networking: use service names (`qdrant:6333`, `minio:9000`), not `localhost` — localhost resolves to the container itself
 - LLM / embedding / Tavily keys live encrypted in `users.llm_keys_json` (AES-256-GCM via `ENCRYPTION_KEY`), set per-user via the settings UI — **not** in `.env`. The `TAVILY_API_KEY` env var is only a fallback; `web_search` is offered only when a key resolves
