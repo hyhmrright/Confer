@@ -53,7 +53,7 @@ TypeScript everywhere. Bun + Hono (server), Tauri 2.0 + React 18 + Zustand (clie
 2. DID documents must be valid W3C DID v1.0 — use the `did` library
 3. AgentFacts must validate against NANDA schema
 4. Migration files are immutable once merged
-5. `.Codex/peers/*` must stay human-readable Markdown
+5. `.claude/peers/*` must stay human-readable Markdown
 
 ## Forbidden
 

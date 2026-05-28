@@ -219,22 +219,22 @@ knowledgeBasesRoutes.post('/:kbId/documents/:docId/retry', async (c) => {
   const buffer = await getObject(doc.storage_key);
   const contentType = doc.content_type ?? guessContentType(doc.filename);
 
-  await deleteByDocId(docId);
-  ingestDocument(
-    docId,
-    kbId,
-    kb.name,
-    user.sub,
-    doc.filename,
-    contentType,
-    buffer.buffer as ArrayBuffer,
-  ).catch((err) => {
-    console.error(`Retry ingestion failed for doc ${docId}:`, err);
-    db.update(knowledgeDocuments)
-      .set({ status: 'failed' })
-      .where(eq(knowledgeDocuments.id, docId))
-      .catch(() => {});
-  });
+  // getObject returns a Buffer that may be a pooled view; slice to its exact bytes
+  const fileBuffer = buffer.buffer.slice(
+    buffer.byteOffset,
+    buffer.byteOffset + buffer.byteLength,
+  ) as ArrayBuffer;
+
+  await deleteByDocId(docId).catch(() => {});
+  ingestDocument(docId, kbId, kb.name, user.sub, doc.filename, contentType, fileBuffer).catch(
+    (err) => {
+      console.error(`Retry ingestion failed for doc ${docId}:`, err);
+      db.update(knowledgeDocuments)
+        .set({ status: 'failed' })
+        .where(eq(knowledgeDocuments.id, docId))
+        .catch(() => {});
+    },
+  );
 
   return c.json({ document: updated });
 });

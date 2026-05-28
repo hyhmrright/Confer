@@ -220,7 +220,7 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
 
           await stream.writeSSE({
             event: 'tool_result',
-            data: JSON.stringify({ result: tc.name }),
+            data: JSON.stringify({ result }),
           });
 
           agentMessages = [
