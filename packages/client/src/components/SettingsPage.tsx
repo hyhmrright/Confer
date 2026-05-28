@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { api } from '../lib/api.js';
 import { useAuthStore } from '../stores/auth.js';
 import { useSettingsStore } from '../stores/settings.js';
-import { api } from '../lib/api.js';
-import { ArrowLeft, User, Bot, Key } from './Icons.js';
+import { ArrowLeft, Bot, Key, User } from './Icons.js';
 
 type Tab = 'profile' | 'agent' | 'keys';
 
@@ -29,6 +29,15 @@ function StatusMsg({ error, success }: { error: string | null; success: string |
     </>
   );
 }
+
+const TOOL_PROVIDERS = [
+  {
+    id: 'tavily',
+    name: 'Tavily 网络搜索',
+    description: '让 AI 能实时搜索网络，查询新闻、股价、天气等任意最新信息',
+    placeholder: 'tvly-...',
+  },
+];
 
 const LLM_PROVIDERS = [
   { id: 'anthropic', name: 'Anthropic (Claude)' },
@@ -104,7 +113,10 @@ function ProfileTab() {
 
   useEffect(() => {
     if (success || error) {
-      const t = setTimeout(() => { setSuccess(null); setError(null); }, 3000);
+      const t = setTimeout(() => {
+        setSuccess(null);
+        setError(null);
+      }, 3000);
       return () => clearTimeout(t);
     }
   }, [success, error]);
@@ -195,8 +207,17 @@ function ProfileTab() {
 }
 
 function AgentTab() {
-  const { agent, loading, saving, error, success, loadAgent, updateAgent, fetchModels, clearMessages } =
-    useSettingsStore();
+  const {
+    agent,
+    loading,
+    saving,
+    error,
+    success,
+    loadAgent,
+    updateAgent,
+    fetchModels,
+    clearMessages,
+  } = useSettingsStore();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [provider, setProvider] = useState('');
@@ -205,7 +226,9 @@ function AgentTab() {
   const [dynamicModels, setDynamicModels] = useState<{ value: string; label: string }[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
 
-  useEffect(() => { loadAgent(); }, [loadAgent]);
+  useEffect(() => {
+    loadAgent();
+  }, [loadAgent]);
 
   useEffect(() => {
     if (agent) {
@@ -235,7 +258,7 @@ function AgentTab() {
     try {
       if (p === 'ollama') {
         const resp = await fetch('http://localhost:11434/api/tags');
-        const data = await resp.json() as { models?: { name: string }[] };
+        const data = (await resp.json()) as { models?: { name: string }[] };
         setDynamicModels((data.models ?? []).map((m) => ({ value: m.name, label: m.name })));
       } else {
         setDynamicModels(await fetchModels(p));
@@ -266,7 +289,11 @@ function AgentTab() {
       <div className="flex justify-center pt-12">
         <div className="flex gap-1.5">
           {[0, 150, 300].map((d) => (
-            <span key={d} className="w-1.5 h-1.5 rounded-full bg-dark-border animate-bounce" style={{ animationDelay: `${d}ms` }} />
+            <span
+              key={d}
+              className="w-1.5 h-1.5 rounded-full bg-dark-border animate-bounce"
+              style={{ animationDelay: `${d}ms` }}
+            />
           ))}
         </div>
       </div>
@@ -304,7 +331,9 @@ function AgentTab() {
         >
           <option value="">选择提供商</option>
           {LLM_PROVIDERS.map((p) => (
-            <option key={p.id} value={p.id}>{p.name}</option>
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
           ))}
         </select>
       </div>
@@ -312,17 +341,17 @@ function AgentTab() {
         <div>
           <FieldLabel>
             模型
-            {loadingModels && <span className="text-ink-muted font-normal ml-2 text-[11px]">查询中...</span>}
+            {loadingModels && (
+              <span className="text-ink-muted font-normal ml-2 text-[11px]">查询中...</span>
+            )}
           </FieldLabel>
           {modelOptions.length > 0 ? (
-            <select
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              className={SELECT_CN}
-            >
+            <select value={model} onChange={(e) => setModel(e.target.value)} className={SELECT_CN}>
               <option value="">选择模型</option>
               {modelOptions.map((m) => (
-                <option key={m.value} value={m.value}>{m.label}</option>
+                <option key={m.value} value={m.value}>
+                  {m.label}
+                </option>
               ))}
             </select>
           ) : (
@@ -330,7 +359,9 @@ function AgentTab() {
               type="text"
               value={model}
               onChange={(e) => setModel(e.target.value)}
-              placeholder={provider === 'ollama' ? '未检测到本地模型，手动输入模型名' : '输入模型名'}
+              placeholder={
+                provider === 'ollama' ? '未检测到本地模型，手动输入模型名' : '输入模型名'
+              }
               className={INPUT_CN}
             />
           )}
@@ -366,7 +397,9 @@ function KeysTab() {
   const [editing, setEditing] = useState<string | null>(null);
   const [keyValue, setKeyValue] = useState('');
 
-  useEffect(() => { loadLlmKeys(); }, [loadLlmKeys]);
+  useEffect(() => {
+    loadLlmKeys();
+  }, [loadLlmKeys]);
 
   useEffect(() => {
     if (success || error) {
@@ -378,6 +411,11 @@ function KeysTab() {
   const handleSave = async (provider: string) => {
     if (!keyValue.trim()) return;
     await saveLlmKey(provider, keyValue.trim());
+    setEditing(null);
+    setKeyValue('');
+  };
+
+  const cancelEdit = () => {
     setEditing(null);
     setKeyValue('');
   };
@@ -403,7 +441,10 @@ function KeysTab() {
           const isOllama = provider.id === 'ollama';
 
           return (
-            <div key={provider.id} className="border border-dark-border rounded-xl p-3.5 bg-dark-card">
+            <div
+              key={provider.id}
+              className="border border-dark-border rounded-xl p-3.5 bg-dark-card"
+            >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
                   <Key className="w-3.5 h-3.5 text-ink-muted" />
@@ -461,7 +502,7 @@ function KeysTab() {
                     保存
                   </button>
                   <button
-                    onClick={() => { setEditing(null); setKeyValue(''); }}
+                    onClick={cancelEdit}
                     className="px-3 py-1.5 border border-dark-border rounded-lg text-xs text-ink-muted hover:text-ink-secondary transition-colors"
                   >
                     取消
@@ -471,6 +512,84 @@ function KeysTab() {
             </div>
           );
         })}
+      </div>
+
+      <div className="pt-2">
+        <p className="text-xs font-medium text-ink-secondary mb-2">工具服务</p>
+        <div className="space-y-2">
+          {TOOL_PROVIDERS.map((tool) => {
+            const keyInfo = llmKeys.find((k) => k.provider === tool.id);
+            const isConfigured = keyInfo?.configured ?? false;
+            const isEditing = editing === tool.id;
+
+            return (
+              <div
+                key={tool.id}
+                className="border border-dark-border rounded-xl p-3.5 bg-dark-card"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <Key className="w-3.5 h-3.5 text-ink-muted" />
+                    <div>
+                      <span className="text-sm font-medium text-ink-primary">{tool.name}</span>
+                      {isConfigured && (
+                        <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-green-900/30 text-green-400 border border-green-800/30">
+                          已配置
+                        </span>
+                      )}
+                      <p className="text-[11px] text-ink-muted mt-0.5">{tool.description}</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-3 shrink-0 ml-3">
+                    {!isEditing && (
+                      <button
+                        onClick={() => handleEdit(tool.id)}
+                        className="text-xs text-primary-400 hover:text-primary-300 transition-colors"
+                      >
+                        {isConfigured ? '更新' : '配置'}
+                      </button>
+                    )}
+                    {isConfigured && !isEditing && (
+                      <button
+                        onClick={() => removeLlmKey(tool.id)}
+                        disabled={saving}
+                        className="text-xs text-red-400 hover:text-red-300 transition-colors disabled:opacity-40"
+                      >
+                        移除
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {isEditing && (
+                  <div className="mt-3 flex gap-2">
+                    <input
+                      type="password"
+                      value={keyValue}
+                      onChange={(e) => setKeyValue(e.target.value)}
+                      placeholder={tool.placeholder}
+                      className="flex-1 px-3 py-1.5 bg-dark-input border border-dark-border rounded-lg text-xs font-mono text-ink-primary placeholder:text-ink-muted focus:outline-none focus:border-primary-600/40 transition-colors"
+                      autoFocus
+                    />
+                    <button
+                      onClick={() => handleSave(tool.id)}
+                      disabled={saving || !keyValue.trim()}
+                      className="px-3 py-1.5 bg-primary-600 text-white rounded-lg text-xs hover:bg-primary-500 disabled:opacity-40 transition-colors"
+                    >
+                      保存
+                    </button>
+                    <button
+                      onClick={cancelEdit}
+                      className="px-3 py-1.5 border border-dark-border rounded-lg text-xs text-ink-muted hover:text-ink-secondary transition-colors"
+                    >
+                      取消
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

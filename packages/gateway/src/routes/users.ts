@@ -1,15 +1,15 @@
+import { AppError, decrypt, encrypt } from '@confer/shared';
+import type { EncryptedValue } from '@confer/shared';
+import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { AppError, encrypt, decrypt } from '@confer/shared';
-import type { EncryptedValue } from '@confer/shared';
-import { authMiddleware } from '../middleware/auth.js';
 import { getDb } from '../db/connection.js';
-import { users, agents } from '../db/schema.js';
-import { eq } from 'drizzle-orm';
+import { agents, users } from '../db/schema.js';
 import { getEnv } from '../env.js';
+import { authMiddleware } from '../middleware/auth.js';
 import type { AppEnv } from '../types.js';
 
-const PROVIDERS = ['anthropic', 'deepseek', 'openai', 'qwen', 'glm', 'ollama'] as const;
+const PROVIDERS = ['anthropic', 'deepseek', 'openai', 'qwen', 'glm', 'ollama', 'tavily'] as const;
 type Provider = (typeof PROVIDERS)[number];
 
 type LlmKeysJson = Partial<Record<Provider, EncryptedValue>>;
@@ -74,11 +74,7 @@ agentRoutes.get('/me', async (c) => {
   const user = c.get('user');
   const db = getDb();
 
-  const [agent] = await db
-    .select()
-    .from(agents)
-    .where(eq(agents.user_id, user.sub))
-    .limit(1);
+  const [agent] = await db.select().from(agents).where(eq(agents.user_id, user.sub)).limit(1);
 
   return c.json({ agent });
 });
@@ -146,7 +142,7 @@ agentRoutes.put('/me/llm-keys', async (c) => {
     .where(eq(users.id, user.sub))
     .limit(1);
 
-  const stored = ((row?.llm_keys_json ?? {}) as LlmKeysJson);
+  const stored = (row?.llm_keys_json ?? {}) as LlmKeysJson;
   const updated: LlmKeysJson = { ...stored, [body.provider]: result.value };
 
   await db.update(users).set({ llm_keys_json: updated }).where(eq(users.id, user.sub));
@@ -169,7 +165,7 @@ agentRoutes.delete('/me/llm-keys/:provider', async (c) => {
     .where(eq(users.id, user.sub))
     .limit(1);
 
-  const stored = ((row?.llm_keys_json ?? {}) as LlmKeysJson);
+  const stored = (row?.llm_keys_json ?? {}) as LlmKeysJson;
   const { [provider]: _removed, ...rest } = stored;
 
   await db.update(users).set({ llm_keys_json: rest }).where(eq(users.id, user.sub));
@@ -222,15 +218,16 @@ async function fetchProviderModels(provider: Provider, apiKey: string): Promise<
   const url = PROVIDER_MODEL_URLS[provider];
   if (!url) return [];
   try {
-    const headers: Record<string, string> = provider === 'anthropic'
-      ? { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' }
-      : { Authorization: `Bearer ${apiKey}` };
+    const headers: Record<string, string> =
+      provider === 'anthropic'
+        ? { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' }
+        : { Authorization: `Bearer ${apiKey}` };
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10_000);
     const resp = await fetch(url, { headers, signal: controller.signal });
     clearTimeout(timeout);
     if (!resp.ok) return [];
-    const data = await resp.json() as { data?: { id: string }[] };
+    const data = (await resp.json()) as { data?: { id: string }[] };
     return data.data ?? [];
   } catch {
     return [];
@@ -242,7 +239,10 @@ agentRoutes.put('/me/policies', async (c) => {
   const db = getDb();
   const body = policyBodySchema.parse(await c.req.json());
 
-  await db.update(agents).set({ policies_json: body, updated_at: new Date() }).where(eq(agents.user_id, user.sub));
+  await db
+    .update(agents)
+    .set({ policies_json: body, updated_at: new Date() })
+    .where(eq(agents.user_id, user.sub));
 
   return c.json({ ok: true });
 });

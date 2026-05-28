@@ -131,9 +131,18 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
             .where(eq(knowledgeBases.user_id, user.sub))
         : [];
 
+      const encryptedTavilyKey = llmKeys['tavily'] as
+        | import('@confer/shared').EncryptedValue
+        | undefined;
+      let tavilyApiKey = env.TAVILY_API_KEY;
+      if (encryptedTavilyKey) {
+        const r = await decrypt(encryptedTavilyKey, env.ENCRYPTION_KEY);
+        if (r.ok) tavilyApiKey = r.value;
+      }
+
       const tools: LLMToolDefinition[] = [
         weatherToolDefinition,
-        ...(env.TAVILY_API_KEY ? [tavilyToolDefinition] : []),
+        ...(tavilyApiKey ? [tavilyToolDefinition] : []),
         ...(userKbs.length > 0 ? [knowledgeBaseToolDefinition] : []),
       ];
       const effectiveSystemPrompt = buildSystemPrompt(systemPrompt, userKbs.length > 0);
@@ -195,7 +204,7 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
               result = await getWeather(args.location);
             } else if (tc.name === 'web_search') {
               const args = JSON.parse(tc.arguments) as { query: string };
-              result = await tavilySearch(args.query, env.TAVILY_API_KEY);
+              result = await tavilySearch(args.query, tavilyApiKey);
             } else if (tc.name === 'search_knowledge_base') {
               const args = JSON.parse(tc.arguments) as { query: string; kb_ids?: string[] };
               const kbResult = await searchKnowledgeBase(
