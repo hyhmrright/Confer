@@ -1,6 +1,6 @@
+import { AppError } from '@confer/shared';
 import { createMiddleware } from 'hono/factory';
 import * as jose from 'jose';
-import { AppError } from '@confer/shared';
 import { getEnv } from '../env.js';
 
 export interface AuthPayload {

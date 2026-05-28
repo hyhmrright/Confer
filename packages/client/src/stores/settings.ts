@@ -91,9 +91,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       set((s) => ({
         saving: false,
         success: `${provider} 密钥已保存`,
-        llmKeys: s.llmKeys.map((k) =>
-          k.provider === provider ? { ...k, configured: true } : k,
-        ),
+        llmKeys: s.llmKeys.map((k) => (k.provider === provider ? { ...k, configured: true } : k)),
       }));
     } catch (e) {
       set({ saving: false, error: e instanceof Error ? e.message : '保存失败' });
@@ -107,9 +105,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       set((s) => ({
         saving: false,
         success: `${provider} 密钥已移除`,
-        llmKeys: s.llmKeys.map((k) =>
-          k.provider === provider ? { ...k, configured: false } : k,
-        ),
+        llmKeys: s.llmKeys.map((k) => (k.provider === provider ? { ...k, configured: false } : k)),
       }));
     } catch (e) {
       set({ saving: false, error: e instanceof Error ? e.message : '删除失败' });
@@ -118,7 +114,9 @@ export const useSettingsStore = create<SettingsState>((set) => ({
 
   fetchModels: async (provider) => {
     try {
-      const data = await api.get<{ models: { id: string }[] }>(`/agents/me/llm-keys/${provider}/models`);
+      const data = await api.get<{ models: { id: string }[] }>(
+        `/agents/me/llm-keys/${provider}/models`,
+      );
       return (data.models ?? []).map((m) => ({ value: m.id, label: m.id }));
     } catch {
       return [];

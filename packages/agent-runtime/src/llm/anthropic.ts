@@ -1,4 +1,10 @@
-import type { LLMProvider, LLMMessage, LLMResponse, LLMStreamEvent, LLMChatOptions } from './provider.js';
+import type {
+  LLMChatOptions,
+  LLMMessage,
+  LLMProvider,
+  LLMResponse,
+  LLMStreamEvent,
+} from './provider.js';
 
 function toAnthropicMessages(messages: LLMMessage[]): unknown[] {
   return messages
@@ -14,7 +20,12 @@ function toAnthropicMessages(messages: LLMMessage[]): unknown[] {
         const content: unknown[] = [];
         if (m.content) content.push({ type: 'text', text: m.content });
         for (const tc of m.tool_calls) {
-          content.push({ type: 'tool_use', id: tc.id, name: tc.function.name, input: JSON.parse(tc.function.arguments || '{}') });
+          content.push({
+            type: 'tool_use',
+            id: tc.id,
+            name: tc.function.name,
+            input: JSON.parse(tc.function.arguments || '{}'),
+          });
         }
         return { role: 'assistant', content };
       }
@@ -59,7 +70,7 @@ export class AnthropicProvider implements LLMProvider {
       throw new Error(`Anthropic API error (${response.status}): ${text}`);
     }
 
-    const data = await response.json() as Record<string, unknown>;
+    const data = (await response.json()) as Record<string, unknown>;
     const content = (data.content as Array<{ type: string; text?: string }>)
       .filter((b) => b.type === 'text')
       .map((b) => b.text)
@@ -131,7 +142,11 @@ export class AnthropicProvider implements LLMProvider {
           const block = data.content_block as Record<string, unknown>;
           const index = data.index as number;
           if (block.type === 'tool_use') {
-            pendingToolBlocks.set(index, { id: block.id as string, name: block.name as string, input: '' });
+            pendingToolBlocks.set(index, {
+              id: block.id as string,
+              name: block.name as string,
+              input: '',
+            });
           }
         } else if (data.type === 'content_block_delta') {
           const delta = data.delta as Record<string, string>;

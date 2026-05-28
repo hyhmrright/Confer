@@ -27,7 +27,9 @@ async function ensureBucket(): Promise<void> {
 export async function putObject(key: string, buffer: Buffer, contentType: string): Promise<void> {
   const env = getEnv();
   await ensureBucket();
-  await getClient().putObject(env.MINIO_BUCKET, key, buffer, buffer.length, { 'Content-Type': contentType });
+  await getClient().putObject(env.MINIO_BUCKET, key, buffer, buffer.length, {
+    'Content-Type': contentType,
+  });
 }
 
 export async function getObject(key: string): Promise<Buffer> {

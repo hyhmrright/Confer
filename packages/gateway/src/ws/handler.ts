@@ -1,9 +1,9 @@
+import { type WsServerMessage, wsClientMessageSchema } from '@confer/shared';
 import type { Server, ServerWebSocket } from 'bun';
+import { and, eq } from 'drizzle-orm';
 import * as jose from 'jose';
-import { wsClientMessageSchema, type WsServerMessage } from '@confer/shared';
 import { getDb } from '../db/connection.js';
-import { conversationParticipants, peerContacts, peerAgents, users } from '../db/schema.js';
-import { eq, and } from 'drizzle-orm';
+import { conversationParticipants, peerAgents, peerContacts, users } from '../db/schema.js';
 import { getEnv } from '../env.js';
 import type { AuthPayload } from '../middleware/auth.js';
 
@@ -81,7 +81,9 @@ export const websocket = {
     }
     set.add(ws);
 
-    broadcastPresence(userId, ws.data.user.username, true).catch((e) => console.error('presence broadcast failed:', e));
+    broadcastPresence(userId, ws.data.user.username, true).catch((e) =>
+      console.error('presence broadcast failed:', e),
+    );
   },
 
   message(ws: ServerWebSocket<WsData>, raw: string | Buffer) {
@@ -145,7 +147,9 @@ export const websocket = {
       set.delete(ws);
       if (set.size === 0) {
         connectionsByUser.delete(userId);
-        broadcastPresence(userId, ws.data.user.username, false).catch((e) => console.error('presence broadcast failed:', e));
+        broadcastPresence(userId, ws.data.user.username, false).catch((e) =>
+          console.error('presence broadcast failed:', e),
+        );
       }
     }
   },

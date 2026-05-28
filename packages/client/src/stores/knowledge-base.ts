@@ -53,7 +53,10 @@ export const useKbStore = create<KbState>((set) => ({
   },
 
   createKb: async (name, description) => {
-    const data = await api.post<{ knowledge_base: KnowledgeBase }>('/knowledge-bases', { name, description });
+    const data = await api.post<{ knowledge_base: KnowledgeBase }>('/knowledge-bases', {
+      name,
+      description,
+    });
     set((s) => ({ kbs: [data.knowledge_base, ...s.kbs] }));
   },
 
@@ -66,7 +69,9 @@ export const useKbStore = create<KbState>((set) => ({
   },
 
   fetchDocuments: async (kbId) => {
-    const data = await api.get<{ documents: KnowledgeDocument[] }>(`/knowledge-bases/${kbId}/documents`);
+    const data = await api.get<{ documents: KnowledgeDocument[] }>(
+      `/knowledge-bases/${kbId}/documents`,
+    );
     set((s) => ({ documents: { ...s.documents, [kbId]: data.documents } }));
   },
 
@@ -75,7 +80,10 @@ export const useKbStore = create<KbState>((set) => ({
     try {
       const form = new FormData();
       form.append('file', file);
-      const data = await api.postForm<{ document: KnowledgeDocument }>(`/knowledge-bases/${kbId}/documents`, form);
+      const data = await api.postForm<{ document: KnowledgeDocument }>(
+        `/knowledge-bases/${kbId}/documents`,
+        form,
+      );
       set((s) => ({
         documents: {
           ...s.documents,
@@ -98,7 +106,10 @@ export const useKbStore = create<KbState>((set) => ({
   },
 
   retryDocument: async (kbId, docId) => {
-    const data = await api.post<{ document: KnowledgeDocument }>(`/knowledge-bases/${kbId}/documents/${docId}/retry`, {});
+    const data = await api.post<{ document: KnowledgeDocument }>(
+      `/knowledge-bases/${kbId}/documents/${docId}/retry`,
+      {},
+    );
     set((s) => ({
       documents: {
         ...s.documents,

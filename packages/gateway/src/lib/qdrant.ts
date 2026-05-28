@@ -84,9 +84,7 @@ export async function searchChunks(
   kbIds: string[] | undefined,
   topK = 5,
 ): Promise<SearchResult[]> {
-  const mustFilters: unknown[] = [
-    { key: 'user_id', match: { value: userId } },
-  ];
+  const mustFilters: unknown[] = [{ key: 'user_id', match: { value: userId } }];
   if (kbIds && kbIds.length > 0) {
     mustFilters.push({ key: 'kb_id', match: { any: kbIds } });
   }
@@ -98,7 +96,7 @@ export async function searchChunks(
     filter: { must: mustFilters },
   };
 
-  const data = await request('POST', `/collections/${COLLECTION}/points/search`, body) as {
+  const data = (await request('POST', `/collections/${COLLECTION}/points/search`, body)) as {
     result: Array<{ id: string; score: number; payload: Record<string, unknown> }>;
   };
 

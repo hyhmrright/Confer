@@ -1,4 +1,4 @@
-import type { LLMProvider, LLMMessage, LLMStreamEvent } from '../llm/provider.js';
+import type { LLMMessage, LLMProvider, LLMStreamEvent } from '../llm/provider.js';
 
 export interface AgentContext {
   agentId: string;
@@ -8,10 +8,7 @@ export interface AgentContext {
   conversationHistory: LLMMessage[];
 }
 
-export async function runAgentLoop(
-  ctx: AgentContext,
-  userMessage: string,
-): Promise<string> {
+export async function runAgentLoop(ctx: AgentContext, userMessage: string): Promise<string> {
   const messages: LLMMessage[] = [
     { role: 'system', content: ctx.systemPrompt },
     ...ctx.conversationHistory,

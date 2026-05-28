@@ -2,12 +2,7 @@ import { z } from 'zod';
 
 export const permissionLevelSchema = z.enum(['L1', 'L2', 'L3']);
 
-export const permissionDecisionSchema = z.enum([
-  'allow_once',
-  'allow_always',
-  'deny',
-  'pending',
-]);
+export const permissionDecisionSchema = z.enum(['allow_once', 'allow_always', 'deny', 'pending']);
 
 export const permissionDecisionScopeSchema = z.enum(['peer', 'peer_action', 'global']);
 

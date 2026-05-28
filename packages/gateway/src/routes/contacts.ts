@@ -1,10 +1,10 @@
-import { Hono } from 'hono';
-import { contactLookupSchema, AppError, newId } from '@confer/shared';
 import { resolveDID } from '@confer/identity';
-import { authMiddleware } from '../middleware/auth.js';
+import { AppError, contactLookupSchema, newId } from '@confer/shared';
+import { and, eq, like } from 'drizzle-orm';
+import { Hono } from 'hono';
 import { getDb } from '../db/connection.js';
-import { peerContacts, peerAgents, agents } from '../db/schema.js';
-import { eq, and, like } from 'drizzle-orm';
+import { agents, peerAgents, peerContacts } from '../db/schema.js';
+import { authMiddleware } from '../middleware/auth.js';
 import type { AppEnv } from '../types.js';
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
@@ -42,11 +42,7 @@ contactRoutes.post('/', async (c) => {
   const body = await c.req.json();
 
   const peerId = body.peer_id as string;
-  const [peer] = await db
-    .select()
-    .from(peerAgents)
-    .where(eq(peerAgents.id, peerId))
-    .limit(1);
+  const [peer] = await db.select().from(peerAgents).where(eq(peerAgents.id, peerId)).limit(1);
 
   if (!peer) {
     throw new AppError('not_found', 'Peer agent not found', 404);
@@ -82,9 +78,7 @@ contactRoutes.delete('/:id', async (c) => {
     throw new AppError('not_found', 'Contact not found', 404);
   }
 
-  await db
-    .delete(peerContacts)
-    .where(eq(peerContacts.id, contactId));
+  await db.delete(peerContacts).where(eq(peerContacts.id, contactId));
 
   return c.json({ ok: true });
 });
@@ -97,7 +91,11 @@ contactRoutes.post('/lookup', async (c) => {
       const parsed = new URL(`https://${body.value}`);
       const hostname = parsed.hostname;
       if (/^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(hostname)) {
-        return c.json({ candidates: [], method: body.method, error: 'Private addresses not allowed' });
+        return c.json({
+          candidates: [],
+          method: body.method,
+          error: 'Private addresses not allowed',
+        });
       }
       const res = await withTimeout(fetch(`https://${hostname}/.well-known/agents.json`), 5000);
       const data = (await res.json()) as { agents?: unknown[] };
@@ -130,7 +128,12 @@ contactRoutes.post('/lookup', async (c) => {
         is_public: agents.is_public,
       })
       .from(agents)
-      .where(and(like(agents.did, `%${body.value.replace(/[%_\\]/g, (c) => `\\${c}`)}%`), eq(agents.is_public, true)))
+      .where(
+        and(
+          like(agents.did, `%${body.value.replace(/[%_\\]/g, (c) => `\\${c}`)}%`),
+          eq(agents.is_public, true),
+        ),
+      )
       .limit(20);
     return c.json({ candidates: rows, method: body.method });
   }

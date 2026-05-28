@@ -11,8 +11,8 @@ interface Citation {
 
 const trustBadge: Record<string, { label: string; color: string }> = {
   authoritative: { label: '权威来源', color: 'bg-green-900/40 text-green-400 border-green-800/40' },
-  verified:      { label: '已验证',   color: 'bg-blue-900/40 text-blue-400 border-blue-800/40' },
-  unverified:    { label: '未验证',   color: 'bg-yellow-900/40 text-yellow-400 border-yellow-800/40' },
+  verified: { label: '已验证', color: 'bg-blue-900/40 text-blue-400 border-blue-800/40' },
+  unverified: { label: '未验证', color: 'bg-yellow-900/40 text-yellow-400 border-yellow-800/40' },
 };
 
 export function CitationCapsule({ citations }: { citations: Citation[] }) {
@@ -28,9 +28,7 @@ export function CitationCapsule({ citations }: { citations: Citation[] }) {
       >
         <BookOpen className="w-3.5 h-3.5" />
         <span>{citations.length} 个引用来源</span>
-        {expanded
-          ? <ChevronDown className="w-3 h-3" />
-          : <ChevronRight className="w-3 h-3" />}
+        {expanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
       </button>
 
       {expanded && (
@@ -42,12 +40,18 @@ export function CitationCapsule({ citations }: { citations: Citation[] }) {
                 <div className="flex items-start gap-2">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-medium text-ink-secondary truncate">{cite.source}</span>
+                      <span className="text-xs font-medium text-ink-secondary truncate">
+                        {cite.source}
+                      </span>
                       {cite.page != null && (
-                        <span className="text-[10px] text-ink-muted font-mono shrink-0">p.{cite.page}</span>
+                        <span className="text-[10px] text-ink-muted font-mono shrink-0">
+                          p.{cite.page}
+                        </span>
                       )}
                       {badge && (
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full shrink-0 border ${badge.color}`}>
+                        <span
+                          className={`text-[10px] px-1.5 py-0.5 rounded-full shrink-0 border ${badge.color}`}
+                        >
                           {badge.label}
                         </span>
                       )}

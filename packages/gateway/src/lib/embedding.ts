@@ -29,7 +29,11 @@ interface EmbeddingResponse {
   data: Array<{ embedding: number[]; index: number }>;
 }
 
-async function embedBatch(texts: string[], apiKey: string, provider: EmbeddingProvider): Promise<number[][]> {
+async function embedBatch(
+  texts: string[],
+  apiKey: string,
+  provider: EmbeddingProvider,
+): Promise<number[][]> {
   const { url, model, dimensionParam } = PROVIDERS[provider];
   const body: Record<string, unknown> = { input: texts, model, [dimensionParam]: VECTOR_SIZE };
 
@@ -45,11 +49,15 @@ async function embedBatch(texts: string[], apiKey: string, provider: EmbeddingPr
     throw new Error(`${provider} embeddings failed (${res.status}): ${text}`);
   }
 
-  const data = await res.json() as EmbeddingResponse;
+  const data = (await res.json()) as EmbeddingResponse;
   return data.data.sort((a, b) => a.index - b.index).map((d) => d.embedding);
 }
 
-export async function embedTexts(texts: string[], apiKey: string, provider: EmbeddingProvider = 'openai'): Promise<number[][]> {
+export async function embedTexts(
+  texts: string[],
+  apiKey: string,
+  provider: EmbeddingProvider = 'openai',
+): Promise<number[][]> {
   if (!apiKey) throw new Error('API key required for embeddings');
   if (texts.length === 0) return [];
 

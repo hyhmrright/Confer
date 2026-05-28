@@ -1,21 +1,21 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
-import { errorHandler } from './middleware/error-handler.js';
-import { authRoutes } from './routes/auth.js';
-import { conversationRoutes } from './routes/conversations.js';
-import { contactRoutes } from './routes/contacts.js';
-import { userRoutes, agentRoutes } from './routes/users.js';
-import { wellKnownRoutes } from './routes/well-known.js';
-import { a2aRoutes } from './routes/a2a.js';
-import { streamRoutes } from './routes/stream.js';
-import { permissionRoutes } from './routes/permissions.js';
-import { agentFactsRoutes } from './routes/agent-facts.js';
-import { memoriesRoutes } from './routes/memories.js';
-import { knowledgeBasesRoutes } from './routes/knowledge-bases.js';
-import { websocket } from './ws/handler.js';
-import { getEnv } from './env.js';
 import { bootstrap } from './bootstrap.js';
+import { getEnv } from './env.js';
+import { errorHandler } from './middleware/error-handler.js';
+import { a2aRoutes } from './routes/a2a.js';
+import { agentFactsRoutes } from './routes/agent-facts.js';
+import { authRoutes } from './routes/auth.js';
+import { contactRoutes } from './routes/contacts.js';
+import { conversationRoutes } from './routes/conversations.js';
+import { knowledgeBasesRoutes } from './routes/knowledge-bases.js';
+import { memoriesRoutes } from './routes/memories.js';
+import { permissionRoutes } from './routes/permissions.js';
+import { streamRoutes } from './routes/stream.js';
+import { agentRoutes, userRoutes } from './routes/users.js';
+import { wellKnownRoutes } from './routes/well-known.js';
+import { websocket } from './ws/handler.js';
 
 const app = new Hono();
 

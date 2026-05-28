@@ -1,6 +1,6 @@
+import { type Result, err, ok } from '@confer/shared';
 import type { DIDDocument } from './document.js';
 import { didDocumentSchema, domainFromDid } from './document.js';
-import { err, ok, type Result } from '@confer/shared';
 
 interface CacheEntry {
   document: DIDDocument;
@@ -11,9 +11,7 @@ interface CacheEntry {
 const cache = new Map<string, CacheEntry>();
 const TTL_MS = 60_000;
 
-export async function resolveDID(
-  did: string,
-): Promise<Result<DIDDocument, string>> {
+export async function resolveDID(did: string): Promise<Result<DIDDocument, string>> {
   const cached = cache.get(did);
   if (cached && Date.now() < cached.expiresAt) {
     return ok(cached.document);

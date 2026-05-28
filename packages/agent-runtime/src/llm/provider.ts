@@ -36,10 +36,7 @@ export interface LLMProvider {
 
   chat(messages: LLMMessage[], options?: LLMChatOptions): Promise<LLMResponse>;
 
-  stream(
-    messages: LLMMessage[],
-    options?: LLMChatOptions,
-  ): AsyncIterable<LLMStreamEvent>;
+  stream(messages: LLMMessage[], options?: LLMChatOptions): AsyncIterable<LLMStreamEvent>;
 }
 
 export interface LLMChatOptions {

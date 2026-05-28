@@ -1,4 +1,4 @@
-import { err, ok, type Result } from '@confer/shared';
+import { type Result, err, ok } from '@confer/shared';
 
 export interface SignatureParams {
   keyId: string;
@@ -39,10 +39,7 @@ export function parseSignatureHeader(header: string): Result<SignatureParams, st
   return ok(params as SignatureParams);
 }
 
-export async function buildSignatureString(
-  request: Request,
-  headers: string[],
-): Promise<string> {
+export async function buildSignatureString(request: Request, headers: string[]): Promise<string> {
   const url = new URL(request.url);
   const lines: string[] = [];
 
@@ -152,8 +149,7 @@ export async function signRequest(
   const signature = await crypto.subtle.sign('Ed25519', privateKey, sigData);
   const sigBase64 = btoa(String.fromCharCode(...new Uint8Array(signature)));
 
-  const sigHeaderValue =
-    `keyId="${keyId}",algorithm="ed25519",headers="${headers.join(' ')}",signature="${sigBase64}"`;
+  const sigHeaderValue = `keyId="${keyId}",algorithm="ed25519",headers="${headers.join(' ')}",signature="${sigBase64}"`;
 
   signed.headers.set('signature', sigHeaderValue);
 

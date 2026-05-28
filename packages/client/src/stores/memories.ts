@@ -17,7 +17,10 @@ interface MemoriesState {
   loading: boolean;
   loadMemories: () => Promise<void>;
   createMemory: (title: string, content: string, tags?: string[]) => Promise<void>;
-  updateMemory: (id: string, patch: Partial<Pick<Memory, 'title' | 'content' | 'tags' | 'pinned'>>) => Promise<void>;
+  updateMemory: (
+    id: string,
+    patch: Partial<Pick<Memory, 'title' | 'content' | 'tags' | 'pinned'>>,
+  ) => Promise<void>;
   deleteMemory: (id: string) => Promise<void>;
 }
 

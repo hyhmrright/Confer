@@ -1,8 +1,8 @@
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { z } from 'zod';
-import { Bot, User } from './Icons.js';
 import { CitationCapsule } from './CitationCapsule.js';
+import { Bot, User } from './Icons.js';
 import { PermissionCard } from './PermissionCard.js';
 
 const permissionRequestSchema = z.object({
@@ -65,7 +65,9 @@ export function MessageBubble({ message }: { message: Message }) {
           <Avatar type="system" />
           <div className="max-w-[78%]">
             <PermissionCard request={parsed.data} />
-            <p className="text-[10px] text-ink-muted mt-1 ml-1 font-mono">{formatTime(message.created_at)}</p>
+            <p className="text-[10px] text-ink-muted mt-1 ml-1 font-mono">
+              {formatTime(message.created_at)}
+            </p>
           </div>
         </div>
       );
@@ -84,9 +86,7 @@ export function MessageBubble({ message }: { message: Message }) {
           }`}
         >
           <div className="markdown-content text-sm leading-relaxed">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-              {message.content ?? ''}
-            </ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content ?? ''}</ReactMarkdown>
           </div>
         </div>
 

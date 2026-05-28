@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { z } from 'zod';
+import { connectWs, disconnectWs, onWsMessage } from '../lib/ws.js';
 import { useAuthStore } from '../stores/auth.js';
 import { useChatStore } from '../stores/chat.js';
 import { usePermissionsStore } from '../stores/permissions.js';
-import { connectWs, disconnectWs, onWsMessage } from '../lib/ws.js';
-import { MessageCircle, Users, BookOpen, Database, Settings } from './Icons.js';
-import { Sidebar } from './Sidebar.js';
-import { MessageView } from './MessageView.js';
 import { AddContactDialog } from './AddContactDialog.js';
+import { BookOpen, Database, MessageCircle, Settings, Users } from './Icons.js';
+import { MessageView } from './MessageView.js';
+import { Sidebar } from './Sidebar.js';
 
 export type Tab = 'conversations' | 'contacts' | 'memory' | 'knowledge';
 
@@ -47,9 +47,9 @@ const wsAgentStatusSchema = z.object({
 
 const NAV_ITEMS = [
   { id: 'conversations' as Tab, Icon: MessageCircle, label: '对话' },
-  { id: 'contacts'     as Tab, Icon: Users,         label: '联系人' },
-  { id: 'memory'       as Tab, Icon: BookOpen,       label: '记忆' },
-  { id: 'knowledge'    as Tab, Icon: Database,       label: '知识库' },
+  { id: 'contacts' as Tab, Icon: Users, label: '联系人' },
+  { id: 'memory' as Tab, Icon: BookOpen, label: '记忆' },
+  { id: 'knowledge' as Tab, Icon: Database, label: '知识库' },
 ];
 
 function NavRail({
@@ -79,9 +79,10 @@ function NavRail({
             onClick={() => setTab(id)}
             title={label}
             className={`relative w-9 h-9 flex items-center justify-center rounded-lg transition-all duration-150 group
-              ${active
-                ? 'bg-primary-600/15 text-primary-400'
-                : 'text-ink-muted hover:text-ink-secondary hover:bg-dark-hover'
+              ${
+                active
+                  ? 'bg-primary-600/15 text-primary-400'
+                  : 'text-ink-muted hover:text-ink-secondary hover:bg-dark-hover'
               }`}
           >
             {active && (
@@ -172,7 +173,13 @@ export function ChatLayout() {
         onSettings={() => navigate('/settings')}
       />
 
-      <Sidebar tab={tab} onLogout={() => { disconnectWs(); logout(); }} />
+      <Sidebar
+        tab={tab}
+        onLogout={() => {
+          disconnectWs();
+          logout();
+        }}
+      />
 
       {activeConversationId ? (
         <MessageView />

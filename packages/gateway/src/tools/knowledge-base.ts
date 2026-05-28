@@ -1,5 +1,5 @@
-import { embedTexts, type EmbeddingProvider } from '../lib/embedding.js';
-import { searchChunks, type SearchResult } from '../lib/qdrant.js';
+import { type EmbeddingProvider, embedTexts } from '../lib/embedding.js';
+import { type SearchResult, searchChunks } from '../lib/qdrant.js';
 
 export interface KbCitation {
   kb_name: string;
@@ -30,9 +30,7 @@ export async function searchKnowledgeBase(
     score: r.score,
   }));
 
-  const parts = results.map(
-    (r, i) => `[来源 ${i + 1}：${r.doc_name}（${r.kb_name}）]\n${r.text}`,
-  );
+  const parts = results.map((r, i) => `[来源 ${i + 1}：${r.doc_name}（${r.kb_name}）]\n${r.text}`);
 
   return { text: parts.join('\n\n'), citations };
 }

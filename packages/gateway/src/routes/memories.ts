@@ -1,10 +1,10 @@
+import { AppError, newId } from '@confer/shared';
+import { and, desc, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { authMiddleware } from '../middleware/auth.js';
 import { getDb } from '../db/connection.js';
 import { agentMemories } from '../db/schema.js';
-import { eq, and, desc } from 'drizzle-orm';
-import { AppError, newId } from '@confer/shared';
+import { authMiddleware } from '../middleware/auth.js';
 import type { AppEnv } from '../types.js';
 
 export const memoriesRoutes = new Hono<AppEnv>();

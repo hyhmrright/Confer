@@ -15,7 +15,10 @@ const envSchema = z.object({
   QDRANT_URL: z.string().default('http://localhost:6333'),
   MINIO_ENDPOINT: z.string().default('localhost'),
   MINIO_PORT: z.coerce.number().default(9000),
-  MINIO_USE_SSL: z.string().transform((v) => v === 'true').default('false'),
+  MINIO_USE_SSL: z
+    .string()
+    .transform((v) => v === 'true')
+    .default('false'),
   MINIO_ACCESS_KEY: z.string().default('confer'),
   MINIO_SECRET_KEY: z.string().default('confer-secret'),
   MINIO_BUCKET: z.string().default('knowledge-docs'),

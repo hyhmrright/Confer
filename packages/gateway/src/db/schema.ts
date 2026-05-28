@@ -269,9 +269,7 @@ export const keypairs = pgTable(
     created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     revoked_at: timestamp('revoked_at', { withTimezone: true }),
   },
-  (t) => [
-    index('idx_keypairs_owner').on(t.owner_type, t.owner_id),
-  ],
+  (t) => [index('idx_keypairs_owner').on(t.owner_type, t.owner_id)],
 );
 
 export const projectMemory = pgTable(

@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
-import { useContactsStore } from '../stores/contacts.js';
 import { useChatStore } from '../stores/chat.js';
+import { useContactsStore } from '../stores/contacts.js';
 import { Bot, Trash } from './Icons.js';
 
 export function ContactList() {

@@ -1,8 +1,8 @@
+import { exportPrivateKey, generateEd25519KeyPair, publicKeyToMultibase } from '@confer/identity';
+import { encrypt, newId } from '@confer/shared';
+import { eq } from 'drizzle-orm';
 import { getDb } from './db/connection.js';
 import { keypairs } from './db/schema.js';
-import { eq } from 'drizzle-orm';
-import { newId, encrypt } from '@confer/shared';
-import { generateEd25519KeyPair, publicKeyToMultibase, exportPrivateKey } from '@confer/identity';
 import { getEnv } from './env.js';
 
 export async function bootstrap(): Promise<void> {

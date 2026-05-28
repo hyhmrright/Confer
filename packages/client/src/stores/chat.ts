@@ -78,7 +78,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       agentStatus: null,
     });
     try {
-      const data = await api.get<{ messages: Array<Message & { citations_json?: unknown }> }>(`/conversations/${id}/messages`);
+      const data = await api.get<{ messages: Array<Message & { citations_json?: unknown }> }>(
+        `/conversations/${id}/messages`,
+      );
       const mapped = data.messages.map((m) => {
         if (!m.citations && m.citations_json) {
           const raw = m.citations_json as Array<Record<string, unknown>>;
@@ -99,9 +101,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   createConversation: async (peerId, name) => {
-    const autoName = name ?? new Date().toLocaleString('zh-CN', {
-      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
-    });
+    const autoName =
+      name ??
+      new Date().toLocaleString('zh-CN', {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
     const body: Record<string, unknown> = { type: 'direct_user_agent', name: autoName };
     if (peerId) body.peer_id = peerId;
     const data = await api.post<{ conversation: Conversation }>('/conversations', body);
@@ -113,9 +120,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     await api.delete(`/conversations/${id}`);
     set((s) => {
       const filtered = s.conversations.filter((c) => c.id !== id);
-      const next = s.activeConversationId === id
-        ? (filtered[0]?.id ?? null)
-        : s.activeConversationId;
+      const next =
+        s.activeConversationId === id ? (filtered[0]?.id ?? null) : s.activeConversationId;
       return {
         conversations: filtered,
         activeConversationId: next,

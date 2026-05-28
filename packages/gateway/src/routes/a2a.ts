@@ -1,39 +1,39 @@
+import {
+  classifyPermissionLevel,
+  createProvider,
+  evaluatePolicy,
+  parsePolicyConfig,
+  runAgentLoop,
+} from '@confer/agent-runtime';
+import type { AgentContext } from '@confer/agent-runtime';
+import {
+  multibaseToPublicKey,
+  parseSignatureHeader,
+  resolveDID,
+  verifyRequestSignature,
+} from '@confer/identity';
+import { AppError, decrypt, newId } from '@confer/shared';
+import { and, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import type { MiddlewareHandler } from 'hono';
 import { streamSSE } from 'hono/streaming';
-import { z } from 'zod';
 import * as jose from 'jose';
-import { AppError, newId, decrypt } from '@confer/shared';
-import {
-  verifyRequestSignature,
-  parseSignatureHeader,
-  resolveDID,
-  multibaseToPublicKey,
-} from '@confer/identity';
-import {
-  createProvider,
-  runAgentLoop,
-  evaluatePolicy,
-  classifyPermissionLevel,
-  parsePolicyConfig,
-} from '@confer/agent-runtime';
-import type { AgentContext } from '@confer/agent-runtime';
+import { z } from 'zod';
+import { sendA2AMessage } from '../a2a/outbound.js';
 import { getDb } from '../db/connection.js';
-import { getEnv } from '../env.js';
 import {
-  messages,
-  conversations,
-  peerAgents,
-  conversationParticipants,
   agents,
-  permissions,
+  conversationParticipants,
+  conversations,
   keypairs,
+  messages,
+  peerAgents,
+  permissions,
   users,
 } from '../db/schema.js';
-import { eq, and } from 'drizzle-orm';
+import { getEnv } from '../env.js';
 import { rateLimit } from '../middleware/rate-limit.js';
 import { broadcastToConversation } from '../ws/handler.js';
-import { sendA2AMessage } from '../a2a/outbound.js';
 
 const a2aMessageSchema = z.object({
   from: z.string().startsWith('did:'),
@@ -126,21 +126,13 @@ a2aRoutes.post('/messages', verifyA2ASignature, verifyCapabilityToken, async (c)
   const body = a2aMessageSchema.parse(await c.req.json());
   const db = getDb();
 
-  const [targetAgent] = await db
-    .select()
-    .from(agents)
-    .where(eq(agents.did, body.to))
-    .limit(1);
+  const [targetAgent] = await db.select().from(agents).where(eq(agents.did, body.to)).limit(1);
 
   if (!targetAgent) {
     throw new AppError('not_found', 'Target agent not found on this instance', 404);
   }
 
-  let [peer] = await db
-    .select()
-    .from(peerAgents)
-    .where(eq(peerAgents.did, body.from))
-    .limit(1);
+  let [peer] = await db.select().from(peerAgents).where(eq(peerAgents.did, body.from)).limit(1);
 
   if (!peer) {
     const peerId = newId();
@@ -258,11 +250,7 @@ a2aRoutes.get('/stream/:messageId', verifyA2ASignature, async (c) => {
   const messageId = c.req.param('messageId');
   const db = getDb();
 
-  const [inbound] = await db
-    .select()
-    .from(messages)
-    .where(eq(messages.id, messageId))
-    .limit(1);
+  const [inbound] = await db.select().from(messages).where(eq(messages.id, messageId)).limit(1);
 
   if (!inbound) {
     throw new AppError('not_found', 'Message not found', 404);
@@ -303,14 +291,8 @@ interface ProcessA2AMessageParams {
 }
 
 async function processA2AMessage(params: ProcessA2AMessageParams): Promise<void> {
-  const {
-    targetAgent,
-    senderDid,
-    senderPeer,
-    messageContent,
-    conversationId,
-    inboundMessageId,
-  } = params;
+  const { targetAgent, senderDid, senderPeer, messageContent, conversationId, inboundMessageId } =
+    params;
 
   const modelConfig = targetAgent.model_config_json as Record<string, unknown> | null;
   const providerName = (modelConfig?.provider as string) ?? 'anthropic';
@@ -332,7 +314,9 @@ async function processA2AMessage(params: ProcessA2AMessageParams): Promise<void>
 
   const provider = createProvider(providerName, apiKey);
   if (!provider) {
-    console.error(`No LLM provider configured for agent ${targetAgent.id} (provider: ${providerName})`);
+    console.error(
+      `No LLM provider configured for agent ${targetAgent.id} (provider: ${providerName})`,
+    );
     return;
   }
 
