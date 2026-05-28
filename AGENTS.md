@@ -13,7 +13,12 @@ bun run typecheck            # tsc --noEmit
 bun run lint                 # biome check
 bun run lint:fix             # biome check --write
 bun run db:migrate           # run gateway DB migrations
+bun run test:setup           # start isolated test stack + build test schema (run once before `bun run test`)
 ```
+
+## Testing
+
+Unit tests are pure (no infra). Gateway route tests (`*.integration.test.ts`) drive the real Hono app against a real Postgres + Qdrant + MinIO test stack (`docker-compose.test.yml`, isolated on ports 5433/6335/9002); embedding/LLM/DID calls are mocked. Run `bun run test:setup` once, then `bun run test`.
 
 ## Architecture
 

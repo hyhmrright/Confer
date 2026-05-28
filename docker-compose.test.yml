@@ -1,0 +1,34 @@
+# Isolated backend stack for gateway integration tests.
+# Distinct project (confer-test), non-conflicting host ports and ephemeral
+# (volumeless) storage so it never touches the dev/prod stack or real data.
+#   docker compose -p confer-test -f docker-compose.test.yml up -d
+#   docker compose -p confer-test -f docker-compose.test.yml down
+services:
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: confer
+      POSTGRES_PASSWORD: confer
+      POSTGRES_DB: confer_test
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U confer -d confer_test"]
+      interval: 3s
+      timeout: 3s
+      retries: 15
+
+  qdrant:
+    image: qdrant/qdrant:v1.12.0
+    ports:
+      - "6335:6333"
+
+  minio:
+    image: minio/minio:latest
+    ports:
+      - "9002:9000"
+      - "9003:9001"
+    environment:
+      MINIO_ROOT_USER: confer
+      MINIO_ROOT_PASSWORD: confer-secret
+    command: server /data --console-address ":9001"

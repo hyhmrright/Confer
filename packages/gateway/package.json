@@ -6,6 +6,7 @@
     "dev": "bun run --watch src/index.ts",
     "build": "bun build ./src/index.ts --outdir ./dist --target bun",
     "test": "bun test",
+    "test:db:setup": "bun run scripts/setup-test-db.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "bun run src/db/migrate.ts"
   },
