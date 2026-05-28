@@ -130,7 +130,7 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
             .where(eq(knowledgeBases.user_id, user.sub))
         : [];
 
-      const encryptedTavilyKey = llmKeys['tavily'] as
+      const encryptedTavilyKey = llmKeys.tavily as
         | import('@confer/shared').EncryptedValue
         | undefined;
       let tavilyApiKey = env.TAVILY_API_KEY;
