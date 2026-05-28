@@ -15,7 +15,6 @@ import {
   searchKnowledgeBase,
 } from '../tools/knowledge-base.js';
 import { tavilySearch, tavilyToolDefinition } from '../tools/tavily.js';
-import { getWeather, weatherToolDefinition } from '../tools/weather.js';
 import type { AppEnv } from '../types.js';
 import { broadcastToConversation } from '../ws/handler.js';
 
@@ -31,7 +30,7 @@ function buildSystemPrompt(base: string, hasKb: boolean): string {
 }
 
 const DEFAULT_SYSTEM_PROMPT =
-  '你是一个智能助手，能够帮助用户回答问题、处理任务。你可以使用 get_weather 工具查询实时天气，使用 web_search 工具搜索实时信息。回答时请用用户使用的语言。';
+  '你是一个智能助手，能够帮助用户回答问题、处理任务。你可以使用 web_search 工具搜索实时信息。回答时请用用户使用的语言。';
 
 streamRoutes.get('/:conversationId/:messageId', async (c) => {
   const user = c.get('user');
@@ -141,7 +140,6 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
       }
 
       const tools: LLMToolDefinition[] = [
-        weatherToolDefinition,
         ...(tavilyApiKey ? [tavilyToolDefinition] : []),
         ...(userKbs.length > 0 ? [knowledgeBaseToolDefinition] : []),
       ];
@@ -199,10 +197,7 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
 
           let result = '';
           try {
-            if (tc.name === 'get_weather') {
-              const args = JSON.parse(tc.arguments) as { location: string };
-              result = await getWeather(args.location);
-            } else if (tc.name === 'web_search') {
+            if (tc.name === 'web_search') {
               const args = JSON.parse(tc.arguments) as { query: string };
               result = await tavilySearch(args.query, tavilyApiKey);
             } else if (tc.name === 'search_knowledge_base') {
