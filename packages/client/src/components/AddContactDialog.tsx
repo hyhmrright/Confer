@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { useContactsStore } from '../stores/contacts.js';
-import { X, Search, Bot, Loader } from './Icons.js';
+import { Bot, Loader, Search, X } from './Icons.js';
 
 export function AddContactDialog() {
   const { dialogOpen, closeDialog, lookupByDomain, addContact, loading, error } =
     useContactsStore();
   const [domain, setDomain] = useState('');
-  const [results, setResults] = useState<Array<{ id: string; did: string; name?: string; description?: string }>>([]);
+  const [results, setResults] = useState<
+    Array<{ id: string; did: string; name?: string; description?: string }>
+  >([]);
   const [searching, setSearching] = useState(false);
 
   if (!dialogOpen) return null;
@@ -93,7 +95,9 @@ export function AddContactDialog() {
                     </div>
                     <div className="text-xs text-gray-400 truncate">{agent.did}</div>
                     {agent.description && (
-                      <div className="text-xs text-gray-400 truncate mt-0.5">{agent.description}</div>
+                      <div className="text-xs text-gray-400 truncate mt-0.5">
+                        {agent.description}
+                      </div>
                     )}
                   </div>
                   <button
@@ -107,7 +111,8 @@ export function AddContactDialog() {
               ))}
             </div>
           ) : (
-            domain && !searching && (
+            domain &&
+            !searching && (
               <div className="text-center py-8">
                 <Bot className="w-10 h-10 text-gray-200 mx-auto mb-2" />
                 <p className="text-sm text-gray-400">未找到 Agent</p>

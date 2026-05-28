@@ -1,4 +1,4 @@
-import { ok, err, type Result } from './result.js';
+import { type Result, err, ok } from './result.js';
 
 export interface EncryptedValue {
   ciphertext: string;
@@ -11,7 +11,13 @@ async function importAesKey(hexKey: string, usage: KeyUsage): Promise<Result<Cry
     return err('Encryption key must be 64 hex characters (32 bytes)');
   }
   const keyBytes = hexToBytes(hexKey);
-  const key = await crypto.subtle.importKey('raw', keyBytes.buffer as ArrayBuffer, 'AES-GCM', false, [usage]);
+  const key = await crypto.subtle.importKey(
+    'raw',
+    keyBytes.buffer as ArrayBuffer,
+    'AES-GCM',
+    false,
+    [usage],
+  );
   return ok(key);
 }
 
@@ -71,7 +77,7 @@ export async function decrypt(
 function hexToBytes(hex: string): Uint8Array {
   const bytes = new Uint8Array(hex.length / 2);
   for (let i = 0; i < bytes.length; i++) {
-    bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+    bytes[i] = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16);
   }
   return bytes;
 }

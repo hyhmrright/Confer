@@ -1,15 +1,20 @@
+import { AppError, decrypt, newId } from '@confer/shared';
+import { and, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { authMiddleware } from '../middleware/auth.js';
 import { getDb } from '../db/connection.js';
 import { knowledgeBases, knowledgeDocuments, users } from '../db/schema.js';
-import { eq, and } from 'drizzle-orm';
-import { AppError, newId, decrypt } from '@confer/shared';
-import { parseDocument, guessContentType } from '../lib/doc-parser.js';
-import { chunkText } from '../lib/chunker.js';
-import { embedTexts, type EmbeddingProvider, EMBEDDING_PROVIDER_PRIORITY } from '../lib/embedding.js';
-import { ensureCollection, upsertChunks, deleteByKbId, deleteByDocId } from '../lib/qdrant.js';
 import { getEnv } from '../env.js';
+import { chunkText } from '../lib/chunker.js';
+import { guessContentType, parseDocument } from '../lib/doc-parser.js';
+import {
+  EMBEDDING_PROVIDER_PRIORITY,
+  type EmbeddingProvider,
+  embedTexts,
+} from '../lib/embedding.js';
+import { deleteByDocId, deleteByKbId, ensureCollection, upsertChunks } from '../lib/qdrant.js';
+import { getObject, putObject, removeObject } from '../lib/storage.js';
+import { authMiddleware } from '../middleware/auth.js';
 import type { AppEnv } from '../types.js';
 
 export const knowledgeBasesRoutes = new Hono<AppEnv>();
@@ -21,7 +26,9 @@ const createKbSchema = z.object({
   description: z.string().optional(),
 });
 
-async function getEmbeddingConfig(userId: string): Promise<{ apiKey: string; provider: EmbeddingProvider }> {
+async function getEmbeddingConfig(
+  userId: string,
+): Promise<{ apiKey: string; provider: EmbeddingProvider }> {
   const env = getEnv();
   const db = getDb();
   const [userRow] = await db
@@ -39,7 +46,11 @@ async function getEmbeddingConfig(userId: string): Promise<{ apiKey: string; pro
     if (result.ok) return { apiKey: result.value, provider };
   }
 
-  throw new AppError('embedding_unavailable', 'No embedding provider configured — please add an OpenAI, ZhipuAI (GLM), or Qwen API key in Settings', 400);
+  throw new AppError(
+    'embedding_unavailable',
+    'No embedding provider configured — please add an OpenAI, ZhipuAI (GLM), or Qwen API key in Settings',
+    400,
+  );
 }
 
 // --- Knowledge Base CRUD ---
@@ -47,10 +58,7 @@ async function getEmbeddingConfig(userId: string): Promise<{ apiKey: string; pro
 knowledgeBasesRoutes.get('/', async (c) => {
   const user = c.get('user');
   const db = getDb();
-  const rows = await db
-    .select()
-    .from(knowledgeBases)
-    .where(eq(knowledgeBases.user_id, user.sub));
+  const rows = await db.select().from(knowledgeBases).where(eq(knowledgeBases.user_id, user.sub));
   return c.json({ knowledge_bases: rows });
 });
 
@@ -80,7 +88,7 @@ knowledgeBasesRoutes.delete('/:kbId', async (c) => {
 
   if (!kb) throw new AppError('not_found', 'Knowledge base not found', 404);
 
-  await deleteByKbId(kbId);
+  await deleteByKbId(kbId).catch(() => {});
   await db.delete(knowledgeDocuments).where(eq(knowledgeDocuments.kb_id, kbId));
   await db.delete(knowledgeBases).where(eq(knowledgeBases.id, kbId));
 
@@ -101,10 +109,7 @@ knowledgeBasesRoutes.get('/:kbId/documents', async (c) => {
     .limit(1);
   if (!kb) throw new AppError('not_found', 'Knowledge base not found', 404);
 
-  const docs = await db
-    .select()
-    .from(knowledgeDocuments)
-    .where(eq(knowledgeDocuments.kb_id, kbId));
+  const docs = await db.select().from(knowledgeDocuments).where(eq(knowledgeDocuments.kb_id, kbId));
 
   return c.json({ documents: docs });
 });
@@ -133,6 +138,10 @@ knowledgeBasesRoutes.post('/:kbId/documents', async (c) => {
   const buffer = await file.arrayBuffer();
 
   const docId = newId();
+  const storageKey = `${user.sub}/${kbId}/${docId}`;
+
+  await putObject(storageKey, Buffer.from(buffer), contentType);
+
   const [docRow] = await db
     .insert(knowledgeDocuments)
     .values({
@@ -143,6 +152,7 @@ knowledgeBasesRoutes.post('/:kbId/documents', async (c) => {
       content_type: contentType,
       size_bytes: file.size,
       status: 'processing',
+      storage_key: storageKey,
     })
     .returning();
 
@@ -170,10 +180,63 @@ knowledgeBasesRoutes.delete('/:kbId/documents/:docId', async (c) => {
     .limit(1);
   if (!doc) throw new AppError('not_found', 'Document not found', 404);
 
-  await deleteByDocId(docId);
+  await deleteByDocId(docId).catch(() => {});
   await db.delete(knowledgeDocuments).where(eq(knowledgeDocuments.id, docId));
+  if (doc.storage_key) await removeObject(doc.storage_key).catch(() => {});
 
   return c.json({ ok: true });
+});
+
+knowledgeBasesRoutes.post('/:kbId/documents/:docId/retry', async (c) => {
+  const user = c.get('user');
+  const db = getDb();
+  const { kbId, docId } = c.req.param();
+
+  const [doc] = await db
+    .select()
+    .from(knowledgeDocuments)
+    .where(and(eq(knowledgeDocuments.id, docId), eq(knowledgeDocuments.user_id, user.sub)))
+    .limit(1);
+  if (!doc) throw new AppError('not_found', 'Document not found', 404);
+  if (!doc.storage_key)
+    throw new AppError('bad_request', 'Original file not available for retry', 400);
+  if (doc.status === 'processing')
+    throw new AppError('bad_request', 'Document is already processing', 400);
+
+  const [kb] = await db
+    .select()
+    .from(knowledgeBases)
+    .where(and(eq(knowledgeBases.id, kbId), eq(knowledgeBases.user_id, user.sub)))
+    .limit(1);
+  if (!kb) throw new AppError('not_found', 'Knowledge base not found', 404);
+
+  const [updated] = await db
+    .update(knowledgeDocuments)
+    .set({ status: 'processing', chunk_count: 0 })
+    .where(eq(knowledgeDocuments.id, docId))
+    .returning();
+
+  const buffer = await getObject(doc.storage_key);
+  const contentType = doc.content_type ?? guessContentType(doc.filename);
+
+  // getObject returns a Buffer that may be a pooled view; slice to its exact bytes
+  const fileBuffer = buffer.buffer.slice(
+    buffer.byteOffset,
+    buffer.byteOffset + buffer.byteLength,
+  ) as ArrayBuffer;
+
+  await deleteByDocId(docId).catch(() => {});
+  ingestDocument(docId, kbId, kb.name, user.sub, doc.filename, contentType, fileBuffer).catch(
+    (err) => {
+      console.error(`Retry ingestion failed for doc ${docId}:`, err);
+      db.update(knowledgeDocuments)
+        .set({ status: 'failed' })
+        .where(eq(knowledgeDocuments.id, docId))
+        .catch(() => {});
+    },
+  );
+
+  return c.json({ document: updated });
 });
 
 async function ingestDocument(
@@ -189,21 +252,30 @@ async function ingestDocument(
   const { apiKey, provider } = await getEmbeddingConfig(userId);
 
   const text = await parseDocument(buffer, contentType);
-  const chunks = chunkText(text, docId, filename, kbId, userId).map((c) => ({ ...c, kb_name: kbName }));
+  const chunks = chunkText(text, docId, filename, kbId, userId).map((c) => ({
+    ...c,
+    kb_name: kbName,
+  }));
 
   if (chunks.length === 0) {
-    await db.update(knowledgeDocuments)
+    await db
+      .update(knowledgeDocuments)
       .set({ status: 'ready', chunk_count: 0 })
       .where(eq(knowledgeDocuments.id, docId));
     return;
   }
 
   await ensureCollection();
-  const vectors = await embedTexts(chunks.map((c) => c.text), apiKey, provider);
+  const vectors = await embedTexts(
+    chunks.map((c) => c.text),
+    apiKey,
+    provider,
+  );
   const points = chunks.map((c, i) => ({ ...c, vector: vectors[i] as number[] }));
   await upsertChunks(points);
 
-  await db.update(knowledgeDocuments)
+  await db
+    .update(knowledgeDocuments)
     .set({ status: 'ready', chunk_count: chunks.length })
     .where(eq(knowledgeDocuments.id, docId));
 }

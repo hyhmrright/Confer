@@ -269,9 +269,7 @@ export const keypairs = pgTable(
     created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     revoked_at: timestamp('revoked_at', { withTimezone: true }),
   },
-  (t) => [
-    index('idx_keypairs_owner').on(t.owner_type, t.owner_id),
-  ],
+  (t) => [index('idx_keypairs_owner').on(t.owner_type, t.owner_id)],
 );
 
 export const projectMemory = pgTable(
@@ -345,6 +343,7 @@ export const knowledgeDocuments = pgTable(
     size_bytes: integer('size_bytes'),
     chunk_count: integer('chunk_count').default(0),
     status: varchar('status', { length: 32 }).default('processing'),
+    storage_key: varchar('storage_key', { length: 512 }),
     created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index('idx_knowledge_documents_kb').on(t.kb_id)],

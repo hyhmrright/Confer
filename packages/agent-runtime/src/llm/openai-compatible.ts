@@ -1,4 +1,20 @@
-import type { LLMProvider, LLMMessage, LLMResponse, LLMStreamEvent, LLMChatOptions } from './provider.js';
+import type {
+  LLMChatOptions,
+  LLMMessage,
+  LLMProvider,
+  LLMResponse,
+  LLMStreamEvent,
+} from './provider.js';
+
+function toOpenAIMessage(m: LLMMessage): Record<string, unknown> {
+  if (m.role === 'tool') {
+    return { role: 'tool', content: m.content ?? '', tool_call_id: m.tool_call_id };
+  }
+  if (m.tool_calls) {
+    return { role: 'assistant', content: m.content, tool_calls: m.tool_calls };
+  }
+  return { role: m.role, content: m.content ?? '' };
+}
 
 export class OpenAICompatibleProvider implements LLMProvider {
   readonly name: string;
@@ -7,7 +23,13 @@ export class OpenAICompatibleProvider implements LLMProvider {
   private defaultModel: string;
   private completionsPath: string;
 
-  constructor(name: string, apiKey: string, baseUrl: string, defaultModel: string, completionsPath = '/v1/chat/completions') {
+  constructor(
+    name: string,
+    apiKey: string,
+    baseUrl: string,
+    defaultModel: string,
+    completionsPath = '/v1/chat/completions',
+  ) {
     this.name = name;
     this.apiKey = apiKey;
     this.baseUrl = baseUrl;
@@ -26,7 +48,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
       },
       body: JSON.stringify({
         model,
-        messages: messages.map((m) => ({ role: m.role, content: m.content })),
+        messages: messages.map(toOpenAIMessage),
         temperature: options?.temperature,
         max_tokens: options?.max_tokens ?? 4096,
       }),
@@ -37,7 +59,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
       throw new Error(`${this.name} API error (${response.status}): ${text}`);
     }
 
-    const data = await response.json() as Record<string, unknown>;
+    const data = (await response.json()) as Record<string, unknown>;
     const choices = data.choices as Array<Record<string, unknown>>;
     const choice = choices[0]!;
     const message = choice.message as Record<string, string>;
@@ -57,7 +79,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
 
     const body: Record<string, unknown> = {
       model,
-      messages: messages.map((m) => ({ role: m.role, content: m.content })),
+      messages: messages.map(toOpenAIMessage),
       temperature: options?.temperature,
       max_tokens: options?.max_tokens ?? 4096,
       stream: true,
@@ -101,7 +123,10 @@ export class OpenAICompatibleProvider implements LLMProvider {
         const chunk = line.slice(6).trim();
         if (chunk === '[DONE]') {
           for (const [, tc] of pendingCalls) {
-            yield { type: 'tool_call', tool_call: { id: tc.id, name: tc.name, arguments: tc.arguments } };
+            yield {
+              type: 'tool_call',
+              tool_call: { id: tc.id, name: tc.name, arguments: tc.arguments },
+            };
           }
           yield { type: 'done' };
           return;
@@ -135,7 +160,12 @@ export class OpenAICompatibleProvider implements LLMProvider {
 }
 
 export function createDeepSeekProvider(apiKey: string): OpenAICompatibleProvider {
-  return new OpenAICompatibleProvider('deepseek', apiKey, 'https://api.deepseek.com', 'deepseek-chat');
+  return new OpenAICompatibleProvider(
+    'deepseek',
+    apiKey,
+    'https://api.deepseek.com',
+    'deepseek-chat',
+  );
 }
 
 export function createOpenAIProvider(apiKey: string): OpenAICompatibleProvider {
@@ -143,12 +173,23 @@ export function createOpenAIProvider(apiKey: string): OpenAICompatibleProvider {
 }
 
 export function createQwenProvider(apiKey: string): OpenAICompatibleProvider {
-  return new OpenAICompatibleProvider('qwen', apiKey, 'https://dashscope.aliyuncs.com/compatible-mode', 'qwen-plus');
+  return new OpenAICompatibleProvider(
+    'qwen',
+    apiKey,
+    'https://dashscope.aliyuncs.com/compatible-mode',
+    'qwen-plus',
+  );
 }
 
 export function createGlmProvider(apiKey: string): OpenAICompatibleProvider {
   // GLM API uses /chat/completions directly under its v4 base path
-  return new OpenAICompatibleProvider('glm', apiKey, 'https://open.bigmodel.cn/api/paas/v4', 'glm-4-flash', '/chat/completions');
+  return new OpenAICompatibleProvider(
+    'glm',
+    apiKey,
+    'https://open.bigmodel.cn/api/paas/v4',
+    'glm-4-flash',
+    '/chat/completions',
+  );
 }
 
 export function createOllamaProvider(baseUrl = 'http://localhost:11434'): OpenAICompatibleProvider {

@@ -24,10 +24,7 @@ export const didDocumentSchema = z.object({
 
 export type DIDDocument = z.infer<typeof didDocumentSchema>;
 
-export function buildDIDDocument(
-  domain: string,
-  publicKeyMultibase: string,
-): DIDDocument {
+export function buildDIDDocument(domain: string, publicKeyMultibase: string): DIDDocument {
   const did = `did:web:${domain}`;
   return {
     '@context': ['https://www.w3.org/ns/did/v1'],

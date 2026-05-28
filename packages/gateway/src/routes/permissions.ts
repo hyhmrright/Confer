@@ -1,9 +1,9 @@
-import { Hono } from 'hono';
 import { AppError, decidePermissionRequestSchema } from '@confer/shared';
-import { authMiddleware } from '../middleware/auth.js';
+import { and, desc, eq, isNull, ne, or } from 'drizzle-orm';
+import { Hono } from 'hono';
 import { getDb } from '../db/connection.js';
 import { permissions } from '../db/schema.js';
-import { eq, and, isNull, or, ne, desc } from 'drizzle-orm';
+import { authMiddleware } from '../middleware/auth.js';
 import type { AppEnv } from '../types.js';
 
 export const permissionRoutes = new Hono<AppEnv>();

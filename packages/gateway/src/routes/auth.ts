@@ -1,13 +1,19 @@
+import { exportPrivateKey, generateEd25519KeyPair, publicKeyToMultibase } from '@confer/identity';
+import {
+  AppError,
+  encrypt,
+  loginRequestSchema,
+  newId,
+  registerRequestSchema,
+} from '@confer/shared';
+import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import * as jose from 'jose';
-import { registerRequestSchema, loginRequestSchema, AppError, newId, encrypt } from '@confer/shared';
-import { generateEd25519KeyPair, publicKeyToMultibase, exportPrivateKey } from '@confer/identity';
 import { getDb } from '../db/connection.js';
-import { users, sessions, agents, keypairs } from '../db/schema.js';
-import { eq } from 'drizzle-orm';
+import { agents, keypairs, sessions, users } from '../db/schema.js';
 import { getEnv } from '../env.js';
-import { rateLimit } from '../middleware/rate-limit.js';
 import { authMiddleware } from '../middleware/auth.js';
+import { rateLimit } from '../middleware/rate-limit.js';
 
 export const authRoutes = new Hono();
 
@@ -118,11 +124,7 @@ authRoutes.post('/login', rateLimit(10, 60_000), async (c) => {
   const body = loginRequestSchema.parse(await c.req.json());
   const db = getDb();
 
-  const [user] = await db
-    .select()
-    .from(users)
-    .where(eq(users.username, body.username))
-    .limit(1);
+  const [user] = await db.select().from(users).where(eq(users.username, body.username)).limit(1);
 
   if (!user?.password_hash) {
     throw new AppError('invalid_credentials', 'Invalid username or password', 401);

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { api, setToken, setRefreshToken } from '../lib/api.js';
+import { api, setRefreshToken, setToken } from '../lib/api.js';
 
 interface User {
   id: string;

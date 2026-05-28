@@ -1,9 +1,9 @@
+import { AppError, newId, sendMessageRequestSchema } from '@confer/shared';
+import { and, desc, eq, inArray, lt } from 'drizzle-orm';
 import { Hono } from 'hono';
-import { sendMessageRequestSchema, AppError, newId } from '@confer/shared';
-import { authMiddleware } from '../middleware/auth.js';
 import { getDb } from '../db/connection.js';
-import { conversations, conversationParticipants, messages } from '../db/schema.js';
-import { eq, desc, and, lt, inArray } from 'drizzle-orm';
+import { conversationParticipants, conversations, messages } from '../db/schema.js';
+import { authMiddleware } from '../middleware/auth.js';
 import type { AppEnv } from '../types.js';
 
 export const conversationRoutes = new Hono<AppEnv>();
@@ -82,7 +82,7 @@ conversationRoutes.get('/:id/messages', async (c) => {
   const before = c.req.query('before');
   const limit = Math.min(Number(c.req.query('limit') ?? 50), 100);
 
-  let query = db
+  const query = db
     .select()
     .from(messages)
     .where(
@@ -118,7 +118,9 @@ conversationRoutes.delete('/:id', async (c) => {
     throw new AppError('forbidden', 'Not a participant', 403);
   }
 
-  await db.delete(conversationParticipants).where(eq(conversationParticipants.conversation_id, convId));
+  await db
+    .delete(conversationParticipants)
+    .where(eq(conversationParticipants.conversation_id, convId));
   await db.delete(messages).where(eq(messages.conversation_id, convId));
   await db.delete(conversations).where(eq(conversations.id, convId));
 

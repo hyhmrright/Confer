@@ -12,8 +12,17 @@ bun run test                 # run tests across all packages
 bun run typecheck            # tsc --noEmit
 bun run lint                 # biome check
 bun run lint:fix             # biome check --write
-bun run db:migrate           # run gateway DB migrations
+bun run db:generate          # generate Drizzle migration from schema changes
+bun run db:migrate           # run gateway DB migrations (apply generated files)
+bun run test:setup           # start isolated test stack + build test schema (run once before `bun run test`)
+bun run test:stack:down      # tear down the isolated test stack
 ```
+
+## Testing
+
+- Unit tests (`shared`, `identity`, `agent-runtime`, `conversation`, gateway `lib/`) are pure and need no infra.
+- Gateway **route** tests (`*.integration.test.ts`) drive the real Hono app (`app.ts`) via `app.request()` against a real Postgres + Qdrant + MinIO **test stack** (`docker-compose.test.yml`, project `confer-test`, ports 5433/6335/9002 — isolated from the dev/prod stack and its data). External third parties (embedding API, LLM API, DID resolution) are mocked; our own infra is real.
+- First run: `bun run test:setup` (brings the stack up and builds the schema), then `bun run test`. The harness preloads test env (`src/test/setup.ts` via `bunfig.toml`) and truncates all tables between tests (`src/test/helpers.ts`).
 
 ## Architecture
 
@@ -27,6 +36,7 @@ Bun workspaces monorepo (`packages/*`):
 | `agent-runtime` | LLM orchestration engine, policy enforcement |
 | `conversation` | Message bus (NATS), conversation threading |
 | `shared` | Zod schemas, shared types, utility functions |
+| `gateway/lib/` | RAG pipeline — MinIO file storage, Qdrant vector search, multi-provider embedding (OpenAI / GLM / Qwen) |
 
 ## Docs
 
@@ -49,6 +59,7 @@ TypeScript everywhere. Bun + Hono (server), Tauri 2.0 + React 18 + Zustand (clie
 3. AgentFacts must validate against NANDA schema
 4. Migration files are immutable once merged
 5. `.claude/peers/*` must stay human-readable Markdown
+6. Embedding provider auto-selected by the `EMBEDDING_PROVIDER_PRIORITY` constant in `lib/embedding.ts` (openai → glm → qwen) — first provider with a user-configured key wins
 
 ## Forbidden
 
@@ -94,3 +105,15 @@ Local infra via Docker: `docker compose up -d` starts PostgreSQL (5432), Redis (
 - `Bun.serve` WebSocket API ≠ Node `ws`
 - HTTP signatures: adding headers invalidates unless in signing set
 - DID document caching: respect TTL/ETag or auth breaks
+- Drizzle migrations: ALWAYS use `bun run db:generate`, never write SQL manually — the journal won't track it and schema gets out of sync requiring manual `ALTER TABLE` in prod (this bit us once: migrations 0002-0004 were hand-written and untracked; the journal was repaired by regenerating a tracked, idempotent `0002` from `schema.ts`)
+- Qdrant point IDs must be UUID or uint64 — ULIDs are rejected with 400; convert via SHA-256 hash (`toUUID` in `lib/qdrant.ts`)
+- Docker inter-container networking: use service names (`qdrant:6333`, `minio:9000`), not `localhost` — localhost resolves to the container itself
+- LLM / embedding / Tavily keys live encrypted in `users.llm_keys_json` (AES-256-GCM via `ENCRYPTION_KEY`), set per-user via the settings UI — **not** in `.env`. The `TAVILY_API_KEY` env var is only a fallback; `web_search` is offered only when a key resolves
+
+## Claude Code automation
+
+`.claude/` ships project-specific automation — prefer it over manual steps:
+
+- **Hooks** (`settings.local.json`): after every Edit/Write, `lint:fix` + `typecheck` run automatically — no need to invoke them by hand. PreToolUse **blocks** edits to `*/migrations/*.sql` (immutable) and `.env*` (live credentials).
+- **Skills**: `deploy` (rebuild/redeploy a service), `create-migration` (Drizzle migration + journal), `rag-debug` (Qdrant/embedding/MinIO diagnostics), `sync-env` (`.env` vs `.env.example`).
+- **Agents**: `a2a-contract-reviewer` (A2A signature/DID/AgentFacts compliance), `migration-reviewer` (migration safety).

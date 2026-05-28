@@ -1,5 +1,5 @@
-import type { ErrorHandler } from 'hono';
 import { AppError } from '@confer/shared';
+import type { ErrorHandler } from 'hono';
 import { ZodError } from 'zod';
 
 export const errorHandler: ErrorHandler = (err, c) => {

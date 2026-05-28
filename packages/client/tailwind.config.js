@@ -9,7 +9,7 @@ export default {
       },
       colors: {
         primary: {
-          50:  '#fdf8f3',
+          50: '#fdf8f3',
           100: '#f9edd9',
           200: '#f3d9b9',
           300: '#e8be95',
@@ -21,19 +21,19 @@ export default {
           900: '#4d270d',
         },
         dark: {
-          base:   '#09090b',
-          nav:    '#0b0c0e',
-          panel:  '#0f1013',
-          card:   '#141417',
-          input:  '#111215',
+          base: '#09090b',
+          nav: '#0b0c0e',
+          panel: '#0f1013',
+          card: '#141417',
+          input: '#111215',
           border: '#222226',
-          hover:  '#1a1a1e',
+          hover: '#1a1a1e',
           active: '#252527',
         },
         ink: {
-          primary:   '#dedede',
+          primary: '#dedede',
           secondary: '#9e9e9e',
-          muted:     '#505050',
+          muted: '#505050',
         },
       },
       keyframes: {

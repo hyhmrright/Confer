@@ -1,6 +1,14 @@
+export interface LLMToolCallBlock {
+  id: string;
+  type: 'function';
+  function: { name: string; arguments: string };
+}
+
 export interface LLMMessage {
-  role: 'system' | 'user' | 'assistant';
-  content: string;
+  role: 'system' | 'user' | 'assistant' | 'tool';
+  content: string | null;
+  tool_calls?: LLMToolCallBlock[];
+  tool_call_id?: string;
 }
 
 export interface LLMToolCall {
@@ -28,10 +36,7 @@ export interface LLMProvider {
 
   chat(messages: LLMMessage[], options?: LLMChatOptions): Promise<LLMResponse>;
 
-  stream(
-    messages: LLMMessage[],
-    options?: LLMChatOptions,
-  ): AsyncIterable<LLMStreamEvent>;
+  stream(messages: LLMMessage[], options?: LLMChatOptions): AsyncIterable<LLMStreamEvent>;
 }
 
 export interface LLMChatOptions {

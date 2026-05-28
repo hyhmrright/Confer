@@ -1,7 +1,7 @@
+import { and, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { getDb } from '../db/connection.js';
 import { agents, keypairs } from '../db/schema.js';
-import { eq, and } from 'drizzle-orm';
 
 export const wellKnownRoutes = new Hono();
 

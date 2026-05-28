@@ -1,5 +1,12 @@
+import { createHash } from 'crypto';
+
 const COLLECTION = 'knowledge_chunks';
 const VECTOR_SIZE = 1536;
+
+export function toUUID(id: string): string {
+  const h = createHash('sha256').update(id).digest('hex');
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
+}
 
 export interface KnowledgeChunk {
   chunk_id: string;
@@ -56,7 +63,7 @@ export async function ensureCollection(): Promise<void> {
 export async function upsertChunks(chunks: KnowledgeChunk[]): Promise<void> {
   if (chunks.length === 0) return;
   const points = chunks.map((c) => ({
-    id: c.chunk_id,
+    id: toUUID(c.chunk_id),
     vector: c.vector,
     payload: {
       kb_id: c.kb_id,
@@ -77,9 +84,7 @@ export async function searchChunks(
   kbIds: string[] | undefined,
   topK = 5,
 ): Promise<SearchResult[]> {
-  const mustFilters: unknown[] = [
-    { key: 'user_id', match: { value: userId } },
-  ];
+  const mustFilters: unknown[] = [{ key: 'user_id', match: { value: userId } }];
   if (kbIds && kbIds.length > 0) {
     mustFilters.push({ key: 'kb_id', match: { any: kbIds } });
   }
@@ -91,7 +96,7 @@ export async function searchChunks(
     filter: { must: mustFilters },
   };
 
-  const data = await request('POST', `/collections/${COLLECTION}/points/search`, body) as {
+  const data = (await request('POST', `/collections/${COLLECTION}/points/search`, body)) as {
     result: Array<{ id: string; score: number; payload: Record<string, unknown> }>;
   };
 

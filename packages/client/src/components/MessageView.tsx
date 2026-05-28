@@ -1,10 +1,10 @@
-import { useRef, useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useChatStore } from '../stores/chat.js';
-import { Send, Bot, Paperclip, X } from './Icons.js';
-import { MessageBubble } from './MessageBubble.js';
 import { CitationCapsule } from './CitationCapsule.js';
+import { Bot, Paperclip, Send, X } from './Icons.js';
+import { MessageBubble } from './MessageBubble.js';
 import { TypingIndicator } from './TypingIndicator.js';
 
 const MAX_FILE_CHARS = 40_000;
@@ -20,9 +20,15 @@ function readFileAsText(file: File): Promise<string> {
 
 export function MessageView() {
   const {
-    conversations, activeConversationId,
-    messages, messagesLoading,
-    sendMessage, streaming, streamContent, streamCitations, agentStatus,
+    conversations,
+    activeConversationId,
+    messages,
+    messagesLoading,
+    sendMessage,
+    streaming,
+    streamContent,
+    streamCitations,
+    agentStatus,
   } = useChatStore();
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -52,7 +58,8 @@ export function MessageView() {
     e.target.value = '';
     try {
       let content = await readFileAsText(file);
-      if (content.length > MAX_FILE_CHARS) content = content.slice(0, MAX_FILE_CHARS) + '\n\n[内容已截断]';
+      if (content.length > MAX_FILE_CHARS)
+        content = content.slice(0, MAX_FILE_CHARS) + '\n\n[内容已截断]';
       setAttachedFile({ name: file.name, content });
     } catch {
       alert('无法读取该文件，请选择文本文件。');
@@ -80,7 +87,10 @@ export function MessageView() {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
   };
 
   const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -118,7 +128,11 @@ export function MessageView() {
           <div className="flex items-center justify-center h-full">
             <div className="flex gap-1.5">
               {[0, 150, 300].map((delay) => (
-                <span key={delay} className="w-2 h-2 rounded-full bg-dark-border animate-bounce" style={{ animationDelay: `${delay}ms` }} />
+                <span
+                  key={delay}
+                  className="w-2 h-2 rounded-full bg-dark-border animate-bounce"
+                  style={{ animationDelay: `${delay}ms` }}
+                />
               ))}
             </div>
           </div>
@@ -175,7 +189,10 @@ export function MessageView() {
               <div className="flex items-center gap-2 px-2.5 py-1 rounded-md bg-primary-600/10 border border-primary-600/20 text-xs text-primary-300 min-w-0">
                 <Paperclip className="w-3 h-3 shrink-0" />
                 <span className="truncate">{attachedFile.name}</span>
-                <button onClick={() => setAttachedFile(null)} className="shrink-0 hover:text-red-400 transition-colors ml-1">
+                <button
+                  onClick={() => setAttachedFile(null)}
+                  className="shrink-0 hover:text-red-400 transition-colors ml-1"
+                >
                   <X className="w-3 h-3" />
                 </button>
               </div>

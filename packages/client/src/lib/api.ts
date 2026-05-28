@@ -44,10 +44,7 @@ async function tryRefresh(): Promise<boolean> {
   }
 }
 
-async function request<T>(
-  path: string,
-  options: RequestInit = {},
-): Promise<T> {
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string>),
@@ -116,9 +113,13 @@ export const api = {
     if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
     const res = await fetch(`${BASE_URL}${path}`, { method: 'POST', headers, body: form });
     if (!res.ok) {
-      const body = await res.json().catch(() => ({})) as Record<string, unknown>;
+      const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
       const err = body?.error as Record<string, unknown> | undefined;
-      throw new ApiError(res.status, (err?.message as string) ?? 'Upload failed', err?.code as string | undefined);
+      throw new ApiError(
+        res.status,
+        (err?.message as string) ?? 'Upload failed',
+        err?.code as string | undefined,
+      );
     }
     return res.json() as Promise<T>;
   },

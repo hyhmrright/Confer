@@ -1,4 +1,37 @@
-import type { LLMProvider, LLMMessage, LLMResponse, LLMStreamEvent, LLMChatOptions } from './provider.js';
+import type {
+  LLMChatOptions,
+  LLMMessage,
+  LLMProvider,
+  LLMResponse,
+  LLMStreamEvent,
+} from './provider.js';
+
+function toAnthropicMessages(messages: LLMMessage[]): unknown[] {
+  return messages
+    .filter((m) => m.role !== 'system')
+    .map((m) => {
+      if (m.role === 'tool') {
+        return {
+          role: 'user',
+          content: [{ type: 'tool_result', tool_use_id: m.tool_call_id, content: m.content ?? '' }],
+        };
+      }
+      if (m.tool_calls?.length) {
+        const content: unknown[] = [];
+        if (m.content) content.push({ type: 'text', text: m.content });
+        for (const tc of m.tool_calls) {
+          content.push({
+            type: 'tool_use',
+            id: tc.id,
+            name: tc.function.name,
+            input: JSON.parse(tc.function.arguments || '{}'),
+          });
+        }
+        return { role: 'assistant', content };
+      }
+      return { role: m.role, content: m.content ?? '' };
+    });
+}
 
 export class AnthropicProvider implements LLMProvider {
   readonly name = 'anthropic';
@@ -13,19 +46,14 @@ export class AnthropicProvider implements LLMProvider {
   async chat(messages: LLMMessage[], options?: LLMChatOptions): Promise<LLMResponse> {
     const model = options?.model ?? 'claude-sonnet-4-20250514';
     const systemMessage = messages.find((m) => m.role === 'system');
-    const nonSystemMessages = messages.filter((m) => m.role !== 'system');
 
     const body: Record<string, unknown> = {
       model,
       max_tokens: options?.max_tokens ?? 4096,
-      messages: nonSystemMessages.map((m) => ({ role: m.role, content: m.content })),
+      messages: toAnthropicMessages(messages),
     };
-    if (systemMessage) {
-      body.system = systemMessage.content;
-    }
-    if (options?.temperature !== undefined) {
-      body.temperature = options.temperature;
-    }
+    if (systemMessage) body.system = systemMessage.content;
+    if (options?.temperature !== undefined) body.temperature = options.temperature;
 
     const response = await fetch(`${this.baseUrl}/v1/messages`, {
       method: 'POST',
@@ -42,7 +70,7 @@ export class AnthropicProvider implements LLMProvider {
       throw new Error(`Anthropic API error (${response.status}): ${text}`);
     }
 
-    const data = await response.json() as Record<string, unknown>;
+    const data = (await response.json()) as Record<string, unknown>;
     const content = (data.content as Array<{ type: string; text?: string }>)
       .filter((b) => b.type === 'text')
       .map((b) => b.text)
@@ -61,16 +89,20 @@ export class AnthropicProvider implements LLMProvider {
   async *stream(messages: LLMMessage[], options?: LLMChatOptions): AsyncIterable<LLMStreamEvent> {
     const model = options?.model ?? 'claude-sonnet-4-20250514';
     const systemMessage = messages.find((m) => m.role === 'system');
-    const nonSystemMessages = messages.filter((m) => m.role !== 'system');
 
     const body: Record<string, unknown> = {
       model,
       max_tokens: options?.max_tokens ?? 4096,
       stream: true,
-      messages: nonSystemMessages.map((m) => ({ role: m.role, content: m.content })),
+      messages: toAnthropicMessages(messages),
     };
-    if (systemMessage) {
-      body.system = systemMessage.content;
+    if (systemMessage) body.system = systemMessage.content;
+    if (options?.tools?.length) {
+      body.tools = options.tools.map((t) => ({
+        name: t.name,
+        description: t.description,
+        input_schema: t.parameters,
+      }));
     }
 
     const response = await fetch(`${this.baseUrl}/v1/messages`, {
@@ -91,6 +123,9 @@ export class AnthropicProvider implements LLMProvider {
     const decoder = new TextDecoder();
     let buffer = '';
 
+    // Track tool_use blocks being streamed
+    const pendingToolBlocks = new Map<number, { id: string; name: string; input: string }>();
+
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -103,12 +138,32 @@ export class AnthropicProvider implements LLMProvider {
         if (!line.startsWith('data: ')) continue;
         const data = JSON.parse(line.slice(6)) as Record<string, unknown>;
 
-        if (data.type === 'content_block_delta') {
+        if (data.type === 'content_block_start') {
+          const block = data.content_block as Record<string, unknown>;
+          const index = data.index as number;
+          if (block.type === 'tool_use') {
+            pendingToolBlocks.set(index, {
+              id: block.id as string,
+              name: block.name as string,
+              input: '',
+            });
+          }
+        } else if (data.type === 'content_block_delta') {
           const delta = data.delta as Record<string, string>;
-          if (delta.text) {
+          const index = data.index as number;
+          if (delta.type === 'text_delta' && delta.text) {
             yield { type: 'token', text: delta.text };
+          } else if (delta.type === 'input_json_delta' && delta.partial_json) {
+            const block = pendingToolBlocks.get(index);
+            if (block) block.input += delta.partial_json;
           }
         } else if (data.type === 'message_stop') {
+          for (const [, block] of pendingToolBlocks) {
+            yield {
+              type: 'tool_call',
+              tool_call: { id: block.id, name: block.name, arguments: block.input || '{}' },
+            };
+          }
           yield { type: 'done' };
         }
       }

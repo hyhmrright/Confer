@@ -29,7 +29,7 @@ export async function tavilySearch(query: string, apiKey: string): Promise<strin
     throw new Error(`Tavily search failed: ${response.status}`);
   }
 
-  const data = await response.json() as TavilyResponse;
+  const data = (await response.json()) as TavilyResponse;
 
   const parts: string[] = [];
   if (data.answer) parts.push(`摘要：${data.answer}`);

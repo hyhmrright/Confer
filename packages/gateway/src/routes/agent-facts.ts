@@ -1,9 +1,9 @@
-import { Hono } from 'hono';
 import { AppError } from '@confer/shared';
-import { getDb } from '../db/connection.js';
-import { getEnv } from '../env.js';
-import { agents } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
+import { Hono } from 'hono';
+import { getDb } from '../db/connection.js';
+import { agents } from '../db/schema.js';
+import { getEnv } from '../env.js';
 
 export const agentFactsRoutes = new Hono();
 
@@ -11,11 +11,7 @@ agentFactsRoutes.get('/agent-facts/:agentDid', async (c) => {
   const agentDid = c.req.param('agentDid');
   const db = getDb();
 
-  const [agent] = await db
-    .select()
-    .from(agents)
-    .where(eq(agents.did, agentDid))
-    .limit(1);
+  const [agent] = await db.select().from(agents).where(eq(agents.did, agentDid)).limit(1);
 
   if (!agent) {
     throw new AppError('not_found', 'Agent not found', 404);

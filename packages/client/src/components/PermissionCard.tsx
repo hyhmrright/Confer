@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Shield } from './Icons.js';
 import { api } from '../lib/api.js';
+import { Shield } from './Icons.js';
 
 interface PermissionRequest {
   id: string;
@@ -23,7 +23,10 @@ const levelLabel: Record<string, string> = {
   L3: '高风险',
 };
 
-export function PermissionCard({ request, onDecided }: {
+export function PermissionCard({
+  request,
+  onDecided,
+}: {
   request: PermissionRequest;
   onDecided?: () => void;
 }) {
