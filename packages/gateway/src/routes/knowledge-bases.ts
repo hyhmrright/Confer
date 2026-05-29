@@ -225,7 +225,11 @@ knowledgeBasesRoutes.post('/:kbId/documents/:docId/retry', async (c) => {
     buffer.byteOffset + buffer.byteLength,
   ) as ArrayBuffer;
 
-  await deleteByDocId(docId).catch(() => {});
+  // Log rather than swallow: a failed cleanup leaves stale chunks that the
+  // re-ingest below would duplicate, silently degrading retrieval quality.
+  await deleteByDocId(docId).catch((err) =>
+    console.error(`Retry cleanup failed for doc ${docId}:`, err),
+  );
   ingestDocument(docId, kbId, kb.name, user.sub, doc.filename, contentType, fileBuffer).catch(
     (err) => {
       console.error(`Retry ingestion failed for doc ${docId}:`, err);
