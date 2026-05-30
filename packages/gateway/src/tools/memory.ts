@@ -28,17 +28,23 @@ export async function extractAndStore(input: ExtractAndStoreInput): Promise<void
 
   const vectors = await embedTexts(facts, input.embeddingKey, input.embeddingProvider);
   const db = getDb();
+  const seen = new Set<string>();
 
   for (let i = 0; i < facts.length; i++) {
     const text = facts[i];
     const vector = vectors[i];
     if (!text || !vector) continue;
 
+    // Within-batch dedup: skip duplicate fact texts before hitting the DB/Qdrant.
+    if (seen.has(text)) continue;
+    seen.add(text);
+
     // Dedup: skip if a near-identical memory already exists.
     const similar = await searchMemories(vector, input.userId, 1, DEDUP_THRESHOLD);
     if (similar.length > 0) continue;
 
     const memoryId = newId();
+    // PG row is written first; if the Qdrant upsert throws, the row persists (listable/manageable) but won't be recall-searchable until re-indexed. Acceptable for the fire-and-forget caller.
     await db.insert(agentMemories).values({
       id: memoryId,
       user_id: input.userId,

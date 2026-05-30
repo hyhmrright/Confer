@@ -118,6 +118,26 @@ describe('memory orchestration', () => {
     }
   });
 
+  test('extractAndStore dedups: duplicate fact in same batch yields 1 row', async () => {
+    const restore = mockEmbedding();
+    try {
+      await extractAndStore({
+        userId: user.id,
+        provider: factProvider(['用户偏好 X', '用户偏好 X']),
+        embeddingKey: KEY,
+        embeddingProvider: 'openai',
+        recentTurns: 'x',
+      });
+    } finally {
+      restore();
+    }
+    const rows = await getDb()
+      .select()
+      .from(agentMemories)
+      .where(eq(agentMemories.user_id, user.id));
+    expect(rows.length).toBe(1);
+  });
+
   test('recallMemories scopes to the user', async () => {
     const other = await seedUser();
     await deleteMemory(other.id, undefined);
