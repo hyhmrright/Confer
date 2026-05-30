@@ -281,6 +281,21 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
         event: 'done',
         data: JSON.stringify({ message_id: replyId }),
       });
+
+      // Fire-and-forget: extract durable facts from this turn into long-term
+      // memory. Never block or fail the response on memory errors.
+      if (embeddingKey && fullContent) {
+        const recentTurns = `用户：${msg.content ?? ''}\n助手：${fullContent}`;
+        void extractAndStore({
+          userId: user.sub,
+          provider,
+          embeddingKey,
+          embeddingProvider,
+          recentTurns,
+        }).catch((err) => {
+          console.error(`Memory extraction failed for user ${user.sub}:`, err);
+        });
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Stream failed';
       await stream.writeSSE({ event: 'error', data: JSON.stringify({ message }) });
