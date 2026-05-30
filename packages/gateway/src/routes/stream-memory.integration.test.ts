@@ -104,8 +104,8 @@ function mockOpenAIAndEmbedding(replyText: string, facts: string[]): () => void 
 async function setupUserWithAgent(): Promise<{ u: SeededUser; convId: string }> {
   const u = await seedUser();
   const env = getEnv();
-  // encrypt(key, plaintext) — hex ENCRYPTION_KEY first, secret second.
-  const encKey = await encrypt(env.ENCRYPTION_KEY, 'sk-test-mem');
+  // encrypt(plaintext, keyHex) — the secret first, the hex ENCRYPTION_KEY second.
+  const encKey = await encrypt('sk-test-mem', env.ENCRYPTION_KEY);
   await getDb()
     .update(users)
     .set({ llm_keys_json: { openai: encKey } })
