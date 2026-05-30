@@ -68,13 +68,13 @@ export async function searchMemories(
   topK = 5,
   minScore = 0.3,
 ): Promise<MemoryHit[]> {
-  const body = {
+  const body: Record<string, unknown> = {
     vector,
     limit: topK,
     with_payload: true,
-    score_threshold: minScore,
     filter: { must: [{ key: 'user_id', match: { value: userId } }] },
   };
+  if (minScore > 0) body.score_threshold = minScore;
   const data = (await request('POST', `/collections/${COLLECTION}/points/search`, body)) as {
     result: Array<{ score: number; payload: Record<string, unknown> }>;
   };
