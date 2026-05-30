@@ -1,6 +1,7 @@
 import { toUUID } from './qdrant.js';
 
 const COLLECTION = 'agent_memories_vec';
+// Embedding output dimension — must match VECTOR_SIZE in lib/embedding.ts; update both if switching providers
 const VECTOR_SIZE = 1536;
 
 export interface MemoryHit {
@@ -43,6 +44,9 @@ export async function ensureMemoryCollection(): Promise<void> {
     await request('PUT', `/collections/${COLLECTION}`, {
       vectors: { size: VECTOR_SIZE, distance: 'Cosine' },
     });
+  } else if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Qdrant GET /collections/${COLLECTION} failed (${res.status}): ${text}`);
   }
 }
 
@@ -74,11 +78,13 @@ export async function searchMemories(
   const data = (await request('POST', `/collections/${COLLECTION}/points/search`, body)) as {
     result: Array<{ score: number; payload: Record<string, unknown> }>;
   };
-  return data.result.map((r) => ({
-    memoryId: r.payload.memory_id as string,
-    text: r.payload.text as string,
-    score: r.score,
-  }));
+  return data.result
+    .filter((r) => typeof r.payload.memory_id === 'string' && typeof r.payload.text === 'string')
+    .map((r) => ({
+      memoryId: r.payload.memory_id as string,
+      text: r.payload.text as string,
+      score: r.score,
+    }));
 }
 
 // Delete one memory by id (memoryId required), or all of a user's memories
