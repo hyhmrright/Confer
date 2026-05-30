@@ -8,6 +8,7 @@ import { getDb } from '../db/connection.js';
 import { agents, conversationParticipants, knowledgeBases, messages, users } from '../db/schema.js';
 import { getEnv } from '../env.js';
 import { EMBEDDING_PROVIDER_PRIORITY, type EmbeddingProvider } from '../lib/embedding.js';
+import { ensureMemoryCollection } from '../lib/memory-store.js';
 import { authMiddleware } from '../middleware/auth.js';
 import {
   type KbCitation,
@@ -145,10 +146,23 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
         ...(userKbs.length > 0 ? [knowledgeBaseToolDefinition] : []),
       ];
 
-      // Recall durable memories for this user and inject them into the system prompt.
-      const memoryFragment = embeddingKey
-        ? await recallMemories(msg.content ?? '', user.sub, embeddingKey, embeddingProvider)
-        : '';
+      // Recall durable memories for this user and inject them into the system
+      // prompt. Best-effort: never fail the request on memory errors.
+      let memoryFragment = '';
+      if (embeddingKey) {
+        try {
+          await ensureMemoryCollection();
+          memoryFragment = await recallMemories(
+            msg.content ?? '',
+            user.sub,
+            embeddingKey,
+            embeddingProvider,
+          );
+        } catch (err) {
+          console.error(`Memory recall failed for user ${user.sub}:`, err);
+        }
+      }
+
       const effectiveSystemPrompt =
         buildSystemPrompt(systemPrompt, userKbs.length > 0) + memoryFragment;
 
@@ -262,20 +276,6 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
           in_reply_to: messageId,
         },
       });
-
-      // Fire-and-forget: extract durable facts from this turn and persist them.
-      if (embeddingKey) {
-        const recentTurns = `user: ${msg.content ?? ''}\nagent: ${fullContent}`;
-        extractAndStore({
-          userId: user.sub,
-          provider,
-          embeddingKey,
-          embeddingProvider,
-          recentTurns,
-        }).catch(() => {
-          // Best-effort — do not fail the stream if memory extraction errors.
-        });
-      }
 
       await stream.writeSSE({
         event: 'done',
