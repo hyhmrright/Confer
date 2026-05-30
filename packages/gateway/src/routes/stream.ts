@@ -14,6 +14,7 @@ import {
   knowledgeBaseToolDefinition,
   searchKnowledgeBase,
 } from '../tools/knowledge-base.js';
+import { extractAndStore, recallMemories } from '../tools/memory.js';
 import { tavilySearch, tavilyToolDefinition } from '../tools/tavily.js';
 import type { AppEnv } from '../types.js';
 import { broadcastToConversation } from '../ws/handler.js';
@@ -143,7 +144,14 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
         ...(tavilyApiKey ? [tavilyToolDefinition] : []),
         ...(userKbs.length > 0 ? [knowledgeBaseToolDefinition] : []),
       ];
-      const effectiveSystemPrompt = buildSystemPrompt(systemPrompt, userKbs.length > 0);
+
+      // Recall durable memories for this user and inject them into the system prompt.
+      const memoryFragment = embeddingKey
+        ? await recallMemories(msg.content ?? '', user.sub, embeddingKey, embeddingProvider)
+        : '';
+      const effectiveSystemPrompt =
+        buildSystemPrompt(systemPrompt, userKbs.length > 0) + memoryFragment;
+
       let agentMessages: LLMMessage[] = [
         { role: 'system', content: effectiveSystemPrompt },
         ...history,
@@ -254,6 +262,20 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
           in_reply_to: messageId,
         },
       });
+
+      // Fire-and-forget: extract durable facts from this turn and persist them.
+      if (embeddingKey) {
+        const recentTurns = `user: ${msg.content ?? ''}\nagent: ${fullContent}`;
+        extractAndStore({
+          userId: user.sub,
+          provider,
+          embeddingKey,
+          embeddingProvider,
+          recentTurns,
+        }).catch(() => {
+          // Best-effort — do not fail the stream if memory extraction errors.
+        });
+      }
 
       await stream.writeSSE({
         event: 'done',
