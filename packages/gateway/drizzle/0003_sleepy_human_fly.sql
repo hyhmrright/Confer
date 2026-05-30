@@ -1,0 +1,1 @@
+ALTER TABLE "agent_memories" ADD COLUMN "source" varchar(16) DEFAULT 'manual' NOT NULL;

@@ -307,6 +307,7 @@ export const agentMemories = pgTable(
     content: text('content').notNull(),
     tags: text('tags').array().default([]),
     pinned: boolean('pinned').notNull().default(false),
+    source: varchar('source', { length: 16 }).notNull().default('manual'),
     created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
