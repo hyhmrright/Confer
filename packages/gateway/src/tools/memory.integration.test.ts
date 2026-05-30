@@ -22,20 +22,28 @@ function factProvider(facts: string[]): LLMProvider {
   };
 }
 
-// Stub the embedding API: returns a unit vector whose hot index is derived from
-// the input text so identical text → identical vector (similarity 1.0), and
-// different text → orthogonal vector (similarity 0).
+// Deterministic embedding stub. Any text mentioning a shared topic maps to one
+// fixed hot index so related texts collide (cosine 1.0) and clear the recall
+// threshold (0.3); unrelated text falls back to a char-sum hash so it stays
+// (mostly) orthogonal and scores below threshold.
+function embedVector(text: string): number[] {
+  const v = new Array(1536).fill(0);
+  if (text.includes('TypeScript')) {
+    v[42] = 1;
+    return v;
+  }
+  let h = 0;
+  for (const ch of text) h = (h + ch.charCodeAt(0)) % 1536;
+  v[h] = 1;
+  return v;
+}
+
+// Stub the embedding API using the deterministic vector above.
 function mockEmbedding(): () => void {
   return mockFetch((url, init) => {
     if (!url.includes('/embeddings')) return undefined;
     const body = JSON.parse(String(init?.body ?? '{}')) as { input: string[] };
-    const data = body.input.map((text, i) => {
-      const v = new Array(1536).fill(0);
-      let h = 0;
-      for (const ch of text) h = (h + ch.charCodeAt(0)) % 1536;
-      v[h] = 1;
-      return { embedding: v, index: i };
-    });
+    const data = body.input.map((text, i) => ({ embedding: embedVector(text), index: i }));
     return new Response(JSON.stringify({ data }), {
       status: 200,
       headers: { 'content-type': 'application/json' },
@@ -77,7 +85,9 @@ describe('memory orchestration', () => {
 
     const restore2 = mockEmbedding();
     try {
-      const hits = await recallMemories('TypeScript 怎么写', user.id, KEY, 'openai');
+      // Query shares the 'TypeScript' topic → collides with the stored fact's
+      // vector (cosine 1.0), clearing the 0.3 recall floor.
+      const hits = await recallMemories('TypeScript 有什么技巧', user.id, KEY, 'openai');
       expect(hits).toContain('用户偏好 TypeScript');
     } finally {
       restore2();

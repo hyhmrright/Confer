@@ -10,7 +10,7 @@ import { searchMemories, upsertMemory } from '../lib/memory-store.js';
 // and is skipped (Mem0's NOOP semantics).
 const DEDUP_THRESHOLD = 0.85;
 const RECALL_TOP_K = 5;
-const RECALL_MIN_SCORE = 0;
+const RECALL_MIN_SCORE = 0.3;
 
 export interface ExtractAndStoreInput {
   userId: string;

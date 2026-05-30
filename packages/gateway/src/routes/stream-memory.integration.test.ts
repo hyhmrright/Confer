@@ -158,11 +158,12 @@ describe('stream long-term memory', () => {
       headers: headers({ token: u.token }),
     });
     await res1.text(); // drain SSE so the fire-and-forget extraction kicks off
-    restore();
-    restore = undefined;
 
-    // Poll until the fire-and-forget extraction has persisted the fact (no fixed sleep).
-    const deadline = Date.now() + 5000;
+    // Poll until the fire-and-forget extraction has persisted the fact (no fixed
+    // sleep). The mock MUST stay active here: extraction runs after the SSE
+    // drain, so restoring fetch too early would make its embedding/LLM calls hit
+    // the real network and fail.
+    const deadline = Date.now() + 4000;
     let persisted = 0;
     while (Date.now() < deadline) {
       const rows = await getDb()
@@ -173,6 +174,8 @@ describe('stream long-term memory', () => {
       if (persisted > 0) break;
       await new Promise((r) => setTimeout(r, 50));
     }
+    restore();
+    restore = undefined;
     // Guard: extraction must actually have stored the fact, else the recall test below is vacuous.
     expect(persisted).toBeGreaterThan(0);
 

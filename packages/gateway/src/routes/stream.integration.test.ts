@@ -137,6 +137,13 @@ describe('GET /stream tool execution', () => {
       if (url.includes('api.tavily.com')) {
         return Response.json({ answer: 'TAVILY_MARKER_42', results: [] });
       }
+      // Memory recall embeds the user message before the chat call. Stub it so it
+      // doesn't consume the llmCall counter that sequences the chat rounds below.
+      if (url.includes('/embeddings')) {
+        const v = new Array(1536).fill(0);
+        v[0] = 1;
+        return Response.json({ data: [{ embedding: v, index: 0 }] });
+      }
       if (url.includes('api.openai.com')) {
         // Round 0: request a web_search tool call. Round 1: reply in plain text.
         const body =
