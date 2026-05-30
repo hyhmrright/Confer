@@ -104,11 +104,13 @@ function mockOpenAIAndEmbedding(replyText: string, facts: string[]): () => void 
 async function setupUserWithAgent(): Promise<{ u: SeededUser; convId: string }> {
   const u = await seedUser();
   const env = getEnv();
-  // encrypt(plaintext, keyHex) — the secret first, the hex ENCRYPTION_KEY second.
-  const encKey = await encrypt('sk-test-mem', env.ENCRYPTION_KEY);
+  // encrypt(plaintext, keyHex) returns a Result — unwrap .value to store the
+  // EncryptedValue shape ({ciphertext, iv, tag}) that the route expects.
+  const encResult = await encrypt('sk-test-mem', env.ENCRYPTION_KEY);
+  if (!encResult.ok) throw new Error(encResult.error);
   await getDb()
     .update(users)
-    .set({ llm_keys_json: { openai: encKey } })
+    .set({ llm_keys_json: { openai: encResult.value } })
     .where(eq(users.id, u.id));
 
   await getDb()
