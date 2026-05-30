@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { newId } from '@confer/shared';
+import { encrypt, newId } from '@confer/shared';
 import { eq } from 'drizzle-orm';
 import { getDb } from '../db/connection.js';
 import {
@@ -8,173 +8,190 @@ import {
   conversationParticipants,
   conversations,
   messages,
+  users,
 } from '../db/schema.js';
-import { ensureMemoryCollection } from '../lib/memory-store.js';
-import { type SeededUser, get, mockFetch, put, resetDb, seedUser } from '../test/helpers.js';
+import { getEnv } from '../env.js';
+import { deleteMemory, ensureMemoryCollection } from '../lib/memory-store.js';
+import {
+  type SeededUser,
+  apiRequest,
+  headers,
+  mockFetch,
+  resetDb,
+  seedUser,
+} from '../test/helpers.js';
 
-let u: SeededUser;
+// The durable fact stored on turn 1 and expected back in the turn-2 system prompt.
+const FACT = '用户偏好 TypeScript';
 
-beforeEach(async () => {
-  await resetDb();
-  await ensureMemoryCollection();
-  u = await seedUser();
-});
+// System prompts seen by the *streaming* (reply) LLM calls, captured for assertions.
+let capturedSystemPrompts: string[] = [];
 
-async function seedConversation(createdBy: string): Promise<string> {
-  const id = newId();
+// Deterministic embedding stub. Any text mentioning 'TypeScript' maps to one
+// fixed hot index, so the turn-2 query ('TypeScript 有什么技巧') and the stored
+// fact ('用户偏好 TypeScript') produce the SAME unit vector → cosine 1.0, which
+// clears the recall/dedup thresholds. Unrelated text falls back to a char-sum
+// hash so it stays (mostly) orthogonal.
+function embedVector(text: string): number[] {
+  const v = new Array(1536).fill(0);
+  if (text.includes('TypeScript')) {
+    v[42] = 1;
+    return v;
+  }
+  let h = 0;
+  for (const ch of text) h = (h + ch.charCodeAt(0)) % 1536;
+  v[h] = 1;
+  return v;
+}
+
+// Mocks the embedding API and the LLM /chat/completions endpoint. The route's
+// streaming reply path and the fire-and-forget extraction path BOTH hit
+// /chat/completions; they are distinguished by body.stream:
+//   - stream:true  → the streamed assistant reply (deliberately does NOT contain
+//                    the fact, so the only way FACT reaches the turn-2 system
+//                    prompt is via memory recall injection). System prompt captured.
+//   - stream:false → the extraction call; extractFacts() does response.json(),
+//                    so this MUST be plain JSON (not SSE) returning the fact list.
+function mockOpenAIAndEmbedding(replyText: string, facts: string[]): () => void {
+  return mockFetch((url, init) => {
+    if (url.includes('/embeddings')) {
+      const body = JSON.parse(String(init?.body ?? '{}')) as { input: string[] };
+      const data = body.input.map((text, i) => ({ embedding: embedVector(text), index: i }));
+      return new Response(JSON.stringify({ data }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    if (url.includes('/chat/completions')) {
+      const body = JSON.parse(String(init?.body ?? '{}')) as {
+        stream?: boolean;
+        messages: Array<{ role: string; content: string }>;
+      };
+      if (body.stream) {
+        capturedSystemPrompts.push(body.messages.find((m) => m.role === 'system')?.content ?? '');
+        const chunks = [
+          `data: ${JSON.stringify({ choices: [{ delta: { content: replyText } }] })}\n\n`,
+          'data: [DONE]\n\n',
+        ];
+        return new Response(chunks.join(''), {
+          status: 200,
+          headers: { 'content-type': 'text/event-stream' },
+        });
+      }
+      // Non-streaming == fact extraction. extractFacts parses this JSON body.
+      return new Response(
+        JSON.stringify({
+          choices: [{ message: { content: JSON.stringify(facts) }, finish_reason: 'stop' }],
+          usage: {},
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }
+    return undefined;
+  });
+}
+
+async function setupUserWithAgent(): Promise<{ u: SeededUser; convId: string }> {
+  const u = await seedUser();
+  const env = getEnv();
+  // encrypt(key, plaintext) — hex ENCRYPTION_KEY first, secret second.
+  const encKey = await encrypt(env.ENCRYPTION_KEY, 'sk-test-mem');
   await getDb()
-    .insert(conversations)
-    .values({ id, type: 'direct_user_agent', created_by: createdBy });
-  return id;
-}
+    .update(users)
+    .set({ llm_keys_json: { openai: encKey } })
+    .where(eq(users.id, u.id));
 
-async function seedMessage(
-  conversationId: string,
-  senderId: string,
-  content: string,
-): Promise<string> {
-  const id = newId();
-  await getDb().insert(messages).values({
-    id,
-    conversation_id: conversationId,
-    sender_type: 'user',
-    sender_id: senderId,
-    content,
-  });
-  return id;
-}
-
-async function seedParticipant(conversationId: string, userId: string): Promise<void> {
-  await getDb().insert(conversationParticipants).values({
-    id: newId(),
-    conversation_id: conversationId,
-    participant_type: 'user',
-    user_id: userId,
-    role: 'admin',
-  });
-}
-
-async function seedAgent(userId: string): Promise<void> {
   await getDb()
     .insert(agents)
     .values({
       id: newId(),
-      user_id: userId,
-      did: `did:web:localhost:agents:a-${newId().toLowerCase()}`,
-      model_config_json: { provider: 'openai' },
+      user_id: u.id,
+      did: `${u.did}:agent`,
+      model_config_json: { provider: 'openai', system_prompt: '你是助手。' },
     });
+
+  const convId = newId();
+  await getDb().insert(conversations).values({ id: convId, type: 'direct', created_by: u.id });
+  await getDb().insert(conversationParticipants).values({
+    id: newId(),
+    conversation_id: convId,
+    participant_type: 'user',
+    user_id: u.id,
+  });
+  return { u, convId };
 }
 
-function parseSSE(raw: string): Array<{ event: string; data: string }> {
-  return raw
-    .split('\n\n')
-    .map((block) => block.trim())
-    .filter(Boolean)
-    .map((block) => {
-      const lines = block.split('\n');
-      const event =
-        lines
-          .find((l) => l.startsWith('event:'))
-          ?.slice(6)
-          .trim() ?? 'message';
-      const data =
-        lines
-          .find((l) => l.startsWith('data:'))
-          ?.slice(5)
-          .trim() ?? '';
-      return { event, data };
-    });
+async function postUserMessage(convId: string, userId: string, text: string): Promise<string> {
+  const id = newId();
+  await getDb().insert(messages).values({
+    id,
+    conversation_id: convId,
+    sender_type: 'user',
+    sender_id: userId,
+    content_type: 'text',
+    content: text,
+  });
+  return id;
 }
 
-describe('stream memory extraction', () => {
-  let restoreFetch: () => void;
+describe('stream long-term memory', () => {
+  let restore: (() => void) | undefined;
 
-  afterEach(() => restoreFetch?.());
+  beforeEach(async () => {
+    await resetDb();
+    await ensureMemoryCollection();
+    capturedSystemPrompts = [];
+  });
 
-  test('fire-and-forget extraction persists fact; turn 2 recall includes it', async () => {
-    const convId = await seedConversation(u.id);
-    await seedParticipant(convId, u.id);
-    await seedAgent(u.id);
+  afterEach(() => restore?.());
 
-    await put('/api/v1/agents/me/llm-keys', {
-      token: u.token,
-      body: { provider: 'openai', api_key: 'sk-test-mem' },
+  test('a fact stored on turn 1 is injected into the system prompt on turn 2', async () => {
+    const { u, convId } = await setupUserWithAgent();
+    await deleteMemory(u.id, undefined);
+
+    // Turn 1: user states a preference. The non-streaming extraction call returns
+    // FACT, which the fire-and-forget path embeds + persists.
+    restore = mockOpenAIAndEmbedding('好的', [FACT]);
+    const msg1 = await postUserMessage(convId, u.id, '我喜欢用 TypeScript');
+    const res1 = await apiRequest(`/api/v1/stream/${convId}/${msg1}`, {
+      method: 'GET',
+      headers: headers({ token: u.token }),
     });
+    await res1.text(); // drain SSE so the fire-and-forget extraction kicks off
+    restore();
+    restore = undefined;
 
-    // Track LLM call index so we can serve different responses per turn.
-    let llmCall = 0;
-
-    restoreFetch = mockFetch((url, init) => {
-      if (url.includes('/embeddings')) {
-        // Stub embedding: unit vector hot at hash(input[0]).
-        const body = JSON.parse(String(init?.body ?? '{}')) as { input: string[] };
-        const data = body.input.map((text, i) => {
-          const v = new Array(1536).fill(0);
-          let h = 0;
-          for (const ch of text) h = (h + ch.charCodeAt(0)) % 1536;
-          v[h] = 1;
-          return { embedding: v, index: i };
-        });
-        return new Response(JSON.stringify({ data }), {
-          status: 200,
-          headers: { 'content-type': 'application/json' },
-        });
-      }
-
-      if (url.includes('api.openai.com/v1/chat')) {
-        // Turn 1 (calls 0-1): LLM says user prefers TypeScript; extraction call returns fact JSON.
-        // Turn 2 (calls 2+): LLM echoes back whatever memories were injected.
-        if (llmCall === 0) {
-          llmCall++;
-          return new Response(
-            'data: {"choices":[{"delta":{"content":"好的，我知道你偏好 TypeScript。"}}]}\n\ndata: [DONE]\n\n',
-            { status: 200, headers: { 'content-type': 'text/event-stream' } },
-          );
-        }
-        if (llmCall === 1) {
-          // Memory extraction LLM call: return fact list JSON.
-          llmCall++;
-          return new Response(
-            'data: {"choices":[{"delta":{"content":"[\\"用户偏好 TypeScript\\"]"}}]}\n\ndata: [DONE]\n\n',
-            { status: 200, headers: { 'content-type': 'text/event-stream' } },
-          );
-        }
-        // Turn 2 chat + optional extraction calls.
-        llmCall++;
-        return new Response(
-          'data: {"choices":[{"delta":{"content":"用户偏好 TypeScript，已记住。"}}]}\n\ndata: [DONE]\n\n',
-          { status: 200, headers: { 'content-type': 'text/event-stream' } },
-        );
-      }
-
-      return undefined;
-    });
-
-    // Turn 1: send first message, drain the SSE.
-    const msg1Id = await seedMessage(convId, u.id, '我偏好 TypeScript');
-    const res1 = await get(`/api/v1/stream/${convId}/${msg1Id}`, { token: u.token });
-    expect(res1.status).toBe(200);
-    const events1 = parseSSE(await res1.text());
-    expect(events1.some((e) => e.event === 'done')).toBe(true);
-
-    // Wait for the fire-and-forget extraction to persist the fact (poll, no fixed sleep).
-    const deadline = Date.now() + 3000;
+    // Poll until the fire-and-forget extraction has persisted the fact (no fixed sleep).
+    const deadline = Date.now() + 5000;
+    let persisted = 0;
     while (Date.now() < deadline) {
       const rows = await getDb()
         .select()
         .from(agentMemories)
         .where(eq(agentMemories.user_id, u.id));
-      if (rows.length > 0) break;
+      persisted = rows.length;
+      if (persisted > 0) break;
       await new Promise((r) => setTimeout(r, 50));
     }
+    // Guard: extraction must actually have stored the fact, else the recall test below is vacuous.
+    expect(persisted).toBeGreaterThan(0);
 
-    // Turn 2: send second message; the stream route should inject recalled memories.
-    const msg2Id = await seedMessage(convId, u.id, '你还记得我的偏好吗？');
-    const res2 = await get(`/api/v1/stream/${convId}/${msg2Id}`, { token: u.token });
-    expect(res2.status).toBe(200);
-    const text2 = await res2.text();
+    // Turn 2: a related query. The streamed reply ('明白') does NOT contain FACT,
+    // so the only path for FACT into the system prompt is recall injection.
+    capturedSystemPrompts = [];
+    restore = mockOpenAIAndEmbedding('明白', []);
+    const msg2 = await postUserMessage(convId, u.id, 'TypeScript 有什么技巧');
+    const res2 = await apiRequest(`/api/v1/stream/${convId}/${msg2}`, {
+      method: 'GET',
+      headers: headers({ token: u.token }),
+    });
+    await res2.text();
+    restore();
+    restore = undefined;
 
-    // The recalled memory fragment must appear somewhere in the streamed tokens.
-    expect(text2).toContain('用户偏好 TypeScript');
+    // Exactly one streaming reply call should have happened on turn 2.
+    expect(capturedSystemPrompts.length).toBe(1);
+    const sysPrompt = capturedSystemPrompts[0];
+    expect(sysPrompt).toContain(FACT);
   });
 });
