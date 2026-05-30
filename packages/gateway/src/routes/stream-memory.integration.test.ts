@@ -87,6 +87,16 @@ function mockOpenAIAndEmbedding(replyText: string, facts: string[]): () => void 
         { status: 200, headers: { 'content-type': 'application/json' } },
       );
     }
+    // Never let an external (OpenAI/Tavily) call reach the real network — a
+    // fire-and-forget extraction call that slips past the matchers above would
+    // otherwise hang ~5s on a real connection. Our own infra (Qdrant/MinIO at
+    // 127.0.0.1) must still pass through, so only short-circuit external hosts.
+    if (url.includes('openai.com') || url.includes('tavily.com')) {
+      return new Response(JSON.stringify({ choices: [{ message: { content: '[]' } }], data: [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
     return undefined;
   });
 }
@@ -163,7 +173,7 @@ describe('stream long-term memory', () => {
     // sleep). The mock MUST stay active here: extraction runs after the SSE
     // drain, so restoring fetch too early would make its embedding/LLM calls hit
     // the real network and fail.
-    const deadline = Date.now() + 4000;
+    const deadline = Date.now() + 5000;
     let persisted = 0;
     while (Date.now() < deadline) {
       const rows = await getDb()
