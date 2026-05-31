@@ -75,6 +75,10 @@ authRoutes.post('/register', rateLimit(3, 3600_000), async (c) => {
     })
     .returning();
 
+  if (!user) {
+    throw new AppError('user_creation_failed', 'Failed to create user', 500);
+  }
+
   const agentId = newId();
   await db.insert(agents).values({
     id: agentId,
@@ -109,11 +113,11 @@ authRoutes.post('/register', rateLimit(3, 3600_000), async (c) => {
       refresh_token: tokens.refreshToken,
       expires_in: tokens.expiresIn,
       user: {
-        id: user!.id,
-        username: user!.username,
-        email: user!.email,
-        display_name: user!.display_name,
-        did: user!.did,
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        display_name: user.display_name,
+        did: user.did,
       },
     },
     201,

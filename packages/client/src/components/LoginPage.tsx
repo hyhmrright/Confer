@@ -63,8 +63,14 @@ export function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-3.5">
             <div>
-              <label className="block text-xs font-medium text-ink-secondary mb-1.5">用户名</label>
+              <label
+                htmlFor="login-username"
+                className="block text-xs font-medium text-ink-secondary mb-1.5"
+              >
+                用户名
+              </label>
               <input
+                id="login-username"
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
@@ -77,10 +83,14 @@ export function LoginPage() {
 
             {isRegister && (
               <div>
-                <label className="block text-xs font-medium text-ink-secondary mb-1.5">
+                <label
+                  htmlFor="login-displayname"
+                  className="block text-xs font-medium text-ink-secondary mb-1.5"
+                >
                   显示名称 <span className="text-ink-muted font-normal">（可选）</span>
                 </label>
                 <input
+                  id="login-displayname"
                   type="text"
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
@@ -91,8 +101,14 @@ export function LoginPage() {
             )}
 
             <div>
-              <label className="block text-xs font-medium text-ink-secondary mb-1.5">密码</label>
+              <label
+                htmlFor="login-password"
+                className="block text-xs font-medium text-ink-secondary mb-1.5"
+              >
+                密码
+              </label>
               <input
+                id="login-password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -124,6 +140,7 @@ export function LoginPage() {
         <p className="text-center text-xs text-ink-muted mt-6">
           {isRegister ? '已有账号？' : '没有账号？'}
           <button
+            type="button"
             onClick={() => setIsRegister(!isRegister)}
             className="text-primary-400 hover:text-primary-300 font-medium ml-1 transition-colors"
           >

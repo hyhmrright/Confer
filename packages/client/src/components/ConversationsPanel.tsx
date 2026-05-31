@@ -30,6 +30,7 @@ export function ConversationsPanel() {
           对话
         </span>
         <button
+          type="button"
           onClick={handleNew}
           className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md
             bg-primary-600/15 text-primary-400 border border-primary-600/20
@@ -67,16 +68,19 @@ export function ConversationsPanel() {
             return (
               <div
                 key={conv.id}
-                className={`relative group cursor-pointer transition-colors duration-100
+                className={`relative group transition-colors duration-100
                   ${active ? 'bg-dark-active' : 'hover:bg-dark-hover'}`}
                 onMouseEnter={() => setHoveredId(conv.id)}
                 onMouseLeave={() => setHoveredId(null)}
-                onClick={() => selectConversation(conv.id)}
               >
                 {active && (
                   <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[2px] h-7 bg-primary-500 rounded-r-full" />
                 )}
-                <div className="flex items-center gap-3 px-4 py-3">
+                <button
+                  type="button"
+                  onClick={() => selectConversation(conv.id)}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-left cursor-pointer"
+                >
                   <div
                     className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-colors
                     ${active ? 'bg-primary-600/20' : 'bg-dark-border'}`}
@@ -101,13 +105,11 @@ export function ConversationsPanel() {
                       })}
                     </p>
                   </div>
-                </div>
+                </button>
                 {hoveredId === conv.id && (
                   <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteConversation(conv.id);
-                    }}
+                    type="button"
+                    onClick={() => deleteConversation(conv.id)}
                     className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded
                       text-ink-muted hover:text-red-400 hover:bg-red-900/20 transition-colors"
                     title="删除"

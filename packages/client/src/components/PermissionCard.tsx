@@ -81,6 +81,7 @@ export function PermissionCard({
       {error && <p className="text-xs text-red-500 ml-6 mb-1">{error}</p>}
       <div className="flex gap-2 ml-6">
         <button
+          type="button"
           onClick={() => handleDecide('allow_once')}
           disabled={deciding}
           className="px-3 py-1 text-xs rounded-md border border-green-300 text-green-700 hover:bg-green-100 disabled:opacity-50"
@@ -88,6 +89,7 @@ export function PermissionCard({
           允许一次
         </button>
         <button
+          type="button"
           onClick={() => handleDecide('allow_always')}
           disabled={deciding}
           className="px-3 py-1 text-xs rounded-md bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
@@ -95,6 +97,7 @@ export function PermissionCard({
           始终允许
         </button>
         <button
+          type="button"
           onClick={() => handleDecide('deny')}
           disabled={deciding}
           className="px-3 py-1 text-xs rounded-md border border-red-300 text-red-700 hover:bg-red-100 disabled:opacity-50"

@@ -112,11 +112,11 @@ const verifyA2ASignature: MiddlewareHandler = async (c, next) => {
 
   const keyId = parsed.value.keyId;
   const didMatch = keyId.match(/^(did:web:[^#]+)/);
-  if (!didMatch) {
+  const senderDid = didMatch?.[1];
+  if (!senderDid) {
     throw new AppError('signature_invalid', 'Invalid keyId format in signature', 401);
   }
 
-  const senderDid = didMatch[1]!;
   const didResult = await resolveDID(senderDid);
   if (!didResult.ok) {
     throw new AppError('did_resolution_failed', didResult.error, 401);
@@ -160,7 +160,7 @@ const verifyCapabilityToken: MiddlewareHandler = async (c, next) => {
       throw new AppError('capability_invalid', 'Capability token has expired', 401);
     }
 
-    const delegationDepth = decoded['delegation_depth'];
+    const delegationDepth = decoded.delegation_depth;
     if (typeof delegationDepth === 'number' && delegationDepth > 3) {
       throw new AppError('capability_invalid', 'Delegation depth exceeds maximum of 3', 401);
     }
@@ -213,6 +213,10 @@ a2aRoutes.post('/messages', verifyA2ASignature, verifyCapabilityToken, async (c)
       .returning();
   }
 
+  if (!peer) {
+    throw new AppError('peer_unavailable', 'Failed to resolve peer agent', 500);
+  }
+
   // Consent gate: an agent only spends its owner's LLM budget for peers the
   // owner has connected to. A message from an unconnected peer is held as a
   // pending connection request — no conversation, no stored message, no LLM —
@@ -220,11 +224,11 @@ a2aRoutes.post('/messages', verifyA2ASignature, verifyCapabilityToken, async (c)
   const [connection] = await db
     .select()
     .from(peerContacts)
-    .where(and(eq(peerContacts.user_id, targetAgent.user_id), eq(peerContacts.peer_id, peer!.id)))
+    .where(and(eq(peerContacts.user_id, targetAgent.user_id), eq(peerContacts.peer_id, peer.id)))
     .limit(1);
 
   if (!connection) {
-    await upsertConnectionRequest(targetAgent.user_id, peer!, body.message.content);
+    await upsertConnectionRequest(targetAgent.user_id, peer, body.message.content);
     return c.json(
       {
         status: 'pending_connection',
@@ -269,7 +273,7 @@ a2aRoutes.post('/messages', verifyA2ASignature, verifyCapabilityToken, async (c)
       id: newId(),
       conversation_id: convId,
       participant_type: 'peer_agent',
-      peer_id: peer!.id,
+      peer_id: peer.id,
       role: 'member',
     });
   }
@@ -279,7 +283,7 @@ a2aRoutes.post('/messages', verifyA2ASignature, verifyCapabilityToken, async (c)
     id: msgId,
     conversation_id: convId,
     sender_type: 'peer_agent',
-    sender_id: peer!.id,
+    sender_id: peer.id,
     sender_did: body.from,
     content_type: 'text',
     content: body.message.content,
@@ -289,7 +293,7 @@ a2aRoutes.post('/messages', verifyA2ASignature, verifyCapabilityToken, async (c)
     delivered_at: new Date(),
   });
 
-  const resolvedPeer = peer!;
+  const resolvedPeer = peer;
   const resolvedConvId = convId;
 
   setImmediate(async () => {

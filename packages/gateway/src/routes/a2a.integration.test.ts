@@ -29,15 +29,13 @@ async function seedTargetAgent(did: string): Promise<void> {
 async function connectPeer(did: string): Promise<void> {
   const db = getDb();
   const peerId = newId();
-  await db
-    .insert(peerAgents)
-    .values({
-      id: peerId,
-      did,
-      endpoint: 'https://localhost/a2a/v1',
-      public_key_json: {},
-      agent_facts_json: {},
-    });
+  await db.insert(peerAgents).values({
+    id: peerId,
+    did,
+    endpoint: 'https://localhost/a2a/v1',
+    public_key_json: {},
+    agent_facts_json: {},
+  });
   await db
     .insert(peerContacts)
     .values({ id: newId(), user_id: user.id, peer_id: peerId, added_via: 'manual' });

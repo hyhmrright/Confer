@@ -56,6 +56,7 @@ function base58btcEncode(bytes: Uint8Array): string {
   for (const byte of bytes) {
     let carry = byte;
     for (let j = 0; j < digits.length; j++) {
+      // biome-ignore lint/style/noNonNullAssertion: j is bounded by digits.length
       carry += digits[j]! * 256;
       digits[j] = carry % 58;
       carry = (carry / 58) | 0;
@@ -72,6 +73,7 @@ function base58btcEncode(bytes: Uint8Array): string {
     else break;
   }
   for (let i = digits.length - 1; i >= 0; i--) {
+    // biome-ignore lint/style/noNonNullAssertion: i is bounded by digits.length
     result += BASE58_ALPHABET[digits[i]!];
   }
   return result;
@@ -85,6 +87,7 @@ function base58btcDecode(str: string): Uint8Array | null {
 
     let carry = value;
     for (let j = 0; j < bytes.length; j++) {
+      // biome-ignore lint/style/noNonNullAssertion: j is bounded by bytes.length
       carry += bytes[j]! * 58;
       bytes[j] = carry & 0xff;
       carry >>= 8;
@@ -103,6 +106,7 @@ function base58btcDecode(str: string): Uint8Array | null {
 
   const result = new Uint8Array(leading + bytes.length);
   for (let i = 0; i < bytes.length; i++) {
+    // biome-ignore lint/style/noNonNullAssertion: i is bounded by bytes.length
     result[result.length - 1 - i] = bytes[i]!;
   }
   return result;

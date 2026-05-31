@@ -67,6 +67,7 @@ function NavRail({
         const active = tab === id;
         return (
           <button
+            type="button"
             key={id}
             onClick={() => setTab(id)}
             title={label}
@@ -89,6 +90,7 @@ function NavRail({
 
       {/* Settings */}
       <button
+        type="button"
         onClick={onSettings}
         title="设置"
         className="w-9 h-9 flex items-center justify-center rounded-lg text-ink-muted hover:text-ink-secondary hover:bg-dark-hover transition-colors"
@@ -98,6 +100,7 @@ function NavRail({
 
       {/* Avatar / logout */}
       <button
+        type="button"
         title="账号"
         className="w-7 h-7 mt-1 rounded-full bg-primary-600/20 border border-primary-600/30 flex items-center justify-center hover:bg-primary-600/30 transition-colors"
       >
@@ -150,7 +153,7 @@ export function ChatLayout() {
 
     return () => {
       disconnectWs();
-      unsubs.forEach((fn) => fn());
+      for (const fn of unsubs) fn();
     };
   }, [loadConversations, addMessage, addPermissionRequest, setAgentStatus, loadPending]);
 

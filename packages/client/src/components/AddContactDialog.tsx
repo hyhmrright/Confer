@@ -39,6 +39,7 @@ export function AddContactDialog() {
         <div className="flex justify-between items-center px-6 py-4 border-b border-gray-100">
           <h2 className="text-lg font-semibold text-gray-800">添加联系人</h2>
           <button
+            type="button"
             onClick={handleClose}
             className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
           >
@@ -100,6 +101,7 @@ export function AddContactDialog() {
                     )}
                   </div>
                   <button
+                    type="button"
                     onClick={() => addContact(agent.id)}
                     disabled={loading}
                     className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors shrink-0"

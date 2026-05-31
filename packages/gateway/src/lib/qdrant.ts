@@ -1,4 +1,4 @@
-import { createHash } from 'crypto';
+import { createHash } from 'node:crypto';
 import { VECTOR_SIZE } from './embedding.js';
 import { QDRANT_HEALTHCHECK_TIMEOUT_MS, qdrantRequest, qdrantUrl } from './qdrant-client.js';
 

@@ -61,7 +61,10 @@ export class OpenAICompatibleProvider implements LLMProvider {
 
     const data = (await response.json()) as Record<string, unknown>;
     const choices = data.choices as Array<Record<string, unknown>>;
-    const choice = choices[0]!;
+    const choice = choices[0];
+    if (!choice) {
+      throw new Error(`${this.name} API returned no choices`);
+    }
     const message = choice.message as Record<string, string>;
 
     return {
@@ -144,10 +147,11 @@ export class OpenAICompatibleProvider implements LLMProvider {
         if (toolCalls) {
           for (const tc of toolCalls) {
             const idx = (tc.index as number) ?? 0;
-            if (!pendingCalls.has(idx)) {
-              pendingCalls.set(idx, { id: '', name: '', arguments: '' });
+            let entry = pendingCalls.get(idx);
+            if (!entry) {
+              entry = { id: '', name: '', arguments: '' };
+              pendingCalls.set(idx, entry);
             }
-            const entry = pendingCalls.get(idx)!;
             if (tc.id) entry.id = tc.id as string;
             const fn = tc.function as Record<string, string> | undefined;
             if (fn?.name) entry.name = fn.name;

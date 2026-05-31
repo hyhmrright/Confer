@@ -10,16 +10,17 @@ export interface BusEvent {
 const subscribers = new Map<string, Set<MessageHandler>>();
 
 export function subscribe(topic: string, handler: MessageHandler): () => void {
-  let handlers = subscribers.get(topic);
-  if (!handlers) {
-    handlers = new Set();
-    subscribers.set(topic, handlers);
+  let existing = subscribers.get(topic);
+  if (!existing) {
+    existing = new Set();
+    subscribers.set(topic, existing);
   }
+  const handlers = existing;
   handlers.add(handler);
 
   return () => {
-    handlers!.delete(handler);
-    if (handlers!.size === 0) {
+    handlers.delete(handler);
+    if (handlers.size === 0) {
       subscribers.delete(topic);
     }
   };

@@ -31,25 +31,28 @@ export function ContactList() {
       {contacts.map((contact) => (
         <div
           key={contact.id}
-          className="group flex items-center gap-3 px-4 py-3 hover:bg-dark-hover cursor-pointer border-b border-dark-border"
-          onClick={() => handleStartChat(contact.peer_id, contact.alias ?? contact.peer.name)}
+          className="group flex items-center gap-3 px-4 py-3 hover:bg-dark-hover border-b border-dark-border"
         >
-          <div className="w-9 h-9 rounded-full bg-dark-border flex items-center justify-center shrink-0">
-            <Bot className="w-[18px] h-[18px] text-ink-muted" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-sm font-medium text-ink-primary truncate">
-              {contact.alias ?? contact.peer.name ?? 'Unnamed'}
-            </div>
-            <div className="text-xs text-ink-muted truncate">
-              {contact.peer.organization ?? contact.peer.did}
-            </div>
-          </div>
           <button
-            onClick={(e) => {
-              e.stopPropagation();
-              removeContact(contact.id);
-            }}
+            type="button"
+            onClick={() => handleStartChat(contact.peer_id, contact.alias ?? contact.peer.name)}
+            className="flex items-center gap-3 flex-1 min-w-0 text-left cursor-pointer"
+          >
+            <div className="w-9 h-9 rounded-full bg-dark-border flex items-center justify-center shrink-0">
+              <Bot className="w-[18px] h-[18px] text-ink-muted" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-medium text-ink-primary truncate">
+                {contact.alias ?? contact.peer.name ?? 'Unnamed'}
+              </div>
+              <div className="text-xs text-ink-muted truncate">
+                {contact.peer.organization ?? contact.peer.did}
+              </div>
+            </div>
+          </button>
+          <button
+            type="button"
+            onClick={() => removeContact(contact.id)}
             className="opacity-0 group-hover:opacity-100 p-1 text-ink-muted hover:text-red-400 transition-all"
           >
             <Trash className="w-3.5 h-3.5" />

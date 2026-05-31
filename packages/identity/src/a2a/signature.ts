@@ -13,23 +13,28 @@ export function parseSignatureHeader(header: string): Result<SignatureParams, st
   const params: Partial<SignatureParams> = {};
 
   const regex = /(\w+)="([^"]+)"/g;
-  let match: RegExpExecArray | null;
-  while ((match = regex.exec(header)) !== null) {
+  let match: RegExpExecArray | null = regex.exec(header);
+  while (match !== null) {
     const [, key, value] = match;
-    switch (key) {
-      case 'keyId':
-        params.keyId = value;
-        break;
-      case 'algorithm':
-        params.algorithm = value;
-        break;
-      case 'headers':
-        params.headers = value!.split(' ');
-        break;
-      case 'signature':
-        params.signature = value;
-        break;
+    // Both capture groups are required by the regex, so a non-null match always
+    // yields defined key/value; this guard makes that invariant explicit.
+    if (key !== undefined && value !== undefined) {
+      switch (key) {
+        case 'keyId':
+          params.keyId = value;
+          break;
+        case 'algorithm':
+          params.algorithm = value;
+          break;
+        case 'headers':
+          params.headers = value.split(' ');
+          break;
+        case 'signature':
+          params.signature = value;
+          break;
+      }
     }
+    match = regex.exec(header);
   }
 
   if (!params.keyId || !params.signature || !params.headers) {

@@ -1,5 +1,5 @@
 // pdf-parse ships CJS only; use createRequire for Bun ESM compatibility
-import { createRequire } from 'module';
+import { createRequire } from 'node:module';
 import { AppError } from '@confer/shared';
 const pdfParse = createRequire(import.meta.url)('pdf-parse') as (
   buf: Buffer,

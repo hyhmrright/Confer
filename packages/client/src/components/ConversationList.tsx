@@ -22,12 +22,14 @@ export default function ConversationList() {
     <aside className="w-72 border-r border-gray-200 bg-white flex flex-col">
       <div className="p-3 border-b border-gray-100 space-y-2">
         <button
+          type="button"
           onClick={handleNew}
           className="w-full py-2 text-sm bg-primary-600 text-white rounded-md hover:bg-primary-700"
         >
           新对话
         </button>
         <button
+          type="button"
           onClick={openDialog}
           className="w-full py-2 text-sm border border-gray-300 text-gray-600 rounded-md hover:bg-gray-50"
         >
@@ -47,6 +49,7 @@ export default function ConversationList() {
             onMouseLeave={() => setHoveredId(null)}
           >
             <button
+              type="button"
               onClick={() => selectConversation(conv.id)}
               className="w-full text-left px-4 py-3 pr-10"
             >
@@ -59,6 +62,7 @@ export default function ConversationList() {
             </button>
             {hoveredId === conv.id && (
               <button
+                type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   deleteConversation(conv.id);
@@ -66,7 +70,13 @@ export default function ConversationList() {
                 className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"
                 title="删除对话"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg
+                  aria-hidden="true"
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"

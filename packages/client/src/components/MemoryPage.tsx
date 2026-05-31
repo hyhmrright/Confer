@@ -43,6 +43,7 @@ export function MemoryPage() {
           记忆
         </span>
         <button
+          type="button"
           onClick={() => setShowForm((v) => !v)}
           className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md
             bg-primary-600/15 text-primary-400 border border-primary-600/20
@@ -85,12 +86,14 @@ export function MemoryPage() {
           />
           <div className="flex gap-2 justify-end">
             <button
+              type="button"
               onClick={() => setShowForm(false)}
               className="px-3 py-1.5 text-xs text-ink-muted hover:text-ink-secondary transition-colors"
             >
               取消
             </button>
             <button
+              type="button"
               onClick={handleCreate}
               disabled={saving || !newTitle.trim() || !newContent.trim()}
               className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg
@@ -176,6 +179,7 @@ export function MemoryPage() {
                 </div>
                 <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                   <button
+                    type="button"
                     onClick={() => updateMemory(mem.id, { pinned: !mem.pinned })}
                     className={`p-1 rounded transition-colors
                       ${
@@ -186,6 +190,7 @@ export function MemoryPage() {
                     title={mem.pinned ? '取消置顶' : '置顶'}
                   >
                     <svg
+                      aria-hidden="true"
                       className="w-3.5 h-3.5"
                       viewBox="0 0 24 24"
                       fill={mem.pinned ? 'currentColor' : 'none'}
@@ -196,6 +201,7 @@ export function MemoryPage() {
                     </svg>
                   </button>
                   <button
+                    type="button"
                     onClick={() => deleteMemory(mem.id)}
                     className="p-1 rounded text-ink-muted hover:text-red-400 hover:bg-red-900/20 transition-colors"
                     title="删除"

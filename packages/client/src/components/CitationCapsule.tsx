@@ -23,6 +23,7 @@ export function CitationCapsule({ citations }: { citations: Citation[] }) {
   return (
     <div className="mt-2">
       <button
+        type="button"
         onClick={() => setExpanded(!expanded)}
         className="flex items-center gap-1.5 text-[11px] text-ink-muted hover:text-ink-secondary transition-colors font-mono"
       >
@@ -36,7 +37,10 @@ export function CitationCapsule({ citations }: { citations: Citation[] }) {
           {citations.map((cite, i) => {
             const badge = cite.trust_level ? trustBadge[cite.trust_level] : null;
             return (
-              <div key={i} className="rounded-lg border border-dark-border bg-dark-card px-3 py-2">
+              <div
+                key={`${cite.source}::${cite.passage ?? cite.page ?? i}`}
+                className="rounded-lg border border-dark-border bg-dark-card px-3 py-2"
+              >
                 <div className="flex items-start gap-2">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">

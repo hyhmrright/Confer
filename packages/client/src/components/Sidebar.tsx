@@ -16,6 +16,7 @@ function ContactsPanel() {
           联系人
         </span>
         <button
+          type="button"
           onClick={openDialog}
           className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md
             bg-primary-600/15 text-primary-400 border border-primary-600/20
@@ -49,6 +50,7 @@ export function Sidebar({ tab, onLogout }: { tab: Tab; onLogout: () => void }) {
       {/* Footer */}
       <div className="px-4 py-2.5 border-t border-dark-border shrink-0">
         <button
+          type="button"
           onClick={onLogout}
           className="flex items-center gap-2 text-xs text-ink-muted hover:text-red-400 transition-colors"
         >

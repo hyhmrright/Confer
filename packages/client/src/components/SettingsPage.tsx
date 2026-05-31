@@ -32,7 +32,9 @@ function StatusMsg({ error, success }: { error: string | null; success: string |
 }
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
-  return <label className="block text-xs font-medium text-ink-secondary mb-1.5">{children}</label>;
+  // Visual field label rendered above (but not htmlFor-bound to) its control;
+  // a span avoids a label-without-control a11y error while keeping the styling.
+  return <span className="block text-xs font-medium text-ink-secondary mb-1.5">{children}</span>;
 }
 
 function ProfileTab() {
@@ -135,6 +137,7 @@ function ProfileTab() {
       <StatusMsg error={error} success={success} />
 
       <button
+        type="button"
         onClick={handleSave}
         disabled={saving}
         className="px-5 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-500 disabled:opacity-40 transition-colors"
@@ -320,6 +323,7 @@ function AgentTab() {
       <StatusMsg error={error} success={success} />
 
       <button
+        type="button"
         onClick={handleSave}
         disabled={saving}
         className="px-5 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-500 disabled:opacity-40 transition-colors"
@@ -405,6 +409,7 @@ function KeysTab() {
                 <div className="flex gap-3">
                   {!isEditing && (
                     <button
+                      type="button"
                       onClick={() => handleEdit(provider.id)}
                       className="text-xs text-primary-400 hover:text-primary-300 transition-colors"
                     >
@@ -413,6 +418,7 @@ function KeysTab() {
                   )}
                   {isConfigured && !isEditing && (
                     <button
+                      type="button"
                       onClick={() => removeLlmKey(provider.id)}
                       disabled={saving}
                       className="text-xs text-red-400 hover:text-red-300 transition-colors disabled:opacity-40"
@@ -433,6 +439,7 @@ function KeysTab() {
                     className="flex-1 px-3 py-1.5 bg-dark-input border border-dark-border rounded-lg text-xs font-mono text-ink-primary placeholder:text-ink-muted focus:outline-none focus:border-primary-600/40 transition-colors"
                   />
                   <button
+                    type="button"
                     onClick={() => handleSave(provider.id)}
                     disabled={saving || !keyValue.trim()}
                     className="px-3 py-1.5 bg-primary-600 text-white rounded-lg text-xs hover:bg-primary-500 disabled:opacity-40 transition-colors"
@@ -440,6 +447,7 @@ function KeysTab() {
                     保存
                   </button>
                   <button
+                    type="button"
                     onClick={cancelEdit}
                     className="px-3 py-1.5 border border-dark-border rounded-lg text-xs text-ink-muted hover:text-ink-secondary transition-colors"
                   >
@@ -481,6 +489,7 @@ function KeysTab() {
                   <div className="flex gap-3 shrink-0 ml-3">
                     {!isEditing && (
                       <button
+                        type="button"
                         onClick={() => handleEdit(tool.id)}
                         className="text-xs text-primary-400 hover:text-primary-300 transition-colors"
                       >
@@ -489,6 +498,7 @@ function KeysTab() {
                     )}
                     {isConfigured && !isEditing && (
                       <button
+                        type="button"
                         onClick={() => removeLlmKey(tool.id)}
                         disabled={saving}
                         className="text-xs text-red-400 hover:text-red-300 transition-colors disabled:opacity-40"
@@ -509,6 +519,7 @@ function KeysTab() {
                       className="flex-1 px-3 py-1.5 bg-dark-input border border-dark-border rounded-lg text-xs font-mono text-ink-primary placeholder:text-ink-muted focus:outline-none focus:border-primary-600/40 transition-colors"
                     />
                     <button
+                      type="button"
                       onClick={() => handleSave(tool.id)}
                       disabled={saving || !keyValue.trim()}
                       className="px-3 py-1.5 bg-primary-600 text-white rounded-lg text-xs hover:bg-primary-500 disabled:opacity-40 transition-colors"
@@ -516,6 +527,7 @@ function KeysTab() {
                       保存
                     </button>
                     <button
+                      type="button"
                       onClick={cancelEdit}
                       className="px-3 py-1.5 border border-dark-border rounded-lg text-xs text-ink-muted hover:text-ink-secondary transition-colors"
                     >
@@ -546,6 +558,7 @@ export function SettingsPage() {
     <div className="h-screen flex flex-col bg-dark-base">
       <header className="h-13 bg-dark-nav border-b border-dark-border flex items-center px-4 shrink-0">
         <button
+          type="button"
           onClick={() => navigate('/')}
           className="p-1.5 -ml-1 text-ink-muted hover:text-ink-secondary hover:bg-dark-hover rounded-lg transition-colors"
         >
@@ -558,6 +571,7 @@ export function SettingsPage() {
         <nav className="w-52 bg-dark-panel border-r border-dark-border p-2 space-y-0.5 shrink-0">
           {tabs.map(({ id, label, icon: Icon }) => (
             <button
+              type="button"
               key={id}
               onClick={() => setTab(id)}
               className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${

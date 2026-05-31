@@ -30,6 +30,9 @@ export function MessageView() {
 
   const activeConversation = conversations.find((c) => c.id === activeConversationId);
 
+  // messages/streamContent are intentional re-run triggers (scroll on new
+  // content), not values read in the body — keep them despite the lint rule.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: scroll trigger
   useEffect(() => {
     cancelAnimationFrame(scrollRaf.current);
     scrollRaf.current = requestAnimationFrame(() => {
@@ -166,6 +169,7 @@ export function MessageView() {
                 <Paperclip className="w-3 h-3 shrink-0" />
                 <span className="truncate">{attachedFile.name}</span>
                 <button
+                  type="button"
                   onClick={clearAttachment}
                   className="shrink-0 hover:text-red-400 transition-colors ml-1"
                 >
@@ -184,6 +188,7 @@ export function MessageView() {
               onChange={handleFileChange}
             />
             <button
+              type="button"
               onClick={openFilePicker}
               disabled={sending || streaming}
               className="p-2 text-ink-muted hover:text-primary-400 hover:bg-primary-600/10 rounded-lg disabled:opacity-30 transition-colors shrink-0"
@@ -205,6 +210,7 @@ export function MessageView() {
             />
 
             <button
+              type="button"
               onClick={handleSend}
               disabled={!canSend}
               className="p-2 rounded-lg bg-primary-600 text-white hover:bg-primary-500
