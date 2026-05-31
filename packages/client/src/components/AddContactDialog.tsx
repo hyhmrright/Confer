@@ -39,6 +39,7 @@ export function AddContactDialog() {
         <div className="flex justify-between items-center px-6 py-4 border-b border-gray-100">
           <h2 className="text-lg font-semibold text-gray-800">添加联系人</h2>
           <button
+            type="button"
             onClick={handleClose}
             className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
           >
@@ -53,11 +54,11 @@ export function AddContactDialog() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" />
               <input
                 type="text"
+                name="contact-domain"
                 value={domain}
                 onChange={(e) => setDomain(e.target.value)}
                 placeholder="输入域名，如 acme.com"
                 className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                autoFocus
               />
             </div>
             <button
@@ -101,6 +102,7 @@ export function AddContactDialog() {
                     )}
                   </div>
                   <button
+                    type="button"
                     onClick={() => addContact(agent.id)}
                     disabled={loading}
                     className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors shrink-0"
@@ -112,7 +114,8 @@ export function AddContactDialog() {
             </div>
           ) : (
             domain &&
-            !searching && (
+            !searching &&
+            !error && (
               <div className="text-center py-8">
                 <Bot className="w-10 h-10 text-gray-200 mx-auto mb-2" />
                 <p className="text-sm text-gray-400">未找到 Agent</p>

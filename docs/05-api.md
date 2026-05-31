@@ -92,7 +92,9 @@ POST   /api/v1/contacts/lookup              # 按 DID / 域名 / username 查找
 }
 ```
 
-响应：返回找到的候选 Agent 列表。
+响应：返回找到的候选 Agent 列表。lookup 会把发现到的 peer **落库到 `peer_agents`** 并在每个候选里带上本地 `id`（`peer_id`）——`POST /api/v1/contacts` 正是用这个 `id` 添加联系人。`POST /contacts` 幂等：重复添加同一 peer 返回已存在的联系人（`200`）而非报错。
+
+> 添加联系人是**接收方授予对方"可消费我的 Agent"的同意**：被加为联系人的 peer 才能触发我的 Agent 回答（消耗我的 LLM 预算）。未连接 peer 发来的 A2A 消息会被挂起为待批连接请求，见 `03-protocol.md` 的「连接同意闸门」。
 
 ```
 POST   /api/v1/contacts/{contact_id}/policies   # 设置 standing policies
@@ -154,6 +156,8 @@ GET    /api/v1/permissions/history               # 历史记录
   "scope": "peer_action"            // 限定范围
 }
 ```
+
+待批请求里 `action='connect'` 的是**连接请求**（陌生 peer 首次接触时由 A2A 入站生成）。批准（`allow_*`）会把该 peer 写入 `peer_contacts`，建立连接；拒绝则不建立。`GET /pending` 为每条请求附带 `description`（含发起方与首条留言）便于主人判断。
 
 ### 项目记忆（Claude Code 集成相关）
 

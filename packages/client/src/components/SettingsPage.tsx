@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api.js';
+import { LLM_PROVIDERS, STATIC_MODELS, TOOL_PROVIDERS } from '../lib/providers.js';
 import { useAuthStore } from '../stores/auth.js';
 import { useSettingsStore } from '../stores/settings.js';
 import { ArrowLeft, Bot, Key, User } from './Icons.js';
@@ -30,70 +31,10 @@ function StatusMsg({ error, success }: { error: string | null; success: string |
   );
 }
 
-const TOOL_PROVIDERS = [
-  {
-    id: 'tavily',
-    name: 'Tavily 网络搜索',
-    description: '让 AI 能实时搜索网络，查询新闻、股价、天气等任意最新信息',
-    placeholder: 'tvly-...',
-  },
-];
-
-const LLM_PROVIDERS = [
-  { id: 'anthropic', name: 'Anthropic (Claude)' },
-  { id: 'openai', name: 'OpenAI', supportsEmbedding: true },
-  { id: 'deepseek', name: 'DeepSeek' },
-  { id: 'qwen', name: '通义千问 (Qwen)', supportsEmbedding: true },
-  { id: 'glm', name: '智谱 AI (GLM)', supportsEmbedding: true },
-  { id: 'ollama', name: 'Ollama (本地)', isLocal: true },
-];
-
-const STATIC_MODELS: Record<string, { value: string; label: string }[]> = {
-  anthropic: [
-    { value: 'claude-opus-4-7', label: 'Claude Opus 4.7（旗舰）' },
-    { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6（高性价比）' },
-    { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5（轻量）' },
-  ],
-  openai: [
-    { value: 'gpt-5', label: 'GPT-5（旗舰）' },
-    { value: 'gpt-5-mini', label: 'GPT-5 mini（高性价比）' },
-    { value: 'o3', label: 'o3（旗舰推理）' },
-    { value: 'o4-mini', label: 'o4-mini（高性价比推理）' },
-    { value: 'gpt-4.1', label: 'GPT-4.1（长上下文）' },
-    { value: 'gpt-4.1-mini', label: 'GPT-4.1 mini' },
-    { value: 'gpt-4o', label: 'GPT-4o（多模态）' },
-    { value: 'gpt-4o-mini', label: 'GPT-4o mini' },
-  ],
-  deepseek: [
-    { value: 'deepseek-v4-pro', label: 'DeepSeek-V4-Pro（旗舰）' },
-    { value: 'deepseek-v4-flash', label: 'DeepSeek-V4-Flash（高性价比）' },
-  ],
-  qwen: [
-    { value: 'qwen3-max', label: 'Qwen3-Max（旗舰）' },
-    { value: 'qwq-plus', label: 'QwQ-Plus（推理）' },
-    { value: 'qwen3.5-plus', label: 'Qwen3.5-Plus（超长上下文）' },
-    { value: 'qwen3.5-flash', label: 'Qwen3.5-Flash（轻量）' },
-    { value: 'qwen-plus', label: 'Qwen-Plus（稳定别名）' },
-    { value: 'qwen-flash', label: 'Qwen-Flash（轻量别名）' },
-    { value: 'qwen-long', label: 'Qwen-Long（超长文档）' },
-  ],
-  glm: [
-    { value: 'glm-5.1', label: 'GLM-5.1（最新旗舰）' },
-    { value: 'glm-5', label: 'GLM-5（高智能）' },
-    { value: 'glm-5-turbo', label: 'GLM-5-Turbo（复杂任务）' },
-    { value: 'glm-4.7', label: 'GLM-4.7（通用）' },
-    { value: 'glm-4.6', label: 'GLM-4.6（编程推理）' },
-    { value: 'glm-4.5-air', label: 'GLM-4.5-Air（高性价比）' },
-    { value: 'glm-4.5-airx', label: 'GLM-4.5-AirX（极速）' },
-    { value: 'glm-4-long', label: 'GLM-4-Long（百万上下文）' },
-    { value: 'glm-4.7-flash', label: 'GLM-4.7-Flash（免费）' },
-    { value: 'glm-4.7-flashx', label: 'GLM-4.7-FlashX（轻量付费）' },
-  ],
-  ollama: [],
-};
-
 function FieldLabel({ children }: { children: React.ReactNode }) {
-  return <label className="block text-xs font-medium text-ink-secondary mb-1.5">{children}</label>;
+  // Visual field label rendered above (but not htmlFor-bound to) its control;
+  // a span avoids a label-without-control a11y error while keeping the styling.
+  return <span className="block text-xs font-medium text-ink-secondary mb-1.5">{children}</span>;
 }
 
 function ProfileTab() {
@@ -196,6 +137,7 @@ function ProfileTab() {
       <StatusMsg error={error} success={success} />
 
       <button
+        type="button"
         onClick={handleSave}
         disabled={saving}
         className="px-5 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-500 disabled:opacity-40 transition-colors"
@@ -381,6 +323,7 @@ function AgentTab() {
       <StatusMsg error={error} success={success} />
 
       <button
+        type="button"
         onClick={handleSave}
         disabled={saving}
         className="px-5 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-500 disabled:opacity-40 transition-colors"
@@ -466,6 +409,7 @@ function KeysTab() {
                 <div className="flex gap-3">
                   {!isEditing && (
                     <button
+                      type="button"
                       onClick={() => handleEdit(provider.id)}
                       className="text-xs text-primary-400 hover:text-primary-300 transition-colors"
                     >
@@ -474,6 +418,7 @@ function KeysTab() {
                   )}
                   {isConfigured && !isEditing && (
                     <button
+                      type="button"
                       onClick={() => removeLlmKey(provider.id)}
                       disabled={saving}
                       className="text-xs text-red-400 hover:text-red-300 transition-colors disabled:opacity-40"
@@ -492,9 +437,9 @@ function KeysTab() {
                     onChange={(e) => setKeyValue(e.target.value)}
                     placeholder={isOllama ? 'http://localhost:11434' : 'sk-...'}
                     className="flex-1 px-3 py-1.5 bg-dark-input border border-dark-border rounded-lg text-xs font-mono text-ink-primary placeholder:text-ink-muted focus:outline-none focus:border-primary-600/40 transition-colors"
-                    autoFocus
                   />
                   <button
+                    type="button"
                     onClick={() => handleSave(provider.id)}
                     disabled={saving || !keyValue.trim()}
                     className="px-3 py-1.5 bg-primary-600 text-white rounded-lg text-xs hover:bg-primary-500 disabled:opacity-40 transition-colors"
@@ -502,6 +447,7 @@ function KeysTab() {
                     保存
                   </button>
                   <button
+                    type="button"
                     onClick={cancelEdit}
                     className="px-3 py-1.5 border border-dark-border rounded-lg text-xs text-ink-muted hover:text-ink-secondary transition-colors"
                   >
@@ -543,6 +489,7 @@ function KeysTab() {
                   <div className="flex gap-3 shrink-0 ml-3">
                     {!isEditing && (
                       <button
+                        type="button"
                         onClick={() => handleEdit(tool.id)}
                         className="text-xs text-primary-400 hover:text-primary-300 transition-colors"
                       >
@@ -551,6 +498,7 @@ function KeysTab() {
                     )}
                     {isConfigured && !isEditing && (
                       <button
+                        type="button"
                         onClick={() => removeLlmKey(tool.id)}
                         disabled={saving}
                         className="text-xs text-red-400 hover:text-red-300 transition-colors disabled:opacity-40"
@@ -569,9 +517,9 @@ function KeysTab() {
                       onChange={(e) => setKeyValue(e.target.value)}
                       placeholder={tool.placeholder}
                       className="flex-1 px-3 py-1.5 bg-dark-input border border-dark-border rounded-lg text-xs font-mono text-ink-primary placeholder:text-ink-muted focus:outline-none focus:border-primary-600/40 transition-colors"
-                      autoFocus
                     />
                     <button
+                      type="button"
                       onClick={() => handleSave(tool.id)}
                       disabled={saving || !keyValue.trim()}
                       className="px-3 py-1.5 bg-primary-600 text-white rounded-lg text-xs hover:bg-primary-500 disabled:opacity-40 transition-colors"
@@ -579,6 +527,7 @@ function KeysTab() {
                       保存
                     </button>
                     <button
+                      type="button"
                       onClick={cancelEdit}
                       className="px-3 py-1.5 border border-dark-border rounded-lg text-xs text-ink-muted hover:text-ink-secondary transition-colors"
                     >
@@ -609,6 +558,7 @@ export function SettingsPage() {
     <div className="h-screen flex flex-col bg-dark-base">
       <header className="h-13 bg-dark-nav border-b border-dark-border flex items-center px-4 shrink-0">
         <button
+          type="button"
           onClick={() => navigate('/')}
           className="p-1.5 -ml-1 text-ink-muted hover:text-ink-secondary hover:bg-dark-hover rounded-lg transition-colors"
         >
@@ -621,6 +571,7 @@ export function SettingsPage() {
         <nav className="w-52 bg-dark-panel border-r border-dark-border p-2 space-y-0.5 shrink-0">
           {tabs.map(({ id, label, icon: Icon }) => (
             <button
+              type="button"
               key={id}
               onClick={() => setTab(id)}
               className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${

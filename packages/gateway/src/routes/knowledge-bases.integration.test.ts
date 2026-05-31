@@ -46,7 +46,9 @@ describe('knowledge base CRUD', () => {
   });
 
   test('404s listing documents of an unknown kb', async () => {
-    expect((await get(`${BASE}/01HZZZZZZZZZZZZZZZZZZZZZZZ/documents`, { token: user.token })).status).toBe(404);
+    expect(
+      (await get(`${BASE}/01HZZZZZZZZZZZZZZZZZZZZZZZ/documents`, { token: user.token })).status,
+    ).toBe(404);
   });
 });
 
@@ -85,7 +87,11 @@ describe('document ingestion (real MinIO + Qdrant, mocked embeddings)', () => {
   test('uploads a document and runs it through the ingestion pipeline', async () => {
     const kbId = await createKb();
 
-    const res = await uploadText(kbId, 'notes.txt', 'Confer is an A2A protocol platform for AI agents.');
+    const res = await uploadText(
+      kbId,
+      'notes.txt',
+      'Confer is an A2A protocol platform for AI agents.',
+    );
     expect(res.status).toBe(201);
     const { document } = await res.json();
     expect(document.status).toBe('processing');
@@ -102,5 +108,74 @@ describe('document ingestion (real MinIO + Qdrant, mocked embeddings)', () => {
 
     expect(status).toBe('ready');
     expect(chunkCount).toBeGreaterThan(0);
+  });
+});
+
+describe('document retry (real MinIO + Qdrant, mocked embeddings)', () => {
+  let restoreFetch: () => void;
+  let embeddingInputs: string[][];
+
+  beforeEach(async () => {
+    embeddingInputs = [];
+    restoreFetch = mockFetch((url, init) => {
+      if (!url.includes('/embeddings')) return undefined;
+      const texts = (JSON.parse(String(init?.body)) as { input: string[] }).input;
+      embeddingInputs.push(texts);
+      return Response.json({
+        data: texts.map((_, index) => ({ index, embedding: new Array(VECTOR_SIZE).fill(0.01) })),
+      });
+    });
+
+    await put('/api/v1/agents/me/llm-keys', {
+      token: user.token,
+      body: { provider: 'openai', api_key: 'sk-test-embedding' },
+    });
+  });
+
+  afterEach(() => restoreFetch());
+
+  async function uploadText(kbId: string, name: string, content: string): Promise<Response> {
+    const form = new FormData();
+    form.append('file', new File([content], name, { type: 'text/plain' }));
+    return apiRequest(`${BASE}/${kbId}/documents`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${user.token}`, 'x-forwarded-for': 'kb-retry' },
+      body: form,
+    });
+  }
+
+  async function waitForReady(kbId: string): Promise<string> {
+    let status = 'processing';
+    for (let i = 0; i < 50 && status !== 'ready'; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      const docs = await (await get(`${BASE}/${kbId}/documents`, { token: user.token })).json();
+      status = docs.documents[0]?.status ?? status;
+    }
+    return status;
+  }
+
+  test('retry re-ingests the exact stored bytes (no buffer-pool corruption)', async () => {
+    const kbId = await createKb();
+    // A short (<4KB) body is the danger case: Buffer.concat returns a view into
+    // the shared pool, so the underlying ArrayBuffer is larger than the file.
+    const content = 'Confer retry buffer regression — 你好, A2A protocol.';
+
+    const upload = await uploadText(kbId, 'retry.txt', content);
+    expect(upload.status).toBe(201);
+    const docId = (await upload.json()).document.id;
+    expect(await waitForReady(kbId)).toBe('ready');
+
+    const uploadInputs = embeddingInputs.at(-1) ?? [];
+    expect(uploadInputs.join('')).toContain(content);
+    embeddingInputs = [];
+
+    const retry = await post(`${BASE}/${kbId}/documents/${docId}/retry`, { token: user.token });
+    expect(retry.status).toBe(200);
+    expect(await waitForReady(kbId)).toBe('ready');
+
+    // Bytes fetched back from MinIO must decode to the same text the upload
+    // embedded — the old code passed the whole pooled ArrayBuffer and corrupted it.
+    const retryInputs = embeddingInputs.at(-1) ?? [];
+    expect(retryInputs).toEqual(uploadInputs);
   });
 });

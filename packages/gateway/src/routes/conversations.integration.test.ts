@@ -32,12 +32,17 @@ describe('conversations', () => {
   test('fetches a conversation by id and 404s for unknown ids', async () => {
     const id = await createConversation(user.token);
     expect((await get(`${BASE}/${id}`, { token: user.token })).status).toBe(200);
-    expect((await get(`${BASE}/01HZZZZZZZZZZZZZZZZZZZZZZZ`, { token: user.token })).status).toBe(404);
+    expect((await get(`${BASE}/01HZZZZZZZZZZZZZZZZZZZZZZZ`, { token: user.token })).status).toBe(
+      404,
+    );
   });
 
   test('posts a message and reads it back', async () => {
     const id = await createConversation(user.token);
-    const sent = await post(`${BASE}/${id}/messages`, { token: user.token, body: { content: 'hello there' } });
+    const sent = await post(`${BASE}/${id}/messages`, {
+      token: user.token,
+      body: { content: 'hello there' },
+    });
     expect(sent.status).toBe(201);
     const body = await sent.json();
     expect(body.delivery_status).toBe('queued');

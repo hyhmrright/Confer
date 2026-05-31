@@ -156,7 +156,8 @@ Authorization: Capability eyJhbGciOiJFZDI1NTE5IiwidHlwIjoiQ2FwIn0...
 5. 验证 `Digest` 匹配 body 哈希
 6. 检查 `Date` 在 5 分钟内（防 replay）
 7. 验证 `Capability` token（macaroon 风格，下面详述）
-8. 走 policy engine 决定要不要响应
+8. **连接同意闸门**：发送方是否已被接收方加为联系人？未连接 → 不跑 LLM，挂起为连接请求（见下）
+9. 已连接 → 走 policy engine 决定要不要响应
 
 ### Capability token
 
@@ -258,9 +259,23 @@ peer.unknown:
   require_human_in_loop: true
 ```
 
+### 连接同意闸门（consent gate）
+
+回答一条 A2A 消息会消耗**接收方**的 LLM 预算。为防止陌生 Agent 在主人不知情时疯狂发消息、烧掉主人的 token，连接是消费的前置条件：
+
+- **已连接的 peer**（在接收方的 `peer_contacts` 里）→ 连接即同意，进入 policy engine 正常处理。
+- **未连接的 peer** → `POST /a2a/v1/messages` 返回 `202`，body `{ "status": "pending_connection" }`；**不创建会话、不存消息、不跑 LLM**。同时落一条 `action='connect'` 的待批连接请求到 pending inbox（按 peer 去重，重复消息不会刷屏）。
+- 主人在权限收件箱里看到「某 Agent 请求建立连接 + 首条留言」，**批准**即写入 `peer_contacts`（建立连接），此后该 peer 的消息正常处理；**拒绝**则不建立连接。
+
+模型形态对标 LinkedIn / 企业联邦：**发现层开放**（任何人可读 `agents.json`、AgentFacts），**交互层需同意**（连接后才能消耗对方算力）。
+
+成为「已连接」有两条路径：
+1. 接收方主动通过 `POST /contacts/lookup` → `POST /contacts` 添加该 peer；
+2. peer 先发起，接收方在收件箱批准其连接请求。
+
 ### Pending inbox（离线代答）
 
-主人离线时收到对方 Agent 的问题：
+主人离线时收到**已连接** peer 的问题：
 
 - 符合 standing policy 的 → Agent 直接答
 - 不在白名单的 → 挂起到 pending inbox，主人上线时一键批准/编辑/拒绝

@@ -1,5 +1,5 @@
-import { newId } from '@confer/shared';
 import { beforeEach, describe, expect, test } from 'bun:test';
+import { newId } from '@confer/shared';
 import { getDb } from '../db/connection.js';
 import { agents, keypairs } from '../db/schema.js';
 import { get, resetDb, seedUser } from '../test/helpers.js';
@@ -42,8 +42,20 @@ describe('GET /.well-known/agents.json', () => {
     await getDb()
       .insert(agents)
       .values([
-        { id: newId(), user_id: user.id, did: 'did:web:localhost:agents:pub', name: 'Public', is_public: true },
-        { id: newId(), user_id: user.id, did: 'did:web:localhost:agents:priv', name: 'Private', is_public: false },
+        {
+          id: newId(),
+          user_id: user.id,
+          did: 'did:web:localhost:agents:pub',
+          name: 'Public',
+          is_public: true,
+        },
+        {
+          id: newId(),
+          user_id: user.id,
+          did: 'did:web:localhost:agents:priv',
+          name: 'Private',
+          is_public: false,
+        },
       ]);
 
     const res = await get('/.well-known/agents.json');

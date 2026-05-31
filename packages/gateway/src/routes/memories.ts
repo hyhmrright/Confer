@@ -4,6 +4,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { getDb } from '../db/connection.js';
 import { agentMemories } from '../db/schema.js';
+import { deleteMemory } from '../lib/memory-store.js';
 import { authMiddleware } from '../middleware/auth.js';
 import type { AppEnv } from '../types.js';
 
@@ -81,5 +82,15 @@ memoriesRoutes.delete('/:id', async (c) => {
     .returning({ id: agentMemories.id });
 
   if (!deleted.length) throw new AppError('not_found', 'Memory not found', 404);
+
+  // Also drop the Qdrant vector so a deleted memory can't be recalled. Best-effort:
+  // a Qdrant hiccup must not fail an otherwise-successful delete (the orphaned
+  // vector is filtered by user_id and can be reconciled later).
+  try {
+    await deleteMemory(user.sub, id);
+  } catch (err) {
+    console.error(`Failed to delete Qdrant vector for memory ${id}:`, err);
+  }
+
   return c.json({ ok: true });
 });

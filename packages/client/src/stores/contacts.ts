@@ -60,10 +60,16 @@ export const useContactsStore = create<ContactsState>((set, get) => ({
   },
 
   lookupByDomain: async (domain) => {
-    const data = await api.post<{ candidates: PeerAgent[] }>('/contacts/lookup', {
+    set({ error: null });
+    const data = await api.post<{ candidates: PeerAgent[]; error?: string }>('/contacts/lookup', {
       method: 'domain',
-      query: domain,
+      value: domain,
     });
+    // Surface the backend's reason (e.g. "Private addresses not allowed",
+    // resolution timeout) instead of silently collapsing to "未找到 Agent".
+    if (data.error && data.candidates.length === 0) {
+      set({ error: data.error });
+    }
     return data.candidates;
   },
 

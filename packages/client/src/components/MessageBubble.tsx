@@ -1,18 +1,9 @@
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { z } from 'zod';
+import { permissionRequestSchema } from '../lib/schemas.js';
 import { CitationCapsule } from './CitationCapsule.js';
 import { Bot, User } from './Icons.js';
 import { PermissionCard } from './PermissionCard.js';
-
-const permissionRequestSchema = z.object({
-  id: z.string(),
-  level: z.string(),
-  action: z.string(),
-  scope: z.record(z.unknown()),
-  description: z.string(),
-  requested_at: z.string(),
-});
 
 interface Citation {
   source: string;

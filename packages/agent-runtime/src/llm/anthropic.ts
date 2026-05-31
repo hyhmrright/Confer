@@ -78,7 +78,7 @@ export class AnthropicProvider implements LLMProvider {
 
     return {
       content,
-      finish_reason: data.stop_reason === 'end_turn' ? 'stop' : 'stop',
+      finish_reason: 'stop',
       usage: {
         prompt_tokens: (data.usage as Record<string, number>).input_tokens ?? 0,
         completion_tokens: (data.usage as Record<string, number>).output_tokens ?? 0,

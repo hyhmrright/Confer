@@ -6,6 +6,9 @@ export interface KeyPair {
 }
 
 const MULTIBASE_PREFIX = 'z';
+// multicodec prefix for an Ed25519 public key (0xed varint), per the
+// did:key / multibase spec — prepended to the raw key before base58btc.
+const ED25519_MULTICODEC = [0xed, 0x01] as const;
 
 export async function generateEd25519KeyPair(): Promise<KeyPair> {
   const pair = await crypto.subtle.generateKey('Ed25519', true, ['sign', 'verify']);
@@ -14,10 +17,9 @@ export async function generateEd25519KeyPair(): Promise<KeyPair> {
 
 export async function publicKeyToMultibase(key: CryptoKey): Promise<string> {
   const raw = new Uint8Array(await crypto.subtle.exportKey('raw', key));
-  const multicodec = new Uint8Array(2 + raw.length);
-  multicodec[0] = 0xed;
-  multicodec[1] = 0x01;
-  multicodec.set(raw, 2);
+  const multicodec = new Uint8Array(ED25519_MULTICODEC.length + raw.length);
+  multicodec.set(ED25519_MULTICODEC, 0);
+  multicodec.set(raw, ED25519_MULTICODEC.length);
   return MULTIBASE_PREFIX + base58btcEncode(multicodec);
 }
 
@@ -30,11 +32,11 @@ export async function multibaseToPublicKey(multibase: string): Promise<Result<Cr
   if (!decoded) {
     return err('Invalid base58btc encoding');
   }
-  if (decoded[0] !== 0xed || decoded[1] !== 0x01) {
+  if (decoded[0] !== ED25519_MULTICODEC[0] || decoded[1] !== ED25519_MULTICODEC[1]) {
     return err('Invalid Ed25519 multicodec prefix');
   }
 
-  const raw = decoded.slice(2);
+  const raw = decoded.slice(ED25519_MULTICODEC.length);
   const key = await crypto.subtle.importKey('raw', raw, 'Ed25519', true, ['verify']);
   return ok(key);
 }
@@ -54,6 +56,7 @@ function base58btcEncode(bytes: Uint8Array): string {
   for (const byte of bytes) {
     let carry = byte;
     for (let j = 0; j < digits.length; j++) {
+      // biome-ignore lint/style/noNonNullAssertion: j is bounded by digits.length
       carry += digits[j]! * 256;
       digits[j] = carry % 58;
       carry = (carry / 58) | 0;
@@ -70,6 +73,7 @@ function base58btcEncode(bytes: Uint8Array): string {
     else break;
   }
   for (let i = digits.length - 1; i >= 0; i--) {
+    // biome-ignore lint/style/noNonNullAssertion: i is bounded by digits.length
     result += BASE58_ALPHABET[digits[i]!];
   }
   return result;
@@ -83,6 +87,7 @@ function base58btcDecode(str: string): Uint8Array | null {
 
     let carry = value;
     for (let j = 0; j < bytes.length; j++) {
+      // biome-ignore lint/style/noNonNullAssertion: j is bounded by bytes.length
       carry += bytes[j]! * 58;
       bytes[j] = carry & 0xff;
       carry >>= 8;
@@ -101,6 +106,7 @@ function base58btcDecode(str: string): Uint8Array | null {
 
   const result = new Uint8Array(leading + bytes.length);
   for (let i = 0; i < bytes.length; i++) {
+    // biome-ignore lint/style/noNonNullAssertion: i is bounded by bytes.length
     result[result.length - 1 - i] = bytes[i]!;
   }
   return result;

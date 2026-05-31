@@ -148,6 +148,10 @@ conversationRoutes.post('/:id/messages', async (c) => {
     })
     .returning();
 
+  if (!msg) {
+    throw new AppError('message_creation_failed', 'Failed to create message', 500);
+  }
+
   await db
     .update(conversations)
     .set({ updated_at: new Date() })
@@ -155,7 +159,7 @@ conversationRoutes.post('/:id/messages', async (c) => {
 
   return c.json(
     {
-      id: msg!.id,
+      id: msg.id,
       delivery_status: 'queued',
       stream_url: `/api/v1/stream/${convId}/${msgId}`,
     },

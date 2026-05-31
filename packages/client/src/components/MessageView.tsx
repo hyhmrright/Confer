@@ -1,22 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { useFileAttachment } from '../hooks/useFileAttachment.js';
 import { useChatStore } from '../stores/chat.js';
 import { CitationCapsule } from './CitationCapsule.js';
 import { Bot, Paperclip, Send, X } from './Icons.js';
 import { MessageBubble } from './MessageBubble.js';
 import { TypingIndicator } from './TypingIndicator.js';
-
-const MAX_FILE_CHARS = 40_000;
-
-function readFileAsText(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsText(file, 'utf-8');
-  });
-}
 
 export function MessageView() {
   const {
@@ -32,14 +22,17 @@ export function MessageView() {
   } = useChatStore();
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
-  const [attachedFile, setAttachedFile] = useState<{ name: string; content: string } | null>(null);
+  const { attachedFile, fileInputRef, handleFileChange, openFilePicker, clearAttachment } =
+    useFileAttachment();
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRaf = useRef(0);
 
   const activeConversation = conversations.find((c) => c.id === activeConversationId);
 
+  // messages/streamContent are intentional re-run triggers (scroll on new
+  // content), not values read in the body — keep them despite the lint rule.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: scroll trigger
   useEffect(() => {
     cancelAnimationFrame(scrollRaf.current);
     scrollRaf.current = requestAnimationFrame(() => {
@@ -52,31 +45,17 @@ export function MessageView() {
     if (!streaming && textareaRef.current) textareaRef.current.focus();
   }, [streaming]);
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    e.target.value = '';
-    try {
-      let content = await readFileAsText(file);
-      if (content.length > MAX_FILE_CHARS)
-        content = content.slice(0, MAX_FILE_CHARS) + '\n\n[内容已截断]';
-      setAttachedFile({ name: file.name, content });
-    } catch {
-      alert('无法读取该文件，请选择文本文件。');
-    }
-  };
-
   const handleSend = async () => {
     const text = input.trim();
     if ((!text && !attachedFile) || sending) return;
 
     let fullText = text;
     if (attachedFile) {
-      fullText = `${text ? text + '\n\n' : ''}[文件: ${attachedFile.name}]\n\`\`\`\n${attachedFile.content}\n\`\`\``;
+      fullText = `${text ? `${text}\n\n` : ''}[文件: ${attachedFile.name}]\n\`\`\`\n${attachedFile.content}\n\`\`\``;
     }
 
     setInput('');
-    setAttachedFile(null);
+    clearAttachment();
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
     setSending(true);
     try {
@@ -97,7 +76,7 @@ export function MessageView() {
     setInput(e.target.value);
     const el = e.target;
     el.style.height = 'auto';
-    el.style.height = Math.min(el.scrollHeight, 160) + 'px';
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
   };
 
   const canSend = (input.trim().length > 0 || attachedFile !== null) && !sending && !streaming;
@@ -190,7 +169,8 @@ export function MessageView() {
                 <Paperclip className="w-3 h-3 shrink-0" />
                 <span className="truncate">{attachedFile.name}</span>
                 <button
-                  onClick={() => setAttachedFile(null)}
+                  type="button"
+                  onClick={clearAttachment}
                   className="shrink-0 hover:text-red-400 transition-colors ml-1"
                 >
                   <X className="w-3 h-3" />
@@ -208,7 +188,8 @@ export function MessageView() {
               onChange={handleFileChange}
             />
             <button
-              onClick={() => fileInputRef.current?.click()}
+              type="button"
+              onClick={openFilePicker}
               disabled={sending || streaming}
               className="p-2 text-ink-muted hover:text-primary-400 hover:bg-primary-600/10 rounded-lg disabled:opacity-30 transition-colors shrink-0"
               title="上传文件"
@@ -218,6 +199,7 @@ export function MessageView() {
 
             <textarea
               ref={textareaRef}
+              name="message-input"
               value={input}
               onChange={handleInput}
               onKeyDown={handleKeyDown}
@@ -229,6 +211,7 @@ export function MessageView() {
             />
 
             <button
+              type="button"
               onClick={handleSend}
               disabled={!canSend}
               className="p-2 rounded-lg bg-primary-600 text-white hover:bg-primary-500

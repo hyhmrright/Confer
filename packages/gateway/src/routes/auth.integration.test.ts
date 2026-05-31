@@ -1,5 +1,5 @@
-import { eq } from 'drizzle-orm';
 import { beforeEach, describe, expect, test } from 'bun:test';
+import { eq } from 'drizzle-orm';
 import { getDb } from '../db/connection.js';
 import { sessions, users } from '../db/schema.js';
 import { apiRequest, headers, resetDb } from '../test/helpers.js';
@@ -86,7 +86,11 @@ describe('POST /auth/login', () => {
   });
 
   test('rejects an unknown user with 401', async () => {
-    const res = await post(LOGIN, { username: 'ghost', password: 'password123', device_id: 'dev-1' });
+    const res = await post(LOGIN, {
+      username: 'ghost',
+      password: 'password123',
+      device_id: 'dev-1',
+    });
     expect(res.status).toBe(401);
   });
 });

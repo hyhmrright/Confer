@@ -1,19 +1,22 @@
 import { createProvider } from '@confer/agent-runtime';
 import type { LLMMessage, LLMToolDefinition } from '@confer/agent-runtime';
-import { AppError, decrypt, newId } from '@confer/shared';
+import { AppError, newId } from '@confer/shared';
 import { and, asc, eq, lt } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import { getDb } from '../db/connection.js';
-import { agents, conversationParticipants, knowledgeBases, messages, users } from '../db/schema.js';
+import { agents, conversationParticipants, knowledgeBases, messages } from '../db/schema.js';
 import { getEnv } from '../env.js';
-import { EMBEDDING_PROVIDER_PRIORITY, type EmbeddingProvider } from '../lib/embedding.js';
+import type { EmbeddingProvider } from '../lib/embedding.js';
+import { decryptUserKey, getUserLlmKeys, resolveEmbeddingKey } from '../lib/llm-keys.js';
+import { ensureMemoryCollection } from '../lib/memory-store.js';
 import { authMiddleware } from '../middleware/auth.js';
 import {
   type KbCitation,
   knowledgeBaseToolDefinition,
   searchKnowledgeBase,
 } from '../tools/knowledge-base.js';
+import { extractAndStore, recallMemories } from '../tools/memory.js';
 import { tavilySearch, tavilyToolDefinition } from '../tools/tavily.js';
 import type { AppEnv } from '../types.js';
 import { broadcastToConversation } from '../ws/handler.js';
@@ -72,21 +75,8 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
       const providerName = (modelConfig?.provider as string) ?? 'anthropic';
       const systemPrompt = (modelConfig?.system_prompt as string) ?? DEFAULT_SYSTEM_PROMPT;
 
-      const [userRow] = await db
-        .select({ llm_keys_json: users.llm_keys_json })
-        .from(users)
-        .where(eq(users.id, user.sub))
-        .limit(1);
-
-      const llmKeys = (userRow?.llm_keys_json ?? {}) as Record<string, unknown>;
-      const encryptedKey = llmKeys[providerName] as
-        | import('@confer/shared').EncryptedValue
-        | undefined;
-      let apiKey = '';
-      if (encryptedKey) {
-        const result = await decrypt(encryptedKey, env.ENCRYPTION_KEY);
-        if (result.ok) apiKey = result.value;
-      }
+      const llmKeys = await getUserLlmKeys(user.sub);
+      const apiKey = await decryptUserKey(llmKeys, providerName, env.ENCRYPTION_KEY);
 
       const provider = createProvider(providerName, apiKey);
       if (!provider) {
@@ -111,18 +101,9 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
       }));
 
       // Resolve embedding provider for knowledge base search
-      let embeddingKey = '';
-      let embeddingProvider: EmbeddingProvider = 'openai';
-      for (const p of EMBEDDING_PROVIDER_PRIORITY) {
-        const encrypted = llmKeys[p] as import('@confer/shared').EncryptedValue | undefined;
-        if (!encrypted) continue;
-        const r = await decrypt(encrypted, env.ENCRYPTION_KEY);
-        if (r.ok) {
-          embeddingKey = r.value;
-          embeddingProvider = p;
-          break;
-        }
-      }
+      const embeddingConfig = await resolveEmbeddingKey(llmKeys, env.ENCRYPTION_KEY);
+      const embeddingKey = embeddingConfig?.apiKey ?? '';
+      const embeddingProvider: EmbeddingProvider = embeddingConfig?.provider ?? 'openai';
       const userKbs = embeddingKey
         ? await db
             .select({ id: knowledgeBases.id })
@@ -130,20 +111,34 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
             .where(eq(knowledgeBases.user_id, user.sub))
         : [];
 
-      const encryptedTavilyKey = llmKeys.tavily as
-        | import('@confer/shared').EncryptedValue
-        | undefined;
-      let tavilyApiKey = env.TAVILY_API_KEY;
-      if (encryptedTavilyKey) {
-        const r = await decrypt(encryptedTavilyKey, env.ENCRYPTION_KEY);
-        if (r.ok) tavilyApiKey = r.value;
-      }
+      const userTavilyKey = await decryptUserKey(llmKeys, 'tavily', env.ENCRYPTION_KEY);
+      const tavilyApiKey = userTavilyKey || env.TAVILY_API_KEY;
 
       const tools: LLMToolDefinition[] = [
         ...(tavilyApiKey ? [tavilyToolDefinition] : []),
         ...(userKbs.length > 0 ? [knowledgeBaseToolDefinition] : []),
       ];
-      const effectiveSystemPrompt = buildSystemPrompt(systemPrompt, userKbs.length > 0);
+
+      // Recall durable memories for this user and inject them into the system
+      // prompt. Best-effort: never fail the request on memory errors.
+      let memoryFragment = '';
+      if (embeddingKey) {
+        try {
+          await ensureMemoryCollection();
+          memoryFragment = await recallMemories(
+            msg.content ?? '',
+            user.sub,
+            embeddingKey,
+            embeddingProvider,
+          );
+        } catch (err) {
+          console.error(`Memory recall failed for user ${user.sub}:`, err);
+        }
+      }
+
+      const effectiveSystemPrompt =
+        buildSystemPrompt(systemPrompt, userKbs.length > 0) + memoryFragment;
+
       let agentMessages: LLMMessage[] = [
         { role: 'system', content: effectiveSystemPrompt },
         ...history,
@@ -211,6 +206,17 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
               );
               result = kbResult.text;
               citations.push(...kbResult.citations);
+              // Stream citations live so the capsule shows during the response,
+              // matching the shape the client maps persisted citations to.
+              for (const cite of kbResult.citations) {
+                await stream.writeSSE({
+                  event: 'citation',
+                  data: JSON.stringify({
+                    source: `${cite.doc_name}（${cite.kb_name}）`,
+                    passage: cite.excerpt,
+                  }),
+                });
+              }
             } else {
               result = `未知工具: ${tc.name}`;
             }
@@ -259,6 +265,21 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
         event: 'done',
         data: JSON.stringify({ message_id: replyId }),
       });
+
+      // Fire-and-forget: extract durable facts from this turn into long-term
+      // memory. Never block or fail the response on memory errors.
+      if (embeddingKey && fullContent) {
+        const recentTurns = `用户：${msg.content ?? ''}\n助手：${fullContent}`;
+        void extractAndStore({
+          userId: user.sub,
+          provider,
+          embeddingKey,
+          embeddingProvider,
+          recentTurns,
+        }).catch((err) => {
+          console.error(`Memory extraction failed for user ${user.sub}:`, err);
+        });
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Stream failed';
       await stream.writeSSE({ event: 'error', data: JSON.stringify({ message }) });

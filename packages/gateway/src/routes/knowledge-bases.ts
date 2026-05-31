@@ -1,17 +1,14 @@
-import { AppError, decrypt, newId } from '@confer/shared';
+import { AppError, newId } from '@confer/shared';
 import { and, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { getDb } from '../db/connection.js';
-import { knowledgeBases, knowledgeDocuments, users } from '../db/schema.js';
+import { knowledgeBases, knowledgeDocuments } from '../db/schema.js';
 import { getEnv } from '../env.js';
 import { chunkText } from '../lib/chunker.js';
 import { guessContentType, parseDocument } from '../lib/doc-parser.js';
-import {
-  EMBEDDING_PROVIDER_PRIORITY,
-  type EmbeddingProvider,
-  embedTexts,
-} from '../lib/embedding.js';
+import { type EmbeddingProvider, embedTexts } from '../lib/embedding.js';
+import { getUserLlmKeys, resolveEmbeddingKey } from '../lib/llm-keys.js';
 import { deleteByDocId, deleteByKbId, ensureCollection, upsertChunks } from '../lib/qdrant.js';
 import { getObject, putObject, removeObject } from '../lib/storage.js';
 import { authMiddleware } from '../middleware/auth.js';
@@ -29,28 +26,16 @@ const createKbSchema = z.object({
 async function getEmbeddingConfig(
   userId: string,
 ): Promise<{ apiKey: string; provider: EmbeddingProvider }> {
-  const env = getEnv();
-  const db = getDb();
-  const [userRow] = await db
-    .select({ llm_keys_json: users.llm_keys_json })
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1);
-
-  const llmKeys = (userRow?.llm_keys_json ?? {}) as Record<string, unknown>;
-
-  for (const provider of EMBEDDING_PROVIDER_PRIORITY) {
-    const encryptedKey = llmKeys[provider] as import('@confer/shared').EncryptedValue | undefined;
-    if (!encryptedKey) continue;
-    const result = await decrypt(encryptedKey, env.ENCRYPTION_KEY);
-    if (result.ok) return { apiKey: result.value, provider };
+  const llmKeys = await getUserLlmKeys(userId);
+  const config = await resolveEmbeddingKey(llmKeys, getEnv().ENCRYPTION_KEY);
+  if (!config) {
+    throw new AppError(
+      'embedding_unavailable',
+      'No embedding provider configured — please add an OpenAI, ZhipuAI (GLM), or Qwen API key in Settings',
+      400,
+    );
   }
-
-  throw new AppError(
-    'embedding_unavailable',
-    'No embedding provider configured — please add an OpenAI, ZhipuAI (GLM), or Qwen API key in Settings',
-    400,
-  );
+  return config;
 }
 
 // --- Knowledge Base CRUD ---
@@ -225,7 +210,11 @@ knowledgeBasesRoutes.post('/:kbId/documents/:docId/retry', async (c) => {
     buffer.byteOffset + buffer.byteLength,
   ) as ArrayBuffer;
 
-  await deleteByDocId(docId).catch(() => {});
+  // Log rather than swallow: a failed cleanup leaves stale chunks that the
+  // re-ingest below would duplicate, silently degrading retrieval quality.
+  await deleteByDocId(docId).catch((err) =>
+    console.error(`Retry cleanup failed for doc ${docId}:`, err),
+  );
   ingestDocument(docId, kbId, kb.name, user.sub, doc.filename, contentType, fileBuffer).catch(
     (err) => {
       console.error(`Retry ingestion failed for doc ${docId}:`, err);

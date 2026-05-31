@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { INPUT_CLS } from '../lib/styles.js';
 import { useMemoriesStore } from '../stores/memories.js';
 import { Plus, Search, Trash } from './Icons.js';
 
@@ -34,10 +35,6 @@ export function MemoryPage() {
     }
   };
 
-  const inputCls = `w-full px-3 py-2 bg-dark-input border border-dark-border rounded-lg text-xs
-    text-ink-primary placeholder:text-ink-muted
-    focus:outline-none focus:border-primary-600/40 transition-colors`;
-
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Header */}
@@ -46,6 +43,7 @@ export function MemoryPage() {
           记忆
         </span>
         <button
+          type="button"
           onClick={() => setShowForm((v) => !v)}
           className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md
             bg-primary-600/15 text-primary-400 border border-primary-600/20
@@ -61,6 +59,7 @@ export function MemoryPage() {
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-muted pointer-events-none" />
           <input
+            name="memory-search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="搜索记忆..."
@@ -77,23 +76,25 @@ export function MemoryPage() {
             value={newTitle}
             onChange={(e) => setNewTitle(e.target.value)}
             placeholder="标题"
-            className={inputCls}
+            className={INPUT_CLS}
           />
           <textarea
             value={newContent}
             onChange={(e) => setNewContent(e.target.value)}
             placeholder="内容..."
             rows={3}
-            className={`${inputCls} resize-none`}
+            className={`${INPUT_CLS} resize-none`}
           />
           <div className="flex gap-2 justify-end">
             <button
+              type="button"
               onClick={() => setShowForm(false)}
               className="px-3 py-1.5 text-xs text-ink-muted hover:text-ink-secondary transition-colors"
             >
               取消
             </button>
             <button
+              type="button"
               onClick={handleCreate}
               disabled={saving || !newTitle.trim() || !newContent.trim()}
               className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg
@@ -143,6 +144,14 @@ export function MemoryPage() {
                         置顶
                       </span>
                     )}
+                    {mem.source === 'auto' && (
+                      <span
+                        className="text-[10px] font-medium text-ink-muted bg-dark-border px-1.5 py-0.5 rounded shrink-0"
+                        title="对话中自动记住"
+                      >
+                        自动
+                      </span>
+                    )}
                     <h3 className="text-xs font-semibold text-ink-primary truncate">{mem.title}</h3>
                   </div>
                   <p className="text-[11px] text-ink-secondary mt-1 leading-relaxed whitespace-pre-wrap line-clamp-3">
@@ -171,6 +180,7 @@ export function MemoryPage() {
                 </div>
                 <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                   <button
+                    type="button"
                     onClick={() => updateMemory(mem.id, { pinned: !mem.pinned })}
                     className={`p-1 rounded transition-colors
                       ${
@@ -181,6 +191,7 @@ export function MemoryPage() {
                     title={mem.pinned ? '取消置顶' : '置顶'}
                   >
                     <svg
+                      aria-hidden="true"
                       className="w-3.5 h-3.5"
                       viewBox="0 0 24 24"
                       fill={mem.pinned ? 'currentColor' : 'none'}
@@ -191,6 +202,7 @@ export function MemoryPage() {
                     </svg>
                   </button>
                   <button
+                    type="button"
                     onClick={() => deleteMemory(mem.id)}
                     className="p-1 rounded text-ink-muted hover:text-red-400 hover:bg-red-900/20 transition-colors"
                     title="删除"

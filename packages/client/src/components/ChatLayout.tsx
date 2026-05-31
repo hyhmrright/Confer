@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { z } from 'zod';
-import { connectWs, disconnectWs, onWsMessage } from '../lib/ws.js';
+import { setOnTokenRefreshed } from '../lib/api.js';
+import { permissionRequestSchema } from '../lib/schemas.js';
+import { connectWs, disconnectWs, onWsMessage, reconnectWs } from '../lib/ws.js';
 import { useAuthStore } from '../stores/auth.js';
 import { useChatStore } from '../stores/chat.js';
 import { usePermissionsStore } from '../stores/permissions.js';
 import { AddContactDialog } from './AddContactDialog.js';
 import { BookOpen, Database, MessageCircle, Settings, Users } from './Icons.js';
 import { MessageView } from './MessageView.js';
+import { PermissionInbox } from './PermissionInbox.js';
 import { Sidebar } from './Sidebar.js';
 
 export type Tab = 'conversations' | 'contacts' | 'memory' | 'knowledge';
@@ -30,15 +33,6 @@ const wsMessageSchema = z.object({
   citations: z.array(wsCitationSchema).optional(),
   in_reply_to: z.string().optional(),
   content_json: z.unknown().optional(),
-});
-
-const wsPermissionSchema = z.object({
-  id: z.string(),
-  level: z.string(),
-  action: z.string(),
-  scope: z.record(z.unknown()),
-  description: z.string(),
-  requested_at: z.string(),
 });
 
 const wsAgentStatusSchema = z.object({
@@ -75,6 +69,7 @@ function NavRail({
         const active = tab === id;
         return (
           <button
+            type="button"
             key={id}
             onClick={() => setTab(id)}
             title={label}
@@ -97,6 +92,7 @@ function NavRail({
 
       {/* Settings */}
       <button
+        type="button"
         onClick={onSettings}
         title="设置"
         className="w-9 h-9 flex items-center justify-center rounded-lg text-ink-muted hover:text-ink-secondary hover:bg-dark-hover transition-colors"
@@ -106,6 +102,7 @@ function NavRail({
 
       {/* Avatar / logout */}
       <button
+        type="button"
         title="账号"
         className="w-7 h-7 mt-1 rounded-full bg-primary-600/20 border border-primary-600/30 flex items-center justify-center hover:bg-primary-600/30 transition-colors"
       >
@@ -126,6 +123,9 @@ export function ChatLayout() {
     loadConversations();
     loadPending();
     connectWs();
+    // A boot-time connection may use an expired stored token; reconnect with the
+    // fresh one once the first API call triggers a refresh.
+    setOnTokenRefreshed(reconnectWs);
 
     const unsubs = [
       onWsMessage('message.new', (data) => {
@@ -138,7 +138,7 @@ export function ChatLayout() {
       }),
 
       onWsMessage('permission.request', (data) => {
-        const parsed = wsPermissionSchema.safeParse(data);
+        const parsed = permissionRequestSchema.safeParse(data);
         if (!parsed.success) {
           console.warn('[ws] permission.request validation failed:', parsed.error.issues);
           return;
@@ -157,8 +157,9 @@ export function ChatLayout() {
     ];
 
     return () => {
+      setOnTokenRefreshed(null);
       disconnectWs();
-      unsubs.forEach((fn) => fn());
+      for (const fn of unsubs) fn();
     };
   }, [loadConversations, addMessage, addPermissionRequest, setAgentStatus, loadPending]);
 
@@ -195,6 +196,7 @@ export function ChatLayout() {
         </div>
       )}
 
+      <PermissionInbox />
       <AddContactDialog />
     </div>
   );

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { INPUT_CLS } from '../lib/styles.js';
 import { type KnowledgeDocument, useKbStore } from '../stores/knowledge-base.js';
 import { ChevronDown, Plus, Trash } from './Icons.js';
 
@@ -36,6 +37,7 @@ function DocRow({
       <div className="flex items-center gap-1 ml-2 shrink-0 opacity-0 group-hover:opacity-100">
         {doc.status === 'failed' && onRetry && (
           <button
+            type="button"
             onClick={onRetry}
             className="text-[10px] px-1.5 py-0.5 rounded text-amber-400 hover:bg-amber-900/20 border border-amber-800/30 transition-colors"
           >
@@ -43,6 +45,7 @@ function DocRow({
           </button>
         )}
         <button
+          type="button"
           onClick={onDelete}
           className="text-ink-muted hover:text-red-400 hover:bg-red-900/20 p-0.5 rounded transition-colors"
         >
@@ -89,6 +92,7 @@ function KbCard({ kbId }: { kbId: string }) {
     <div className="rounded-xl border border-dark-border bg-dark-card overflow-hidden">
       <div className="flex items-center justify-between px-3 py-2.5">
         <button
+          type="button"
           className="flex items-center gap-2 flex-1 text-left min-w-0 group"
           onClick={handleExpand}
         >
@@ -106,6 +110,7 @@ function KbCard({ kbId }: { kbId: string }) {
         </button>
         <div className="flex items-center gap-1 ml-2 shrink-0">
           <button
+            type="button"
             onClick={() => fileRef.current?.click()}
             disabled={uploading}
             className="text-[11px] px-2 py-0.5 rounded-md bg-primary-600/15 text-primary-400
@@ -114,6 +119,7 @@ function KbCard({ kbId }: { kbId: string }) {
             {uploading ? '上传中…' : '上传'}
           </button>
           <button
+            type="button"
             onClick={() => {
               if (confirm(`删除知识库「${kb.name}」？此操作不可恢复。`)) deleteKb(kbId);
             }}
@@ -179,10 +185,6 @@ export function KnowledgePage() {
     }
   };
 
-  const inputCls = `w-full px-3 py-2 bg-dark-input border border-dark-border rounded-lg text-xs
-    text-ink-primary placeholder:text-ink-muted
-    focus:outline-none focus:border-primary-600/40 transition-colors`;
-
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Header */}
@@ -191,6 +193,7 @@ export function KnowledgePage() {
           知识库
         </span>
         <button
+          type="button"
           onClick={() => setShowForm((v) => !v)}
           className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md
             bg-primary-600/15 text-primary-400 border border-primary-600/20
@@ -209,23 +212,25 @@ export function KnowledgePage() {
             placeholder="知识库名称"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className={inputCls}
+            className={INPUT_CLS}
           />
           <input
             type="text"
             placeholder="描述（可选）"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            className={inputCls}
+            className={INPUT_CLS}
           />
           <div className="flex gap-2 justify-end">
             <button
+              type="button"
               onClick={() => setShowForm(false)}
               className="px-3 py-1.5 text-xs text-ink-muted hover:text-ink-secondary transition-colors"
             >
               取消
             </button>
             <button
+              type="button"
               onClick={handleCreate}
               disabled={!name.trim() || saving}
               className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg
