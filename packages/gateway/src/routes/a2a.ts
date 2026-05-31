@@ -20,12 +20,12 @@ import { streamSSE } from 'hono/streaming';
 import * as jose from 'jose';
 import { z } from 'zod';
 import { sendA2AMessage } from '../a2a/outbound.js';
+import { loadActiveAgentKey } from '../a2a/signing.js';
 import { getDb } from '../db/connection.js';
 import {
   agents,
   conversationParticipants,
   conversations,
-  keypairs,
   messages,
   peerAgents,
   peerContacts,
@@ -428,24 +428,11 @@ async function processA2AMessage(params: ProcessA2AMessageParams): Promise<void>
     return;
   }
 
-  const [keypair] = await db
-    .select()
-    .from(keypairs)
-    .where(
-      and(
-        eq(keypairs.owner_type, 'agent'),
-        eq(keypairs.owner_id, targetAgent.id),
-        eq(keypairs.is_active, true),
-      ),
-    )
-    .limit(1);
-
-  if (!keypair) {
-    console.error(`No active signing keypair for agent ${targetAgent.id}`);
+  const key = await loadActiveAgentKey(targetAgent.id);
+  if (!key.ok) {
+    console.error(`Cannot sign A2A reply for agent ${targetAgent.id}: ${key.error}`);
     return;
   }
-
-  const privateKeyJwk = JSON.stringify(keypair.private_key_jwk_encrypted);
 
   const outboundResult = await sendA2AMessage(
     peerEndpoint,
@@ -458,8 +445,8 @@ async function processA2AMessage(params: ProcessA2AMessageParams): Promise<void>
         content: replyContent,
       },
     },
-    keypair.key_id,
-    privateKeyJwk,
+    key.value.keyId,
+    key.value.privateKeyJwk,
   );
 
   if (!outboundResult.ok) {

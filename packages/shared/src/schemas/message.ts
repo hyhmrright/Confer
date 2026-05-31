@@ -54,6 +54,13 @@ export const sendMessageRequestSchema = z.object({
   via: z.enum(['claude-code', 'web', 'mobile', 'api']).default('web'),
 });
 
+export const consultRequestSchema = z.object({
+  question: z.string().min(1).max(8000),
+  code_context: z.string().max(20000).optional(),
+  language: z.string().max(8).optional(),
+});
+
 export type Message = z.infer<typeof messageSchema>;
 export type Citation = z.infer<typeof citationSchema>;
 export type SendMessageRequest = z.infer<typeof sendMessageRequestSchema>;
+export type ConsultRequest = z.infer<typeof consultRequestSchema>;
