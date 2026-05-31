@@ -30,7 +30,10 @@ jobs:
           REF_NAME: ${{ github.ref_name }}
           INPUT_TAG: ${{ inputs.tag }}
         run: |
-          VALUE="${REF_NAME:-$INPUT_TAG}"
+          # On workflow_dispatch, github.ref_name is the branch (e.g. "main"), so the
+          # manual input must win; on a tag push, inputs.tag is empty and ref_name is
+          # the tag. Preferring INPUT_TAG handles both.
+          VALUE="${INPUT_TAG:-$REF_NAME}"
           echo "value=$VALUE" >> "$GITHUB_OUTPUT"
 
       - name: Verify tag is on main
@@ -129,7 +132,9 @@ jobs:
           tagName: ${{ needs.prepare.outputs.tag }}
           releaseName: "Confer ${{ needs.prepare.outputs.tag }}"
           releaseBody: ${{ needs.prepare.outputs.body }}
-          releaseDraft: true
+          # Fresh tag pushes land as a draft for manual review; a manual
+          # workflow_dispatch re-release keeps the existing release published.
+          releaseDraft: ${{ github.event_name != 'workflow_dispatch' }}
           prerelease: false
           args: ${{ matrix.args }}
 
@@ -216,7 +221,8 @@ jobs:
         if: startsWith(needs.prepare.outputs.tag, 'v')
         uses: softprops/action-gh-release@v2
         with:
-          draft: true
+          # Match the desktop job: draft on tag push, published on re-release.
+          draft: ${{ github.event_name != 'workflow_dispatch' }}
           body: ${{ needs.prepare.outputs.body }}
           files: packages/client/src-tauri/gen/android/app/build/outputs/apk/**/*.apk
 
