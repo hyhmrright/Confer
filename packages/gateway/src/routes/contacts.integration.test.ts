@@ -1,8 +1,9 @@
 import { newId } from '@confer/shared';
+import { eq } from 'drizzle-orm';
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { getDb } from '../db/connection.js';
 import { agents, peerAgents } from '../db/schema.js';
-import { type SeededUser, del, get, post, resetDb, seedUser } from '../test/helpers.js';
+import { type SeededUser, del, get, mockFetch, post, resetDb, seedUser } from '../test/helpers.js';
 
 const BASE = '/api/v1/contacts';
 let user: SeededUser;
@@ -78,6 +79,41 @@ describe('contacts', () => {
     const { candidates } = await res.json();
     expect(candidates).toHaveLength(1);
     expect(candidates[0].did).toBe('did:web:localhost:agents:findme');
+  });
+
+  test('domain lookup persists only DIDs bound to the queried host (anti-poisoning)', async () => {
+    const restore = mockFetch((url) => {
+      if (url.includes('/.well-known/agents.json')) {
+        return Response.json({
+          agents: [
+            { did: 'did:web:vendor.example.com', name: 'Legit' },
+            { did: 'did:web:vendor.example.com:agents:bot', name: 'Legit sub' },
+            { did: 'did:web:trusted-bank.com', name: 'Spoofed cross-host' },
+          ],
+        });
+      }
+      return undefined;
+    });
+    try {
+      const res = await post(`${BASE}/lookup`, {
+        token: user.token,
+        body: { method: 'domain', value: 'vendor.example.com' },
+      });
+      const { candidates } = await res.json();
+      expect(candidates.map((c: { did: string }) => c.did).sort()).toEqual([
+        'did:web:vendor.example.com',
+        'did:web:vendor.example.com:agents:bot',
+      ]);
+
+      // The spoofed cross-host DID must never be persisted.
+      const poisoned = await getDb()
+        .select()
+        .from(peerAgents)
+        .where(eq(peerAgents.did, 'did:web:trusted-bank.com'));
+      expect(poisoned).toHaveLength(0);
+    } finally {
+      restore();
+    }
   });
 
   test('blocks domain lookups against private addresses (SSRF guard)', async () => {

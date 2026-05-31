@@ -167,10 +167,15 @@ contactRoutes.post('/lookup', async (c) => {
       // Every agent on a did:web:<host> instance shares the instance A2A
       // endpoint, mirroring the service entry we publish in did.json.
       const endpoint = `https://${hostname}/a2a/v1`;
+      // A server may only advertise did:web identities bound to its own host.
+      // Without this, evil.com could list did:web:trusted.com and hijack the
+      // trusted peer's endpoint via the upsert (peerAgents.did is unique).
+      const hostDid = `did:web:${hostname}`;
       const candidates = [];
       for (const raw of data.agents ?? []) {
         const parsed = remoteAgentSchema.safeParse(raw);
         if (!parsed.success) continue;
+        if (parsed.data.did !== hostDid && !parsed.data.did.startsWith(`${hostDid}:`)) continue;
         candidates.push(
           await upsertPeerAgent({
             did: parsed.data.did,
@@ -194,6 +199,15 @@ contactRoutes.post('/lookup', async (c) => {
         return c.json({ candidates: [], method: body.method, error: result.error });
       }
       const doc = result.value;
+      // The resolved document must claim the DID we asked for; otherwise the
+      // host serving body.value could poison a different DID's peerAgents row.
+      if (doc.id !== body.value) {
+        return c.json({
+          candidates: [],
+          method: body.method,
+          error: 'DID document id does not match the requested DID',
+        });
+      }
       const endpoint = doc.service?.find((s) => s.serviceEndpoint)?.serviceEndpoint;
       if (!endpoint) {
         return c.json({
@@ -202,7 +216,7 @@ contactRoutes.post('/lookup', async (c) => {
           error: 'DID document has no service endpoint',
         });
       }
-      const row = await upsertPeerAgent({ did: doc.id, endpoint, agentFacts: doc });
+      const row = await upsertPeerAgent({ did: body.value, endpoint, agentFacts: doc });
       return c.json({ candidates: [row], method: body.method });
     } catch (e) {
       return c.json({ candidates: [], method: body.method, error: (e as Error).message });
