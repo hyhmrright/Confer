@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { z } from 'zod';
+import { permissionRequestSchema } from '../lib/schemas.js';
 import { connectWs, disconnectWs, onWsMessage } from '../lib/ws.js';
 import { useAuthStore } from '../stores/auth.js';
 import { useChatStore } from '../stores/chat.js';
@@ -30,15 +31,6 @@ const wsMessageSchema = z.object({
   citations: z.array(wsCitationSchema).optional(),
   in_reply_to: z.string().optional(),
   content_json: z.unknown().optional(),
-});
-
-const wsPermissionSchema = z.object({
-  id: z.string(),
-  level: z.string(),
-  action: z.string(),
-  scope: z.record(z.unknown()),
-  description: z.string(),
-  requested_at: z.string(),
 });
 
 const wsAgentStatusSchema = z.object({
@@ -138,7 +130,7 @@ export function ChatLayout() {
       }),
 
       onWsMessage('permission.request', (data) => {
-        const parsed = wsPermissionSchema.safeParse(data);
+        const parsed = permissionRequestSchema.safeParse(data);
         if (!parsed.success) {
           console.warn('[ws] permission.request validation failed:', parsed.error.issues);
           return;
