@@ -62,7 +62,7 @@ export const useContactsStore = create<ContactsState>((set, get) => ({
   lookupByDomain: async (domain) => {
     const data = await api.post<{ candidates: PeerAgent[] }>('/contacts/lookup', {
       method: 'domain',
-      query: domain,
+      value: domain,
     });
     return data.candidates;
   },

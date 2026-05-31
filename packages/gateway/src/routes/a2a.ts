@@ -28,6 +28,7 @@ import {
   keypairs,
   messages,
   peerAgents,
+  peerContacts,
   permissions,
   users,
 } from '../db/schema.js';
@@ -46,6 +47,53 @@ const a2aMessageSchema = z.object({
     context: z.record(z.unknown()).optional(),
   }),
 });
+
+// Resolve a peer's A2A service endpoint from its DID document. Returns '' if
+// the DID cannot be resolved or advertises no service endpoint.
+async function resolvePeerEndpoint(did: string): Promise<string> {
+  const result = await resolveDID(did);
+  if (!result.ok) return '';
+  return result.value.service?.find((s) => s.serviceEndpoint)?.serviceEndpoint ?? '';
+}
+
+// Record a pending connection request from an unconnected peer, deduplicated
+// so repeated messages from the same peer don't flood the owner's inbox.
+async function upsertConnectionRequest(
+  userId: string,
+  peer: typeof peerAgents.$inferSelect,
+  firstMessage: string,
+): Promise<void> {
+  const db = getDb();
+  const [existing] = await db
+    .select()
+    .from(permissions)
+    .where(
+      and(
+        eq(permissions.user_id, userId),
+        eq(permissions.peer_id, peer.id),
+        eq(permissions.action, 'connect'),
+        eq(permissions.decision, 'pending'),
+      ),
+    )
+    .limit(1);
+
+  if (existing) return;
+
+  await db.insert(permissions).values({
+    id: newId(),
+    user_id: userId,
+    peer_id: peer.id,
+    action: 'connect',
+    scope_json: {
+      peer_did: peer.did,
+      peer_name: peer.name,
+      first_message: firstMessage.slice(0, 500),
+    },
+    level: 'L2',
+    decision: 'pending',
+    requested_by: peer.id,
+  });
+}
 
 export const a2aRoutes = new Hono();
 
@@ -90,6 +138,10 @@ const verifyA2ASignature: MiddlewareHandler = async (c, next) => {
     throw new AppError('signature_failed', verifyResult.error, 401);
   }
 
+  // Expose the cryptographically proven signer DID so the handler can ensure
+  // the message `from` isn't forged under another identity.
+  c.set('a2aSenderDid' as never, senderDid as never);
+
   await next();
 };
 
@@ -126,6 +178,14 @@ a2aRoutes.post('/messages', verifyA2ASignature, verifyCapabilityToken, async (c)
   const body = a2aMessageSchema.parse(await c.req.json());
   const db = getDb();
 
+  // `from` must be the signing key's DID or a sub-identifier under it (e.g.
+  // did:web:vendor.com signing for did:web:vendor.com:users:li). Otherwise a
+  // peer with one valid key could forge connection requests under any identity.
+  const signerDid = c.get('a2aSenderDid' as never) as string | undefined;
+  if (signerDid && body.from !== signerDid && !body.from.startsWith(`${signerDid}:`)) {
+    throw new AppError('sender_mismatch', 'Message `from` is not authorized by the signing key', 401);
+  }
+
   const [targetAgent] = await db.select().from(agents).where(eq(agents.did, body.to)).limit(1);
 
   if (!targetAgent) {
@@ -135,44 +195,51 @@ a2aRoutes.post('/messages', verifyA2ASignature, verifyCapabilityToken, async (c)
   let [peer] = await db.select().from(peerAgents).where(eq(peerAgents.did, body.from)).limit(1);
 
   if (!peer) {
-    const peerId = newId();
     [peer] = await db
       .insert(peerAgents)
       .values({
-        id: peerId,
+        id: newId(),
         did: body.from,
-        endpoint: '',
+        // Resolve the sender's A2A endpoint up front so a reply can be sent
+        // once the owner approves the connection.
+        endpoint: await resolvePeerEndpoint(body.from),
         public_key_json: {},
         agent_facts_json: {},
       })
       .returning();
   }
 
-  const level = classifyPermissionLevel('ask');
-  const policyRequest = {
-    action: 'ask',
-    peer_did: body.from,
-    level,
-  };
+  // Consent gate: an agent only spends its owner's LLM budget for peers the
+  // owner has connected to. A message from an unconnected peer is held as a
+  // pending connection request — no conversation, no stored message, no LLM —
+  // until the owner approves it in the permission inbox.
+  const [connection] = await db
+    .select()
+    .from(peerContacts)
+    .where(and(eq(peerContacts.user_id, targetAgent.user_id), eq(peerContacts.peer_id, peer!.id)))
+    .limit(1);
 
+  if (!connection) {
+    await upsertConnectionRequest(targetAgent.user_id, peer!, body.message.content);
+    return c.json(
+      {
+        status: 'pending_connection',
+        message: 'Connection request is awaiting approval from the recipient',
+      },
+      202,
+    );
+  }
+
+  // The connection itself is the consent for ordinary questions; an explicit
+  // policy rule can still deny a specific connected peer.
   const policyConfig = parsePolicyConfig(targetAgent.policies_json);
-  const decision = evaluatePolicy(policyRequest, policyConfig);
+  const decision = evaluatePolicy(
+    { action: 'ask', peer_did: body.from, level: classifyPermissionLevel('ask') },
+    policyConfig,
+  );
 
   if (decision === 'deny') {
     throw new AppError('policy_denied', 'Agent policy denied this request', 403);
-  }
-
-  if (decision === 'ask_user') {
-    await db.insert(permissions).values({
-      id: newId(),
-      user_id: targetAgent.user_id,
-      peer_id: peer!.id,
-      action: 'ask',
-      scope_json: { message_type: body.message.type },
-      level,
-      decision: 'pending',
-      requested_by: peer!.id,
-    });
   }
 
   let convId = body.thread_id;

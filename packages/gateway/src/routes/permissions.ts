@@ -1,10 +1,30 @@
-import { AppError, decidePermissionRequestSchema } from '@confer/shared';
+import { AppError, decidePermissionRequestSchema, newId } from '@confer/shared';
 import { and, desc, eq, isNull, ne, or } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { getDb } from '../db/connection.js';
-import { permissions } from '../db/schema.js';
+import { peerAgents, peerContacts, permissions } from '../db/schema.js';
 import { authMiddleware } from '../middleware/auth.js';
 import type { AppEnv } from '../types.js';
+
+interface PendingRow {
+  action: string;
+  scope_json: unknown;
+  peer_name: string | null;
+  peer_did: string | null;
+}
+
+// Build a human-readable description for the permission inbox. Connection
+// requests surface who is asking and their opening message.
+function describePermission(row: PendingRow): string {
+  const who = row.peer_name ?? row.peer_did ?? '某个 Agent';
+  if (row.action === 'connect') {
+    const first = (row.scope_json as { first_message?: string } | null)?.first_message;
+    return first
+      ? `${who} 请求与你的 Agent 建立连接：“${first}”`
+      : `${who} 请求与你的 Agent 建立连接`;
+  }
+  return `${who} 请求执行：${row.action}`;
+}
 
 export const permissionRoutes = new Hono<AppEnv>();
 
@@ -15,8 +35,19 @@ permissionRoutes.get('/pending', async (c) => {
   const db = getDb();
 
   const rows = await db
-    .select()
+    .select({
+      id: permissions.id,
+      level: permissions.level,
+      action: permissions.action,
+      scope_json: permissions.scope_json,
+      decision: permissions.decision,
+      created_at: permissions.created_at,
+      peer_id: permissions.peer_id,
+      peer_name: peerAgents.name,
+      peer_did: peerAgents.did,
+    })
     .from(permissions)
+    .leftJoin(peerAgents, eq(permissions.peer_id, peerAgents.id))
     .where(
       and(
         eq(permissions.user_id, user.sub),
@@ -24,7 +55,17 @@ permissionRoutes.get('/pending', async (c) => {
       ),
     );
 
-  return c.json({ permissions: rows });
+  return c.json({
+    permissions: rows.map((r) => ({
+      id: r.id,
+      level: r.level,
+      action: r.action,
+      scope: r.scope_json,
+      decision: r.decision,
+      requested_at: r.created_at,
+      description: describePermission(r),
+    })),
+  });
 });
 
 permissionRoutes.post('/:id/decide', async (c) => {
@@ -52,6 +93,20 @@ permissionRoutes.post('/:id/decide', async (c) => {
       decided_by: user.sub,
     })
     .where(eq(permissions.id, id));
+
+  // Approving a connection request establishes the contact, which is what the
+  // A2A consent gate checks before letting the peer spend the owner's budget.
+  if (row.action === 'connect' && row.peer_id && body.decision.startsWith('allow')) {
+    await db
+      .insert(peerContacts)
+      .values({
+        id: newId(),
+        user_id: user.sub,
+        peer_id: row.peer_id,
+        added_via: 'inbound_request',
+      })
+      .onConflictDoNothing();
+  }
 
   return c.json({ ok: true });
 });
