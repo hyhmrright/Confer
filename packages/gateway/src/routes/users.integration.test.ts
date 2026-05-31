@@ -1,6 +1,6 @@
+import { beforeEach, describe, expect, test } from 'bun:test';
 import { newId } from '@confer/shared';
 import { eq } from 'drizzle-orm';
-import { beforeEach, describe, expect, test } from 'bun:test';
 import { getDb } from '../db/connection.js';
 import { agents, users } from '../db/schema.js';
 import { type SeededUser, del, get, patch, put, resetDb, seedUser } from '../test/helpers.js';
@@ -8,11 +8,13 @@ import { type SeededUser, del, get, patch, put, resetDb, seedUser } from '../tes
 let user: SeededUser;
 
 async function seedAgent(userId: string): Promise<void> {
-  await getDb().insert(agents).values({
-    id: newId(),
-    user_id: userId,
-    did: `${`did:web:localhost:agents:${userId.slice(-6)}`}:agent`,
-  });
+  await getDb()
+    .insert(agents)
+    .values({
+      id: newId(),
+      user_id: userId,
+      did: `${`did:web:localhost:agents:${userId.slice(-6)}`}:agent`,
+    });
 }
 
 beforeEach(async () => {
@@ -56,13 +58,23 @@ describe('agent LLM keys', () => {
       .select({ llm_keys_json: users.llm_keys_json })
       .from(users)
       .where(eq(users.id, user.id));
-    const stored = row?.llm_keys_json as Record<string, { ciphertext: string; iv: string; tag: string }>;
-    expect(stored.openai).toMatchObject({ ciphertext: expect.any(String), iv: expect.any(String), tag: expect.any(String) });
+    const stored = row?.llm_keys_json as Record<
+      string,
+      { ciphertext: string; iv: string; tag: string }
+    >;
+    expect(stored.openai).toMatchObject({
+      ciphertext: expect.any(String),
+      iv: expect.any(String),
+      tag: expect.any(String),
+    });
     expect(JSON.stringify(stored.openai)).not.toContain('sk-super-secret');
   });
 
   test('removes a stored key', async () => {
-    await put('/api/v1/agents/me/llm-keys', { token: user.token, body: { provider: 'openai', api_key: 'sk-x' } });
+    await put('/api/v1/agents/me/llm-keys', {
+      token: user.token,
+      body: { provider: 'openai', api_key: 'sk-x' },
+    });
     await del('/api/v1/agents/me/llm-keys/openai', { token: user.token });
     const listed = await get('/api/v1/agents/me/llm-keys', { token: user.token });
     const { keys } = await listed.json();

@@ -10,7 +10,11 @@ export function qdrantUrl(path: string): string {
   return `${base}${path}`;
 }
 
-export async function qdrantRequest(method: string, path: string, body?: unknown): Promise<unknown> {
+export async function qdrantRequest(
+  method: string,
+  path: string,
+  body?: unknown,
+): Promise<unknown> {
   const res = await fetch(qdrantUrl(path), {
     method,
     headers: { 'Content-Type': 'application/json' },

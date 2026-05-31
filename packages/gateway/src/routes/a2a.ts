@@ -183,7 +183,11 @@ a2aRoutes.post('/messages', verifyA2ASignature, verifyCapabilityToken, async (c)
   // peer with one valid key could forge connection requests under any identity.
   const signerDid = c.get('a2aSenderDid' as never) as string | undefined;
   if (signerDid && body.from !== signerDid && !body.from.startsWith(`${signerDid}:`)) {
-    throw new AppError('sender_mismatch', 'Message `from` is not authorized by the signing key', 401);
+    throw new AppError(
+      'sender_mismatch',
+      'Message `from` is not authorized by the signing key',
+      401,
+    );
   }
 
   const [targetAgent] = await db.select().from(agents).where(eq(agents.did, body.to)).limit(1);

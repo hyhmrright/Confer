@@ -1,7 +1,12 @@
-import { clearDIDCache, generateEd25519KeyPair, publicKeyToMultibase, signRequest } from '@confer/identity';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import {
+  clearDIDCache,
+  generateEd25519KeyPair,
+  publicKeyToMultibase,
+  signRequest,
+} from '@confer/identity';
 import { newId } from '@confer/shared';
 import { eq } from 'drizzle-orm';
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { app } from '../app.js';
 import { getDb } from '../db/connection.js';
 import { agents, messages, peerAgents, peerContacts, permissions } from '../db/schema.js';
@@ -26,7 +31,13 @@ async function connectPeer(did: string): Promise<void> {
   const peerId = newId();
   await db
     .insert(peerAgents)
-    .values({ id: peerId, did, endpoint: 'https://localhost/a2a/v1', public_key_json: {}, agent_facts_json: {} });
+    .values({
+      id: peerId,
+      did,
+      endpoint: 'https://localhost/a2a/v1',
+      public_key_json: {},
+      agent_facts_json: {},
+    });
   await db
     .insert(peerContacts)
     .values({ id: newId(), user_id: user.id, peer_id: peerId, added_via: 'manual' });
@@ -37,7 +48,11 @@ describe('A2A signature rejection', () => {
     const res = await app.request('/a2a/v1/messages', {
       method: 'POST',
       headers: headers(),
-      body: JSON.stringify({ from: 'did:web:peer', to: 'did:web:x', message: { type: 'question', content: 'hi' } }),
+      body: JSON.stringify({
+        from: 'did:web:peer',
+        to: 'did:web:x',
+        message: { type: 'question', content: 'hi' },
+      }),
     });
     expect(res.status).toBe(401);
     expect((await res.json()).error.code).toBe('signature_missing');
@@ -47,7 +62,11 @@ describe('A2A signature rejection', () => {
     const res = await app.request('/a2a/v1/messages', {
       method: 'POST',
       headers: { ...headers(), signature: 'not-a-valid-signature-header' },
-      body: JSON.stringify({ from: 'did:web:peer', to: 'did:web:x', message: { type: 'question', content: 'hi' } }),
+      body: JSON.stringify({
+        from: 'did:web:peer',
+        to: 'did:web:x',
+        message: { type: 'question', content: 'hi' },
+      }),
     });
     expect(res.status).toBe(401);
   });
@@ -59,7 +78,11 @@ describe('A2A signature rejection', () => {
         ...headers(),
         signature: 'keyId="key-1",algorithm="ed25519",headers="(request-target)",signature="AAA"',
       },
-      body: JSON.stringify({ from: 'did:web:peer', to: 'did:web:x', message: { type: 'question', content: 'hi' } }),
+      body: JSON.stringify({
+        from: 'did:web:peer',
+        to: 'did:web:x',
+        message: { type: 'question', content: 'hi' },
+      }),
     });
     expect(res.status).toBe(401);
   });
@@ -84,7 +107,12 @@ describe('A2A signed message (real Ed25519, mocked DID resolution)', () => {
       '@context': ['https://www.w3.org/ns/did/v1'],
       id: 'did:web:localhost',
       verificationMethod: [
-        { id: KEY_ID, type: 'Ed25519VerificationKey2020', controller: 'did:web:localhost', publicKeyMultibase },
+        {
+          id: KEY_ID,
+          type: 'Ed25519VerificationKey2020',
+          controller: 'did:web:localhost',
+          publicKeyMultibase,
+        },
       ],
     };
     restoreFetch = mockFetch((url) => {
@@ -101,7 +129,11 @@ describe('A2A signed message (real Ed25519, mocked DID resolution)', () => {
     return new Request(MESSAGES, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ from: 'did:web:localhost', to: targetDid, message: { type: 'question', content } }),
+      body: JSON.stringify({
+        from: 'did:web:localhost',
+        to: targetDid,
+        message: { type: 'question', content },
+      }),
     });
   }
 
@@ -111,7 +143,11 @@ describe('A2A signed message (real Ed25519, mocked DID resolution)', () => {
     await connectPeer('did:web:localhost');
     const privateKey = await signingKeyResolvedViaDid();
 
-    const signed = await signRequest(messageRequest(targetDid, 'Hello target agent'), privateKey, KEY_ID);
+    const signed = await signRequest(
+      messageRequest(targetDid, 'Hello target agent'),
+      privateKey,
+      KEY_ID,
+    );
 
     const res = await app.request(signed);
     expect(res.status).toBe(201);
@@ -145,7 +181,9 @@ describe('A2A signed message (real Ed25519, mocked DID resolution)', () => {
     // Repeated messages from the same unconnected peer don't pile up requests.
     const signed2 = await signRequest(messageRequest(targetDid, 'again'), privateKey, KEY_ID);
     expect((await app.request(signed2)).status).toBe(202);
-    expect(await getDb().select().from(permissions).where(eq(permissions.user_id, user.id))).toHaveLength(1);
+    expect(
+      await getDb().select().from(permissions).where(eq(permissions.user_id, user.id)),
+    ).toHaveLength(1);
   });
 
   test('rejects a message whose `from` is not authorized by the signing key (401)', async () => {
@@ -178,7 +216,11 @@ describe('A2A signed message (real Ed25519, mocked DID resolution)', () => {
     const tampered = new Request(MESSAGES, {
       method: 'POST',
       headers: signed.headers,
-      body: JSON.stringify({ from: 'did:web:localhost', to: targetDid, message: { type: 'question', content: 'tampered' } }),
+      body: JSON.stringify({
+        from: 'did:web:localhost',
+        to: targetDid,
+        message: { type: 'question', content: 'tampered' },
+      }),
     });
     const res = await app.request(tampered);
     expect(res.status).toBe(401);

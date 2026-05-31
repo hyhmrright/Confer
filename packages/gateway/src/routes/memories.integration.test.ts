@@ -50,8 +50,17 @@ describe('memories', () => {
   });
 
   test('returns 404 updating or deleting an unknown id', async () => {
-    expect((await patch(`${BASE}/01HZZZZZZZZZZZZZZZZZZZZZZZ`, { token: user.token, body: { pinned: true } })).status).toBe(404);
-    expect((await del(`${BASE}/01HZZZZZZZZZZZZZZZZZZZZZZZ`, { token: user.token })).status).toBe(404);
+    expect(
+      (
+        await patch(`${BASE}/01HZZZZZZZZZZZZZZZZZZZZZZZ`, {
+          token: user.token,
+          body: { pinned: true },
+        })
+      ).status,
+    ).toBe(404);
+    expect((await del(`${BASE}/01HZZZZZZZZZZZZZZZZZZZZZZZ`, { token: user.token })).status).toBe(
+      404,
+    );
   });
 
   test('scopes memories to their owner', async () => {

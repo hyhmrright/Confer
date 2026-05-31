@@ -81,7 +81,9 @@ describe('auth store', () => {
 
   test('login surfaces the error and rethrows on failure', async () => {
     post.mockRejectedValueOnce(new Error('bad credentials'));
-    await expect(useAuthStore.getState().login('alice', 'wrong')).rejects.toThrow('bad credentials');
+    await expect(useAuthStore.getState().login('alice', 'wrong')).rejects.toThrow(
+      'bad credentials',
+    );
 
     const state = useAuthStore.getState();
     expect(state.loading).toBe(false);

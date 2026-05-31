@@ -1,10 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import {
-  buildDIDDocument,
-  didDocumentSchema,
-  didFromDomain,
-  domainFromDid,
-} from './document.js';
+import { buildDIDDocument, didDocumentSchema, didFromDomain, domainFromDid } from './document.js';
 
 describe('buildDIDDocument', () => {
   test('builds a schema-valid did:web document for a domain', () => {

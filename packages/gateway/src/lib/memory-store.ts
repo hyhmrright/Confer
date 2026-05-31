@@ -1,9 +1,5 @@
 import { VECTOR_SIZE } from './embedding.js';
-import {
-  QDRANT_HEALTHCHECK_TIMEOUT_MS,
-  qdrantRequest,
-  qdrantUrl,
-} from './qdrant-client.js';
+import { QDRANT_HEALTHCHECK_TIMEOUT_MS, qdrantRequest, qdrantUrl } from './qdrant-client.js';
 import { toUUID } from './qdrant.js';
 
 const COLLECTION = 'agent_memories_vec';

@@ -69,7 +69,11 @@ describe('buildSignatureString', () => {
 describe('signRequest / verifyRequestSignature', () => {
   test('a freshly signed request verifies against its public key', async () => {
     const { publicKey, privateKey } = await generateEd25519KeyPair();
-    const signed = await signRequest(jsonRequest({ task: 'ping' }), privateKey, 'did:web:a.com#key-1');
+    const signed = await signRequest(
+      jsonRequest({ task: 'ping' }),
+      privateKey,
+      'did:web:a.com#key-1',
+    );
 
     expect(signed.headers.get('signature')).toBeTruthy();
     const result = await verifyRequestSignature(signed, publicKey);

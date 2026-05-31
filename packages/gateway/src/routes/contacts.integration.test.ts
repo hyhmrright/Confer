@@ -1,6 +1,6 @@
+import { beforeEach, describe, expect, test } from 'bun:test';
 import { newId } from '@confer/shared';
 import { eq } from 'drizzle-orm';
-import { beforeEach, describe, expect, test } from 'bun:test';
 import { getDb } from '../db/connection.js';
 import { agents, peerAgents } from '../db/schema.js';
 import { type SeededUser, del, get, mockFetch, post, resetDb, seedUser } from '../test/helpers.js';
@@ -15,13 +15,15 @@ beforeEach(async () => {
 
 async function seedPeer(): Promise<string> {
   const id = newId();
-  await getDb().insert(peerAgents).values({
-    id,
-    did: `did:web:peer-${id.slice(-6).toLowerCase()}.example.com`,
-    endpoint: 'https://peer.example.com/a2a/v1',
-    public_key_json: {},
-    agent_facts_json: {},
-  });
+  await getDb()
+    .insert(peerAgents)
+    .values({
+      id,
+      did: `did:web:peer-${id.slice(-6).toLowerCase()}.example.com`,
+      endpoint: 'https://peer.example.com/a2a/v1',
+      public_key_json: {},
+      agent_facts_json: {},
+    });
   return id;
 }
 
@@ -53,7 +55,10 @@ describe('contacts', () => {
   });
 
   test('returns 404 when adding an unknown peer', async () => {
-    const res = await post(BASE, { token: user.token, body: { peer_id: '01HZZZZZZZZZZZZZZZZZZZZZZZ' } });
+    const res = await post(BASE, {
+      token: user.token,
+      body: { peer_id: '01HZZZZZZZZZZZZZZZZZZZZZZZ' },
+    });
     expect(res.status).toBe(404);
   });
 

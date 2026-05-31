@@ -1,5 +1,5 @@
-import { newId } from '@confer/shared';
 import { beforeEach, describe, expect, test } from 'bun:test';
+import { newId } from '@confer/shared';
 import { getDb } from '../db/connection.js';
 import { agents } from '../db/schema.js';
 import { get, resetDb, seedUser } from '../test/helpers.js';
@@ -15,14 +15,16 @@ describe('GET /a2a/v1/agent-facts/:agentDid', () => {
   test('returns a NANDA-shaped fact sheet for a known agent', async () => {
     const user = await seedUser();
     const did = 'did:web:localhost:agents:facts';
-    await getDb().insert(agents).values({
-      id: newId(),
-      user_id: user.id,
-      did,
-      name: 'Facts Agent',
-      description: 'Test agent',
-      capabilities_json: ['chat'],
-    });
+    await getDb()
+      .insert(agents)
+      .values({
+        id: newId(),
+        user_id: user.id,
+        did,
+        name: 'Facts Agent',
+        description: 'Test agent',
+        capabilities_json: ['chat'],
+      });
 
     const res = await get(`/a2a/v1/agent-facts/${did}`);
     expect(res.status).toBe(200);

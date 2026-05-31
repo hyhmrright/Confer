@@ -1,5 +1,5 @@
-import { type EncryptedValue, encrypt } from '@confer/shared';
 import { describe, expect, test } from 'bun:test';
+import { type EncryptedValue, encrypt } from '@confer/shared';
 import { decryptUserKey, resolveEmbeddingKey } from './llm-keys.js';
 
 // Two distinct valid 32-byte (64 hex char) AES keys.
