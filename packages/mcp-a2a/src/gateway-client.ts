@@ -20,7 +20,11 @@ export class GatewayClient {
     const res = await this.fetchFn(`${this.cfg.gatewayUrl}/api/v1/auth/login`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ username: this.cfg.username, password: this.cfg.password }),
+      body: JSON.stringify({
+        username: this.cfg.username,
+        password: this.cfg.password,
+        device_id: 'mcp-a2a',
+      }),
     });
     if (!res.ok) throw new Error(`gateway login failed: ${res.status}`);
     const body = (await res.json()) as { access_token: string };

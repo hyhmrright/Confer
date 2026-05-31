@@ -7,6 +7,7 @@ COPY packages/conversation/package.json ./packages/conversation/
 COPY packages/agent-runtime/package.json ./packages/agent-runtime/
 COPY packages/gateway/package.json ./packages/gateway/
 COPY packages/client/package.json ./packages/client/
+COPY packages/mcp-a2a/package.json ./packages/mcp-a2a/
 RUN bun install --frozen-lockfile
 
 COPY packages/shared ./packages/shared
