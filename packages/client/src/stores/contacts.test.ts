@@ -4,7 +4,12 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 const get = mock(async (_path: string) => ({ contacts: [] }) as unknown);
 const post = mock(async (_path: string, _body: unknown) => ({}) as unknown);
 const del = mock(async (_path: string) => ({}) as unknown);
-mock.module('../lib/api.js', () => ({ api: { get, post, delete: del } }));
+mock.module('../lib/api.js', () => ({
+  api: { get, post, delete: del },
+  setToken: mock(() => {}),
+  setRefreshToken: mock(() => {}),
+  getToken: mock(() => null),
+}));
 
 const { useContactsStore } = await import('./contacts.js');
 
