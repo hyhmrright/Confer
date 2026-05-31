@@ -143,6 +143,14 @@ export function MemoryPage() {
                         置顶
                       </span>
                     )}
+                    {mem.source === 'auto' && (
+                      <span
+                        className="text-[10px] font-medium text-ink-muted bg-dark-border px-1.5 py-0.5 rounded shrink-0"
+                        title="对话中自动记住"
+                      >
+                        自动
+                      </span>
+                    )}
                     <h3 className="text-xs font-semibold text-ink-primary truncate">{mem.title}</h3>
                   </div>
                   <p className="text-[11px] text-ink-secondary mt-1 leading-relaxed whitespace-pre-wrap line-clamp-3">

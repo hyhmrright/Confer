@@ -8,6 +8,7 @@ export interface Memory {
   content: string;
   tags: string[];
   pinned: boolean;
+  source: 'auto' | 'manual';
   created_at: string;
   updated_at: string;
 }
