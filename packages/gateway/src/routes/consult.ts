@@ -1,5 +1,5 @@
 import { AppError, consultRequestSchema, newId } from '@confer/shared';
-import { and, asc, eq, gt } from 'drizzle-orm';
+import { and, asc, eq, gt, or } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { deliverConsult } from '../a2a/consult.js';
 import { getDb } from '../db/connection.js';
@@ -133,16 +133,45 @@ consultRoutes.get('/:conversationId/reply', async (c) => {
   const convId = c.req.param('conversationId');
   await assertOwnsConversation(user.sub, convId);
 
-  const afterId = c.req.query('after');
-  const waitMs = Math.min(Number(c.req.query('wait') ?? '25'), 55) * 1000;
+  // Clamp wait defensively: a non-numeric query param must not produce a NaN
+  // deadline (which would make the poll loop run forever). An explicitly
+  // garbage value is treated as 0 (return immediately), not the absent-default.
+  const rawWait = Number(c.req.query('wait') ?? '25');
+  const waitMs = (Number.isFinite(rawWait) ? Math.min(Math.max(rawWait, 0), 55) : 0) * 1000;
 
-  // Cursor: only consider peer replies created strictly after the `after`
-  // message (the user's question). Falls back to epoch when absent.
+  // Cursor over (created_at, id) so same-timestamp ties can't drop or duplicate
+  // a reply. `after` is the user's question id; an unknown id is a client bug,
+  // not "return the oldest reply" — reject it rather than misattribute.
+  const afterId = c.req.query('after');
   let afterTs = new Date(0);
+  let afterCursorId = '';
   if (afterId) {
     const [m] = await db.select().from(messages).where(eq(messages.id, afterId)).limit(1);
-    if (m) afterTs = m.created_at;
+    if (!m) throw new AppError('unknown_cursor', 'after message not found in this thread', 400);
+    afterTs = m.created_at;
+    afterCursorId = m.id;
   }
+
+  // Correlate only with replies from THIS thread's peer participant, so a
+  // message from any other sender can never be returned as the answer.
+  const [peerParticipant] = await db
+    .select({ peer_id: conversationParticipants.peer_id })
+    .from(conversationParticipants)
+    .where(
+      and(
+        eq(conversationParticipants.conversation_id, convId),
+        eq(conversationParticipants.participant_type, 'peer_agent'),
+      ),
+    )
+    .limit(1);
+  const peerId = peerParticipant?.peer_id ?? null;
+
+  const cursor = afterCursorId
+    ? or(
+        gt(messages.created_at, afterTs),
+        and(eq(messages.created_at, afterTs), gt(messages.id, afterCursorId)),
+      )
+    : gt(messages.created_at, afterTs);
 
   const deadline = Date.now() + waitMs;
   for (;;) {
@@ -153,10 +182,11 @@ consultRoutes.get('/:conversationId/reply', async (c) => {
         and(
           eq(messages.conversation_id, convId),
           eq(messages.sender_type, 'peer_agent'),
-          gt(messages.created_at, afterTs),
+          peerId ? eq(messages.sender_id, peerId) : undefined,
+          cursor,
         ),
       )
-      .orderBy(asc(messages.created_at))
+      .orderBy(asc(messages.created_at), asc(messages.id))
       .limit(1);
 
     if (reply) return c.json({ status: 'answered', message: reply });

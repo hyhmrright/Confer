@@ -214,4 +214,105 @@ describe('consult', () => {
     expect(body.status).toBe('answered');
     expect(body.message.content).toContain('AES-256-GCM');
   });
+
+  test('non-numeric wait does not hang (returns pending promptly)', async () => {
+    await seedOwnAgent();
+    const peerId = await seedPeerContact();
+    mockOutbound();
+    const sent = await post(`${CONSULT}/${peerId}`, { token: user.token, body: { question: 'q' } });
+    const { conversation_id, message_id } = await sent.json();
+
+    const started = Date.now();
+    const res = await get(`${CONSULT}/${conversation_id}/reply?after=${message_id}&wait=abc`, {
+      token: user.token,
+    });
+    expect(res.status).toBe(200);
+    expect((await res.json()).status).toBe('pending');
+    // A garbage value must not loop forever (the NaN-deadline bug); it returns
+    // immediately rather than polling.
+    expect(Date.now() - started).toBeLessThan(2_000);
+  });
+
+  test('unknown after cursor is rejected (400) rather than returning a stale reply', async () => {
+    await seedOwnAgent();
+    const peerId = await seedPeerContact();
+    mockOutbound();
+    const sent = await post(`${CONSULT}/${peerId}`, { token: user.token, body: { question: 'q' } });
+    const { conversation_id } = await sent.json();
+
+    const res = await get(
+      `${CONSULT}/${conversation_id}/reply?after=01HZZZZZZZZZZZZZZZZZZZZZZZ&wait=1`,
+      { token: user.token },
+    );
+    expect(res.status).toBe(400);
+  });
+
+  test('a connected peer cannot inject an answer into another peer thread', async () => {
+    await seedOwnAgent();
+    const peerAId = await seedPeerContact(); // consult target (did:web:localhost)
+
+    // Peer B: a different connected peer with its own signing key.
+    const bDid = 'did:web:localhost:agents:peerb';
+    const bKeyId = `${bDid}#key-1`;
+    const db = getDb();
+    const bPeerId = newId();
+    await db.insert(peerAgents).values({
+      id: bPeerId,
+      did: bDid,
+      endpoint: 'https://peerb.example/a2a/v1',
+      public_key_json: {},
+      agent_facts_json: {},
+    });
+    await db
+      .insert(peerContacts)
+      .values({ id: newId(), user_id: user.id, peer_id: bPeerId, added_via: 'manual' });
+
+    const bKp = await generateEd25519KeyPair();
+    // domainFromDid collapses both DIDs to `localhost`, so B's doc is served at
+    // the same /.well-known/did.json the resolver fetches for the signer.
+    const bDoc = {
+      '@context': ['https://www.w3.org/ns/did/v1'],
+      id: bDid,
+      verificationMethod: [
+        {
+          id: bKeyId,
+          type: 'Ed25519VerificationKey2020',
+          controller: bDid,
+          publicKeyMultibase: await publicKeyToMultibase(bKp.publicKey),
+        },
+      ],
+    };
+    mockOutbound({ didDocument: bDoc });
+
+    // Start a consult with peer A -> conv1 (B is NOT a participant).
+    const sent = await post(`${CONSULT}/${peerAId}`, {
+      token: user.token,
+      body: { question: 'q' },
+    });
+    const { conversation_id, message_id } = await sent.json();
+
+    // B signs an answer targeting conv1.
+    const signed = await signRequest(
+      new Request('http://localhost/a2a/v1/messages', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          from: bDid,
+          to: myAgentDid,
+          thread_id: conversation_id,
+          message: { type: 'answer', content: 'INJECTED by peer B' },
+        }),
+      }),
+      bKp.privateKey,
+      bKeyId,
+    );
+    const inbound = await app.request(signed);
+    expect(inbound.status).toBe(201); // accepted, but routed to a fresh thread
+
+    // conv1 must NOT surface B's message as the answer.
+    const res = await get(`${CONSULT}/${conversation_id}/reply?after=${message_id}&wait=1`, {
+      token: user.token,
+    });
+    expect((await res.json()).status).toBe('pending');
+  });
 });

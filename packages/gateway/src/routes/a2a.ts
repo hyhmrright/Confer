@@ -253,12 +253,21 @@ a2aRoutes.post('/messages', verifyA2ASignature, verifyCapabilityToken, async (c)
   let convId = body.thread_id;
 
   if (convId) {
-    const [existing] = await db
-      .select()
-      .from(conversations)
-      .where(eq(conversations.id, convId))
+    // The sender may only reuse a thread it is already a participant of.
+    // Otherwise a connected peer could target another peer's conversation id
+    // and inject a message into it (the reply would then be broadcast and
+    // surfaced to the owner as if it came from the real participant).
+    const [member] = await db
+      .select({ id: conversationParticipants.id })
+      .from(conversationParticipants)
+      .where(
+        and(
+          eq(conversationParticipants.conversation_id, convId),
+          eq(conversationParticipants.peer_id, peer.id),
+        ),
+      )
       .limit(1);
-    if (!existing) convId = undefined;
+    if (!member) convId = undefined;
   }
 
   if (!convId) {

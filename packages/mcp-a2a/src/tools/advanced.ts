@@ -9,14 +9,27 @@ export async function askMultiple(
 ): Promise<Array<AskResult & { peerId: string }>> {
   const targets = input.peerIds.slice(0, MAX_PARALLEL);
   return Promise.all(
-    targets.map(async (peerId) => ({
-      peerId,
-      ...(await askAgent(client, {
-        peerId,
-        question: input.question,
-        waitSeconds: input.waitSeconds,
-      })),
-    })),
+    targets.map(async (peerId) => {
+      try {
+        return {
+          peerId,
+          ...(await askAgent(client, {
+            peerId,
+            question: input.question,
+            waitSeconds: input.waitSeconds,
+          })),
+        };
+      } catch (e) {
+        // One peer failing must not sink the whole batch.
+        return {
+          peerId,
+          status: 'failed' as const,
+          conversationId: '',
+          messageId: '',
+          error: e instanceof Error ? e.message : String(e),
+        };
+      }
+    }),
   );
 }
 

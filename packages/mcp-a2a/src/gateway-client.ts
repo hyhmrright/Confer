@@ -10,11 +10,22 @@ type FetchFn = typeof fetch;
  */
 export class GatewayClient {
   private token: string | null = null;
+  private loginInFlight: Promise<void> | null = null;
 
   constructor(
     private readonly cfg: McpConfig,
     private readonly fetchFn: FetchFn = fetch,
   ) {}
+
+  // De-duplicate concurrent logins (e.g. ask_multiple firing several requests
+  // before the first token lands) into a single in-flight request.
+  private async ensureLogin(): Promise<void> {
+    if (this.token) return;
+    this.loginInFlight ??= this.login().finally(() => {
+      this.loginInFlight = null;
+    });
+    await this.loginInFlight;
+  }
 
   private async login(): Promise<void> {
     const res = await this.fetchFn(`${this.cfg.gatewayUrl}/api/v1/auth/login`, {
@@ -32,7 +43,7 @@ export class GatewayClient {
   }
 
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
-    if (!this.token) await this.login();
+    await this.ensureLogin();
     const send = () =>
       this.fetchFn(`${this.cfg.gatewayUrl}${path}`, {
         method,
@@ -45,7 +56,9 @@ export class GatewayClient {
 
     let res = await send();
     if (res.status === 401) {
-      await this.login();
+      // Token rejected: drop it so ensureLogin actually re-authenticates.
+      this.token = null;
+      await this.ensureLogin();
       res = await send();
     }
     if (!res.ok) {
