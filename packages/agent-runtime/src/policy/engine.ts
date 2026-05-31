@@ -2,6 +2,13 @@ export type PermissionLevel = 'L1' | 'L2' | 'L3';
 
 export type PolicyDecision = 'allow' | 'deny' | 'ask_user';
 
+// NOTE: this is the AUTHORITATIVE runtime shape — `parsePolicyConfig` reads
+// `agents.policies_json` as { action, peer_did?, decision } and the gateway's
+// PUT /me/policies stores whatever the client sends here. It deliberately does
+// NOT match @confer/shared `policyRuleSchema` ({ peer, action, pattern, effect }),
+// which describes the AgentFacts policy advertisement, a separate concern.
+// Do not bridge AgentFacts.policies into policies_json without reconciling the
+// two vocabularies first — parseRule() silently drops rules lacking `decision`.
 export interface PolicyRule {
   action: string;
   peer_did?: string;

@@ -13,6 +13,11 @@ export const modelConfigSchema = z.object({
   summarize: modelChoiceSchema.default({ provider: 'deepseek', model: 'deepseek-chat' }),
 });
 
+// AgentFacts policy advertisement shape. NOTE: intentionally distinct from the
+// agent-runtime engine's runtime PolicyRule ({ action, peer_did?, decision }),
+// which is what `agents.policies_json` is actually evaluated against. These two
+// vocabularies (effect/ask here vs decision/ask_user there) must be reconciled
+// before any code feeds one into the other — see agent-runtime policy/engine.ts.
 export const policyRuleSchema = z.object({
   peer: z.string().optional(),
   action: z.enum(['read', 'ask', 'share', 'commit']),
