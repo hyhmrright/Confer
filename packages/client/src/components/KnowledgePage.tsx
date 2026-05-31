@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { INPUT_CLS } from '../lib/styles.js';
 import { type KnowledgeDocument, useKbStore } from '../stores/knowledge-base.js';
 import { ChevronDown, Plus, Trash } from './Icons.js';
 
@@ -179,9 +180,6 @@ export function KnowledgePage() {
     }
   };
 
-  const inputCls = `w-full px-3 py-2 bg-dark-input border border-dark-border rounded-lg text-xs
-    text-ink-primary placeholder:text-ink-muted
-    focus:outline-none focus:border-primary-600/40 transition-colors`;
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -209,14 +207,14 @@ export function KnowledgePage() {
             placeholder="知识库名称"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className={inputCls}
+            className={INPUT_CLS}
           />
           <input
             type="text"
             placeholder="描述（可选）"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            className={inputCls}
+            className={INPUT_CLS}
           />
           <div className="flex gap-2 justify-end">
             <button

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { INPUT_CLS } from '../lib/styles.js';
 import { useMemoriesStore } from '../stores/memories.js';
 import { Plus, Search, Trash } from './Icons.js';
 
@@ -34,9 +35,6 @@ export function MemoryPage() {
     }
   };
 
-  const inputCls = `w-full px-3 py-2 bg-dark-input border border-dark-border rounded-lg text-xs
-    text-ink-primary placeholder:text-ink-muted
-    focus:outline-none focus:border-primary-600/40 transition-colors`;
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -77,14 +75,14 @@ export function MemoryPage() {
             value={newTitle}
             onChange={(e) => setNewTitle(e.target.value)}
             placeholder="标题"
-            className={inputCls}
+            className={INPUT_CLS}
           />
           <textarea
             value={newContent}
             onChange={(e) => setNewContent(e.target.value)}
             placeholder="内容..."
             rows={3}
-            className={`${inputCls} resize-none`}
+            className={`${INPUT_CLS} resize-none`}
           />
           <div className="flex gap-2 justify-end">
             <button
