@@ -1,0 +1,9 @@
+[
+  {
+    "date": "2026-05-31",
+    "mode": "Full Sweep",
+    "score": 28,
+    "findings": { "critical": 1, "warning": 9, "suggestion": 12 },
+    "scope": "monorepo packages/* (~119 TS/TSX source files)"
+  }
+]

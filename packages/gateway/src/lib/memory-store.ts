@@ -1,8 +1,12 @@
+import { VECTOR_SIZE } from './embedding.js';
+import {
+  QDRANT_HEALTHCHECK_TIMEOUT_MS,
+  qdrantRequest,
+  qdrantUrl,
+} from './qdrant-client.js';
 import { toUUID } from './qdrant.js';
 
 const COLLECTION = 'agent_memories_vec';
-// Embedding output dimension — must match VECTOR_SIZE in lib/embedding.ts; update both if switching providers
-const VECTOR_SIZE = 1536;
 
 export interface MemoryHit {
   memoryId: string;
@@ -17,31 +21,12 @@ export interface UpsertMemoryInput {
   vector: number[];
 }
 
-function qdrantUrl(path: string): string {
-  const base = process.env.QDRANT_URL ?? 'http://localhost:6333';
-  return `${base}${path}`;
-}
-
-async function request(method: string, path: string, body?: unknown): Promise<unknown> {
-  const res = await fetch(qdrantUrl(path), {
-    method,
-    headers: { 'Content-Type': 'application/json' },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-    signal: AbortSignal.timeout(30_000),
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Qdrant ${method} ${path} failed (${res.status}): ${text}`);
-  }
-  return res.json();
-}
-
 export async function ensureMemoryCollection(): Promise<void> {
   const res = await fetch(qdrantUrl(`/collections/${COLLECTION}`), {
-    signal: AbortSignal.timeout(10_000),
+    signal: AbortSignal.timeout(QDRANT_HEALTHCHECK_TIMEOUT_MS),
   });
   if (res.status === 404) {
-    await request('PUT', `/collections/${COLLECTION}`, {
+    await qdrantRequest('PUT', `/collections/${COLLECTION}`, {
       vectors: { size: VECTOR_SIZE, distance: 'Cosine' },
     });
   } else if (!res.ok) {
@@ -51,7 +36,7 @@ export async function ensureMemoryCollection(): Promise<void> {
 }
 
 export async function upsertMemory(input: UpsertMemoryInput): Promise<void> {
-  await request('PUT', `/collections/${COLLECTION}/points?wait=true`, {
+  await qdrantRequest('PUT', `/collections/${COLLECTION}/points?wait=true`, {
     points: [
       {
         id: toUUID(input.memoryId),
@@ -75,7 +60,7 @@ export async function searchMemories(
     filter: { must: [{ key: 'user_id', match: { value: userId } }] },
   };
   if (minScore > 0) body.score_threshold = minScore;
-  const data = (await request('POST', `/collections/${COLLECTION}/points/search`, body)) as {
+  const data = (await qdrantRequest('POST', `/collections/${COLLECTION}/points/search`, body)) as {
     result: Array<{ score: number; payload: Record<string, unknown> }>;
   };
   return data.result
@@ -94,5 +79,5 @@ export async function deleteMemory(userId: string, memoryId: string | undefined)
   if (memoryId !== undefined) {
     must.push({ key: 'memory_id', match: { value: memoryId } });
   }
-  await request('POST', `/collections/${COLLECTION}/points/delete`, { filter: { must } });
+  await qdrantRequest('POST', `/collections/${COLLECTION}/points/delete`, { filter: { must } });
 }

@@ -148,100 +148,105 @@ contactRoutes.delete('/:id', async (c) => {
   return c.json({ ok: true });
 });
 
+// Each lookup strategy returns the discovered candidates (and an optional
+// error string); the route attaches `method` to the response. Splitting them
+// keeps each path independently readable and testable.
+interface LookupResult {
+  candidates: unknown[];
+  error?: string;
+}
+
+async function lookupByDomain(value: string): Promise<LookupResult> {
+  try {
+    const hostname = new URL(`https://${value}`).hostname;
+    if (/^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(hostname)) {
+      return { candidates: [], error: 'Private addresses not allowed' };
+    }
+    const res = await withTimeout(fetch(`https://${hostname}/.well-known/agents.json`), 5000);
+    const data = (await res.json()) as { agents?: unknown[] };
+    // Every agent on a did:web:<host> instance shares the instance A2A
+    // endpoint, mirroring the service entry we publish in did.json.
+    const endpoint = `https://${hostname}/a2a/v1`;
+    // A server may only advertise did:web identities bound to its own host.
+    // Without this, evil.com could list did:web:trusted.com and hijack the
+    // trusted peer's endpoint via the upsert (peerAgents.did is unique).
+    const hostDid = `did:web:${hostname}`;
+    const candidates = [];
+    for (const raw of data.agents ?? []) {
+      const parsed = remoteAgentSchema.safeParse(raw);
+      if (!parsed.success) continue;
+      if (parsed.data.did !== hostDid && !parsed.data.did.startsWith(`${hostDid}:`)) continue;
+      candidates.push(
+        await upsertPeerAgent({
+          did: parsed.data.did,
+          name: parsed.data.name,
+          description: parsed.data.description,
+          endpoint,
+          agentFacts: raw,
+        }),
+      );
+    }
+    return { candidates };
+  } catch (e) {
+    return { candidates: [], error: (e as Error).message };
+  }
+}
+
+async function lookupByDid(value: string): Promise<LookupResult> {
+  try {
+    const result = await withTimeout(resolveDID(value), 5000);
+    if (!result.ok) {
+      return { candidates: [], error: result.error };
+    }
+    const doc = result.value;
+    // The resolved document must claim the DID we asked for; otherwise the
+    // host serving `value` could poison a different DID's peerAgents row.
+    if (doc.id !== value) {
+      return { candidates: [], error: 'DID document id does not match the requested DID' };
+    }
+    const endpoint = doc.service?.find((s) => s.serviceEndpoint)?.serviceEndpoint;
+    if (!endpoint) {
+      return { candidates: [], error: 'DID document has no service endpoint' };
+    }
+    const row = await upsertPeerAgent({ did: value, endpoint, agentFacts: doc });
+    return { candidates: [row] };
+  } catch (e) {
+    return { candidates: [], error: (e as Error).message };
+  }
+}
+
+async function lookupByUsername(value: string): Promise<LookupResult> {
+  const rows = await getDb()
+    .select({
+      did: agents.did,
+      name: agents.name,
+      description: agents.description,
+      is_public: agents.is_public,
+    })
+    .from(agents)
+    .where(
+      and(
+        like(agents.did, `%${value.replace(/[%_\\]/g, (c) => `\\${c}`)}%`),
+        eq(agents.is_public, true),
+      ),
+    )
+    .limit(20);
+  return { candidates: rows };
+}
+
 contactRoutes.post('/lookup', async (c) => {
   const body = contactLookupSchema.parse(await c.req.json());
 
+  let result: LookupResult;
   if (body.method === 'domain') {
-    try {
-      const parsed = new URL(`https://${body.value}`);
-      const hostname = parsed.hostname;
-      if (/^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(hostname)) {
-        return c.json({
-          candidates: [],
-          method: body.method,
-          error: 'Private addresses not allowed',
-        });
-      }
-      const res = await withTimeout(fetch(`https://${hostname}/.well-known/agents.json`), 5000);
-      const data = (await res.json()) as { agents?: unknown[] };
-      // Every agent on a did:web:<host> instance shares the instance A2A
-      // endpoint, mirroring the service entry we publish in did.json.
-      const endpoint = `https://${hostname}/a2a/v1`;
-      // A server may only advertise did:web identities bound to its own host.
-      // Without this, evil.com could list did:web:trusted.com and hijack the
-      // trusted peer's endpoint via the upsert (peerAgents.did is unique).
-      const hostDid = `did:web:${hostname}`;
-      const candidates = [];
-      for (const raw of data.agents ?? []) {
-        const parsed = remoteAgentSchema.safeParse(raw);
-        if (!parsed.success) continue;
-        if (parsed.data.did !== hostDid && !parsed.data.did.startsWith(`${hostDid}:`)) continue;
-        candidates.push(
-          await upsertPeerAgent({
-            did: parsed.data.did,
-            name: parsed.data.name,
-            description: parsed.data.description,
-            endpoint,
-            agentFacts: raw,
-          }),
-        );
-      }
-      return c.json({ candidates, method: body.method });
-    } catch (e) {
-      return c.json({ candidates: [], method: body.method, error: (e as Error).message });
-    }
+    result = await lookupByDomain(body.value);
+  } else if (body.method === 'did') {
+    result = await lookupByDid(body.value);
+  } else if (body.method === 'username') {
+    result = await lookupByUsername(body.value);
+  } else {
+    result = { candidates: [] };
   }
 
-  if (body.method === 'did') {
-    try {
-      const result = await withTimeout(resolveDID(body.value), 5000);
-      if (!result.ok) {
-        return c.json({ candidates: [], method: body.method, error: result.error });
-      }
-      const doc = result.value;
-      // The resolved document must claim the DID we asked for; otherwise the
-      // host serving body.value could poison a different DID's peerAgents row.
-      if (doc.id !== body.value) {
-        return c.json({
-          candidates: [],
-          method: body.method,
-          error: 'DID document id does not match the requested DID',
-        });
-      }
-      const endpoint = doc.service?.find((s) => s.serviceEndpoint)?.serviceEndpoint;
-      if (!endpoint) {
-        return c.json({
-          candidates: [],
-          method: body.method,
-          error: 'DID document has no service endpoint',
-        });
-      }
-      const row = await upsertPeerAgent({ did: body.value, endpoint, agentFacts: doc });
-      return c.json({ candidates: [row], method: body.method });
-    } catch (e) {
-      return c.json({ candidates: [], method: body.method, error: (e as Error).message });
-    }
-  }
-
-  if (body.method === 'username') {
-    const db = getDb();
-    const rows = await db
-      .select({
-        did: agents.did,
-        name: agents.name,
-        description: agents.description,
-        is_public: agents.is_public,
-      })
-      .from(agents)
-      .where(
-        and(
-          like(agents.did, `%${body.value.replace(/[%_\\]/g, (c) => `\\${c}`)}%`),
-          eq(agents.is_public, true),
-        ),
-      )
-      .limit(20);
-    return c.json({ candidates: rows, method: body.method });
-  }
-
-  return c.json({ candidates: [], method: body.method });
+  return c.json({ ...result, method: body.method });
 });

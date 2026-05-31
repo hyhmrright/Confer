@@ -1,13 +1,14 @@
 import { createProvider } from '@confer/agent-runtime';
 import type { LLMMessage, LLMToolDefinition } from '@confer/agent-runtime';
-import { AppError, decrypt, newId } from '@confer/shared';
+import { AppError, newId } from '@confer/shared';
 import { and, asc, eq, lt } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import { getDb } from '../db/connection.js';
-import { agents, conversationParticipants, knowledgeBases, messages, users } from '../db/schema.js';
+import { agents, conversationParticipants, knowledgeBases, messages } from '../db/schema.js';
 import { getEnv } from '../env.js';
-import { EMBEDDING_PROVIDER_PRIORITY, type EmbeddingProvider } from '../lib/embedding.js';
+import type { EmbeddingProvider } from '../lib/embedding.js';
+import { decryptUserKey, getUserLlmKeys, resolveEmbeddingKey } from '../lib/llm-keys.js';
 import { ensureMemoryCollection } from '../lib/memory-store.js';
 import { authMiddleware } from '../middleware/auth.js';
 import {
@@ -74,21 +75,8 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
       const providerName = (modelConfig?.provider as string) ?? 'anthropic';
       const systemPrompt = (modelConfig?.system_prompt as string) ?? DEFAULT_SYSTEM_PROMPT;
 
-      const [userRow] = await db
-        .select({ llm_keys_json: users.llm_keys_json })
-        .from(users)
-        .where(eq(users.id, user.sub))
-        .limit(1);
-
-      const llmKeys = (userRow?.llm_keys_json ?? {}) as Record<string, unknown>;
-      const encryptedKey = llmKeys[providerName] as
-        | import('@confer/shared').EncryptedValue
-        | undefined;
-      let apiKey = '';
-      if (encryptedKey) {
-        const result = await decrypt(encryptedKey, env.ENCRYPTION_KEY);
-        if (result.ok) apiKey = result.value;
-      }
+      const llmKeys = await getUserLlmKeys(user.sub);
+      const apiKey = await decryptUserKey(llmKeys, providerName, env.ENCRYPTION_KEY);
 
       const provider = createProvider(providerName, apiKey);
       if (!provider) {
@@ -113,18 +101,9 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
       }));
 
       // Resolve embedding provider for knowledge base search
-      let embeddingKey = '';
-      let embeddingProvider: EmbeddingProvider = 'openai';
-      for (const p of EMBEDDING_PROVIDER_PRIORITY) {
-        const encrypted = llmKeys[p] as import('@confer/shared').EncryptedValue | undefined;
-        if (!encrypted) continue;
-        const r = await decrypt(encrypted, env.ENCRYPTION_KEY);
-        if (r.ok) {
-          embeddingKey = r.value;
-          embeddingProvider = p;
-          break;
-        }
-      }
+      const embeddingConfig = await resolveEmbeddingKey(llmKeys, env.ENCRYPTION_KEY);
+      const embeddingKey = embeddingConfig?.apiKey ?? '';
+      const embeddingProvider: EmbeddingProvider = embeddingConfig?.provider ?? 'openai';
       const userKbs = embeddingKey
         ? await db
             .select({ id: knowledgeBases.id })
@@ -132,14 +111,8 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
             .where(eq(knowledgeBases.user_id, user.sub))
         : [];
 
-      const encryptedTavilyKey = llmKeys.tavily as
-        | import('@confer/shared').EncryptedValue
-        | undefined;
-      let tavilyApiKey = env.TAVILY_API_KEY;
-      if (encryptedTavilyKey) {
-        const r = await decrypt(encryptedTavilyKey, env.ENCRYPTION_KEY);
-        if (r.ok) tavilyApiKey = r.value;
-      }
+      const userTavilyKey = await decryptUserKey(llmKeys, 'tavily', env.ENCRYPTION_KEY);
+      const tavilyApiKey = userTavilyKey || env.TAVILY_API_KEY;
 
       const tools: LLMToolDefinition[] = [
         ...(tavilyApiKey ? [tavilyToolDefinition] : []),

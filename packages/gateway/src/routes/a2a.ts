@@ -12,7 +12,7 @@ import {
   resolveDID,
   verifyRequestSignature,
 } from '@confer/identity';
-import { AppError, decrypt, newId } from '@confer/shared';
+import { AppError, newId } from '@confer/shared';
 import { and, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import type { MiddlewareHandler } from 'hono';
@@ -30,9 +30,9 @@ import {
   peerAgents,
   peerContacts,
   permissions,
-  users,
 } from '../db/schema.js';
 import { getEnv } from '../env.js';
+import { decryptUserKey, getUserLlmKeys } from '../lib/llm-keys.js';
 import { rateLimit } from '../middleware/rate-limit.js';
 import { broadcastToConversation } from '../ws/handler.js';
 
@@ -365,19 +365,8 @@ async function processA2AMessage(params: ProcessA2AMessageParams): Promise<void>
   const providerName = (modelConfig?.provider as string) ?? 'anthropic';
 
   const db = getDb();
-  const [userRow] = await db
-    .select({ llm_keys_json: users.llm_keys_json })
-    .from(users)
-    .where(eq(users.id, targetAgent.user_id))
-    .limit(1);
-
-  const llmKeys = (userRow?.llm_keys_json ?? {}) as Record<string, unknown>;
-  const encryptedKey = llmKeys[providerName] as import('@confer/shared').EncryptedValue | undefined;
-  let apiKey = '';
-  if (encryptedKey) {
-    const result = await decrypt(encryptedKey, getEnv().ENCRYPTION_KEY);
-    if (result.ok) apiKey = result.value;
-  }
+  const llmKeys = await getUserLlmKeys(targetAgent.user_id);
+  const apiKey = await decryptUserKey(llmKeys, providerName, getEnv().ENCRYPTION_KEY);
 
   const provider = createProvider(providerName, apiKey);
   if (!provider) {

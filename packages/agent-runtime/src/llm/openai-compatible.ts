@@ -66,7 +66,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
 
     return {
       content: message.content ?? '',
-      finish_reason: (choice.finish_reason as string) === 'stop' ? 'stop' : 'stop',
+      finish_reason: 'stop',
       usage: {
         prompt_tokens: (data.usage as Record<string, number>).prompt_tokens ?? 0,
         completion_tokens: (data.usage as Record<string, number>).completion_tokens ?? 0,
