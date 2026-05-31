@@ -72,7 +72,6 @@ export function LoginPage() {
                 className={inputCls}
                 required
                 minLength={3}
-                autoFocus
               />
             </div>
 

@@ -57,7 +57,6 @@ export function AddContactDialog() {
                 onChange={(e) => setDomain(e.target.value)}
                 placeholder="输入域名，如 acme.com"
                 className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                autoFocus
               />
             </div>
             <button

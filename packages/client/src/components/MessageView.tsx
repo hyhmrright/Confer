@@ -48,7 +48,7 @@ export function MessageView() {
 
     let fullText = text;
     if (attachedFile) {
-      fullText = `${text ? text + '\n\n' : ''}[文件: ${attachedFile.name}]\n\`\`\`\n${attachedFile.content}\n\`\`\``;
+      fullText = `${text ? `${text}\n\n` : ''}[文件: ${attachedFile.name}]\n\`\`\`\n${attachedFile.content}\n\`\`\``;
     }
 
     setInput('');
@@ -73,7 +73,7 @@ export function MessageView() {
     setInput(e.target.value);
     const el = e.target;
     el.style.height = 'auto';
-    el.style.height = Math.min(el.scrollHeight, 160) + 'px';
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
   };
 
   const canSend = (input.trim().length > 0 || attachedFile !== null) && !sending && !streaming;

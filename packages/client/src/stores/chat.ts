@@ -87,8 +87,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
           return {
             ...m,
             citations: raw.map((c) => ({
-              source: `${c['doc_name'] as string}（${c['kb_name'] as string}）`,
-              passage: c['excerpt'] as string | undefined,
+              source: `${c.doc_name as string}（${c.kb_name as string}）`,
+              passage: c.excerpt as string | undefined,
             })),
           };
         }

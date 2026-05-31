@@ -431,7 +431,6 @@ function KeysTab() {
                     onChange={(e) => setKeyValue(e.target.value)}
                     placeholder={isOllama ? 'http://localhost:11434' : 'sk-...'}
                     className="flex-1 px-3 py-1.5 bg-dark-input border border-dark-border rounded-lg text-xs font-mono text-ink-primary placeholder:text-ink-muted focus:outline-none focus:border-primary-600/40 transition-colors"
-                    autoFocus
                   />
                   <button
                     onClick={() => handleSave(provider.id)}
@@ -508,7 +507,6 @@ function KeysTab() {
                       onChange={(e) => setKeyValue(e.target.value)}
                       placeholder={tool.placeholder}
                       className="flex-1 px-3 py-1.5 bg-dark-input border border-dark-border rounded-lg text-xs font-mono text-ink-primary placeholder:text-ink-muted focus:outline-none focus:border-primary-600/40 transition-colors"
-                      autoFocus
                     />
                     <button
                       onClick={() => handleSave(tool.id)}

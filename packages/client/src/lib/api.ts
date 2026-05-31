@@ -51,7 +51,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   };
 
   if (accessToken) {
-    headers['Authorization'] = `Bearer ${accessToken}`;
+    headers.Authorization = `Bearer ${accessToken}`;
   }
 
   const res = await fetch(`${BASE_URL}${path}`, {
@@ -67,7 +67,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       });
     }
     await refreshing;
-    headers['Authorization'] = `Bearer ${accessToken}`;
+    headers.Authorization = `Bearer ${accessToken}`;
     const retry = await fetch(`${BASE_URL}${path}`, { ...options, headers });
     if (!retry.ok) {
       const body = await retry.json().catch(() => ({}));
@@ -110,7 +110,7 @@ export const api = {
 
   postForm: async <T>(path: string, form: FormData): Promise<T> => {
     const headers: Record<string, string> = {};
-    if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+    if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
     const res = await fetch(`${BASE_URL}${path}`, { method: 'POST', headers, body: form });
     if (!res.ok) {
       const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;

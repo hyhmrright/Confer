@@ -71,5 +71,5 @@ export function onWsMessage(type: string, handler: MessageHandler): () => void {
     handlers.set(type, set);
   }
   set.add(handler);
-  return () => set!.delete(handler);
+  return () => set?.delete(handler);
 }
