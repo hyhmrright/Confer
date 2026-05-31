@@ -41,9 +41,7 @@ describe('knowledge-base store', () => {
 
   test('fetchKbs clears loading even when the request fails', async () => {
     get.mockRejectedValueOnce(new Error('boom'));
-    expect(useKbStore.getState().fetchKbs()).rejects.toThrow('boom');
-    // loading is reset by the finally block; await microtask flush
-    await Promise.resolve();
+    await expect(useKbStore.getState().fetchKbs()).rejects.toThrow('boom');
     expect(useKbStore.getState().loading).toBe(false);
   });
 
@@ -97,8 +95,9 @@ describe('knowledge-base store', () => {
   test('uploadDocument clears uploading even when the upload fails', async () => {
     postForm.mockRejectedValueOnce(new Error('upload failed'));
     const file = new File(['x'], 'c.pdf', { type: 'application/pdf' });
-    expect(useKbStore.getState().uploadDocument('kb1', file)).rejects.toThrow('upload failed');
-    await Promise.resolve();
+    await expect(useKbStore.getState().uploadDocument('kb1', file)).rejects.toThrow(
+      'upload failed',
+    );
     expect(useKbStore.getState().uploading).toBe(false);
   });
 

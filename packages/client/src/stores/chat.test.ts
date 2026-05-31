@@ -50,7 +50,9 @@ const makeMessage = (over: Partial<Record<string, unknown>> = {}) => ({
 
 describe('chat store', () => {
   test('loadConversations stores the fetched list', async () => {
-    const conversations = [{ id: 'c1', type: 'direct_user_agent', created_at: 'a', updated_at: 'b' }];
+    const conversations = [
+      { id: 'c1', type: 'direct_user_agent', created_at: 'a', updated_at: 'b' },
+    ];
     get.mockResolvedValueOnce({ conversations });
 
     await useChatStore.getState().loadConversations();
@@ -102,7 +104,9 @@ describe('chat store', () => {
   test('createConversation posts and prepends the new conversation', async () => {
     const conversation = { id: 'c2', type: 'direct_user_agent', created_at: 'a', updated_at: 'b' };
     useChatStore.setState({
-      conversations: [{ id: 'c1', type: 'direct_user_agent', created_at: 'a', updated_at: 'b' }] as never,
+      conversations: [
+        { id: 'c1', type: 'direct_user_agent', created_at: 'a', updated_at: 'b' },
+      ] as never,
     });
     post.mockResolvedValueOnce({ conversation });
 
@@ -127,6 +131,24 @@ describe('chat store', () => {
       type: 'direct_user_agent',
       name: 'My Chat',
     });
+  });
+
+  test('createConversation falls back to a generated name when none is given', async () => {
+    const conversation = { id: 'c2', type: 'direct_user_agent', created_at: 'a', updated_at: 'b' };
+    post.mockResolvedValueOnce({ conversation });
+
+    await useChatStore.getState().createConversation('p1');
+
+    expect(post).toHaveBeenCalledWith(
+      '/conversations',
+      expect.objectContaining({
+        type: 'direct_user_agent',
+        peer_id: 'p1',
+        name: expect.any(String),
+      }),
+    );
+    const body = (post.mock.calls[0] as [string, { name: string }])[1];
+    expect(body.name.length).toBeGreaterThan(0);
   });
 
   test('deleteConversation removes it and clears active selection + messages', async () => {
@@ -190,6 +212,13 @@ describe('chat store', () => {
     const { messages } = useChatStore.getState();
     expect(messages).toHaveLength(1);
     expect(messages[0].content).toBe('hi');
+  });
+
+  test('sendMessage is a no-op when there is no active conversation', async () => {
+    useChatStore.setState({ activeConversationId: null });
+    await useChatStore.getState().sendMessage('hello');
+    expect(post).not.toHaveBeenCalled();
+    expect(useChatStore.getState().messages).toEqual([]);
   });
 
   test('setStreaming updates streaming flag and content', () => {

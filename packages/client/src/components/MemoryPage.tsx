@@ -35,7 +35,6 @@ export function MemoryPage() {
     }
   };
 
-
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Header */}
