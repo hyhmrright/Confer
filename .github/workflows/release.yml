@@ -176,19 +176,32 @@ jobs:
         working-directory: packages/client
         run: bunx tauri android init
 
-      - name: Decode keystore
+      - name: Set up Android signing
         env:
-          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-        run: echo "$KEYSTORE_BASE64" | base64 -d > /tmp/confer-release.jks
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          GEN="packages/client/src-tauri/gen/android"
+          # Tauri/Gradle read gen/android/keystore.properties — the TAURI_ANDROID_*
+          # env vars are NOT consumed by the build, which is why earlier APKs shipped
+          # unsigned. Decode the keystore and point keystore.properties at it.
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/confer-release.jks"
+          {
+            echo "storeFile=$RUNNER_TEMP/confer-release.jks"
+            echo "storePassword=$ANDROID_KEYSTORE_PASSWORD"
+            echo "keyAlias=$ANDROID_KEY_ALIAS"
+            echo "keyPassword=$ANDROID_KEY_PASSWORD"
+          } > "$GEN/keystore.properties"
+          # `tauri android init` regenerates build.gradle.kts without release signing,
+          # so inject a signingConfig that reads keystore.properties (idempotent).
+          python3 .github/scripts/inject-android-signing.py "$GEN/app/build.gradle.kts"
 
       - name: Build Android APK (signed)
         working-directory: packages/client
         env:
           NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973
-          TAURI_ANDROID_KEYSTORE_PATH: /tmp/confer-release.jks
-          TAURI_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          TAURI_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          TAURI_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: bunx tauri android build --apk
 
       - name: Upload Android artifacts
@@ -198,55 +211,16 @@ jobs:
           path: packages/client/src-tauri/gen/android/app/build/outputs/apk/**/*.apk
 
       - name: Attach APK to release
-        if: startsWith(github.ref, 'refs/tags/')
+        # Fires for both tag pushes and manual workflow_dispatch re-runs (on
+        # dispatch github.ref is the branch, not the tag, so gate on the resolved tag).
+        if: startsWith(needs.prepare.outputs.tag, 'v')
         uses: softprops/action-gh-release@v2
         with:
           draft: true
           body: ${{ needs.prepare.outputs.body }}
           files: packages/client/src-tauri/gen/android/app/build/outputs/apk/**/*.apk
 
-  # ── 4. iOS (unsigned, artifact only) ─────────────────────────────────────
-  ios:
-    runs-on: macos-latest
-    name: iOS
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-apple-ios,aarch64-apple-ios-sim
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Verify icons exist
-        run: |
-          ICON_DIR="packages/client/src-tauri/icons"
-          if [ ! -f "$ICON_DIR/icon.icns" ] || [ ! -f "$ICON_DIR/icon.ico" ]; then
-            echo "::error::Icons missing from repo. Run 'bunx tauri icon <source.png>' locally and commit the icons/ directory."
-            exit 1
-          fi
-
-      - name: Init iOS project
-        working-directory: packages/client
-        run: bunx tauri ios init
-
-      - name: Build iOS (unsigned)
-        working-directory: packages/client
-        run: bunx tauri ios build --export-method debugging
-
-      - name: Upload iOS artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: ios-build
-          path: packages/client/src-tauri/gen/apple/build/**/*.app
-
-  # ── 5. Post-release: update GitHub About + sync labels ───────────────────
+  # ── 4. Post-release: update GitHub About + sync labels ───────────────────
   finalize:
     needs: [desktop, android]
     runs-on: ubuntu-latest
