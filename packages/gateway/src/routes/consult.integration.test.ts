@@ -32,7 +32,9 @@ async function seedOwnAgent(): Promise<void> {
   const db = getDb();
   const agentId = newId();
   myAgentDid = `did:web:localhost:agents:me-${agentId.slice(-6).toLowerCase()}`;
-  await db.insert(agents).values({ id: agentId, user_id: user.id, did: myAgentDid, policies_json: {} });
+  await db
+    .insert(agents)
+    .values({ id: agentId, user_id: user.id, did: myAgentDid, policies_json: {} });
 
   const kp = await generateEd25519KeyPair();
   const privJwk = await exportPrivateKey(kp.privateKey);
@@ -77,7 +79,8 @@ function mockOutbound(opts: { didDocument?: unknown } = {}): void {
     if (opts.didDocument && url.includes('/.well-known/did.json')) {
       return Promise.resolve(Response.json(opts.didDocument));
     }
-    if (url.includes('api.anthropic.com')) return Promise.resolve(new Response('{}', { status: 401 }));
+    if (url.includes('api.anthropic.com'))
+      return Promise.resolve(new Response('{}', { status: 401 }));
     if (url.includes('peer.example')) {
       return Promise.resolve(
         Response.json({ message_id: 'remote-1', thread_id: 't', stream_url: '/s' }),
@@ -103,7 +106,10 @@ describe('consult', () => {
 
   test('rejects consulting a non-contact peer (403)', async () => {
     await seedOwnAgent();
-    const res = await post(`${CONSULT}/${newId()}`, { token: user.token, body: { question: 'hi' } });
+    const res = await post(`${CONSULT}/${newId()}`, {
+      token: user.token,
+      body: { question: 'hi' },
+    });
     expect(res.status).toBe(403);
   });
 
@@ -135,7 +141,8 @@ describe('consult', () => {
     const peerId = await seedPeerContact();
     // No mock: outbound fetch to peer.example fails -> deliverConsult returns err.
     const realFetch = globalThis.fetch;
-    globalThis.fetch = (() => Promise.resolve(new Response('boom', { status: 500 }))) as typeof fetch;
+    globalThis.fetch = (() =>
+      Promise.resolve(new Response('boom', { status: 500 }))) as unknown as typeof fetch;
     restoreFetch = () => {
       globalThis.fetch = realFetch;
     };

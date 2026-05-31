@@ -3,12 +3,7 @@ import { and, asc, eq, gt } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { deliverConsult } from '../a2a/consult.js';
 import { getDb } from '../db/connection.js';
-import {
-  conversationParticipants,
-  conversations,
-  messages,
-  peerContacts,
-} from '../db/schema.js';
+import { conversationParticipants, conversations, messages, peerContacts } from '../db/schema.js';
 import { authMiddleware } from '../middleware/auth.js';
 import type { AppEnv } from '../types.js';
 
@@ -102,7 +97,12 @@ consultRoutes.post('/:peerId', async (c) => {
     via: 'a2a',
   });
 
-  const result = await deliverConsult({ userId: user.sub, peerId, conversationId: convId, content });
+  const result = await deliverConsult({
+    userId: user.sub,
+    peerId,
+    conversationId: convId,
+    content,
+  });
 
   await db
     .update(messages)
@@ -112,7 +112,10 @@ consultRoutes.post('/:peerId', async (c) => {
     })
     .where(eq(messages.id, msgId));
 
-  await db.update(conversations).set({ updated_at: new Date() }).where(eq(conversations.id, convId));
+  await db
+    .update(conversations)
+    .set({ updated_at: new Date() })
+    .where(eq(conversations.id, convId));
 
   if (!result.ok) {
     return c.json(

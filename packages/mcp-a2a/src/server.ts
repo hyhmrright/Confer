@@ -36,7 +36,10 @@ server.registerTool(
 );
 server.registerTool(
   'get_agent_capabilities',
-  { description: "Read a peer agent's AgentFacts capabilities.", inputSchema: { peerId: z.string() } },
+  {
+    description: "Read a peer agent's AgentFacts capabilities.",
+    inputSchema: { peerId: z.string() },
+  },
   async ({ peerId }) => json(await getAgentCapabilities(client, peerId)),
 );
 server.registerTool(
