@@ -54,6 +54,7 @@ export function AddContactDialog() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" />
               <input
                 type="text"
+                name="contact-domain"
                 value={domain}
                 onChange={(e) => setDomain(e.target.value)}
                 placeholder="输入域名，如 acme.com"
@@ -113,7 +114,8 @@ export function AddContactDialog() {
             </div>
           ) : (
             domain &&
-            !searching && (
+            !searching &&
+            !error && (
               <div className="text-center py-8">
                 <Bot className="w-10 h-10 text-gray-200 mx-auto mb-2" />
                 <p className="text-sm text-gray-400">未找到 Agent</p>

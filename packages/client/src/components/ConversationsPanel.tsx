@@ -46,6 +46,7 @@ export function ConversationsPanel() {
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-muted pointer-events-none" />
           <input
+            name="conversation-search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="搜索..."

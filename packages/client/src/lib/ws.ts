@@ -51,6 +51,22 @@ export function disconnectWs(): void {
   }
 }
 
+// Drop the current socket (without scheduling the usual delayed retry) and open
+// a fresh one with the latest token. Used after a token refresh so a connection
+// that was opened with an expired token doesn't sit broken until it times out.
+export function reconnectWs(): void {
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+  if (socket) {
+    socket.onclose = null;
+    socket.close();
+    socket = null;
+  }
+  connectWs();
+}
+
 export function sendWs(type: string, data?: Record<string, unknown>): void {
   if (socket?.readyState !== WebSocket.OPEN) return;
   socket.send(JSON.stringify({ type, data }));

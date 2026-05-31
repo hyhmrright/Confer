@@ -206,6 +206,17 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
               );
               result = kbResult.text;
               citations.push(...kbResult.citations);
+              // Stream citations live so the capsule shows during the response,
+              // matching the shape the client maps persisted citations to.
+              for (const cite of kbResult.citations) {
+                await stream.writeSSE({
+                  event: 'citation',
+                  data: JSON.stringify({
+                    source: `${cite.doc_name}（${cite.kb_name}）`,
+                    passage: cite.excerpt,
+                  }),
+                });
+              }
             } else {
               result = `未知工具: ${tc.name}`;
             }

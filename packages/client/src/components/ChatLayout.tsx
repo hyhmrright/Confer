@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { z } from 'zod';
+import { setOnTokenRefreshed } from '../lib/api.js';
 import { permissionRequestSchema } from '../lib/schemas.js';
-import { connectWs, disconnectWs, onWsMessage } from '../lib/ws.js';
+import { connectWs, disconnectWs, onWsMessage, reconnectWs } from '../lib/ws.js';
 import { useAuthStore } from '../stores/auth.js';
 import { useChatStore } from '../stores/chat.js';
 import { usePermissionsStore } from '../stores/permissions.js';
 import { AddContactDialog } from './AddContactDialog.js';
 import { BookOpen, Database, MessageCircle, Settings, Users } from './Icons.js';
 import { MessageView } from './MessageView.js';
+import { PermissionInbox } from './PermissionInbox.js';
 import { Sidebar } from './Sidebar.js';
 
 export type Tab = 'conversations' | 'contacts' | 'memory' | 'knowledge';
@@ -121,6 +123,9 @@ export function ChatLayout() {
     loadConversations();
     loadPending();
     connectWs();
+    // A boot-time connection may use an expired stored token; reconnect with the
+    // fresh one once the first API call triggers a refresh.
+    setOnTokenRefreshed(reconnectWs);
 
     const unsubs = [
       onWsMessage('message.new', (data) => {
@@ -152,6 +157,7 @@ export function ChatLayout() {
     ];
 
     return () => {
+      setOnTokenRefreshed(null);
       disconnectWs();
       for (const fn of unsubs) fn();
     };
@@ -190,6 +196,7 @@ export function ChatLayout() {
         </div>
       )}
 
+      <PermissionInbox />
       <AddContactDialog />
     </div>
   );

@@ -3,6 +3,13 @@ const BASE_URL = '/api/v1';
 let accessToken: string | null = null;
 let refreshToken: string | null = null;
 let refreshing: Promise<void> | null = null;
+let onTokenRefreshed: (() => void) | null = null;
+
+// Let other modules (e.g. the WebSocket layer) react when the access token is
+// rotated, so a connection opened with a now-stale token can reconnect.
+export function setOnTokenRefreshed(cb: (() => void) | null) {
+  onTokenRefreshed = cb;
+}
 
 export function setToken(token: string | null) {
   accessToken = token;
@@ -38,6 +45,7 @@ async function tryRefresh(): Promise<boolean> {
       parsed.refresh_token = data.refresh_token;
       localStorage.setItem('confer_auth', JSON.stringify(parsed));
     }
+    onTokenRefreshed?.();
     return true;
   } catch {
     return false;

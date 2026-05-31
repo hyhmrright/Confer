@@ -199,6 +199,7 @@ export function MessageView() {
 
             <textarea
               ref={textareaRef}
+              name="message-input"
               value={input}
               onChange={handleInput}
               onKeyDown={handleKeyDown}
