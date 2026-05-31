@@ -296,20 +296,40 @@ a2aRoutes.post('/messages', verifyA2ASignature, verifyCapabilityToken, async (c)
   const resolvedPeer = peer;
   const resolvedConvId = convId;
 
-  setImmediate(async () => {
-    try {
-      await processA2AMessage({
-        targetAgent,
-        senderDid: body.from,
-        senderPeer: resolvedPeer,
-        messageContent: body.message.content,
-        conversationId: resolvedConvId,
-        inboundMessageId: msgId,
-      });
-    } catch (error) {
-      console.error('A2A processing failed:', error);
-    }
+  // Broadcast the inbound message so web subscribers and consult long-polls
+  // wake up regardless of message type.
+  broadcastToConversation(resolvedConvId, {
+    type: 'message.new',
+    data: {
+      id: msgId,
+      conversation_id: resolvedConvId,
+      sender_type: 'peer_agent',
+      sender_id: resolvedPeer.id,
+      content: body.message.content,
+      in_reply_to: body.thread_id,
+    },
   });
+
+  // Only an inbound question triggers our local auto-reply loop. An answer or
+  // notification (e.g. a peer responding to one of our outgoing consults) is
+  // stored and broadcast above but must NOT spawn another reply — otherwise
+  // two agents would ping-pong forever.
+  if (body.message.type === 'question') {
+    setImmediate(async () => {
+      try {
+        await processA2AMessage({
+          targetAgent,
+          senderDid: body.from,
+          senderPeer: resolvedPeer,
+          messageContent: body.message.content,
+          conversationId: resolvedConvId,
+          inboundMessageId: msgId,
+        });
+      } catch (error) {
+        console.error('A2A processing failed:', error);
+      }
+    });
+  }
 
   return c.json(
     {
