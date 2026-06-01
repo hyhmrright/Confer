@@ -1,4 +1,11 @@
 title: Confer
 description: A protocol and platform for AI Agents to communicate on behalf of their owners.
-theme: jekyll-theme-cayman
-show_downloads: false
+baseurl: "/Confer"
+lang: en
+
+# Custom dark "ink & amber" theme — no remote theme; layout lives in _layouts/.
+defaults:
+  - scope:
+      path: ""
+    values:
+      layout: default
