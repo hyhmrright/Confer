@@ -20,12 +20,12 @@ import { streamSSE } from 'hono/streaming';
 import * as jose from 'jose';
 import { z } from 'zod';
 import { sendA2AMessage } from '../a2a/outbound.js';
+import { loadActiveAgentKey } from '../a2a/signing.js';
 import { getDb } from '../db/connection.js';
 import {
   agents,
   conversationParticipants,
   conversations,
-  keypairs,
   messages,
   peerAgents,
   peerContacts,
@@ -253,12 +253,21 @@ a2aRoutes.post('/messages', verifyA2ASignature, verifyCapabilityToken, async (c)
   let convId = body.thread_id;
 
   if (convId) {
-    const [existing] = await db
-      .select()
-      .from(conversations)
-      .where(eq(conversations.id, convId))
+    // The sender may only reuse a thread it is already a participant of.
+    // Otherwise a connected peer could target another peer's conversation id
+    // and inject a message into it (the reply would then be broadcast and
+    // surfaced to the owner as if it came from the real participant).
+    const [member] = await db
+      .select({ id: conversationParticipants.id })
+      .from(conversationParticipants)
+      .where(
+        and(
+          eq(conversationParticipants.conversation_id, convId),
+          eq(conversationParticipants.peer_id, peer.id),
+        ),
+      )
       .limit(1);
-    if (!existing) convId = undefined;
+    if (!member) convId = undefined;
   }
 
   if (!convId) {
@@ -296,20 +305,40 @@ a2aRoutes.post('/messages', verifyA2ASignature, verifyCapabilityToken, async (c)
   const resolvedPeer = peer;
   const resolvedConvId = convId;
 
-  setImmediate(async () => {
-    try {
-      await processA2AMessage({
-        targetAgent,
-        senderDid: body.from,
-        senderPeer: resolvedPeer,
-        messageContent: body.message.content,
-        conversationId: resolvedConvId,
-        inboundMessageId: msgId,
-      });
-    } catch (error) {
-      console.error('A2A processing failed:', error);
-    }
+  // Broadcast the inbound message so web subscribers and consult long-polls
+  // wake up regardless of message type.
+  broadcastToConversation(resolvedConvId, {
+    type: 'message.new',
+    data: {
+      id: msgId,
+      conversation_id: resolvedConvId,
+      sender_type: 'peer_agent',
+      sender_id: resolvedPeer.id,
+      content: body.message.content,
+      in_reply_to: body.thread_id,
+    },
   });
+
+  // Only an inbound question triggers our local auto-reply loop. An answer or
+  // notification (e.g. a peer responding to one of our outgoing consults) is
+  // stored and broadcast above but must NOT spawn another reply — otherwise
+  // two agents would ping-pong forever.
+  if (body.message.type === 'question') {
+    setImmediate(async () => {
+      try {
+        await processA2AMessage({
+          targetAgent,
+          senderDid: body.from,
+          senderPeer: resolvedPeer,
+          messageContent: body.message.content,
+          conversationId: resolvedConvId,
+          inboundMessageId: msgId,
+        });
+      } catch (error) {
+        console.error('A2A processing failed:', error);
+      }
+    });
+  }
 
   return c.json(
     {
@@ -428,24 +457,11 @@ async function processA2AMessage(params: ProcessA2AMessageParams): Promise<void>
     return;
   }
 
-  const [keypair] = await db
-    .select()
-    .from(keypairs)
-    .where(
-      and(
-        eq(keypairs.owner_type, 'agent'),
-        eq(keypairs.owner_id, targetAgent.id),
-        eq(keypairs.is_active, true),
-      ),
-    )
-    .limit(1);
-
-  if (!keypair) {
-    console.error(`No active signing keypair for agent ${targetAgent.id}`);
+  const key = await loadActiveAgentKey(targetAgent.id);
+  if (!key.ok) {
+    console.error(`Cannot sign A2A reply for agent ${targetAgent.id}: ${key.error}`);
     return;
   }
-
-  const privateKeyJwk = JSON.stringify(keypair.private_key_jwk_encrypted);
 
   const outboundResult = await sendA2AMessage(
     peerEndpoint,
@@ -458,8 +474,8 @@ async function processA2AMessage(params: ProcessA2AMessageParams): Promise<void>
         content: replyContent,
       },
     },
-    keypair.key_id,
-    privateKeyJwk,
+    key.value.keyId,
+    key.value.privateKeyJwk,
   );
 
   if (!outboundResult.ok) {

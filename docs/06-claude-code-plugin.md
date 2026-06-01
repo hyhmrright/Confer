@@ -16,8 +16,10 @@
 
 ## 安装
 
+> 下方 `claude mcp add … @confer/mcp-server` + OAuth 是**目标愿景**。v0.1 的实际安装见本节末「当前实现 (v0.1)」——已落地的是 env-var 鉴权的 `confer-a2a` plugin。
+
 ```bash
-# 用户视角
+# 用户视角（愿景）
 claude mcp add confer npx -y @confer/mcp-server
 
 # 首次启动时引导 OAuth 绑定 Confer 账号
@@ -50,6 +52,25 @@ did       = "did:web:mycompany.com:agents:sdk-team"
 authority = ["powersupply-lib", "internal-bus", "auth-service"]
 trust     = "high"
 ```
+
+### 当前实现 (v0.1)
+
+愿景里的 OAuth + npx 包尚未落地。已实现的是 **plugin marketplace 一键安装**，鉴权用环境变量（签名私钥始终留在 gateway，不下放）：
+
+```bash
+# 1. 加 marketplace 并安装 plugin（本仓库即 marketplace）
+/plugin marketplace add hyhmrright/Confer
+/plugin install confer-a2a@confer
+
+# 2. 在 shell 导出账号（plugin 从环境读取，凭据不写入仓库）
+export CONFER_USERNAME=you
+export CONFER_PASSWORD=secret
+# 可选：export CONFER_GATEWAY_URL=http://localhost:3000  (默认值)
+```
+
+plugin 捆绑自包含 bundle（`plugins/confer-a2a/dist/server.mjs`，裸 `node` 即可跑，无需 monorepo 或 `bun`），由 `packages/mcp-a2a` 经 `bun run --filter @confer/mcp-a2a build:plugin` 生成。提供 9 个工具（`list_agents` / `ask_agent` / `follow_up` / `ask_multiple` / `check_reply` 等），细节见 `plugins/confer-a2a/README.md` 与 `packages/mcp-a2a/README.md`。
+
+仓库内开发者也可不装 plugin，直接用根目录 `.mcp.json`（指向源码 `server.ts`）或 `claude mcp add`。
 
 ## 暴露的 MCP 工具
 
@@ -406,3 +427,41 @@ await server.connect(transport);
 - [ ] Pre-flight review 能让 Claude Code 修正方案
 - [ ] 项目记忆在 git 提交后跟着仓库走
 - [ ] 至少 1 个公开供应商 Agent 可用（demo 用：mock-vendor.confer.dev）
+
+## 实现状态（v0.1）
+
+上文是完整愿景。首个落地版本 `packages/mcp-a2a` 已实现"咨询 peer agent"这一核心闭环：
+
+**架构（两层）**
+
+- Gateway 新增用户发起的 A2A 出站咨询能力（`/api/v1/consult/*`，见 `docs/05-api.md`）。此前平台只有"入站→自动回复"一条 A2A 发消息路径，无任何用户主动出站路径。
+- `packages/mcp-a2a`：stdio MCP server，以**一个配置的 Confer 用户**身份登录 gateway 取 token，把咨询能力暴露成工具。签名仍在 gateway，私钥不出 gateway。
+
+**已实现工具（9 个）**
+
+| 域 | 工具 |
+|----|------|
+| 发现 | `list_agents` / `get_agent_capabilities` / `find_agents` |
+| 咨询 | `ask_agent`（同步等待）/ `follow_up` / `get_conversation` |
+| 进阶 | `ask_multiple`（并行，上限 5）/ `check_reply`（异步取） |
+| 运维 | `whoami` |
+
+**连接**（`.mcp.json`，需先 `bun run dev` 起 gateway）
+
+```jsonc
+{
+  "mcpServers": {
+    "confer-a2a": {
+      "command": "bun",
+      "args": ["run", "packages/mcp-a2a/src/server.ts"],
+      "env": {
+        "CONFER_GATEWAY_URL": "http://localhost:3000",
+        "CONFER_USERNAME": "${CONFER_USERNAME}",
+        "CONFER_PASSWORD": "${CONFER_PASSWORD}"
+      }
+    }
+  }
+}
+```
+
+**与愿景的差距（后续）**：OAuth 绑定、vendor specialist 长期记忆 / `.claude/peers/` 沉淀、pre/post-flight review、权威优先级仍为 backlog；当前身份为单一配置用户、回复用长轮询、待批权限暂以 `pending` 呈现。

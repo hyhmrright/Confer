@@ -1,5 +1,9 @@
 node_modules/
 dist/
+# The confer-a2a plugin ships its bundled server as a committed artifact so
+# `/plugin install` works without the monorepo; keep it tracked despite dist/.
+!plugins/confer-a2a/dist/
+!plugins/confer-a2a/dist/server.mjs
 .env
 .env.*
 !.env.example

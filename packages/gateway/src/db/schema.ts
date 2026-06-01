@@ -157,6 +157,7 @@ export const messages = pgTable(
     language: varchar('language', { length: 8 }),
     translation_json: jsonb('translation_json'),
     via: varchar('via', { length: 32 }),
+    delivery_status: varchar('delivery_status', { length: 16 }),
     delivered_at: timestamp('delivered_at', { withTimezone: true }),
     read_by_json: jsonb('read_by_json').default([]),
     created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

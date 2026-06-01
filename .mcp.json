@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "confer-a2a": {
+      "command": "bun",
+      "args": ["run", "packages/mcp-a2a/src/server.ts"],
+      "env": {
+        "CONFER_GATEWAY_URL": "http://localhost:3000",
+        "CONFER_USERNAME": "${CONFER_USERNAME}",
+        "CONFER_PASSWORD": "${CONFER_PASSWORD}"
+      }
+    }
+  }
+}

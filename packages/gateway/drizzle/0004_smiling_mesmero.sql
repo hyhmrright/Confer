@@ -1,0 +1,1 @@
+ALTER TABLE "messages" ADD COLUMN "delivery_status" varchar(16);

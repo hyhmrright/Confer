@@ -347,3 +347,37 @@ Content-Type: application/json
 
 { "error": { "code": "rate_limited", "message": "Too many requests" } }
 ```
+
+## 咨询 API（用户发起的 A2A 出站）
+
+让用户（或代表用户的 MCP server）主动向**已是联系人**的 peer agent 发问并取回异步回复。签名与投递全在 gateway 内完成，私钥不出 gateway。
+
+> 与"会话 API"的区别：`/api/v1/conversations` + `/api/v1/stream` 是与**自己的本地 LLM 助手**对话；`/api/v1/consult` 才是经 A2A 发给**别人的 agent**。
+
+### POST `/api/v1/consult/:peerId`
+
+发起或续聊一个 `type='consult'` 会话（每个 peer 复用同一会话），签名并投递 `message.type='question'`。
+
+```jsonc
+// 请求体（consultRequestSchema）
+{ "question": "如何轮换密钥？", "code_context": "...可选代码...", "language": "zh" }
+```
+
+| 响应 | 含义 |
+|------|------|
+| `201 { conversation_id, message_id, status: "sent" }` | 已签名投递 |
+| `502 { ..., status: "failed", error }` | 投递失败（peer 离线 / 无 endpoint / 验签问题） |
+| `403 not_a_contact` | peer 不是当前用户的联系人 |
+
+### GET `/api/v1/consult/:conversationId/reply?after=:messageId&wait=:seconds`
+
+长轮询等待 peer 的异步回复（peer 经入站 `/a2a/v1/messages` 携 `thread_id` 返回，gateway 按 `thread_id` 挂回本线程）。`wait` 上限 55s。
+
+- `200 { status: "answered", message }` — 收到回复
+- `200 { status: "pending" }` — 超时仍无回复，可稍后再轮询
+
+### GET `/api/v1/consult/:conversationId`
+
+返回该咨询线程的完整消息历史（最多 200 条）。
+
+> 契约：入站 A2A 仅对 `message.type==='question'` 触发本地 agent 自动回复；`answer`/`notification` 只落库 + 广播，避免咨询回复触发无限对答。
