@@ -36,16 +36,19 @@ function consultConversationId(userId: string, peerId: string): string {
 async function getOrCreateConsultConversation(userId: string, peerId: string): Promise<string> {
   const db = getDb();
   const convId = consultConversationId(userId, peerId);
-  const inserted = await db
-    .insert(conversations)
-    .values({ id: convId, type: 'consult', created_by: userId })
-    .onConflictDoNothing()
-    .returning({ id: conversations.id });
 
-  // Only the caller that actually created the row seeds participants, so they
-  // are never duplicated.
-  if (inserted.length > 0) {
-    await db.insert(conversationParticipants).values([
+  // Atomic so a conversation row can never persist without its participants:
+  // the creator inserts both or neither. Concurrent callers conflict on the
+  // deterministic primary key and skip participant seeding (no duplicates).
+  await db.transaction(async (tx) => {
+    const inserted = await tx
+      .insert(conversations)
+      .values({ id: convId, type: 'consult', created_by: userId })
+      .onConflictDoNothing()
+      .returning({ id: conversations.id });
+    if (inserted.length === 0) return;
+
+    await tx.insert(conversationParticipants).values([
       {
         id: newId(),
         conversation_id: convId,
@@ -61,7 +64,7 @@ async function getOrCreateConsultConversation(userId: string, peerId: string): P
         role: 'member',
       },
     ]);
-  }
+  });
   return convId;
 }
 
