@@ -1,65 +1,112 @@
 // Presentation catalog for the settings UI: tool/LLM provider display metadata
 // and the static fallback model lists. Kept out of the component so the catalog
 // is editable in one place.
+//
+// Brand and model names stay verbatim (proper nouns); only the generic
+// parenthetical annotations are localized via i18n tag keys (see
+// `i18n/locales/*.ts` providers.*). `toolProviderName`/`toolProviderDescription`
+// and `llmProviderName` resolve their localized parts at call time.
 
-export const TOOL_PROVIDERS = [
+import type { TFunction } from 'i18next';
+import type { TranslationKey } from '../i18n/index.js';
+
+export interface ToolProvider {
+  id: string;
+  nameKey: TranslationKey;
+  descriptionKey: TranslationKey;
+  placeholder: string;
+}
+
+export const TOOL_PROVIDERS: ToolProvider[] = [
   {
     id: 'tavily',
-    name: 'Tavily 网络搜索',
-    description: '让 AI 能实时搜索网络，查询新闻、股价、天气等任意最新信息',
+    nameKey: 'providers.tavilyName',
+    descriptionKey: 'providers.tavilyDescription',
     placeholder: 'tvly-...',
   },
 ];
 
-export const LLM_PROVIDERS = [
+export interface LlmProvider {
+  id: string;
+  name: string;
+  aliasKey?: TranslationKey;
+  supportsEmbedding?: boolean;
+  isLocal?: boolean;
+}
+
+export const LLM_PROVIDERS: LlmProvider[] = [
   { id: 'anthropic', name: 'Anthropic (Claude)' },
   { id: 'openai', name: 'OpenAI', supportsEmbedding: true },
   { id: 'deepseek', name: 'DeepSeek' },
-  { id: 'qwen', name: '通义千问 (Qwen)', supportsEmbedding: true },
-  { id: 'glm', name: '智谱 AI (GLM)', supportsEmbedding: true },
-  { id: 'ollama', name: 'Ollama (本地)', isLocal: true },
+  { id: 'qwen', name: 'Qwen', aliasKey: 'providers.qwenAlias', supportsEmbedding: true },
+  { id: 'glm', name: 'GLM', aliasKey: 'providers.glmAlias', supportsEmbedding: true },
+  { id: 'ollama', name: 'Ollama', aliasKey: 'providers.ollamaAlias', isLocal: true },
 ];
 
-export const STATIC_MODELS: Record<string, { value: string; label: string }[]> = {
+export interface StaticModel {
+  value: string;
+  // Brand/model name, kept verbatim.
+  name: string;
+  // i18n key for the generic annotation shown in parentheses.
+  tagKey?: TranslationKey;
+}
+
+export const STATIC_MODELS: Record<string, StaticModel[]> = {
   anthropic: [
-    { value: 'claude-opus-4-7', label: 'Claude Opus 4.7（旗舰）' },
-    { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6（高性价比）' },
-    { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5（轻量）' },
+    { value: 'claude-opus-4-7', name: 'Claude Opus 4.7', tagKey: 'providers.tagFlagship' },
+    { value: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6', tagKey: 'providers.tagValue' },
+    {
+      value: 'claude-haiku-4-5-20251001',
+      name: 'Claude Haiku 4.5',
+      tagKey: 'providers.tagLight',
+    },
   ],
   openai: [
-    { value: 'gpt-5', label: 'GPT-5（旗舰）' },
-    { value: 'gpt-5-mini', label: 'GPT-5 mini（高性价比）' },
-    { value: 'o3', label: 'o3（旗舰推理）' },
-    { value: 'o4-mini', label: 'o4-mini（高性价比推理）' },
-    { value: 'gpt-4.1', label: 'GPT-4.1（长上下文）' },
-    { value: 'gpt-4.1-mini', label: 'GPT-4.1 mini' },
-    { value: 'gpt-4o', label: 'GPT-4o（多模态）' },
-    { value: 'gpt-4o-mini', label: 'GPT-4o mini' },
+    { value: 'gpt-5', name: 'GPT-5', tagKey: 'providers.tagFlagship' },
+    { value: 'gpt-5-mini', name: 'GPT-5 mini', tagKey: 'providers.tagValue' },
+    { value: 'o3', name: 'o3', tagKey: 'providers.tagFlagshipReasoning' },
+    { value: 'o4-mini', name: 'o4-mini', tagKey: 'providers.tagValueReasoning' },
+    { value: 'gpt-4.1', name: 'GPT-4.1', tagKey: 'providers.tagLongContext' },
+    { value: 'gpt-4.1-mini', name: 'GPT-4.1 mini' },
+    { value: 'gpt-4o', name: 'GPT-4o', tagKey: 'providers.tagMultimodal' },
+    { value: 'gpt-4o-mini', name: 'GPT-4o mini' },
   ],
   deepseek: [
-    { value: 'deepseek-v4-pro', label: 'DeepSeek-V4-Pro（旗舰）' },
-    { value: 'deepseek-v4-flash', label: 'DeepSeek-V4-Flash（高性价比）' },
+    { value: 'deepseek-v4-pro', name: 'DeepSeek-V4-Pro', tagKey: 'providers.tagFlagship' },
+    { value: 'deepseek-v4-flash', name: 'DeepSeek-V4-Flash', tagKey: 'providers.tagValue' },
   ],
   qwen: [
-    { value: 'qwen3-max', label: 'Qwen3-Max（旗舰）' },
-    { value: 'qwq-plus', label: 'QwQ-Plus（推理）' },
-    { value: 'qwen3.5-plus', label: 'Qwen3.5-Plus（超长上下文）' },
-    { value: 'qwen3.5-flash', label: 'Qwen3.5-Flash（轻量）' },
-    { value: 'qwen-plus', label: 'Qwen-Plus（稳定别名）' },
-    { value: 'qwen-flash', label: 'Qwen-Flash（轻量别名）' },
-    { value: 'qwen-long', label: 'Qwen-Long（超长文档）' },
+    { value: 'qwen3-max', name: 'Qwen3-Max', tagKey: 'providers.tagFlagship' },
+    { value: 'qwq-plus', name: 'QwQ-Plus', tagKey: 'providers.tagReasoning' },
+    { value: 'qwen3.5-plus', name: 'Qwen3.5-Plus', tagKey: 'providers.tagSuperLongContext' },
+    { value: 'qwen3.5-flash', name: 'Qwen3.5-Flash', tagKey: 'providers.tagLight' },
+    { value: 'qwen-plus', name: 'Qwen-Plus', tagKey: 'providers.tagStableAlias' },
+    { value: 'qwen-flash', name: 'Qwen-Flash', tagKey: 'providers.tagLightAlias' },
+    { value: 'qwen-long', name: 'Qwen-Long', tagKey: 'providers.tagLongDoc' },
   ],
   glm: [
-    { value: 'glm-5.1', label: 'GLM-5.1（最新旗舰）' },
-    { value: 'glm-5', label: 'GLM-5（高智能）' },
-    { value: 'glm-5-turbo', label: 'GLM-5-Turbo（复杂任务）' },
-    { value: 'glm-4.7', label: 'GLM-4.7（通用）' },
-    { value: 'glm-4.6', label: 'GLM-4.6（编程推理）' },
-    { value: 'glm-4.5-air', label: 'GLM-4.5-Air（高性价比）' },
-    { value: 'glm-4.5-airx', label: 'GLM-4.5-AirX（极速）' },
-    { value: 'glm-4-long', label: 'GLM-4-Long（百万上下文）' },
-    { value: 'glm-4.7-flash', label: 'GLM-4.7-Flash（免费）' },
-    { value: 'glm-4.7-flashx', label: 'GLM-4.7-FlashX（轻量付费）' },
+    { value: 'glm-5.1', name: 'GLM-5.1', tagKey: 'providers.tagLatestFlagship' },
+    { value: 'glm-5', name: 'GLM-5', tagKey: 'providers.tagHighIntelligence' },
+    { value: 'glm-5-turbo', name: 'GLM-5-Turbo', tagKey: 'providers.tagComplexTask' },
+    { value: 'glm-4.7', name: 'GLM-4.7', tagKey: 'providers.tagGeneral' },
+    { value: 'glm-4.6', name: 'GLM-4.6', tagKey: 'providers.tagCodingReasoning' },
+    { value: 'glm-4.5-air', name: 'GLM-4.5-Air', tagKey: 'providers.tagValue' },
+    { value: 'glm-4.5-airx', name: 'GLM-4.5-AirX', tagKey: 'providers.tagFast' },
+    { value: 'glm-4-long', name: 'GLM-4-Long', tagKey: 'providers.tagMillionContext' },
+    { value: 'glm-4.7-flash', name: 'GLM-4.7-Flash', tagKey: 'providers.tagFree' },
+    { value: 'glm-4.7-flashx', name: 'GLM-4.7-FlashX', tagKey: 'providers.tagLightPaid' },
   ],
   ollama: [],
 };
+
+// Display name for an LLM provider: appends the localized alias in parentheses
+// when one exists (e.g. "Qwen (通义千问)").
+export function llmProviderName(provider: LlmProvider, t: TFunction): string {
+  return provider.aliasKey ? `${provider.name} (${t(provider.aliasKey)})` : provider.name;
+}
+
+// Display label for a model option: brand name plus the localized annotation in
+// parentheses when present (e.g. "Claude Opus 4.7 (flagship)").
+export function modelLabel(model: StaticModel, t: TFunction): string {
+  return model.tagKey ? `${model.name} (${t(model.tagKey)})` : model.name;
+}

@@ -13,6 +13,7 @@ mock.module('../lib/api.js', () => ({
   getToken: mock(() => null),
 }));
 
+const { default: i18n } = await import('../i18n/index.js');
 const { useSettingsStore } = await import('./settings.js');
 
 const initial = useSettingsStore.getState();
@@ -64,7 +65,7 @@ describe('settings store', () => {
     const state = useSettingsStore.getState();
     expect(state.agent?.name).toBe('New');
     expect(state.saving).toBe(false);
-    expect(state.success).toBe('保存成功');
+    expect(state.success).toBe(i18n.t('settings.saveSuccess'));
     expect(state.error).toBeNull();
   });
 
@@ -107,7 +108,7 @@ describe('settings store', () => {
     });
     const state = useSettingsStore.getState();
     expect(state.saving).toBe(false);
-    expect(state.success).toBe('openai 密钥已保存');
+    expect(state.success).toBe(i18n.t('settings.keySaved', { provider: 'openai' }));
     expect(state.llmKeys).toEqual([
       { provider: 'openai', configured: true },
       { provider: 'glm', configured: false },
@@ -134,7 +135,7 @@ describe('settings store', () => {
     expect(del).toHaveBeenCalledWith('/agents/me/llm-keys/openai');
     const state = useSettingsStore.getState();
     expect(state.saving).toBe(false);
-    expect(state.success).toBe('openai 密钥已移除');
+    expect(state.success).toBe(i18n.t('settings.keyRemoved', { provider: 'openai' }));
     expect(state.llmKeys).toEqual([
       { provider: 'openai', configured: false },
       { provider: 'glm', configured: true },

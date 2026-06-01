@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { dateLocale } from '../i18n/index.js';
 import { INPUT_CLS } from '../lib/styles.js';
 import { useMemoriesStore } from '../stores/memories.js';
 import { Plus, Search, Trash } from './Icons.js';
 
 export function MemoryPage() {
+  const { t } = useTranslation();
   const { memories, loading, loadMemories, createMemory, updateMemory, deleteMemory } =
     useMemoriesStore();
   const [query, setQuery] = useState('');
@@ -40,7 +43,7 @@ export function MemoryPage() {
       {/* Header */}
       <div className="px-4 py-3 flex items-center justify-between border-b border-dark-border shrink-0">
         <span className="text-xs font-semibold text-ink-secondary tracking-wider uppercase font-mono">
-          记忆
+          {t('memory.title')}
         </span>
         <button
           type="button"
@@ -50,7 +53,7 @@ export function MemoryPage() {
             hover:bg-primary-600/25 transition-all"
         >
           <Plus className="w-3 h-3" />
-          新建
+          {t('common.new')}
         </button>
       </div>
 
@@ -62,7 +65,7 @@ export function MemoryPage() {
             name="memory-search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="搜索记忆..."
+            placeholder={t('memory.searchPlaceholder')}
             className="w-full pl-8 pr-3 py-1.5 bg-dark-input border border-dark-border text-ink-secondary
               text-xs rounded-md placeholder:text-ink-muted focus:outline-none focus:border-primary-600/40 transition-colors"
           />
@@ -75,13 +78,13 @@ export function MemoryPage() {
           <input
             value={newTitle}
             onChange={(e) => setNewTitle(e.target.value)}
-            placeholder="标题"
+            placeholder={t('memory.titlePlaceholder')}
             className={INPUT_CLS}
           />
           <textarea
             value={newContent}
             onChange={(e) => setNewContent(e.target.value)}
-            placeholder="内容..."
+            placeholder={t('memory.contentPlaceholder')}
             rows={3}
             className={`${INPUT_CLS} resize-none`}
           />
@@ -91,7 +94,7 @@ export function MemoryPage() {
               onClick={() => setShowForm(false)}
               className="px-3 py-1.5 text-xs text-ink-muted hover:text-ink-secondary transition-colors"
             >
-              取消
+              {t('common.cancel')}
             </button>
             <button
               type="button"
@@ -100,7 +103,7 @@ export function MemoryPage() {
               className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg
                 hover:bg-primary-500 disabled:opacity-40 transition-colors"
             >
-              {saving ? '保存中…' : '保存'}
+              {saving ? t('common.saving') : t('common.save')}
             </button>
           </div>
         </div>
@@ -122,8 +125,8 @@ export function MemoryPage() {
           </div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-ink-muted pt-10">
-            <p className="text-xs">暂无记忆</p>
-            <p className="text-[10px] mt-0.5 text-ink-muted opacity-60">点击右上角新建</p>
+            <p className="text-xs">{t('memory.empty')}</p>
+            <p className="text-[10px] mt-0.5 text-ink-muted opacity-60">{t('memory.emptyHint')}</p>
           </div>
         ) : (
           filtered.map((mem) => (
@@ -141,15 +144,15 @@ export function MemoryPage() {
                   <div className="flex items-center gap-2">
                     {mem.pinned && (
                       <span className="text-[10px] font-medium text-primary-400 bg-primary-600/15 px-1.5 py-0.5 rounded border border-primary-600/20 shrink-0">
-                        置顶
+                        {t('memory.pinned')}
                       </span>
                     )}
                     {mem.source === 'auto' && (
                       <span
                         className="text-[10px] font-medium text-ink-muted bg-dark-border px-1.5 py-0.5 rounded shrink-0"
-                        title="对话中自动记住"
+                        title={t('memory.autoTitle')}
                       >
-                        自动
+                        {t('memory.auto')}
                       </span>
                     )}
                     <h3 className="text-xs font-semibold text-ink-primary truncate">{mem.title}</h3>
@@ -170,7 +173,7 @@ export function MemoryPage() {
                     </div>
                   )}
                   <p className="text-[10px] text-ink-muted mt-1.5 font-mono">
-                    {new Date(mem.updated_at).toLocaleString('zh-CN', {
+                    {new Date(mem.updated_at).toLocaleString(dateLocale(), {
                       month: 'short',
                       day: 'numeric',
                       hour: '2-digit',
@@ -188,7 +191,7 @@ export function MemoryPage() {
                           ? 'text-primary-400 hover:text-primary-300'
                           : 'text-ink-muted hover:text-primary-400'
                       }`}
-                    title={mem.pinned ? '取消置顶' : '置顶'}
+                    title={mem.pinned ? t('memory.unpin') : t('memory.pin')}
                   >
                     <svg
                       aria-hidden="true"
@@ -205,7 +208,7 @@ export function MemoryPage() {
                     type="button"
                     onClick={() => deleteMemory(mem.id)}
                     className="p-1 rounded text-ink-muted hover:text-red-400 hover:bg-red-900/20 transition-colors"
-                    title="删除"
+                    title={t('memory.delete')}
                   >
                     <Trash className="w-3.5 h-3.5" />
                   </button>

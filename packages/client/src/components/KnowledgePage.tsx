@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import i18n from '../i18n/index.js';
 import { INPUT_CLS } from '../lib/styles.js';
 import { type KnowledgeDocument, useKbStore } from '../stores/knowledge-base.js';
 import { ChevronDown, Plus, Trash } from './Icons.js';
@@ -10,7 +12,11 @@ function statusBadge(status: string | null) {
     processing: 'bg-yellow-900/30 text-yellow-400 border-yellow-800/30',
     failed: 'bg-red-900/30 text-red-400 border-red-800/30',
   };
-  const labels: Record<string, string> = { ready: '就绪', processing: '处理中', failed: '失败' };
+  const labels: Record<string, string> = {
+    ready: i18n.t('knowledge.statusReady'),
+    processing: i18n.t('knowledge.statusProcessing'),
+    failed: i18n.t('knowledge.statusFailed'),
+  };
   return (
     <span
       className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium border ${colors[s] ?? colors.processing}`}
@@ -25,13 +31,16 @@ function DocRow({
   onDelete,
   onRetry,
 }: { doc: KnowledgeDocument; onDelete: () => void; onRetry?: () => void }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-dark-input border border-dark-border text-xs group">
       <div className="flex items-center gap-2 min-w-0">
         <span className="truncate text-ink-secondary font-mono">{doc.filename}</span>
         {statusBadge(doc.status)}
         {doc.chunk_count != null && doc.status === 'ready' && (
-          <span className="text-ink-muted shrink-0">{doc.chunk_count}块</span>
+          <span className="text-ink-muted shrink-0">
+            {t('knowledge.chunkCount', { count: doc.chunk_count })}
+          </span>
         )}
       </div>
       <div className="flex items-center gap-1 ml-2 shrink-0 opacity-0 group-hover:opacity-100">
@@ -41,7 +50,7 @@ function DocRow({
             onClick={onRetry}
             className="text-[10px] px-1.5 py-0.5 rounded text-amber-400 hover:bg-amber-900/20 border border-amber-800/30 transition-colors"
           >
-            重试
+            {t('common.retry')}
           </button>
         )}
         <button
@@ -57,6 +66,7 @@ function DocRow({
 }
 
 function KbCard({ kbId }: { kbId: string }) {
+  const { t } = useTranslation();
   const {
     kbs,
     documents,
@@ -116,12 +126,12 @@ function KbCard({ kbId }: { kbId: string }) {
             className="text-[11px] px-2 py-0.5 rounded-md bg-primary-600/15 text-primary-400
               border border-primary-600/20 hover:bg-primary-600/25 disabled:opacity-40 transition-all"
           >
-            {uploading ? '上传中…' : '上传'}
+            {uploading ? t('knowledge.uploading') : t('knowledge.upload')}
           </button>
           <button
             type="button"
             onClick={() => {
-              if (confirm(`删除知识库「${kb.name}」？此操作不可恢复。`)) deleteKb(kbId);
+              if (confirm(t('knowledge.deleteConfirm', { name: kb.name }))) deleteKb(kbId);
             }}
             className="p-1 text-ink-muted hover:text-red-400 hover:bg-red-900/20 rounded transition-colors"
           >
@@ -140,10 +150,10 @@ function KbCard({ kbId }: { kbId: string }) {
       {expanded && (
         <div className="px-3 pb-2.5 flex flex-col gap-1.5 border-t border-dark-border pt-2">
           {!docs ? (
-            <p className="text-[10px] text-ink-muted py-1 text-center">加载中…</p>
+            <p className="text-[10px] text-ink-muted py-1 text-center">{t('common.loading')}</p>
           ) : docs.length === 0 ? (
             <p className="text-[10px] text-ink-muted py-1 text-center">
-              暂无文档，点击"上传"导入 .txt / .md / .pdf
+              {t('knowledge.docsEmpty')}
             </p>
           ) : (
             docs.map((doc) => (
@@ -162,6 +172,7 @@ function KbCard({ kbId }: { kbId: string }) {
 }
 
 export function KnowledgePage() {
+  const { t } = useTranslation();
   const { kbs, loading, fetchKbs, createKb } = useKbStore();
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState('');
@@ -190,7 +201,7 @@ export function KnowledgePage() {
       {/* Header */}
       <div className="px-4 py-3 flex items-center justify-between border-b border-dark-border shrink-0">
         <span className="text-xs font-semibold text-ink-secondary tracking-wider uppercase font-mono">
-          知识库
+          {t('knowledge.title')}
         </span>
         <button
           type="button"
@@ -200,7 +211,7 @@ export function KnowledgePage() {
             hover:bg-primary-600/25 transition-all"
         >
           <Plus className="w-3 h-3" />
-          新建
+          {t('common.new')}
         </button>
       </div>
 
@@ -209,14 +220,14 @@ export function KnowledgePage() {
         <div className="px-3 py-3 border-b border-dark-border space-y-2 shrink-0 bg-dark-card/50">
           <input
             type="text"
-            placeholder="知识库名称"
+            placeholder={t('knowledge.namePlaceholder')}
             value={name}
             onChange={(e) => setName(e.target.value)}
             className={INPUT_CLS}
           />
           <input
             type="text"
-            placeholder="描述（可选）"
+            placeholder={t('knowledge.descriptionPlaceholder')}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             className={INPUT_CLS}
@@ -227,7 +238,7 @@ export function KnowledgePage() {
               onClick={() => setShowForm(false)}
               className="px-3 py-1.5 text-xs text-ink-muted hover:text-ink-secondary transition-colors"
             >
-              取消
+              {t('common.cancel')}
             </button>
             <button
               type="button"
@@ -236,7 +247,7 @@ export function KnowledgePage() {
               className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg
                 hover:bg-primary-500 disabled:opacity-40 transition-colors"
             >
-              {saving ? '创建中…' : '创建'}
+              {saving ? t('common.creating') : t('common.create')}
             </button>
           </div>
         </div>
@@ -258,8 +269,8 @@ export function KnowledgePage() {
           </div>
         ) : kbs.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-ink-muted pt-10">
-            <p className="text-xs">暂无知识库</p>
-            <p className="text-[10px] mt-0.5 opacity-60">点击右上角新建</p>
+            <p className="text-xs">{t('knowledge.empty')}</p>
+            <p className="text-[10px] mt-0.5 opacity-60">{t('knowledge.emptyHint')}</p>
           </div>
         ) : (
           kbs.map((kb) => <KbCard key={kb.id} kbId={kb.id} />)

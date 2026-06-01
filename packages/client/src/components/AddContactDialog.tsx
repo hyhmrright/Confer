@@ -1,8 +1,10 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useContactsStore } from '../stores/contacts.js';
 import { Bot, Loader, Search, X } from './Icons.js';
 
 export function AddContactDialog() {
+  const { t } = useTranslation();
   const { dialogOpen, closeDialog, lookupByDomain, addContact, loading, error } =
     useContactsStore();
   const [domain, setDomain] = useState('');
@@ -37,7 +39,7 @@ export function AddContactDialog() {
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden animate-fade-in">
         {/* Header */}
         <div className="flex justify-between items-center px-6 py-4 border-b border-gray-100">
-          <h2 className="text-lg font-semibold text-gray-800">添加联系人</h2>
+          <h2 className="text-lg font-semibold text-gray-800">{t('contacts.dialogTitle')}</h2>
           <button
             type="button"
             onClick={handleClose}
@@ -57,7 +59,7 @@ export function AddContactDialog() {
                 name="contact-domain"
                 value={domain}
                 onChange={(e) => setDomain(e.target.value)}
-                placeholder="输入域名，如 acme.com"
+                placeholder={t('contacts.domainPlaceholder')}
                 className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               />
             </div>
@@ -67,7 +69,7 @@ export function AddContactDialog() {
               className="px-4 py-2.5 bg-primary-600 text-white rounded-xl text-sm hover:bg-primary-700 disabled:opacity-50 transition-colors flex items-center gap-1.5"
             >
               {searching ? <Loader className="w-3.5 h-3.5" /> : <Search className="w-3.5 h-3.5" />}
-              搜索
+              {t('contacts.search')}
             </button>
           </form>
         </div>
@@ -92,7 +94,7 @@ export function AddContactDialog() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium text-gray-800">
-                      {agent.name ?? 'Unnamed agent'}
+                      {agent.name ?? t('contacts.unnamedAgent')}
                     </div>
                     <div className="text-xs text-gray-400 truncate">{agent.did}</div>
                     {agent.description && (
@@ -107,7 +109,7 @@ export function AddContactDialog() {
                     disabled={loading}
                     className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors shrink-0"
                   >
-                    添加
+                    {t('contacts.add')}
                   </button>
                 </div>
               ))}
@@ -118,7 +120,7 @@ export function AddContactDialog() {
             !error && (
               <div className="text-center py-8">
                 <Bot className="w-10 h-10 text-gray-200 mx-auto mb-2" />
-                <p className="text-sm text-gray-400">未找到 Agent</p>
+                <p className="text-sm text-gray-400">{t('contacts.notFound')}</p>
               </div>
             )
           )}

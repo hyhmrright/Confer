@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useFileAttachment } from '../hooks/useFileAttachment.js';
@@ -9,6 +10,7 @@ import { MessageBubble } from './MessageBubble.js';
 import { TypingIndicator } from './TypingIndicator.js';
 
 export function MessageView() {
+  const { t } = useTranslation();
   const {
     conversations,
     activeConversationId,
@@ -90,13 +92,13 @@ export function MessageView() {
             <Bot className="w-3.5 h-3.5 text-primary-400" />
           </div>
           <span className="text-sm font-medium text-ink-primary truncate">
-            {activeConversation?.name ?? '对话'}
+            {activeConversation?.name ?? t('message.title')}
           </span>
         </div>
         {streaming && (
           <div className="ml-auto flex items-center gap-1.5 text-xs text-primary-400 font-mono">
             <span className="w-1.5 h-1.5 rounded-full bg-primary-400 animate-pulse" />
-            {agentStatus ?? '思考中'}
+            {agentStatus ?? t('message.thinking')}
           </div>
         )}
       </div>
@@ -118,7 +120,7 @@ export function MessageView() {
         ) : messages.length === 0 && !streaming ? (
           <div className="flex flex-col items-center justify-center h-full text-ink-muted gap-2">
             <Bot className="w-8 h-8 opacity-30" />
-            <p className="text-sm text-ink-muted">开始对话</p>
+            <p className="text-sm text-ink-muted">{t('message.start')}</p>
           </div>
         ) : null}
 
@@ -192,7 +194,7 @@ export function MessageView() {
               onClick={openFilePicker}
               disabled={sending || streaming}
               className="p-2 text-ink-muted hover:text-primary-400 hover:bg-primary-600/10 rounded-lg disabled:opacity-30 transition-colors shrink-0"
-              title="上传文件"
+              title={t('message.uploadFile')}
             >
               <Paperclip className="w-4 h-4" />
             </button>
@@ -203,7 +205,7 @@ export function MessageView() {
               value={input}
               onChange={handleInput}
               onKeyDown={handleKeyDown}
-              placeholder="输入消息… (Enter 发送，Shift+Enter 换行)"
+              placeholder={t('message.composerPlaceholder')}
               rows={1}
               className="flex-1 bg-transparent text-ink-primary text-sm leading-relaxed resize-none
                 focus:outline-none placeholder:text-ink-muted py-1.5 px-1 max-h-40 scrollbar-thin"
@@ -222,7 +224,7 @@ export function MessageView() {
           </div>
         </div>
         <p className="text-center text-[10px] text-ink-muted mt-1.5 font-mono">
-          Enter 发送 · Shift+Enter 换行
+          {t('message.sendHint')}
         </p>
       </div>
     </div>

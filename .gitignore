@@ -31,3 +31,7 @@ packages/client/src-tauri/gen/
 
 # Test
 coverage/
+
+# harness scratch (confer-feature orchestrator)
+_workspace/
+_workspace_prev/

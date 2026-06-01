@@ -1,9 +1,11 @@
 import { useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useChatStore } from '../stores/chat.js';
 import { useContactsStore } from '../stores/contacts.js';
 import { Bot, Trash } from './Icons.js';
 
 export function ContactList() {
+  const { t } = useTranslation();
   const { contacts, loadContacts, removeContact } = useContactsStore();
   const { createConversation, selectConversation } = useChatStore();
 
@@ -12,7 +14,10 @@ export function ContactList() {
   }, [loadContacts]);
 
   const handleStartChat = async (peerId: string, name?: string) => {
-    const id = await createConversation(peerId, name ? `与 ${name} 的对话` : undefined);
+    const id = await createConversation(
+      peerId,
+      name ? t('contacts.chatName', { name }) : undefined,
+    );
     await selectConversation(id);
   };
 
@@ -20,8 +25,8 @@ export function ContactList() {
     return (
       <div className="flex-1 flex flex-col items-center justify-center text-ink-muted p-6">
         <Bot className="w-10 h-10 mb-3 opacity-40" />
-        <p className="text-sm text-center">还没有联系人</p>
-        <p className="text-xs text-center mt-1">点击上方按钮添加</p>
+        <p className="text-sm text-center">{t('contacts.empty')}</p>
+        <p className="text-xs text-center mt-1">{t('contacts.emptyHint')}</p>
       </div>
     );
   }
@@ -43,7 +48,7 @@ export function ContactList() {
             </div>
             <div className="flex-1 min-w-0">
               <div className="text-sm font-medium text-ink-primary truncate">
-                {contact.alias ?? contact.peer.name ?? 'Unnamed'}
+                {contact.alias ?? contact.peer.name ?? t('contacts.unnamed')}
               </div>
               <div className="text-xs text-ink-muted truncate">
                 {contact.peer.organization ?? contact.peer.did}

@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TranslationKey } from '../i18n/index.js';
 import { api } from '../lib/api.js';
 import { Shield } from './Icons.js';
 
@@ -17,10 +19,10 @@ const levelColor: Record<string, string> = {
   L3: 'border-red-300 bg-red-50',
 };
 
-const levelLabel: Record<string, string> = {
-  L1: '低风险',
-  L2: '中风险',
-  L3: '高风险',
+const levelLabelKey: Record<string, TranslationKey> = {
+  L1: 'permission.levelLow',
+  L2: 'permission.levelMedium',
+  L3: 'permission.levelHigh',
 };
 
 export function PermissionCard({
@@ -30,6 +32,7 @@ export function PermissionCard({
   request: PermissionRequest;
   onDecided?: () => void;
 }) {
+  const { t } = useTranslation();
   const [deciding, setDeciding] = useState(false);
   const [decided, setDecided] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -46,14 +49,14 @@ export function PermissionCard({
       onDecided?.();
     } catch {
       setDeciding(false);
-      setError('操作失败，请重试');
+      setError(t('permission.decideError'));
     }
   };
 
   const borderClass = levelColor[request.level] ?? 'border-gray-300 bg-gray-50';
 
   if (decided) {
-    const label = decided.includes('allow') ? '已允许' : '已拒绝';
+    const label = decided.includes('allow') ? t('permission.allowed') : t('permission.denied');
     const color = decided.includes('allow') ? 'text-green-600' : 'text-red-600';
     return (
       <div className={`rounded-lg border-2 px-4 py-3 ${borderClass} opacity-60`}>
@@ -73,7 +76,9 @@ export function PermissionCard({
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-1">
             <span className="text-xs font-medium text-gray-500">{request.level}</span>
-            <span className="text-xs text-gray-400">{levelLabel[request.level]}</span>
+            <span className="text-xs text-gray-400">
+              {levelLabelKey[request.level] ? t(levelLabelKey[request.level]) : request.level}
+            </span>
           </div>
           <p className="text-sm text-gray-700">{request.description}</p>
         </div>
@@ -86,7 +91,7 @@ export function PermissionCard({
           disabled={deciding}
           className="px-3 py-1 text-xs rounded-md border border-green-300 text-green-700 hover:bg-green-100 disabled:opacity-50"
         >
-          允许一次
+          {t('permission.allowOnce')}
         </button>
         <button
           type="button"
@@ -94,7 +99,7 @@ export function PermissionCard({
           disabled={deciding}
           className="px-3 py-1 text-xs rounded-md bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
         >
-          始终允许
+          {t('permission.allowAlways')}
         </button>
         <button
           type="button"
@@ -102,7 +107,7 @@ export function PermissionCard({
           disabled={deciding}
           className="px-3 py-1 text-xs rounded-md border border-red-300 text-red-700 hover:bg-red-100 disabled:opacity-50"
         >
-          拒绝
+          {t('permission.deny')}
         </button>
       </div>
     </div>

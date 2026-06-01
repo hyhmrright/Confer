@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { z } from 'zod';
+import type { TranslationKey } from '../i18n/index.js';
 import { setOnTokenRefreshed } from '../lib/api.js';
 import { permissionRequestSchema } from '../lib/schemas.js';
 import { connectWs, disconnectWs, onWsMessage, reconnectWs } from '../lib/ws.js';
@@ -9,6 +11,7 @@ import { useChatStore } from '../stores/chat.js';
 import { usePermissionsStore } from '../stores/permissions.js';
 import { AddContactDialog } from './AddContactDialog.js';
 import { BookOpen, Database, MessageCircle, Settings, Users } from './Icons.js';
+import { LanguageSwitcherCompact } from './LanguageSwitcher.js';
 import { MessageView } from './MessageView.js';
 import { PermissionInbox } from './PermissionInbox.js';
 import { Sidebar } from './Sidebar.js';
@@ -40,11 +43,11 @@ const wsAgentStatusSchema = z.object({
 });
 
 const NAV_ITEMS = [
-  { id: 'conversations' as Tab, Icon: MessageCircle, label: '对话' },
-  { id: 'contacts' as Tab, Icon: Users, label: '联系人' },
-  { id: 'memory' as Tab, Icon: BookOpen, label: '记忆' },
-  { id: 'knowledge' as Tab, Icon: Database, label: '知识库' },
-];
+  { id: 'conversations' as Tab, Icon: MessageCircle, labelKey: 'nav.conversations' },
+  { id: 'contacts' as Tab, Icon: Users, labelKey: 'nav.contacts' },
+  { id: 'memory' as Tab, Icon: BookOpen, labelKey: 'nav.memory' },
+  { id: 'knowledge' as Tab, Icon: Database, labelKey: 'nav.knowledge' },
+] as const satisfies { id: Tab; Icon: typeof MessageCircle; labelKey: TranslationKey }[];
 
 function NavRail({
   tab,
@@ -57,6 +60,7 @@ function NavRail({
   initials: string;
   onSettings: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <nav className="w-[52px] shrink-0 flex flex-col items-center py-3 gap-0.5 bg-dark-nav border-r border-dark-border">
       {/* Logo */}
@@ -65,14 +69,14 @@ function NavRail({
       </div>
 
       {/* Navigation */}
-      {NAV_ITEMS.map(({ id, Icon, label }) => {
+      {NAV_ITEMS.map(({ id, Icon, labelKey }) => {
         const active = tab === id;
         return (
           <button
             type="button"
             key={id}
             onClick={() => setTab(id)}
-            title={label}
+            title={t(labelKey)}
             className={`relative w-9 h-9 flex items-center justify-center rounded-lg transition-all duration-150 group
               ${
                 active
@@ -90,11 +94,14 @@ function NavRail({
 
       <div className="flex-1" />
 
+      {/* Language */}
+      <LanguageSwitcherCompact />
+
       {/* Settings */}
       <button
         type="button"
         onClick={onSettings}
-        title="设置"
+        title={t('nav.settings')}
         className="w-9 h-9 flex items-center justify-center rounded-lg text-ink-muted hover:text-ink-secondary hover:bg-dark-hover transition-colors"
       >
         <Settings className="w-[18px] h-[18px]" />
@@ -103,7 +110,7 @@ function NavRail({
       {/* Avatar / logout */}
       <button
         type="button"
-        title="账号"
+        title={t('nav.account')}
         className="w-7 h-7 mt-1 rounded-full bg-primary-600/20 border border-primary-600/30 flex items-center justify-center hover:bg-primary-600/30 transition-colors"
       >
         <span className="text-[11px] font-semibold text-primary-400 font-mono">{initials}</span>
@@ -113,6 +120,7 @@ function NavRail({
 }
 
 export function ChatLayout() {
+  const { t } = useTranslation();
   const [tab, setTab] = useState<Tab>('conversations');
   const { user, logout } = useAuthStore();
   const { loadConversations, activeConversationId, addMessage, setAgentStatus } = useChatStore();
@@ -190,8 +198,8 @@ export function ChatLayout() {
             <MessageCircle className="w-6 h-6 text-ink-muted opacity-50" />
           </div>
           <div className="text-center">
-            <p className="text-sm font-medium text-ink-secondary">选择或创建一个对话</p>
-            <p className="text-xs text-ink-muted mt-0.5">从左侧点击对话，或新建一个</p>
+            <p className="text-sm font-medium text-ink-secondary">{t('nav.emptyTitle')}</p>
+            <p className="text-xs text-ink-muted mt-0.5">{t('nav.emptyHint')}</p>
           </div>
         </div>
       )}

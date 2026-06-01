@@ -1,8 +1,11 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { dateLocale } from '../i18n/index.js';
 import { useChatStore } from '../stores/chat.js';
 import { Bot, Plus, Search, Trash } from './Icons.js';
 
 export function ConversationsPanel() {
+  const { t } = useTranslation();
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const {
@@ -27,7 +30,7 @@ export function ConversationsPanel() {
       {/* Header */}
       <div className="px-4 py-3 flex items-center justify-between border-b border-dark-border shrink-0">
         <span className="text-xs font-semibold text-ink-secondary tracking-wider uppercase font-mono">
-          对话
+          {t('conversations.title')}
         </span>
         <button
           type="button"
@@ -37,7 +40,7 @@ export function ConversationsPanel() {
             hover:bg-primary-600/25 hover:border-primary-600/35 transition-all"
         >
           <Plus className="w-3 h-3" />
-          新对话
+          {t('conversations.new')}
         </button>
       </div>
 
@@ -49,7 +52,7 @@ export function ConversationsPanel() {
             name="conversation-search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="搜索..."
+            placeholder={t('conversations.searchPlaceholder')}
             className="w-full pl-8 pr-3 py-1.5 bg-dark-input text-ink-secondary text-xs rounded-md
               border border-dark-border placeholder:text-ink-muted
               focus:outline-none focus:border-primary-600/40 transition-colors"
@@ -61,7 +64,7 @@ export function ConversationsPanel() {
       <div className="flex-1 overflow-y-auto scrollbar-thin">
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full py-12 text-ink-muted">
-            <p className="text-xs">暂无对话</p>
+            <p className="text-xs">{t('conversations.empty')}</p>
           </div>
         ) : (
           filtered.map((conv) => {
@@ -95,10 +98,10 @@ export function ConversationsPanel() {
                       className={`text-xs font-medium truncate transition-colors
                       ${active ? 'text-ink-primary' : 'text-ink-secondary'}`}
                     >
-                      {conv.name ?? `对话 ${conv.id.slice(0, 6)}`}
+                      {conv.name ?? t('conversations.untitled', { id: conv.id.slice(0, 6) })}
                     </p>
                     <p className="text-[10px] text-ink-muted mt-0.5 font-mono">
-                      {new Date(conv.updated_at).toLocaleString('zh-CN', {
+                      {new Date(conv.updated_at).toLocaleString(dateLocale(), {
                         month: 'short',
                         day: 'numeric',
                         hour: '2-digit',
@@ -113,7 +116,7 @@ export function ConversationsPanel() {
                     onClick={() => deleteConversation(conv.id)}
                     className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded
                       text-ink-muted hover:text-red-400 hover:bg-red-900/20 transition-colors"
-                    title="删除"
+                    title={t('conversations.delete')}
                   >
                     <Trash className="w-3.5 h-3.5" />
                   </button>
