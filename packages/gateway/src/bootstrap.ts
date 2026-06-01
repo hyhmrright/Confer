@@ -1,13 +1,38 @@
 import { exportPrivateKey, generateEd25519KeyPair, publicKeyToMultibase } from '@confer/identity';
 import { encrypt, newId } from '@confer/shared';
-import { eq } from 'drizzle-orm';
+import { and, eq, inArray, ne } from 'drizzle-orm';
 import { getDb } from './db/connection.js';
-import { keypairs } from './db/schema.js';
+import { keypairs, users } from './db/schema.js';
 import { getEnv } from './env.js';
+
+// Promote the accounts named in ADMIN_USERNAMES to the 'admin' role. Idempotent:
+// accounts already admin (or not yet registered) are left untouched. This is the
+// bootstrap path for the first admin — declarative and replayable.
+export async function bootstrapAdmins(): Promise<void> {
+  const db = getDb();
+  const env = getEnv();
+
+  const names = env.ADMIN_USERNAMES.split(',')
+    .map((n) => n.trim())
+    .filter((n) => n.length > 0);
+  if (names.length === 0) return;
+
+  const promoted = await db
+    .update(users)
+    .set({ role: 'admin', updated_at: new Date() })
+    .where(and(inArray(users.username, names), ne(users.role, 'admin')))
+    .returning({ username: users.username });
+
+  if (promoted.length > 0) {
+    console.log(`Promoted to admin: ${promoted.map((u) => u.username).join(', ')}`);
+  }
+}
 
 export async function bootstrap(): Promise<void> {
   const db = getDb();
   const env = getEnv();
+
+  await bootstrapAdmins();
 
   const [existing] = await db
     .select()

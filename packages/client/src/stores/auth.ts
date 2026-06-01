@@ -9,6 +9,7 @@ interface User {
   display_name?: string;
   avatar_url?: string;
   did: string;
+  role?: string;
 }
 
 interface AuthState {

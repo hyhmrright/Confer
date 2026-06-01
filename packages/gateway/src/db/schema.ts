@@ -23,6 +23,15 @@ export const users = pgTable(
     avatar_url: text('avatar_url'),
     did: varchar('did', { length: 255 }).unique().notNull(),
     password_hash: text('password_hash'),
+    // Two-level access role: 'member' (default) or 'admin'. The admin role
+    // gates the /api/v1/admin/* surface; it is checked per-request by
+    // adminMiddleware (never carried in the JWT) so changes take effect at once.
+    role: varchar('role', { length: 16 }).notNull().default('member'),
+    // Account lifecycle flag: 'active' (default) or 'disabled'. Disabling soft
+    // -locks the account — auth (login/refresh) and adminMiddleware reject it,
+    // and its sessions are revoked on disable. Distinct from deleted_at (the
+    // account-deletion tombstone).
+    status: varchar('status', { length: 16 }).notNull().default('active'),
     preferences_json: jsonb('preferences_json').default({}),
     llm_keys_json: jsonb('llm_keys_json').default({}),
     created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

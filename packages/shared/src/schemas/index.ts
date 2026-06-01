@@ -1,4 +1,5 @@
 export * from './user.js';
+export * from './admin.js';
 export * from './agent.js';
 export * from './peer.js';
 export * from './conversation.js';

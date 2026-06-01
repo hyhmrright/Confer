@@ -77,6 +77,7 @@ anyone else.
 | `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` | `confer` / `confer-secret` | Object storage credentials. |
 | `EXPOSE_PORT` | `80` | Host port the web UI binds to. Set e.g. `8080` if 80 is taken. |
 | `TAVILY_API_KEY` | empty | Optional fallback for web search; a per-user key in Settings takes precedence. |
+| `ADMIN_USERNAMES` | empty | Comma-separated usernames auto-promoted to the `admin` role on gateway startup. The accounts must already be registered. Admins log in with their normal account password and get the admin panel; they can then promote others from the UI. |
 
 > LLM / embedding / Tavily keys are **not** set in `.env` — they live encrypted per
 > user in the database and are configured through the Settings UI. The `.env` keys

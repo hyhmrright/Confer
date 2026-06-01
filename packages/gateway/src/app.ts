@@ -3,6 +3,7 @@ import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { errorHandler } from './middleware/error-handler.js';
 import { a2aRoutes } from './routes/a2a.js';
+import { adminRoutes } from './routes/admin.js';
 import { agentFactsRoutes } from './routes/agent-facts.js';
 import { authRoutes } from './routes/auth.js';
 import { consultRoutes } from './routes/consult.js';
@@ -39,6 +40,7 @@ app.route('/api/v1/stream', streamRoutes);
 app.route('/api/v1/permissions', permissionRoutes);
 app.route('/api/v1/memories', memoriesRoutes);
 app.route('/api/v1/knowledge-bases', knowledgeBasesRoutes);
+app.route('/api/v1/admin', adminRoutes);
 
 app.route('/a2a/v1', a2aRoutes);
 app.route('/a2a/v1', agentFactsRoutes);

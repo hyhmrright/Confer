@@ -10,7 +10,7 @@ import { useAuthStore } from '../stores/auth.js';
 import { useChatStore } from '../stores/chat.js';
 import { usePermissionsStore } from '../stores/permissions.js';
 import { AddContactDialog } from './AddContactDialog.js';
-import { BookOpen, Database, MessageCircle, Settings, Users } from './Icons.js';
+import { BookOpen, Database, MessageCircle, Settings, Shield, Users } from './Icons.js';
 import { LanguageSwitcherCompact } from './LanguageSwitcher.js';
 import { MessageView } from './MessageView.js';
 import { PermissionInbox } from './PermissionInbox.js';
@@ -53,11 +53,15 @@ function NavRail({
   tab,
   setTab,
   initials,
+  isAdmin,
+  onAdmin,
   onSettings,
 }: {
   tab: Tab;
   setTab: (t: Tab) => void;
   initials: string;
+  isAdmin: boolean;
+  onAdmin: () => void;
   onSettings: () => void;
 }) {
   const { t } = useTranslation();
@@ -96,6 +100,18 @@ function NavRail({
 
       {/* Language */}
       <LanguageSwitcherCompact />
+
+      {/* Admin (admins only) */}
+      {isAdmin && (
+        <button
+          type="button"
+          onClick={onAdmin}
+          title={t('nav.admin')}
+          className="w-9 h-9 flex items-center justify-center rounded-lg text-ink-muted hover:text-ink-secondary hover:bg-dark-hover transition-colors"
+        >
+          <Shield className="w-[18px] h-[18px]" />
+        </button>
+      )}
 
       {/* Settings */}
       <button
@@ -179,6 +195,8 @@ export function ChatLayout() {
         tab={tab}
         setTab={setTab}
         initials={initials}
+        isAdmin={user?.role === 'admin'}
+        onAdmin={() => navigate('/admin')}
         onSettings={() => navigate('/settings')}
       />
 
