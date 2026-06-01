@@ -130,3 +130,4 @@ Local infra via Docker: `docker compose up -d` starts PostgreSQL (5432), Redis (
 | 日期 | 变更内容 | 对象 | 事由 |
 |------|----------|------|------|
 | 2026-06-01 | 初始构成（3 人功能开发团队 + confer-feature 编排器） | 全体 | 已有 harness 仅含审查/运维，缺开发执行团队与编排器 |
+| 2026-06-01 | reviewer-qa 增加 client build / env 透传 / 迁移落库 三项 QA 检查 | agents/confer-reviewer-qa.md | admin 3a 部署时才发现 client 严格 build 与 compose env 透传漏检 |
