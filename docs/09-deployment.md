@@ -156,8 +156,35 @@ on the public internet:
 - Set `PUBLIC_HOST` (in `.env`) to the externally reachable host so DID documents and
   AgentFacts advertise the correct address.
 - Change every default secret (`JWT_SECRET`, `ENCRYPTION_KEY`, DB and MinIO passwords).
-- Registration is open by default — decide whether that's acceptable or whether you
-  front it with an invite/allowlist.
+- Registration is open by default. An admin can close it at any time from the
+  **Admin → Config** tab (`registration_open`), or front it with an invite/allowlist.
+
+### Free public instance on Oracle Cloud (Always Free)
+
+The cheapest way to run a always-on public test instance is Oracle Cloud's
+**Always Free** ARM tier (4 OCPU / 24 GB / 10 TB egress, no time limit). The whole
+stack builds and runs on `arm64`.
+
+1. Create a VM: shape **VM.Standard.A1.Flex** (up to 4 OCPU / 24 GB), image
+   **Ubuntu 22.04+ (arm64)**. ARM capacity is tight in popular regions — pick a
+   large region (Ashburn, London) and retry if you hit "out of capacity".
+2. In the Console, open the VCN **security list / NSG** to allow inbound **TCP 80**
+   (and 443 later if you add TLS).
+3. SSH in and run the bootstrap (installs Docker, opens the host firewall, clones,
+   generates secrets, builds and starts the stack):
+
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/hyhmrright/Confer/main/infra/oracle-bootstrap.sh | bash
+   ```
+
+   Or clone first and run `bash infra/oracle-bootstrap.sh`. It is idempotent.
+4. Open `http://<vm-ip>/`, register, then grant yourself admin: set
+   `ADMIN_USERNAMES=<you>` in `~/Confer/.env` and
+   `docker compose -f docker-compose.prod.yml up -d gateway`.
+
+This serves over plain HTTP by IP — fine for testing. For a stable `did:web`
+identity and federation, point a domain at the IP, set `PUBLIC_HOST`, and add TLS
+(see above).
 
 ## Troubleshooting
 
