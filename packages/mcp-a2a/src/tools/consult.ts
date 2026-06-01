@@ -29,7 +29,8 @@ export interface AskResult {
 }
 
 export async function askAgent(client: GatewayClient, input: AskInput): Promise<AskResult> {
-  const initiated = await client.post<InitiateResponse>(`/api/v1/consult/${input.peerId}`, {
+  const peer = encodeURIComponent(input.peerId);
+  const initiated = await client.post<InitiateResponse>(`/api/v1/consult/${peer}`, {
     question: input.question,
     code_context: input.codeContext,
     language: input.language,
@@ -53,7 +54,7 @@ export async function askAgent(client: GatewayClient, input: AskInput): Promise<
   }
 
   const reply = await client.get<ReplyResponse>(
-    `/api/v1/consult/${initiated.conversation_id}/reply?after=${initiated.message_id}&wait=${input.waitSeconds}`,
+    `/api/v1/consult/${encodeURIComponent(initiated.conversation_id)}/reply?after=${encodeURIComponent(initiated.message_id)}&wait=${input.waitSeconds}`,
   );
   if (reply.status === 'answered') {
     return {
@@ -78,5 +79,5 @@ export async function getConversation(
   client: GatewayClient,
   conversationId: string,
 ): Promise<unknown> {
-  return client.get(`/api/v1/consult/${conversationId}`);
+  return client.get(`/api/v1/consult/${encodeURIComponent(conversationId)}`);
 }

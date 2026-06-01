@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { AppError, consultRequestSchema, newId } from '@confer/shared';
 import { and, asc, eq, gt, or } from 'drizzle-orm';
 import { Hono } from 'hono';
@@ -12,45 +13,55 @@ consultRoutes.use('/*', authMiddleware);
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-// Find an existing consult conversation with this peer, or create one with the
-// user + peer as participants. Returns the conversation id.
+const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+
+// Deterministic 26-char (ULID-shaped) conversation id for a (user, peer) pair.
+// Making the id derivable means concurrent first-consults collide on the
+// primary key instead of racing to create two duplicate threads.
+function consultConversationId(userId: string, peerId: string): string {
+  const hash = createHash('sha256').update(`consult:${userId}:${peerId}`).digest();
+  let n = 0n;
+  for (let i = 0; i < 16; i++) n = (n << 8n) | BigInt(hash[i] ?? 0);
+  let out = '';
+  for (let i = 0; i < 26; i++) {
+    out = CROCKFORD[Number(n & 31n)] + out;
+    n >>= 5n;
+  }
+  return out;
+}
+
+// Return the consult conversation for this (user, peer), creating it on first
+// use. The conversation id is deterministic and the insert is conflict-safe, so
+// concurrent callers converge on one thread (the loser's insert is a no-op).
 async function getOrCreateConsultConversation(userId: string, peerId: string): Promise<string> {
   const db = getDb();
-  const [existing] = await db
-    .select({ id: conversations.id })
-    .from(conversations)
-    .innerJoin(
-      conversationParticipants,
-      eq(conversationParticipants.conversation_id, conversations.id),
-    )
-    .where(
-      and(
-        eq(conversations.type, 'consult'),
-        eq(conversations.created_by, userId),
-        eq(conversationParticipants.peer_id, peerId),
-      ),
-    )
-    .limit(1);
-  if (existing) return existing.id;
+  const convId = consultConversationId(userId, peerId);
+  const inserted = await db
+    .insert(conversations)
+    .values({ id: convId, type: 'consult', created_by: userId })
+    .onConflictDoNothing()
+    .returning({ id: conversations.id });
 
-  const convId = newId();
-  await db.insert(conversations).values({ id: convId, type: 'consult', created_by: userId });
-  await db.insert(conversationParticipants).values([
-    {
-      id: newId(),
-      conversation_id: convId,
-      participant_type: 'user',
-      user_id: userId,
-      role: 'owner',
-    },
-    {
-      id: newId(),
-      conversation_id: convId,
-      participant_type: 'peer_agent',
-      peer_id: peerId,
-      role: 'member',
-    },
-  ]);
+  // Only the caller that actually created the row seeds participants, so they
+  // are never duplicated.
+  if (inserted.length > 0) {
+    await db.insert(conversationParticipants).values([
+      {
+        id: newId(),
+        conversation_id: convId,
+        participant_type: 'user',
+        user_id: userId,
+        role: 'owner',
+      },
+      {
+        id: newId(),
+        conversation_id: convId,
+        participant_type: 'peer_agent',
+        peer_id: peerId,
+        role: 'member',
+      },
+    ]);
+  }
   return convId;
 }
 
@@ -117,6 +128,8 @@ consultRoutes.post('/:peerId', async (c) => {
     .set({ updated_at: new Date() })
     .where(eq(conversations.id, convId));
 
+  // A failed question stays in the thread on purpose (auditable); clients can
+  // tell it apart by its delivery_status, which the history endpoint returns.
   if (!result.ok) {
     return c.json(
       { conversation_id: convId, message_id: msgId, status: 'failed', error: result.error },
@@ -146,7 +159,13 @@ consultRoutes.get('/:conversationId/reply', async (c) => {
   let afterTs = new Date(0);
   let afterCursorId = '';
   if (afterId) {
-    const [m] = await db.select().from(messages).where(eq(messages.id, afterId)).limit(1);
+    // Scope the cursor lookup to this conversation: a message id from another
+    // thread must not silently set the cursor.
+    const [m] = await db
+      .select()
+      .from(messages)
+      .where(and(eq(messages.id, afterId), eq(messages.conversation_id, convId)))
+      .limit(1);
     if (!m) throw new AppError('unknown_cursor', 'after message not found in this thread', 400);
     afterTs = m.created_at;
     afterCursorId = m.id;
@@ -165,6 +184,8 @@ consultRoutes.get('/:conversationId/reply', async (c) => {
     )
     .limit(1);
   const peerId = peerParticipant?.peer_id ?? null;
+  // No peer participant => nothing can answer this thread; don't poll.
+  if (!peerId) return c.json({ status: 'pending' });
 
   const cursor = afterCursorId
     ? or(
@@ -182,7 +203,7 @@ consultRoutes.get('/:conversationId/reply', async (c) => {
         and(
           eq(messages.conversation_id, convId),
           eq(messages.sender_type, 'peer_agent'),
-          peerId ? eq(messages.sender_id, peerId) : undefined,
+          eq(messages.sender_id, peerId),
           cursor,
         ),
       )

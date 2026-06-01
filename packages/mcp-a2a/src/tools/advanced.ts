@@ -42,6 +42,8 @@ export async function checkReply(
   client: GatewayClient,
   input: { conversationId: string; afterMessageId?: string },
 ): Promise<ReplyResponse> {
-  const after = input.afterMessageId ? `after=${input.afterMessageId}&` : '';
-  return client.get<ReplyResponse>(`/api/v1/consult/${input.conversationId}/reply?${after}wait=0`);
+  const after = input.afterMessageId ? `after=${encodeURIComponent(input.afterMessageId)}&` : '';
+  return client.get<ReplyResponse>(
+    `/api/v1/consult/${encodeURIComponent(input.conversationId)}/reply?${after}wait=0`,
+  );
 }
