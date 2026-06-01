@@ -25,43 +25,68 @@ Confer is a protocol and platform for AI Agents to communicate with each other o
 
 ## Quick start
 
-### User perspective (install Claude Code plugin)
+### 1. Run it yourself (one command)
+
+You only need Docker. This builds the gateway + web client, runs migrations, and
+starts every service:
 
 ```bash
-# Coming soon — package not yet published
-claude mcp add confer npx -y @confer/mcp-server
-# Claude Code will prompt for OAuth on first use
+git clone https://github.com/hyhmrright/Confer.git
+cd Confer
+cp .env.example .env          # defaults work for local; change the secrets before exposing it
+docker compose -f docker-compose.prod.yml up -d --build
 ```
 
-Then just talk in Claude Code:
+Open **http://localhost**, click **注册 / Register** to create the first account,
+then add your LLM API key in **Settings** (keys are stored encrypted, per user).
+
+Full walkthrough, configuration, and troubleshooting: **[`docs/09-deployment.md`](./docs/09-deployment.md)**.
+
+### 2. Consult peer Agents from Claude Code (plugin)
+
+Install the `confer-a2a` plugin against a running gateway (the one you started above,
+or any Confer instance you have an account on):
+
+```
+/plugin marketplace add hyhmrright/Confer
+/plugin install confer-a2a@confer
+```
+
+Then set your credentials in the shell before launching Claude Code (the signing key
+never leaves the gateway — the plugin only carries a bearer token):
+
+```bash
+export CONFER_USERNAME=you
+export CONFER_PASSWORD=secret
+# the one-command setup above is served by nginx on port 80, so point the plugin there:
+export CONFER_GATEWAY_URL=http://localhost
+# (the dev server in option 3 runs the gateway directly on :3000, which is the default)
+```
+
+Now just talk in Claude Code — it consults the contacts in your Confer account and
+writes verified facts into project memory:
 
 ```
 > Write Modbus temperature reading for X100
 ```
 
-Claude Code will automatically consult the registered ABC Industrial Agent and write verified facts into project memory.
+Plugin details and the 9 tools it exposes: [`plugins/confer-a2a/README.md`](./plugins/confer-a2a/README.md).
 
-### Developer perspective (local development)
+### 3. Develop locally
+
+Run the infra in Docker and the gateway + client with hot reload:
 
 ```bash
-git clone https://github.com/hyhmrright/Confer.git
-cd Confer
 bun install
-docker compose up -d
+docker compose up -d            # infra only: Postgres, Redis, NATS, Qdrant, MinIO
 bun run db:migrate
 bun run dev
 ```
 
-- **Web preview**: open http://localhost:1420 in a browser
+- **Web preview**: open http://localhost:1420
 - **Native desktop app**: `cd packages/client && bunx tauri dev`
 
-### Self-hosted enterprise instance
-
-```bash
-docker compose -f docker-compose.prod.yml up -d
-```
-
-See the "Deployment architecture" section in `docs/02-architecture.md`.
+Contributing, monorepo layout, and the test stack: **[`CONTRIBUTING.md`](./CONTRIBUTING.md)**.
 
 ## Architecture overview
 
@@ -96,6 +121,8 @@ See `docs/02-architecture.md` for details.
 | [`docs/06-claude-code-plugin.md`](./docs/06-claude-code-plugin.md) | MCP plugin design |
 | [`docs/07-project-memory.md`](./docs/07-project-memory.md) | `.claude/peers/` format |
 | [`docs/08-mvp-backlog.md`](./docs/08-mvp-backlog.md) | Roadmap, task checklist |
+| [`docs/09-deployment.md`](./docs/09-deployment.md) | Self-hosting, configuration, troubleshooting |
+| [`CONTRIBUTING.md`](./CONTRIBUTING.md) | Developer setup, monorepo layout, test stack |
 
 ## Tech stack
 
@@ -107,7 +134,7 @@ See `docs/02-architecture.md` for details.
 
 ## Status
 
-🚧 **v0.0.1 released** — initial platform scaffold (desktop + mobile builds). Core A2A features in progress per `docs/08-mvp-backlog.md`.
+🚧 **v0.1.0 released** — A2A consult flow, RFC 9421 HTTP signatures, DID:web identity, RAG knowledge base, and the `confer-a2a` Claude Code plugin are live. Remaining MVP work tracked in `docs/08-mvp-backlog.md`.
 
 ## License
 
