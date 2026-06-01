@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "bun run ./src/server.ts",
     "build": "bun build ./src/server.ts --outdir ./dist --target bun",
+    "build:plugin": "bun build ./src/server.ts --target=node --outfile=../../plugins/confer-a2a/dist/server.mjs",
     "test": "bun test"
   },
   "dependencies": {

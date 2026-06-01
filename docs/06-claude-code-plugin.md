@@ -16,8 +16,10 @@
 
 ## 安装
 
+> 下方 `claude mcp add … @confer/mcp-server` + OAuth 是**目标愿景**。v0.1 的实际安装见本节末「当前实现 (v0.1)」——已落地的是 env-var 鉴权的 `confer-a2a` plugin。
+
 ```bash
-# 用户视角
+# 用户视角（愿景）
 claude mcp add confer npx -y @confer/mcp-server
 
 # 首次启动时引导 OAuth 绑定 Confer 账号
@@ -50,6 +52,25 @@ did       = "did:web:mycompany.com:agents:sdk-team"
 authority = ["powersupply-lib", "internal-bus", "auth-service"]
 trust     = "high"
 ```
+
+### 当前实现 (v0.1)
+
+愿景里的 OAuth + npx 包尚未落地。已实现的是 **plugin marketplace 一键安装**，鉴权用环境变量（签名私钥始终留在 gateway，不下放）：
+
+```bash
+# 1. 加 marketplace 并安装 plugin（本仓库即 marketplace）
+/plugin marketplace add hyhmrright/Confer
+/plugin install confer-a2a@confer
+
+# 2. 在 shell 导出账号（plugin 从环境读取，凭据不写入仓库）
+export CONFER_USERNAME=you
+export CONFER_PASSWORD=secret
+# 可选：export CONFER_GATEWAY_URL=http://localhost:3000  (默认值)
+```
+
+plugin 捆绑自包含 bundle（`plugins/confer-a2a/dist/server.mjs`，裸 `node` 即可跑，无需 monorepo 或 `bun`），由 `packages/mcp-a2a` 经 `bun run --filter @confer/mcp-a2a build:plugin` 生成。提供 9 个工具（`list_agents` / `ask_agent` / `follow_up` / `ask_multiple` / `check_reply` 等），细节见 `plugins/confer-a2a/README.md` 与 `packages/mcp-a2a/README.md`。
+
+仓库内开发者也可不装 plugin，直接用根目录 `.mcp.json`（指向源码 `server.ts`）或 `claude mcp add`。
 
 ## 暴露的 MCP 工具
 

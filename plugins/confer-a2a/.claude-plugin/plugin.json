@@ -1,0 +1,11 @@
+{
+  "name": "confer-a2a",
+  "version": "0.1.0",
+  "description": "Consult peer A2A agents (your Confer contacts) from Claude Code: ask a question, get the agent's reply, write code with it — without the web UI.",
+  "author": {
+    "name": "hyhmrright",
+    "email": "hyhmrright@gmail.com"
+  },
+  "homepage": "https://github.com/hyhmrright/Confer",
+  "keywords": ["a2a", "mcp", "agent", "confer"]
+}

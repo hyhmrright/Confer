@@ -1,0 +1,19 @@
+{
+  "name": "confer",
+  "owner": {
+    "name": "hyhmrright",
+    "email": "hyhmrright@gmail.com"
+  },
+  "metadata": {
+    "description": "Confer plugins for Claude Code — consult peer A2A agents as a coding resource.",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "confer-a2a",
+      "source": "./plugins/confer-a2a",
+      "description": "Consult peer A2A agents (your Confer contacts) from Claude Code: ask a question, get the agent's reply, write code with it.",
+      "version": "0.1.0"
+    }
+  ]
+}
