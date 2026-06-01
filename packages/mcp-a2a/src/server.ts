@@ -17,12 +17,20 @@ const json = (data: unknown) => ({
   content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
 });
 
+const waitSecondsField = z.number().int().min(0).max(55).optional();
+
+// Fill in the configured default when the caller omits waitSeconds.
+const withWait = <T extends { waitSeconds?: number }>(a: T): T & { waitSeconds: number } => ({
+  ...a,
+  waitSeconds: a.waitSeconds ?? cfg.defaultWaitSeconds,
+});
+
 const askShape = {
   peerId: z.string(),
   question: z.string(),
   codeContext: z.string().optional(),
   language: z.string().optional(),
-  waitSeconds: z.number().int().min(0).max(55).optional(),
+  waitSeconds: waitSecondsField,
 };
 
 // --- Domain 1: discovery ---
@@ -58,8 +66,7 @@ server.registerTool(
     description: 'Ask a peer agent a question; waits for the reply when waitSeconds > 0.',
     inputSchema: askShape,
   },
-  async (a) =>
-    json(await askAgent(client, { ...a, waitSeconds: a.waitSeconds ?? cfg.defaultWaitSeconds })),
+  async (a) => json(await askAgent(client, withWait(a))),
 );
 server.registerTool(
   'follow_up',
@@ -67,8 +74,7 @@ server.registerTool(
     description: 'Ask a follow-up to the same peer in the existing consult thread.',
     inputSchema: askShape,
   },
-  async (a) =>
-    json(await followUp(client, { ...a, waitSeconds: a.waitSeconds ?? cfg.defaultWaitSeconds })),
+  async (a) => json(await followUp(client, withWait(a))),
 );
 server.registerTool(
   'get_conversation',
@@ -87,11 +93,10 @@ server.registerTool(
     inputSchema: {
       peerIds: z.array(z.string()).min(1),
       question: z.string(),
-      waitSeconds: z.number().int().min(0).max(55).optional(),
+      waitSeconds: waitSecondsField,
     },
   },
-  async (a) =>
-    json(await askMultiple(client, { ...a, waitSeconds: a.waitSeconds ?? cfg.defaultWaitSeconds })),
+  async (a) => json(await askMultiple(client, withWait(a))),
 );
 server.registerTool(
   'check_reply',
