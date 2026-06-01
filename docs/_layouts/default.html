@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="{{ page.lang | default: site.lang | default: 'en' }}">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>{{ page.title | default: site.title }} · Confer docs</title>
+<meta name="description" content="{{ site.description }}" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500&family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,500;1,6..72,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="{{ '/assets/style.css' | relative_url }}" />
+</head>
+<body>
+
+<nav>
+  <div class="nav-in">
+    <a class="brand" href="{{ '/' | relative_url }}"><span class="dot"></span>Confer</a>
+    <div class="nav-links">
+      <a href="{{ '/' | relative_url }}">← Home</a>
+      <a href="{{ '/09-deployment.html' | relative_url }}" class="hide-sm">Deploy</a>
+      <a href="https://github.com/hyhmrright/Confer" target="_blank" rel="noopener">GitHub ↗</a>
+    </div>
+  </div>
+</nav>
+
+{% assign docs = "01-product.html,Product|02-architecture.html,Architecture|03-protocol.html,Protocol|04-data-model.html,Data model|05-api.html,API|06-claude-code-plugin.html,Claude Code plugin|07-project-memory.html,Project memory|08-mvp-backlog.html,MVP backlog|09-deployment.html,Deployment" | split: "|" %}
+
+<div class="doc-shell">
+  <aside class="doc-nav">
+    <span class="label">Design docs</span>
+    {% for d in docs %}
+      {% assign parts = d | split: "," %}
+      {% assign href = parts[0] %}
+      {% assign name = parts[1] %}
+      {% assign num = forloop.index | prepend: '0' | slice: -2, 2 %}
+      {% assign cur = page.url | split: "/" | last %}
+      <a href="{{ href | relative_url }}" class="{% if cur == href %}on{% endif %}"><span class="n">{{ num }}</span>{{ name }}</a>
+    {% endfor %}
+  </aside>
+
+  <article class="doc">
+    {{ content }}
+    <div class="doc-foot">
+      <a href="{{ '/' | relative_url }}">← Back to Confer</a>
+      <span>A2A · DID:web · RFC 9421 · NANDA</span>
+    </div>
+  </article>
+</div>
+
+<footer>
+  <div class="foot-in">
+    <span>© 2026 Confer — open source.</span>
+    <a href="https://github.com/hyhmrright/Confer" target="_blank" rel="noopener">github.com/hyhmrright/Confer ↗</a>
+  </div>
+</footer>
+
+</body>
+</html>
