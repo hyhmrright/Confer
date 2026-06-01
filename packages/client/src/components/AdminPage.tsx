@@ -1,12 +1,17 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { dateLocale, type TranslationKey } from '../i18n/index.js';
-import { type AdminUser, useAdminStore } from '../stores/admin.js';
+import { type TranslationKey, dateLocale } from '../i18n/index.js';
+import {
+  type AdminAgent,
+  type AdminConversation,
+  type AdminUser,
+  useAdminStore,
+} from '../stores/admin.js';
 import { useAuthStore } from '../stores/auth.js';
-import { ArrowLeft, Shield, Users } from './Icons.js';
+import { ArrowLeft, MessageCircle, Settings, Shield, Users } from './Icons.js';
 
-type Tab = 'overview' | 'users';
+type Tab = 'overview' | 'users' | 'content' | 'config';
 
 function OperationsOverview() {
   const { t } = useTranslation();
@@ -210,6 +215,282 @@ function UserManagement() {
   );
 }
 
+function AgentRow({ a }: { a: AdminAgent }) {
+  const { t } = useTranslation();
+  const { updateAgent } = useAdminStore();
+  const [busy, setBusy] = useState(false);
+  const suspended = a.status === 'suspended';
+
+  const run = async (status: string, confirmKey: TranslationKey) => {
+    if (!window.confirm(t(confirmKey))) return;
+    setBusy(true);
+    try {
+      await updateAgent(a.id, status);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <tr className="border-t border-dark-border">
+      <td className="py-2.5 px-3">
+        <span className="text-sm text-ink-primary">{a.name || a.did}</span>
+        <span className="block text-[11px] text-ink-muted font-mono">{a.did}</span>
+      </td>
+      <td className="py-2.5 px-3">
+        <span className={`text-xs ${suspended ? 'text-red-400' : 'text-green-400'}`}>
+          {suspended ? t('admin.agentStatusSuspended') : t('admin.agentStatusActive')}
+        </span>
+      </td>
+      <td className="py-2.5 px-3 text-right">
+        {suspended ? (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => run('active', 'admin.confirmRestoreAgent')}
+            className="text-xs px-2 py-1 rounded-md text-green-400 hover:bg-dark-hover disabled:opacity-40"
+          >
+            {t('admin.actionRestore')}
+          </button>
+        ) : (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => run('suspended', 'admin.confirmSuspend')}
+            className="text-xs px-2 py-1 rounded-md text-red-400 hover:bg-dark-hover disabled:opacity-40"
+          >
+            {t('admin.actionSuspend')}
+          </button>
+        )}
+      </td>
+    </tr>
+  );
+}
+
+function ConversationRow({ conv }: { conv: AdminConversation }) {
+  const { t } = useTranslation();
+  const { updateConversation } = useAdminStore();
+  const [busy, setBusy] = useState(false);
+  const hidden = conv.moderation_status === 'hidden';
+
+  const run = async (status: string, confirmKey: TranslationKey) => {
+    if (!window.confirm(t(confirmKey))) return;
+    setBusy(true);
+    try {
+      await updateConversation(conv.id, status);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <tr className="border-t border-dark-border">
+      <td className="py-2.5 px-3">
+        <span className="text-sm text-ink-primary">{conv.name || t('admin.convUntitled')}</span>
+        <span className="block text-[11px] text-ink-muted font-mono">{conv.id}</span>
+      </td>
+      <td className="py-2.5 px-3">
+        <span className={`text-xs ${hidden ? 'text-red-400' : 'text-green-400'}`}>
+          {hidden ? t('admin.convStatusHidden') : t('admin.convStatusVisible')}
+        </span>
+      </td>
+      <td className="py-2.5 px-3 text-xs text-ink-muted">
+        {new Date(conv.created_at).toLocaleDateString(dateLocale())}
+      </td>
+      <td className="py-2.5 px-3 text-right">
+        {hidden ? (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => run('visible', 'admin.confirmUnhide')}
+            className="text-xs px-2 py-1 rounded-md text-green-400 hover:bg-dark-hover disabled:opacity-40"
+          >
+            {t('admin.actionUnhide')}
+          </button>
+        ) : (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => run('hidden', 'admin.confirmHide')}
+            className="text-xs px-2 py-1 rounded-md text-red-400 hover:bg-dark-hover disabled:opacity-40"
+          >
+            {t('admin.actionHide')}
+          </button>
+        )}
+      </td>
+    </tr>
+  );
+}
+
+function ContentModeration() {
+  const { t } = useTranslation();
+  const { agents, conversations, error, loadAgents, loadConversations } = useAdminStore();
+
+  useEffect(() => {
+    loadAgents({ page: 1 });
+    loadConversations({ page: 1 });
+  }, [loadAgents, loadConversations]);
+
+  return (
+    <div className="max-w-3xl space-y-8">
+      {error && <p className="text-xs text-red-400">{t('admin.loadError')}</p>}
+
+      <section>
+        <h3 className="text-sm font-medium text-ink-secondary mb-3">{t('admin.contentAgents')}</h3>
+        <table className="w-full">
+          <thead>
+            <tr className="text-left">
+              <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
+                {t('admin.agentColName')}
+              </th>
+              <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
+                {t('admin.agentColStatus')}
+              </th>
+              <th className="py-2 px-3 text-[11px] font-medium text-ink-muted text-right">
+                {t('admin.agentColActions')}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {agents.map((a) => (
+              <AgentRow key={a.id} a={a} />
+            ))}
+          </tbody>
+        </table>
+        {agents.length === 0 && <p className="text-sm text-ink-muted py-4">{t('admin.empty')}</p>}
+      </section>
+
+      <section>
+        <h3 className="text-sm font-medium text-ink-secondary mb-3">
+          {t('admin.contentConversations')}
+        </h3>
+        <table className="w-full">
+          <thead>
+            <tr className="text-left">
+              <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
+                {t('admin.convColName')}
+              </th>
+              <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
+                {t('admin.convColStatus')}
+              </th>
+              <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
+                {t('admin.convColCreated')}
+              </th>
+              <th className="py-2 px-3 text-[11px] font-medium text-ink-muted text-right">
+                {t('admin.convColActions')}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {conversations.map((conv) => (
+              <ConversationRow key={conv.id} conv={conv} />
+            ))}
+          </tbody>
+        </table>
+        {conversations.length === 0 && (
+          <p className="text-sm text-ink-muted py-4">{t('admin.empty')}</p>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function GlobalConfig() {
+  const { t } = useTranslation();
+  const { config, loadConfig, updateConfig } = useAdminStore();
+  const [instanceName, setInstanceName] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState(false);
+
+  useEffect(() => {
+    loadConfig();
+  }, [loadConfig]);
+
+  useEffect(() => {
+    if (config) setInstanceName(config.instance_name);
+  }, [config]);
+
+  if (!config) {
+    return <p className="text-sm text-ink-muted">—</p>;
+  }
+
+  const toggleRegistration = async () => {
+    setSaveError(false);
+    try {
+      await updateConfig({ registration_open: !config.registration_open });
+    } catch {
+      setSaveError(true);
+    }
+  };
+
+  const saveInstanceName = async () => {
+    setSaving(true);
+    setSaved(false);
+    setSaveError(false);
+    try {
+      await updateConfig({ instance_name: instanceName });
+      setSaved(true);
+    } catch {
+      setSaveError(true);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="max-w-lg space-y-6">
+      <div className="flex items-center justify-between px-4 py-3 bg-dark-card border border-dark-border rounded-xl">
+        <div>
+          <p className="text-sm text-ink-primary">{t('admin.configRegistrationOpen')}</p>
+          <p className="text-xs text-ink-muted mt-0.5">{t('admin.configRegistrationOpenHint')}</p>
+        </div>
+        <button
+          type="button"
+          onClick={toggleRegistration}
+          className={`relative w-11 h-6 rounded-full transition-colors ${
+            config.registration_open ? 'bg-primary-600' : 'bg-dark-border'
+          }`}
+        >
+          <span
+            className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
+              config.registration_open ? 'translate-x-5' : ''
+            }`}
+          />
+        </button>
+      </div>
+
+      <div className="px-4 py-3 bg-dark-card border border-dark-border rounded-xl space-y-2">
+        <label htmlFor="instance-name" className="text-sm text-ink-primary">
+          {t('admin.configInstanceName')}
+        </label>
+        <div className="flex gap-2">
+          <input
+            id="instance-name"
+            type="text"
+            value={instanceName}
+            onChange={(e) => {
+              setInstanceName(e.target.value);
+              setSaved(false);
+            }}
+            className="flex-1 px-3 py-2 bg-dark-input border border-dark-border rounded-lg text-sm text-ink-primary focus:outline-none focus:border-primary-600/40"
+          />
+          <button
+            type="button"
+            disabled={saving || instanceName.trim().length === 0}
+            onClick={saveInstanceName}
+            className="text-xs px-4 py-2 rounded-lg bg-primary-600/15 text-primary-400 hover:bg-primary-600/25 disabled:opacity-40"
+          >
+            {t('admin.configSave')}
+          </button>
+        </div>
+        {saved && <p className="text-xs text-green-400">{t('admin.configSaved')}</p>}
+        {saveError && <p className="text-xs text-red-400">{t('admin.configSaveError')}</p>}
+      </div>
+    </div>
+  );
+}
+
 export function AdminPage() {
   const { t } = useTranslation();
   const [tab, setTab] = useState<Tab>('overview');
@@ -218,6 +499,8 @@ export function AdminPage() {
   const tabs: { id: Tab; label: string; icon: typeof Shield }[] = [
     { id: 'overview', label: t('admin.tabOverview'), icon: Shield },
     { id: 'users', label: t('admin.tabUsers'), icon: Users },
+    { id: 'content', label: t('admin.tabContent'), icon: MessageCircle },
+    { id: 'config', label: t('admin.tabConfig'), icon: Settings },
   ];
 
   return (
@@ -258,6 +541,8 @@ export function AdminPage() {
           </h2>
           {tab === 'overview' && <OperationsOverview />}
           {tab === 'users' && <UserManagement />}
+          {tab === 'content' && <ContentModeration />}
+          {tab === 'config' && <GlobalConfig />}
         </div>
       </div>
     </div>

@@ -12,6 +12,7 @@ import * as jose from 'jose';
 import { getDb } from '../db/connection.js';
 import { agents, keypairs, sessions, users } from '../db/schema.js';
 import { getEnv } from '../env.js';
+import { getConfigValue } from '../lib/app-config.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rate-limit.js';
 
@@ -51,6 +52,12 @@ async function issueTokens(userId: string, username: string) {
 }
 
 authRoutes.post('/register', rateLimit(3, 3600_000), async (c) => {
+  // Honor the global registration switch before doing any work.
+  const registrationOpen = await getConfigValue('registration_open');
+  if (!registrationOpen) {
+    throw new AppError('registration_closed', 'Registration is currently closed', 403);
+  }
+
   const body = registerRequestSchema.parse(await c.req.json());
   const db = getDb();
 

@@ -228,6 +228,8 @@ async function lookupByUsername(value: string): Promise<LookupResult> {
       and(
         like(agents.did, `%${value.replace(/[%_\\]/g, (c) => `\\${c}`)}%`),
         eq(agents.is_public, true),
+        // Suspended agents are hidden from public discovery (moderation 3b).
+        eq(agents.status, 'active'),
       ),
     )
     .limit(20);

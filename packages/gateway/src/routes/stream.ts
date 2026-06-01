@@ -87,11 +87,18 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
         return;
       }
 
-      // Load up to 20 messages before this one as conversation history
+      // Load up to 20 messages before this one as conversation history.
+      // Moderator-hidden messages are excluded so they don't flow into the LLM context.
       const historyRows = await db
         .select()
         .from(messages)
-        .where(and(eq(messages.conversation_id, conversationId), lt(messages.id, messageId)))
+        .where(
+          and(
+            eq(messages.conversation_id, conversationId),
+            lt(messages.id, messageId),
+            eq(messages.moderation_status, 'visible'),
+          ),
+        )
         .orderBy(asc(messages.created_at))
         .limit(20);
 

@@ -1,8 +1,26 @@
-import { AppError, adminUpdateUserSchema, adminUserListQuerySchema, newId } from '@confer/shared';
+import {
+  AppError,
+  adminListQuerySchema,
+  adminModerateSchema,
+  adminUpdateAgentSchema,
+  adminUpdateConfigSchema,
+  adminUpdateUserSchema,
+  adminUserListQuerySchema,
+  newId,
+} from '@confer/shared';
 import { count, desc, eq, like } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { getDb } from '../db/connection.js';
-import { auditLog, conversations, messages, peerContacts, sessions, users } from '../db/schema.js';
+import {
+  agents,
+  auditLog,
+  conversations,
+  messages,
+  peerContacts,
+  sessions,
+  users,
+} from '../db/schema.js';
+import { getAppConfig, setConfigValue } from '../lib/app-config.js';
 import { adminMiddleware } from '../middleware/admin.js';
 import { authMiddleware } from '../middleware/auth.js';
 import type { AppEnv } from '../types.js';
@@ -155,4 +173,209 @@ adminRoutes.get('/stats', async (c) => {
     contacts: contact[0]?.value ?? 0,
     messages: msg[0]?.value ?? 0,
   });
+});
+
+// --- 3b: content moderation -------------------------------------------------
+
+// List all agents with moderation status. Admin-only — includes suspended.
+adminRoutes.get('/agents', async (c) => {
+  const query = adminListQuerySchema.parse(Object.fromEntries(new URL(c.req.url).searchParams));
+  const db = getDb();
+  const offset = (query.page - 1) * query.page_size;
+
+  const rows = await db
+    .select({
+      id: agents.id,
+      user_id: agents.user_id,
+      name: agents.name,
+      did: agents.did,
+      is_public: agents.is_public,
+      status: agents.status,
+      created_at: agents.created_at,
+    })
+    .from(agents)
+    .orderBy(desc(agents.created_at))
+    .limit(query.page_size)
+    .offset(offset);
+
+  const [totalRow] = await db.select({ value: count() }).from(agents);
+
+  return c.json({
+    agents: rows,
+    page: query.page,
+    page_size: query.page_size,
+    total: totalRow?.value ?? 0,
+  });
+});
+
+// Suspend or restore an agent. Only flips agents.status — the AgentFacts/DID
+// document is intentionally untouched (Contract 3 stays clear). Read-path
+// filtering hides suspended agents from public discovery.
+adminRoutes.patch('/agents/:id', async (c) => {
+  const actor = c.get('user');
+  const targetId = c.req.param('id');
+  const body = adminUpdateAgentSchema.parse(await c.req.json());
+  const db = getDb();
+
+  const [target] = await db
+    .select({ id: agents.id, status: agents.status })
+    .from(agents)
+    .where(eq(agents.id, targetId))
+    .limit(1);
+  if (!target) {
+    throw new AppError('agent_not_found', 'Agent not found', 404);
+  }
+
+  await db
+    .update(agents)
+    .set({ status: body.status, updated_at: new Date() })
+    .where(eq(agents.id, targetId));
+
+  if (body.status !== target.status) {
+    await writeAudit(
+      actor.sub,
+      `admin.agent.${body.status === 'suspended' ? 'suspend' : 'restore'}`,
+      c.req.header('x-forwarded-for') ?? undefined,
+      { target_id: targetId, before: target.status, after: body.status, reason: body.reason },
+    );
+  }
+
+  return c.json({ ok: true });
+});
+
+// List recent conversations (admin sees hidden too).
+adminRoutes.get('/conversations', async (c) => {
+  const query = adminListQuerySchema.parse(Object.fromEntries(new URL(c.req.url).searchParams));
+  const db = getDb();
+  const offset = (query.page - 1) * query.page_size;
+
+  const rows = await db
+    .select({
+      id: conversations.id,
+      type: conversations.type,
+      name: conversations.name,
+      created_by: conversations.created_by,
+      moderation_status: conversations.moderation_status,
+      created_at: conversations.created_at,
+      updated_at: conversations.updated_at,
+    })
+    .from(conversations)
+    .orderBy(desc(conversations.updated_at))
+    .limit(query.page_size)
+    .offset(offset);
+
+  const [totalRow] = await db.select({ value: count() }).from(conversations);
+
+  return c.json({
+    conversations: rows,
+    page: query.page,
+    page_size: query.page_size,
+    total: totalRow?.value ?? 0,
+  });
+});
+
+// Hide or restore a conversation. Soft — never deletes data.
+adminRoutes.patch('/conversations/:id', async (c) => {
+  const actor = c.get('user');
+  const targetId = c.req.param('id');
+  const body = adminModerateSchema.parse(await c.req.json());
+  const db = getDb();
+
+  const [target] = await db
+    .select({ id: conversations.id, moderation_status: conversations.moderation_status })
+    .from(conversations)
+    .where(eq(conversations.id, targetId))
+    .limit(1);
+  if (!target) {
+    throw new AppError('conversation_not_found', 'Conversation not found', 404);
+  }
+
+  await db
+    .update(conversations)
+    .set({ moderation_status: body.moderation_status, updated_at: new Date() })
+    .where(eq(conversations.id, targetId));
+
+  if (body.moderation_status !== target.moderation_status) {
+    await writeAudit(
+      actor.sub,
+      `admin.conversation.${body.moderation_status === 'hidden' ? 'hide' : 'restore'}`,
+      c.req.header('x-forwarded-for') ?? undefined,
+      {
+        target_id: targetId,
+        before: target.moderation_status,
+        after: body.moderation_status,
+        reason: body.reason,
+      },
+    );
+  }
+
+  return c.json({ ok: true });
+});
+
+// Hide or restore a single message. Soft — never deletes data.
+adminRoutes.patch('/messages/:id', async (c) => {
+  const actor = c.get('user');
+  const targetId = c.req.param('id');
+  const body = adminModerateSchema.parse(await c.req.json());
+  const db = getDb();
+
+  const [target] = await db
+    .select({ id: messages.id, moderation_status: messages.moderation_status })
+    .from(messages)
+    .where(eq(messages.id, targetId))
+    .limit(1);
+  if (!target) {
+    throw new AppError('message_not_found', 'Message not found', 404);
+  }
+
+  await db
+    .update(messages)
+    .set({ moderation_status: body.moderation_status, updated_at: new Date() })
+    .where(eq(messages.id, targetId));
+
+  if (body.moderation_status !== target.moderation_status) {
+    await writeAudit(
+      actor.sub,
+      `admin.message.${body.moderation_status === 'hidden' ? 'hide' : 'restore'}`,
+      c.req.header('x-forwarded-for') ?? undefined,
+      {
+        target_id: targetId,
+        before: target.moderation_status,
+        after: body.moderation_status,
+        reason: body.reason,
+      },
+    );
+  }
+
+  return c.json({ ok: true });
+});
+
+// --- 3c: global config ------------------------------------------------------
+
+adminRoutes.get('/config', async (c) => {
+  const config = await getAppConfig();
+  return c.json({ config });
+});
+
+adminRoutes.patch('/config', async (c) => {
+  const actor = c.get('user');
+  const body = adminUpdateConfigSchema.parse(await c.req.json());
+
+  const before = await getAppConfig();
+
+  if (body.registration_open !== undefined) {
+    await setConfigValue('registration_open', body.registration_open);
+  }
+  if (body.instance_name !== undefined) {
+    await setConfigValue('instance_name', body.instance_name);
+  }
+
+  const after = await getAppConfig();
+
+  await writeAudit(actor.sub, 'admin.config.update', c.req.header('x-forwarded-for') ?? undefined, {
+    before,
+    after,
+  });
+
+  return c.json({ config: after });
 });
