@@ -4,8 +4,26 @@ baseurl: "/Confer"
 lang: en
 
 # Custom dark "ink & amber" theme — no remote theme; layout lives in _layouts/.
+#
+# i18n: every design doc exists in three languages — zh at the repo root (canonical,
+# also the dev reference), en under /en, ja under /ja. The path-scoped defaults below
+# tag each rendered page with its language; _layouts/default.html reads page.lang to
+# localise the chrome, build the sidebar, and emit cross-language links.
 defaults:
   - scope:
       path: ""
     values:
       layout: default
+      lang: zh
+  - scope:
+      path: "en"
+    values:
+      lang: en
+  - scope:
+      path: "ja"
+    values:
+      lang: ja
+  - scope:
+      path: "i18n/README.ja.md"
+    values:
+      lang: ja

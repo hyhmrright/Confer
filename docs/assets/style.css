@@ -111,6 +111,26 @@ nav {
     display: none;
   }
 }
+/* in-doc language switcher (lives in the nav) */
+.doc-lang {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.doc-lang a {
+  padding: 3px 10px;
+  color: var(--paper-faint);
+  transition: color .2s, background .2s;
+}
+.doc-lang a:hover {
+  color: var(--paper);
+}
+.doc-lang a.on {
+  background: var(--amber);
+  color: #1a1206;
+  font-weight: 600;
+}
 
 /* doc shell: sidebar + article */
 .doc-shell {
