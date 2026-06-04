@@ -2,7 +2,15 @@ import { beforeEach, describe, expect, test } from 'bun:test';
 import { newId } from '@confer/shared';
 import { eq } from 'drizzle-orm';
 import { getDb } from '../db/connection.js';
-import { agents, appConfig, conversations, messages, sessions, users } from '../db/schema.js';
+import {
+  agents,
+  appConfig,
+  conversationParticipants,
+  conversations,
+  messages,
+  sessions,
+  users,
+} from '../db/schema.js';
 import { type SeededUser, get, patch, post, resetDb, seedUser } from '../test/helpers.js';
 
 let admin: SeededUser;
@@ -173,6 +181,14 @@ async function seedConversation(userId: string): Promise<string> {
     type: 'direct_user_agent',
     name: 'Test conversation',
     created_by: userId,
+  });
+  // Mirror production POST /conversations: the creator is also a participant.
+  await getDb().insert(conversationParticipants).values({
+    id: newId(),
+    conversation_id: id,
+    participant_type: 'user',
+    user_id: userId,
+    role: 'admin',
   });
   return id;
 }

@@ -68,13 +68,15 @@ conversationRoutes.post('/', async (c) => {
 });
 
 conversationRoutes.get('/:id', async (c) => {
+  const user = c.get('user');
   const db = getDb();
+  const convId = c.req.param('id');
   const [conv] = await db
     .select()
     .from(conversations)
     .where(
       and(
-        eq(conversations.id, c.req.param('id')),
+        eq(conversations.id, convId),
         // A hidden conversation reads as not-found for regular users.
         eq(conversations.moderation_status, 'visible'),
       ),
@@ -85,14 +87,45 @@ conversationRoutes.get('/:id', async (c) => {
     throw new AppError('not_found', 'Conversation not found', 404);
   }
 
+  const [participant] = await db
+    .select()
+    .from(conversationParticipants)
+    .where(
+      and(
+        eq(conversationParticipants.conversation_id, convId),
+        eq(conversationParticipants.user_id, user.sub),
+      ),
+    )
+    .limit(1);
+
+  if (!participant) {
+    throw new AppError('forbidden', 'Not a participant', 403);
+  }
+
   return c.json({ conversation: conv });
 });
 
 conversationRoutes.get('/:id/messages', async (c) => {
+  const user = c.get('user');
   const db = getDb();
   const convId = c.req.param('id');
   const before = c.req.query('before');
   const limit = Math.min(Number(c.req.query('limit') ?? 50), 100);
+
+  const [participant] = await db
+    .select()
+    .from(conversationParticipants)
+    .where(
+      and(
+        eq(conversationParticipants.conversation_id, convId),
+        eq(conversationParticipants.user_id, user.sub),
+      ),
+    )
+    .limit(1);
+
+  if (!participant) {
+    throw new AppError('forbidden', 'Not a participant', 403);
+  }
 
   // Admin-hidden messages are filtered from regular reads.
   const visible = eq(messages.moderation_status, 'visible');
@@ -145,6 +178,22 @@ conversationRoutes.post('/:id/messages', async (c) => {
   const user = c.get('user');
   const db = getDb();
   const convId = c.req.param('id');
+
+  const [participant] = await db
+    .select()
+    .from(conversationParticipants)
+    .where(
+      and(
+        eq(conversationParticipants.conversation_id, convId),
+        eq(conversationParticipants.user_id, user.sub),
+      ),
+    )
+    .limit(1);
+
+  if (!participant) {
+    throw new AppError('forbidden', 'Not a participant', 403);
+  }
+
   const body = sendMessageRequestSchema.parse(await c.req.json());
 
   const msgId = newId();

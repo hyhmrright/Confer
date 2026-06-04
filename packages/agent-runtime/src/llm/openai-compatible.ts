@@ -67,9 +67,11 @@ export class OpenAICompatibleProvider implements LLMProvider {
     }
     const message = choice.message as Record<string, string>;
 
+    const choiceFinish = choice.finish_reason as string | undefined;
     return {
       content: message.content ?? '',
-      finish_reason: 'stop',
+      finish_reason:
+        choiceFinish === 'tool_calls' ? 'tool_use' : choiceFinish === 'length' ? 'length' : 'stop',
       usage: {
         prompt_tokens: (data.usage as Record<string, number>).prompt_tokens ?? 0,
         completion_tokens: (data.usage as Record<string, number>).completion_tokens ?? 0,

@@ -76,9 +76,11 @@ export class AnthropicProvider implements LLMProvider {
       .map((b) => b.text)
       .join('');
 
+    const stopReason = data.stop_reason as string | undefined;
     return {
       content,
-      finish_reason: 'stop',
+      finish_reason:
+        stopReason === 'max_tokens' ? 'length' : stopReason === 'tool_use' ? 'tool_use' : 'stop',
       usage: {
         prompt_tokens: (data.usage as Record<string, number>).input_tokens ?? 0,
         completion_tokens: (data.usage as Record<string, number>).output_tokens ?? 0,

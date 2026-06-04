@@ -60,6 +60,23 @@ describe('conversations', () => {
     expect(res.status).toBe(400);
   });
 
+  test('only a participant may post a message', async () => {
+    const id = await createConversation(user.token);
+    const outsider = await seedUser();
+    const res = await post(`${BASE}/${id}/messages`, {
+      token: outsider.token,
+      body: { content: 'intruder' },
+    });
+    expect(res.status).toBe(403);
+  });
+
+  test('only a participant may read messages', async () => {
+    const id = await createConversation(user.token);
+    const outsider = await seedUser();
+    const res = await get(`${BASE}/${id}/messages`, { token: outsider.token });
+    expect(res.status).toBe(403);
+  });
+
   test('only a participant may delete a conversation', async () => {
     const id = await createConversation(user.token);
     const outsider = await seedUser();
