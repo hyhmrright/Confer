@@ -1,10 +1,18 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api.js';
-import { LLM_PROVIDERS, STATIC_MODELS, TOOL_PROVIDERS } from '../lib/providers.js';
+import {
+  LLM_PROVIDERS,
+  STATIC_MODELS,
+  TOOL_PROVIDERS,
+  llmProviderName,
+  modelLabel,
+} from '../lib/providers.js';
 import { useAuthStore } from '../stores/auth.js';
 import { useSettingsStore } from '../stores/settings.js';
 import { ArrowLeft, Bot, Key, User } from './Icons.js';
+import { LanguageSwitcher } from './LanguageSwitcher.js';
 
 type Tab = 'profile' | 'agent' | 'keys';
 
@@ -38,6 +46,7 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
 }
 
 function ProfileTab() {
+  const { t } = useTranslation();
   const { user, refreshUser } = useAuthStore();
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
@@ -73,9 +82,9 @@ function ProfileTab() {
         phone: phone || null,
       });
       await refreshUser();
-      setSuccess('保存成功');
+      setSuccess(t('settings.saveSuccess'));
     } catch (e) {
-      setError(e instanceof Error ? e.message : '保存失败');
+      setError(e instanceof Error ? e.message : t('settings.saveFailed'));
     } finally {
       setSaving(false);
     }
@@ -84,54 +93,59 @@ function ProfileTab() {
   return (
     <div className="space-y-4">
       <div>
-        <FieldLabel>用户名</FieldLabel>
+        <FieldLabel>{t('settings.profileUsername')}</FieldLabel>
         <input
           type="text"
           value={user?.username ?? ''}
           disabled
           className="w-full px-3 py-2 bg-dark-base border border-dark-border rounded-lg text-sm text-ink-muted font-mono opacity-60"
         />
-        <p className="text-[11px] text-ink-muted mt-1">用户名不可修改</p>
+        <p className="text-[11px] text-ink-muted mt-1">{t('settings.profileUsernameHint')}</p>
       </div>
       <div>
-        <FieldLabel>DID</FieldLabel>
+        <FieldLabel>{t('settings.profileDid')}</FieldLabel>
         <input
           type="text"
           value={user?.did ?? ''}
           disabled
           className="w-full px-3 py-2 bg-dark-base border border-dark-border rounded-lg text-xs text-ink-muted font-mono opacity-60"
         />
-        <p className="text-[11px] text-ink-muted mt-1">去中心化身份标识，由系统生成</p>
+        <p className="text-[11px] text-ink-muted mt-1">{t('settings.profileDidHint')}</p>
       </div>
       <div>
-        <FieldLabel>显示名称</FieldLabel>
+        <FieldLabel>{t('settings.profileDisplayName')}</FieldLabel>
         <input
           type="text"
           value={displayName}
           onChange={(e) => setDisplayName(e.target.value)}
-          placeholder="输入显示名称"
+          placeholder={t('settings.profileDisplayNamePlaceholder')}
           className={INPUT_CN}
         />
       </div>
       <div>
-        <FieldLabel>邮箱</FieldLabel>
+        <FieldLabel>{t('settings.profileEmail')}</FieldLabel>
         <input
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          placeholder="输入邮箱地址"
+          placeholder={t('settings.profileEmailPlaceholder')}
           className={INPUT_CN}
         />
       </div>
       <div>
-        <FieldLabel>手机号</FieldLabel>
+        <FieldLabel>{t('settings.profilePhone')}</FieldLabel>
         <input
           type="tel"
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
-          placeholder="输入手机号"
+          placeholder={t('settings.profilePhonePlaceholder')}
           className={INPUT_CN}
         />
+      </div>
+
+      <div>
+        <FieldLabel>{t('language.label')}</FieldLabel>
+        <LanguageSwitcher />
       </div>
 
       <StatusMsg error={error} success={success} />
@@ -142,13 +156,14 @@ function ProfileTab() {
         disabled={saving}
         className="px-5 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-500 disabled:opacity-40 transition-colors"
       >
-        {saving ? '保存中...' : '保存'}
+        {saving ? t('common.saving') : t('common.save')}
       </button>
     </div>
   );
 }
 
 function AgentTab() {
+  const { t } = useTranslation();
   const {
     agent,
     loading,
@@ -212,7 +227,10 @@ function AgentTab() {
     }
   };
 
-  const modelOptions = dynamicModels.length > 0 ? dynamicModels : (STATIC_MODELS[provider] ?? []);
+  const modelOptions =
+    dynamicModels.length > 0
+      ? dynamicModels
+      : (STATIC_MODELS[provider] ?? []).map((m) => ({ value: m.value, label: modelLabel(m, t) }));
 
   const handleSave = () => {
     updateAgent({
@@ -245,36 +263,36 @@ function AgentTab() {
   return (
     <div className="space-y-4">
       <div>
-        <FieldLabel>Agent 名称</FieldLabel>
+        <FieldLabel>{t('settings.agentName')}</FieldLabel>
         <input
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="我的 AI 助手"
+          placeholder={t('settings.agentNamePlaceholder')}
           className={INPUT_CN}
         />
       </div>
       <div>
-        <FieldLabel>描述</FieldLabel>
+        <FieldLabel>{t('settings.agentDescription')}</FieldLabel>
         <textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          placeholder="描述你的 Agent 能做什么..."
+          placeholder={t('settings.agentDescriptionPlaceholder')}
           rows={2}
           className={`${INPUT_CN} resize-none`}
         />
       </div>
       <div>
-        <FieldLabel>模型提供商</FieldLabel>
+        <FieldLabel>{t('settings.agentProvider')}</FieldLabel>
         <select
           value={provider}
           onChange={(e) => handleProviderChange(e.target.value)}
           className={SELECT_CN}
         >
-          <option value="">选择提供商</option>
+          <option value="">{t('settings.agentProviderPlaceholder')}</option>
           {LLM_PROVIDERS.map((p) => (
             <option key={p.id} value={p.id}>
-              {p.name}
+              {llmProviderName(p, t)}
             </option>
           ))}
         </select>
@@ -282,14 +300,16 @@ function AgentTab() {
       {provider && (
         <div>
           <FieldLabel>
-            模型
+            {t('settings.agentModel')}
             {loadingModels && (
-              <span className="text-ink-muted font-normal ml-2 text-[11px]">查询中...</span>
+              <span className="text-ink-muted font-normal ml-2 text-[11px]">
+                {t('settings.agentModelLoading')}
+              </span>
             )}
           </FieldLabel>
           {modelOptions.length > 0 ? (
             <select value={model} onChange={(e) => setModel(e.target.value)} className={SELECT_CN}>
-              <option value="">选择模型</option>
+              <option value="">{t('settings.agentModelPlaceholder')}</option>
               {modelOptions.map((m) => (
                 <option key={m.value} value={m.value}>
                   {m.label}
@@ -302,7 +322,9 @@ function AgentTab() {
               value={model}
               onChange={(e) => setModel(e.target.value)}
               placeholder={
-                provider === 'ollama' ? '未检测到本地模型，手动输入模型名' : '输入模型名'
+                provider === 'ollama'
+                  ? t('settings.agentModelOllamaInput')
+                  : t('settings.agentModelInput')
               }
               className={INPUT_CN}
             />
@@ -310,11 +332,11 @@ function AgentTab() {
         </div>
       )}
       <div>
-        <FieldLabel>系统提示词</FieldLabel>
+        <FieldLabel>{t('settings.agentSystemPrompt')}</FieldLabel>
         <textarea
           value={systemPrompt}
           onChange={(e) => setSystemPrompt(e.target.value)}
-          placeholder="自定义 Agent 的行为和角色..."
+          placeholder={t('settings.agentSystemPromptPlaceholder')}
           rows={5}
           className={`${INPUT_CN} resize-none font-mono text-xs`}
         />
@@ -328,13 +350,14 @@ function AgentTab() {
         disabled={saving}
         className="px-5 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-500 disabled:opacity-40 transition-colors"
       >
-        {saving ? '保存中...' : '保存'}
+        {saving ? t('common.saving') : t('common.save')}
       </button>
     </div>
   );
 }
 
 function KeysTab() {
+  const { t } = useTranslation();
   const { llmKeys, saving, error, success, loadLlmKeys, saveLlmKey, removeLlmKey, clearMessages } =
     useSettingsStore();
   const [editing, setEditing] = useState<string | null>(null);
@@ -370,9 +393,7 @@ function KeysTab() {
 
   return (
     <div className="space-y-4">
-      <p className="text-xs text-ink-muted leading-relaxed">
-        配置 LLM API 密钥，密钥将被加密存储在服务端，绝不会发送到客户端。
-      </p>
+      <p className="text-xs text-ink-muted leading-relaxed">{t('settings.keysIntro')}</p>
 
       <StatusMsg error={error} success={success} />
 
@@ -391,19 +412,23 @@ function KeysTab() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
                   <Key className="w-3.5 h-3.5 text-ink-muted" />
-                  <span className="text-sm font-medium text-ink-primary">{provider.name}</span>
+                  <span className="text-sm font-medium text-ink-primary">
+                    {llmProviderName(provider, t)}
+                  </span>
                   {provider.supportsEmbedding && (
                     <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-900/30 text-blue-400 border border-blue-800/30">
-                      支持知识库
+                      {t('settings.keysSupportsKb')}
                     </span>
                   )}
                   {isConfigured && (
                     <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-900/30 text-green-400 border border-green-800/30">
-                      已配置
+                      {t('settings.keysConfigured')}
                     </span>
                   )}
                   {isOllama && !isConfigured && (
-                    <span className="text-[11px] text-ink-muted">无需 API Key，填写服务地址</span>
+                    <span className="text-[11px] text-ink-muted">
+                      {t('settings.keysOllamaHint')}
+                    </span>
                   )}
                 </div>
                 <div className="flex gap-3">
@@ -413,7 +438,7 @@ function KeysTab() {
                       onClick={() => handleEdit(provider.id)}
                       className="text-xs text-primary-400 hover:text-primary-300 transition-colors"
                     >
-                      {isConfigured ? '更新' : '配置'}
+                      {isConfigured ? t('common.update') : t('common.configure')}
                     </button>
                   )}
                   {isConfigured && !isEditing && (
@@ -423,7 +448,7 @@ function KeysTab() {
                       disabled={saving}
                       className="text-xs text-red-400 hover:text-red-300 transition-colors disabled:opacity-40"
                     >
-                      移除
+                      {t('common.remove')}
                     </button>
                   )}
                 </div>
@@ -444,14 +469,14 @@ function KeysTab() {
                     disabled={saving || !keyValue.trim()}
                     className="px-3 py-1.5 bg-primary-600 text-white rounded-lg text-xs hover:bg-primary-500 disabled:opacity-40 transition-colors"
                   >
-                    保存
+                    {t('common.save')}
                   </button>
                   <button
                     type="button"
                     onClick={cancelEdit}
                     className="px-3 py-1.5 border border-dark-border rounded-lg text-xs text-ink-muted hover:text-ink-secondary transition-colors"
                   >
-                    取消
+                    {t('common.cancel')}
                   </button>
                 </div>
               )}
@@ -461,7 +486,9 @@ function KeysTab() {
       </div>
 
       <div className="pt-2">
-        <p className="text-xs font-medium text-ink-secondary mb-2">工具服务</p>
+        <p className="text-xs font-medium text-ink-secondary mb-2">
+          {t('settings.keysToolServices')}
+        </p>
         <div className="space-y-2">
           {TOOL_PROVIDERS.map((tool) => {
             const keyInfo = llmKeys.find((k) => k.provider === tool.id);
@@ -477,13 +504,15 @@ function KeysTab() {
                   <div className="flex items-center gap-2.5">
                     <Key className="w-3.5 h-3.5 text-ink-muted" />
                     <div>
-                      <span className="text-sm font-medium text-ink-primary">{tool.name}</span>
+                      <span className="text-sm font-medium text-ink-primary">
+                        {t(tool.nameKey)}
+                      </span>
                       {isConfigured && (
                         <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-green-900/30 text-green-400 border border-green-800/30">
-                          已配置
+                          {t('settings.keysConfigured')}
                         </span>
                       )}
-                      <p className="text-[11px] text-ink-muted mt-0.5">{tool.description}</p>
+                      <p className="text-[11px] text-ink-muted mt-0.5">{t(tool.descriptionKey)}</p>
                     </div>
                   </div>
                   <div className="flex gap-3 shrink-0 ml-3">
@@ -493,7 +522,7 @@ function KeysTab() {
                         onClick={() => handleEdit(tool.id)}
                         className="text-xs text-primary-400 hover:text-primary-300 transition-colors"
                       >
-                        {isConfigured ? '更新' : '配置'}
+                        {isConfigured ? t('common.update') : t('common.configure')}
                       </button>
                     )}
                     {isConfigured && !isEditing && (
@@ -503,7 +532,7 @@ function KeysTab() {
                         disabled={saving}
                         className="text-xs text-red-400 hover:text-red-300 transition-colors disabled:opacity-40"
                       >
-                        移除
+                        {t('common.remove')}
                       </button>
                     )}
                   </div>
@@ -524,14 +553,14 @@ function KeysTab() {
                       disabled={saving || !keyValue.trim()}
                       className="px-3 py-1.5 bg-primary-600 text-white rounded-lg text-xs hover:bg-primary-500 disabled:opacity-40 transition-colors"
                     >
-                      保存
+                      {t('common.save')}
                     </button>
                     <button
                       type="button"
                       onClick={cancelEdit}
                       className="px-3 py-1.5 border border-dark-border rounded-lg text-xs text-ink-muted hover:text-ink-secondary transition-colors"
                     >
-                      取消
+                      {t('common.cancel')}
                     </button>
                   </div>
                 )}
@@ -545,13 +574,14 @@ function KeysTab() {
 }
 
 export function SettingsPage() {
+  const { t } = useTranslation();
   const [tab, setTab] = useState<Tab>('profile');
   const navigate = useNavigate();
 
   const tabs: { id: Tab; label: string; icon: typeof User }[] = [
-    { id: 'profile', label: '个人信息', icon: User },
-    { id: 'agent', label: 'Agent 配置', icon: Bot },
-    { id: 'keys', label: 'LLM 密钥', icon: Key },
+    { id: 'profile', label: t('settings.tabProfile'), icon: User },
+    { id: 'agent', label: t('settings.tabAgent'), icon: Bot },
+    { id: 'keys', label: t('settings.tabKeys'), icon: Key },
   ];
 
   return (
@@ -564,7 +594,7 @@ export function SettingsPage() {
         >
           <ArrowLeft className="w-4 h-4" />
         </button>
-        <h1 className="font-semibold text-sm text-ink-primary ml-2">设置</h1>
+        <h1 className="font-semibold text-sm text-ink-primary ml-2">{t('settings.title')}</h1>
       </header>
 
       <div className="flex-1 flex overflow-hidden">
@@ -589,7 +619,7 @@ export function SettingsPage() {
         <div className="flex-1 overflow-y-auto scrollbar-thin p-8 bg-dark-base">
           <div className="max-w-lg">
             <h2 className="text-base font-semibold text-ink-primary mb-6">
-              {tabs.find((t) => t.id === tab)?.label}
+              {tabs.find((item) => item.id === tab)?.label}
             </h2>
             {tab === 'profile' && <ProfileTab />}
             {tab === 'agent' && <AgentTab />}

@@ -23,6 +23,9 @@ model: opus
 - 增量验证：每个模块完成后即验，不要等全部做完才一次性测
 - 能跑就跑：gateway 路由用 `*.integration.test.ts` 驱动真实 `app.ts`；纯逻辑跑单测；UI 改动按需用 `deploy` skill 部署到 http://localhost/ 后实际点验
 - 验证命令优先用 `bun run test`、`bun run typecheck`，不臆造命令
+- **client 改动必须实跑 `cd packages/client && bun run build`**：client 的 `tsc` 比根 `bun run typecheck` 更严格（i18n 类型增强等只在 client tsconfig 下生效），根 typecheck 通过≠client 能构建——这一步漏过会在部署时才崩
+- **新增 env 变量必须验证全链路透传**：app 的 `env.ts` 加了变量，还要确认 `docker-compose.prod.yml` 对应服务的 `environment:` 块也转发了它（`exec` 进容器 `echo $VAR` 实测），否则部署后变量为空、功能静默失效
+- **新增 DB 列/迁移**：确认部署链路会应用（本项目由 `migrate` 一次性服务跑），并在 prod 库实测列已存在
 
 ## 输入 / 输出协议
 

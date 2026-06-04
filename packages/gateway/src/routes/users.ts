@@ -38,6 +38,7 @@ userRoutes.get('/me', async (c) => {
       display_name: users.display_name,
       avatar_url: users.avatar_url,
       did: users.did,
+      role: users.role,
       preferences_json: users.preferences_json,
       created_at: users.created_at,
     })

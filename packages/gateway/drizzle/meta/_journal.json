@@ -36,6 +36,20 @@
       "when": 1780243132210,
       "tag": "0004_smiling_mesmero",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1780320540498,
+      "tag": "0005_ancient_mongu",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1780324441311,
+      "tag": "0006_even_tigra",
+      "breakpoints": true
     }
   ]
 }

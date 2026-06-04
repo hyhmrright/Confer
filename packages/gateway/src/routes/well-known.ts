@@ -54,7 +54,10 @@ wellKnownRoutes.get('/agents.json', async (c) => {
       is_public: agents.is_public,
     })
     .from(agents)
-    .where(eq(agents.is_public, true));
+    // Suspended agents (moderation 3b) are filtered from the public discovery
+    // list. This only drops the row from the listing — it does not modify any
+    // agent's AgentFacts/DID document (Contract 3 stays untouched).
+    .where(and(eq(agents.is_public, true), eq(agents.status, 'active')));
 
   return c.json({ agents: publicAgents });
 });

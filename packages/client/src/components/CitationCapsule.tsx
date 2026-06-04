@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TranslationKey } from '../i18n/index.js';
 import { BookOpen, ChevronDown, ChevronRight, ExternalLink } from './Icons.js';
 
 interface Citation {
@@ -9,13 +11,23 @@ interface Citation {
   trust_level?: string;
 }
 
-const trustBadge: Record<string, { label: string; color: string }> = {
-  authoritative: { label: '权威来源', color: 'bg-green-900/40 text-green-400 border-green-800/40' },
-  verified: { label: '已验证', color: 'bg-blue-900/40 text-blue-400 border-blue-800/40' },
-  unverified: { label: '未验证', color: 'bg-yellow-900/40 text-yellow-400 border-yellow-800/40' },
+const trustBadge: Record<string, { labelKey: TranslationKey; color: string }> = {
+  authoritative: {
+    labelKey: 'citation.trustAuthoritative',
+    color: 'bg-green-900/40 text-green-400 border-green-800/40',
+  },
+  verified: {
+    labelKey: 'citation.trustVerified',
+    color: 'bg-blue-900/40 text-blue-400 border-blue-800/40',
+  },
+  unverified: {
+    labelKey: 'citation.trustUnverified',
+    color: 'bg-yellow-900/40 text-yellow-400 border-yellow-800/40',
+  },
 };
 
 export function CitationCapsule({ citations }: { citations: Citation[] }) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
 
   if (citations.length === 0) return null;
@@ -28,7 +40,7 @@ export function CitationCapsule({ citations }: { citations: Citation[] }) {
         className="flex items-center gap-1.5 text-[11px] text-ink-muted hover:text-ink-secondary transition-colors font-mono"
       >
         <BookOpen className="w-3.5 h-3.5" />
-        <span>{citations.length} 个引用来源</span>
+        <span>{t('citation.sources', { count: citations.length })}</span>
         {expanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
       </button>
 
@@ -56,7 +68,7 @@ export function CitationCapsule({ citations }: { citations: Citation[] }) {
                         <span
                           className={`text-[10px] px-1.5 py-0.5 rounded-full shrink-0 border ${badge.color}`}
                         >
-                          {badge.label}
+                          {t(badge.labelKey)}
                         </span>
                       )}
                     </div>

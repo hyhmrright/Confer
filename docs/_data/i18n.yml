@@ -1,0 +1,60 @@
+# Chrome strings + design-doc nav, per language. Consumed by _layouts/default.html.
+# Doc `file` names are shared across languages (same .html, different directory);
+# the layout prefixes them with the language directory (en/ , ja/ , or "" for zh).
+en:
+  htmllang: en
+  home: Home
+  deploy: Deployment
+  docslabel: Design docs
+  langlabel: Language
+  back: Back to Confer
+  footline: "A2A · DID:web · RFC 9421 · NANDA"
+  copyright: "© 2026 Confer — open source."
+  docs:
+    - { file: 01-product.html, name: Product }
+    - { file: 02-architecture.html, name: Architecture }
+    - { file: 03-protocol.html, name: Protocol }
+    - { file: 04-data-model.html, name: Data model }
+    - { file: 05-api.html, name: API }
+    - { file: 06-claude-code-plugin.html, name: Claude Code plugin }
+    - { file: 07-project-memory.html, name: Project memory }
+    - { file: 08-mvp-backlog.html, name: MVP backlog }
+    - { file: 09-deployment.html, name: Deployment }
+zh:
+  htmllang: zh-CN
+  home: 首页
+  deploy: 部署
+  docslabel: 设计文档
+  langlabel: 语言
+  back: 返回 Confer
+  footline: "A2A · DID:web · RFC 9421 · NANDA"
+  copyright: "© 2026 Confer — 开源项目。"
+  docs:
+    - { file: 01-product.html, name: 产品定义 }
+    - { file: 02-architecture.html, name: 架构 }
+    - { file: 03-protocol.html, name: 协议 }
+    - { file: 04-data-model.html, name: 数据模型 }
+    - { file: 05-api.html, name: API }
+    - { file: 06-claude-code-plugin.html, name: Claude Code 插件 }
+    - { file: 07-project-memory.html, name: 项目记忆 }
+    - { file: 08-mvp-backlog.html, name: MVP backlog }
+    - { file: 09-deployment.html, name: 部署 }
+ja:
+  htmllang: ja
+  home: ホーム
+  deploy: デプロイ
+  docslabel: 設計ドキュメント
+  langlabel: 言語
+  back: Confer に戻る
+  footline: "A2A · DID:web · RFC 9421 · NANDA"
+  copyright: "© 2026 Confer — オープンソース。"
+  docs:
+    - { file: 01-product.html, name: プロダクト定義 }
+    - { file: 02-architecture.html, name: アーキテクチャ }
+    - { file: 03-protocol.html, name: プロトコル }
+    - { file: 04-data-model.html, name: データモデル }
+    - { file: 05-api.html, name: API }
+    - { file: 06-claude-code-plugin.html, name: Claude Code プラグイン }
+    - { file: 07-project-memory.html, name: プロジェクト記憶 }
+    - { file: 08-mvp-backlog.html, name: MVP backlog }
+    - { file: 09-deployment.html, name: デプロイ }

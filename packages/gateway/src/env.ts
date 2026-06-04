@@ -6,6 +6,11 @@ const envSchema = z.object({
   NATS_URL: z.string().default('nats://localhost:4222'),
   JWT_SECRET: z.string().min(16),
   JWT_ISSUER: z.string().default('confer'),
+  // Comma-separated usernames promoted to the 'admin' role on gateway startup
+  // (idempotent — already-admin accounts are skipped). This is how the first
+  // admin is bootstrapped; the value is operator config, not a secret.
+  // NOTE for ops: add ADMIN_USERNAMES to .env.example and the deploy docs.
+  ADMIN_USERNAMES: z.string().default(''),
   PORT: z.coerce.number().default(3000),
   HOST: z.string().default('0.0.0.0'),
   PUBLIC_HOST: z.string().default('localhost:3000'),

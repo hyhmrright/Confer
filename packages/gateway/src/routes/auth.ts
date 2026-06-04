@@ -12,6 +12,7 @@ import * as jose from 'jose';
 import { getDb } from '../db/connection.js';
 import { agents, keypairs, sessions, users } from '../db/schema.js';
 import { getEnv } from '../env.js';
+import { getConfigValue } from '../lib/app-config.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rate-limit.js';
 
@@ -51,6 +52,12 @@ async function issueTokens(userId: string, username: string) {
 }
 
 authRoutes.post('/register', rateLimit(3, 3600_000), async (c) => {
+  // Honor the global registration switch before doing any work.
+  const registrationOpen = await getConfigValue('registration_open');
+  if (!registrationOpen) {
+    throw new AppError('registration_closed', 'Registration is currently closed', 403);
+  }
+
   const body = registerRequestSchema.parse(await c.req.json());
   const db = getDb();
 
@@ -118,6 +125,7 @@ authRoutes.post('/register', rateLimit(3, 3600_000), async (c) => {
         email: user.email,
         display_name: user.display_name,
         did: user.did,
+        role: user.role,
       },
     },
     201,
@@ -137,6 +145,10 @@ authRoutes.post('/login', rateLimit(10, 60_000), async (c) => {
   const valid = await verifyPassword(user.password_hash, body.password);
   if (!valid) {
     throw new AppError('invalid_credentials', 'Invalid username or password', 401);
+  }
+
+  if (user.status === 'disabled') {
+    throw new AppError('account_disabled', 'This account has been disabled', 403);
   }
 
   const tokens = await issueTokens(user.id, user.username);
@@ -161,6 +173,7 @@ authRoutes.post('/login', rateLimit(10, 60_000), async (c) => {
       email: user.email,
       display_name: user.display_name,
       did: user.did,
+      role: user.role,
     },
   });
 });
@@ -179,6 +192,18 @@ authRoutes.post('/refresh', async (c) => {
       issuer: env.JWT_ISSUER,
     });
 
+    // A disabled account must not be able to mint fresh tokens. Re-check status
+    // on every refresh so disabling takes effect within one access-token cycle.
+    const db = getDb();
+    const [user] = await db
+      .select({ status: users.status })
+      .from(users)
+      .where(eq(users.id, payload.sub as string))
+      .limit(1);
+    if (!user || user.status === 'disabled') {
+      throw new AppError('account_disabled', 'This account has been disabled', 403);
+    }
+
     const tokens = await issueTokens(payload.sub as string, payload.username as string);
 
     return c.json({
@@ -186,7 +211,8 @@ authRoutes.post('/refresh', async (c) => {
       refresh_token: tokens.refreshToken,
       expires_in: tokens.expiresIn,
     });
-  } catch {
+  } catch (e) {
+    if (e instanceof AppError) throw e;
     throw new AppError('unauthorized', 'Invalid or expired refresh token', 401);
   }
 });

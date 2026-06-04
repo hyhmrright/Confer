@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import i18n from '../i18n/index.js';
 import { api } from '../lib/api.js';
 
 interface ModelConfig {
@@ -68,10 +69,10 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       set((s) => ({
         agent: s.agent ? { ...s.agent, ...patch } : s.agent,
         saving: false,
-        success: '保存成功',
+        success: i18n.t('settings.saveSuccess'),
       }));
     } catch (e) {
-      set({ saving: false, error: e instanceof Error ? e.message : '保存失败' });
+      set({ saving: false, error: e instanceof Error ? e.message : i18n.t('settings.saveFailed') });
     }
   },
 
@@ -90,11 +91,11 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       await api.put('/agents/me/llm-keys', { provider, api_key: apiKey });
       set((s) => ({
         saving: false,
-        success: `${provider} 密钥已保存`,
+        success: i18n.t('settings.keySaved', { provider }),
         llmKeys: s.llmKeys.map((k) => (k.provider === provider ? { ...k, configured: true } : k)),
       }));
     } catch (e) {
-      set({ saving: false, error: e instanceof Error ? e.message : '保存失败' });
+      set({ saving: false, error: e instanceof Error ? e.message : i18n.t('settings.saveFailed') });
     }
   },
 
@@ -104,11 +105,14 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       await api.delete(`/agents/me/llm-keys/${provider}`);
       set((s) => ({
         saving: false,
-        success: `${provider} 密钥已移除`,
+        success: i18n.t('settings.keyRemoved', { provider }),
         llmKeys: s.llmKeys.map((k) => (k.provider === provider ? { ...k, configured: false } : k)),
       }));
     } catch (e) {
-      set({ saving: false, error: e instanceof Error ? e.message : '删除失败' });
+      set({
+        saving: false,
+        error: e instanceof Error ? e.message : i18n.t('settings.deleteFailed'),
+      });
     }
   },
 

@@ -1,9 +1,11 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/auth.js';
 import { Loader } from './Icons.js';
 
 export function LoginPage() {
+  const { t } = useTranslation();
   const [isRegister, setIsRegister] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -49,16 +51,16 @@ export function LoginPage() {
             <span className="text-white text-xl font-bold font-mono">C</span>
           </div>
           <h1 className="text-2xl font-bold text-ink-primary tracking-tight">Confer</h1>
-          <p className="text-sm text-ink-muted mt-1">AI Agent 协作平台</p>
+          <p className="text-sm text-ink-muted mt-1">{t('login.tagline')}</p>
         </div>
 
         {/* Card */}
         <div className="bg-dark-panel rounded-2xl border border-dark-border p-8 shadow-2xl shadow-black/40">
           <h2 className="text-base font-semibold text-ink-primary mb-1">
-            {isRegister ? '创建账号' : '欢迎回来'}
+            {isRegister ? t('login.createAccount') : t('login.welcomeBack')}
           </h2>
           <p className="text-xs text-ink-muted mb-6">
-            {isRegister ? '注册后即可开始使用' : '登录你的账号'}
+            {isRegister ? t('login.registerHint') : t('login.loginHint')}
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-3.5">
@@ -67,14 +69,14 @@ export function LoginPage() {
                 htmlFor="login-username"
                 className="block text-xs font-medium text-ink-secondary mb-1.5"
               >
-                用户名
+                {t('login.username')}
               </label>
               <input
                 id="login-username"
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="至少 3 个字符"
+                placeholder={t('login.usernamePlaceholder')}
                 className={inputCls}
                 required
                 minLength={3}
@@ -87,14 +89,15 @@ export function LoginPage() {
                   htmlFor="login-displayname"
                   className="block text-xs font-medium text-ink-secondary mb-1.5"
                 >
-                  显示名称 <span className="text-ink-muted font-normal">（可选）</span>
+                  {t('login.displayName')}{' '}
+                  <span className="text-ink-muted font-normal">{t('common.optional')}</span>
                 </label>
                 <input
                   id="login-displayname"
                   type="text"
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
-                  placeholder="你的昵称"
+                  placeholder={t('login.displayNamePlaceholder')}
                   className={inputCls}
                 />
               </div>
@@ -105,14 +108,14 @@ export function LoginPage() {
                 htmlFor="login-password"
                 className="block text-xs font-medium text-ink-secondary mb-1.5"
               >
-                密码
+                {t('login.password')}
               </label>
               <input
                 id="login-password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="至少 8 个字符"
+                placeholder={t('login.passwordPlaceholder')}
                 className={inputCls}
                 required
                 minLength={8}
@@ -132,19 +135,23 @@ export function LoginPage() {
                 hover:bg-primary-500 disabled:opacity-40 transition-colors flex items-center justify-center gap-2 mt-1"
             >
               {loading && <Loader className="w-4 h-4 animate-spin" />}
-              {loading ? '处理中...' : isRegister ? '注册' : '登录'}
+              {loading
+                ? t('login.processing')
+                : isRegister
+                  ? t('login.register')
+                  : t('login.login')}
             </button>
           </form>
         </div>
 
         <p className="text-center text-xs text-ink-muted mt-6">
-          {isRegister ? '已有账号？' : '没有账号？'}
+          {isRegister ? t('login.hasAccount') : t('login.noAccount')}
           <button
             type="button"
             onClick={() => setIsRegister(!isRegister)}
             className="text-primary-400 hover:text-primary-300 font-medium ml-1 transition-colors"
           >
-            {isRegister ? '去登录' : '注册'}
+            {isRegister ? t('login.goLogin') : t('login.register')}
           </button>
         </p>
       </div>

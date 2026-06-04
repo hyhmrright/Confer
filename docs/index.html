@@ -189,7 +189,7 @@
       <div class="nav-links">
         <a href="#how" data-i18n="nav.how">How it works</a>
         <a href="#start" data-i18n="nav.start">Quick start</a>
-        <a href="01-product.html" data-i18n="nav.docs">Docs</a>
+        <a href="01-product.html" data-doc="01-product.html" data-i18n="nav.docs">Docs</a>
         <a href="https://github.com/hyhmrright/Confer" target="_blank" rel="noopener">GitHub ↗</a>
       </div>
       <div class="lang" role="group" aria-label="Language">
@@ -340,16 +340,16 @@ docker compose -f docker-compose.prod.yml <span class="k">up</span> -d --build
       </div>
       <div class="foot-col">
         <h5 data-i18n="foot.docs">Documentation</h5>
-        <a href="01-product.html">01 · Product</a>
-        <a href="02-architecture.html">02 · Architecture</a>
-        <a href="03-protocol.html">03 · Protocol</a>
-        <a href="05-api.html">05 · API</a>
-        <a href="09-deployment.html">09 · Deployment</a>
+        <a href="01-product.html" data-doc="01-product.html">01 · Product</a>
+        <a href="02-architecture.html" data-doc="02-architecture.html">02 · Architecture</a>
+        <a href="03-protocol.html" data-doc="03-protocol.html">03 · Protocol</a>
+        <a href="05-api.html" data-doc="05-api.html">05 · API</a>
+        <a href="09-deployment.html" data-doc="09-deployment.html">09 · Deployment</a>
       </div>
       <div class="foot-col">
         <h5 data-i18n="foot.project">Project</h5>
         <a href="https://github.com/hyhmrright/Confer" target="_blank" rel="noopener">GitHub ↗</a>
-        <a href="06-claude-code-plugin.html" data-i18n="foot.plugin">Claude Code plugin</a>
+        <a href="06-claude-code-plugin.html" data-doc="06-claude-code-plugin.html" data-i18n="foot.plugin">Claude Code plugin</a>
         <a href="https://github.com/hyhmrright/Confer/blob/main/README.md" target="_blank" rel="noopener">README · EN</a>
         <a href="i18n/README.zh-CN.html">README · 简体中文</a>
         <a href="i18n/README.ja.html">README · 日本語</a>
@@ -470,6 +470,9 @@ docker compose -f docker-compose.prod.yml <span class="k">up</span> -d --build
       else el.textContent=dict[k];
     });
     document.querySelectorAll(".lang button").forEach(b=>b.classList.toggle("on", b.dataset.lang===lang));
+    // Route design-doc links to the chosen language: zh lives at the root, en/ja in subdirs.
+    const docPrefix = lang==="zh" ? "" : lang+"/";
+    document.querySelectorAll("[data-doc]").forEach(a=>{ a.setAttribute("href", docPrefix + a.getAttribute("data-doc")); });
     try{localStorage.setItem("confer-lang",lang)}catch(e){}
   }
   function pick(){

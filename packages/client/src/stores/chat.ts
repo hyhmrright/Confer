@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import i18n, { dateLocale } from '../i18n/index.js';
 import { api, getToken } from '../lib/api.js';
 import { useAuthStore } from './auth.js';
 
@@ -103,7 +104,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   createConversation: async (peerId, name) => {
     const autoName =
       name ??
-      new Date().toLocaleString('zh-CN', {
+      new Date().toLocaleString(dateLocale(), {
         month: 'short',
         day: 'numeric',
         hour: '2-digit',
@@ -151,7 +152,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
     };
     set((s) => ({ messages: [...s.messages, userMsg] }));
 
-    set({ streaming: true, streamContent: '', streamCitations: [], agentStatus: '正在思考...' });
+    set({
+      streaming: true,
+      streamContent: '',
+      streamCitations: [],
+      agentStatus: i18n.t('message.statusThinking'),
+    });
 
     try {
       const res = await fetch(data.stream_url, {
@@ -220,7 +226,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             }
 
             if (event.tool) {
-              set({ agentStatus: `正在调用 ${event.tool}...` });
+              set({ agentStatus: i18n.t('message.statusCallingTool', { tool: event.tool }) });
             }
 
             if (event.result !== undefined) {

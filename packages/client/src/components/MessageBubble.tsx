@@ -1,5 +1,6 @@
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { dateLocale } from '../i18n/index.js';
 import { permissionRequestSchema } from '../lib/schemas.js';
 import { CitationCapsule } from './CitationCapsule.js';
 import { Bot, User } from './Icons.js';
@@ -42,7 +43,7 @@ function Avatar({ type }: { type: string }) {
 }
 
 function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+  return new Date(iso).toLocaleTimeString(dateLocale(), { hour: '2-digit', minute: '2-digit' });
 }
 
 export function MessageBubble({ message }: { message: Message }) {

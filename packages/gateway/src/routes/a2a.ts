@@ -192,7 +192,9 @@ a2aRoutes.post('/messages', verifyA2ASignature, verifyCapabilityToken, async (c)
 
   const [targetAgent] = await db.select().from(agents).where(eq(agents.did, body.to)).limit(1);
 
-  if (!targetAgent) {
+  // A suspended agent is treated as absent: moderation takes it off the air for
+  // inbound A2A too, not just public discovery. Don't reveal the suspension.
+  if (!targetAgent || targetAgent.status === 'suspended') {
     throw new AppError('not_found', 'Target agent not found on this instance', 404);
   }
 

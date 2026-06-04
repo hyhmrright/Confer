@@ -27,7 +27,13 @@ conversationRoutes.get('/', async (c) => {
   const convs = await db
     .select()
     .from(conversations)
-    .where(inArray(conversations.id, convIds))
+    .where(
+      and(
+        inArray(conversations.id, convIds),
+        // Admin-hidden conversations are invisible to regular users.
+        eq(conversations.moderation_status, 'visible'),
+      ),
+    )
     .orderBy(desc(conversations.updated_at))
     .limit(50);
 
@@ -66,7 +72,13 @@ conversationRoutes.get('/:id', async (c) => {
   const [conv] = await db
     .select()
     .from(conversations)
-    .where(eq(conversations.id, c.req.param('id')))
+    .where(
+      and(
+        eq(conversations.id, c.req.param('id')),
+        // A hidden conversation reads as not-found for regular users.
+        eq(conversations.moderation_status, 'visible'),
+      ),
+    )
     .limit(1);
 
   if (!conv) {
@@ -82,13 +94,15 @@ conversationRoutes.get('/:id/messages', async (c) => {
   const before = c.req.query('before');
   const limit = Math.min(Number(c.req.query('limit') ?? 50), 100);
 
+  // Admin-hidden messages are filtered from regular reads.
+  const visible = eq(messages.moderation_status, 'visible');
   const query = db
     .select()
     .from(messages)
     .where(
       before
-        ? and(eq(messages.conversation_id, convId), lt(messages.id, before))
-        : eq(messages.conversation_id, convId),
+        ? and(eq(messages.conversation_id, convId), lt(messages.id, before), visible)
+        : and(eq(messages.conversation_id, convId), visible),
     )
     .orderBy(desc(messages.created_at))
     .limit(limit);

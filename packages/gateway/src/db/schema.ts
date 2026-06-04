@@ -23,6 +23,15 @@ export const users = pgTable(
     avatar_url: text('avatar_url'),
     did: varchar('did', { length: 255 }).unique().notNull(),
     password_hash: text('password_hash'),
+    // Two-level access role: 'member' (default) or 'admin'. The admin role
+    // gates the /api/v1/admin/* surface; it is checked per-request by
+    // adminMiddleware (never carried in the JWT) so changes take effect at once.
+    role: varchar('role', { length: 16 }).notNull().default('member'),
+    // Account lifecycle flag: 'active' (default) or 'disabled'. Disabling soft
+    // -locks the account — auth (login/refresh) and adminMiddleware reject it,
+    // and its sessions are revoked on disable. Distinct from deleted_at (the
+    // account-deletion tombstone).
+    status: varchar('status', { length: 16 }).notNull().default('active'),
     preferences_json: jsonb('preferences_json').default({}),
     llm_keys_json: jsonb('llm_keys_json').default({}),
     created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -49,6 +58,11 @@ export const agents = pgTable(
     policies_json: jsonb('policies_json').default({}),
     capabilities_json: jsonb('capabilities_json').default([]),
     is_public: boolean('is_public').notNull().default(false),
+    // Moderation lifecycle: 'active' (default) or 'suspended'. A suspended agent
+    // is soft-removed by admins — it is filtered out of public discovery/listing
+    // read paths. The AgentFacts/DID document itself is intentionally untouched
+    // (avoids touching Contract 3); only this status flag drives filtering.
+    status: varchar('status', { length: 16 }).notNull().default('active'),
     created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -112,6 +126,10 @@ export const conversations = pgTable(
     created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     archived_at: timestamp('archived_at', { withTimezone: true }),
+    // Admin moderation flag: 'visible' (default) or 'hidden'. A hidden
+    // conversation is filtered from non-admin read paths but never deleted;
+    // admins still see it. Distinct from archived_at (user-initiated archive).
+    moderation_status: varchar('moderation_status', { length: 16 }).notNull().default('visible'),
   },
   (t) => [index('idx_conversations_created_by').on(t.created_by)],
 );
@@ -163,6 +181,10 @@ export const messages = pgTable(
     created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     deleted_at: timestamp('deleted_at', { withTimezone: true }),
+    // Admin moderation flag: 'visible' (default) or 'hidden'. A hidden message
+    // is filtered from non-admin read paths but never deleted; admins still see
+    // it. Distinct from deleted_at (user-initiated delete).
+    moderation_status: varchar('moderation_status', { length: 16 }).notNull().default('visible'),
   },
   (t) => [
     index('idx_messages_conversation_created').on(t.conversation_id, t.created_at),
@@ -350,3 +372,13 @@ export const knowledgeDocuments = pgTable(
   },
   (t) => [index('idx_knowledge_documents_kb').on(t.kb_id)],
 );
+
+// Global instance configuration as a typed key/value store. Values are stored as
+// TEXT; the typed accessor (lib/app-config.ts) parses each known key and falls
+// back to a code-level default when the row is absent. Empty table is fully
+// backward compatible — every read resolves to its default.
+export const appConfig = pgTable('app_config', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
+  updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});

@@ -1,5 +1,9 @@
 <!DOCTYPE html>
-<html lang="{{ page.lang | default: site.lang | default: 'en' }}">
+{%- assign t = site.data.i18n[page.lang] | default: site.data.i18n.en -%}
+{%- assign cur = page.url | split: "/" | last -%}
+{%- if page.lang == "en" -%}{%- assign prefix = "en/" -%}{%- elsif page.lang == "ja" -%}{%- assign prefix = "ja/" -%}{%- else -%}{%- assign prefix = "" -%}{%- endif -%}
+{%- assign docfiles = "01-product.html,02-architecture.html,03-protocol.html,04-data-model.html,05-api.html,06-claude-code-plugin.html,07-project-memory.html,08-mvp-backlog.html,09-deployment.html" -%}
+<html lang="{{ t.htmllang }}">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -11,45 +15,49 @@
 <link rel="stylesheet" href="{{ '/assets/style.css' | relative_url }}" />
 </head>
 <body>
+<script>try{localStorage.setItem("confer-lang","{{ page.lang }}")}catch(e){}</script>
 
 <nav>
   <div class="nav-in">
     <a class="brand" href="{{ '/' | relative_url }}"><span class="dot"></span>Confer</a>
     <div class="nav-links">
-      <a href="{{ '/' | relative_url }}">← Home</a>
-      <a href="{{ '/09-deployment.html' | relative_url }}" class="hide-sm">Deploy</a>
+      <a href="{{ '/' | relative_url }}">← {{ t.home }}</a>
+      <a href="{{ prefix | append: '09-deployment.html' | prepend: '/' | relative_url }}" class="hide-sm">{{ t.deploy }}</a>
+      {%- if docfiles contains cur -%}
+      <span class="doc-lang" role="group" aria-label="{{ t.langlabel }}">
+        {%- assign langorder = "zh,en,ja" | split: "," -%}
+        {%- for l in langorder -%}
+          {%- if l == "en" -%}{%- assign lp = "en/" -%}{%- assign ll = "EN" -%}{%- elsif l == "ja" -%}{%- assign lp = "ja/" -%}{%- assign ll = "日" -%}{%- else -%}{%- assign lp = "" -%}{%- assign ll = "中" -%}{%- endif -%}
+          <a href="{{ lp | append: cur | prepend: '/' | relative_url }}" class="{% if l == page.lang %}on{% endif %}">{{ ll }}</a>
+        {%- endfor -%}
+      </span>
+      {%- endif -%}
       <a href="https://github.com/hyhmrright/Confer" target="_blank" rel="noopener">GitHub ↗</a>
     </div>
   </div>
 </nav>
 
-{% assign docs = "01-product.html,Product|02-architecture.html,Architecture|03-protocol.html,Protocol|04-data-model.html,Data model|05-api.html,API|06-claude-code-plugin.html,Claude Code plugin|07-project-memory.html,Project memory|08-mvp-backlog.html,MVP backlog|09-deployment.html,Deployment" | split: "|" %}
-
 <div class="doc-shell">
   <aside class="doc-nav">
-    <span class="label">Design docs</span>
-    {% for d in docs %}
-      {% assign parts = d | split: "," %}
-      {% assign href = parts[0] %}
-      {% assign name = parts[1] %}
-      {% assign num = forloop.index | prepend: '0' | slice: -2, 2 %}
-      {% assign cur = page.url | split: "/" | last %}
-      <a href="{{ href | relative_url }}" class="{% if cur == href %}on{% endif %}"><span class="n">{{ num }}</span>{{ name }}</a>
-    {% endfor %}
+    <span class="label">{{ t.docslabel }}</span>
+    {%- for d in t.docs -%}
+      {%- assign num = forloop.index | prepend: '0' | slice: -2, 2 -%}
+      <a href="{{ prefix | append: d.file | prepend: '/' | relative_url }}" class="{% if cur == d.file %}on{% endif %}"><span class="n">{{ num }}</span>{{ d.name }}</a>
+    {%- endfor -%}
   </aside>
 
   <article class="doc">
     {{ content }}
     <div class="doc-foot">
-      <a href="{{ '/' | relative_url }}">← Back to Confer</a>
-      <span>A2A · DID:web · RFC 9421 · NANDA</span>
+      <a href="{{ '/' | relative_url }}">← {{ t.back }}</a>
+      <span>{{ t.footline }}</span>
     </div>
   </article>
 </div>
 
 <footer>
   <div class="foot-in">
-    <span>© 2026 Confer — open source.</span>
+    <span>{{ t.copyright }}</span>
     <a href="https://github.com/hyhmrright/Confer" target="_blank" rel="noopener">github.com/hyhmrright/Confer ↗</a>
   </div>
 </footer>
