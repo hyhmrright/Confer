@@ -5,6 +5,7 @@ import type {
   LLMResponse,
   LLMStreamEvent,
 } from './provider.js';
+import { readSSEData } from './stream-utils.js';
 
 function toOpenAIMessage(m: LLMMessage): Record<string, unknown> {
   if (m.role === 'tool') {
@@ -110,94 +111,98 @@ export class OpenAICompatibleProvider implements LLMProvider {
       throw new Error(`${this.name} stream error: ${response.status}`);
     }
 
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buf = '';
     const pendingCalls = new Map<number, { id: string; name: string; arguments: string }>();
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buf += decoder.decode(value, { stream: true });
-      const lines = buf.split('\n');
-      buf = lines.pop() ?? '';
-
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue;
-        const chunk = line.slice(6).trim();
-        if (chunk === '[DONE]') {
-          for (const [, tc] of pendingCalls) {
-            yield {
-              type: 'tool_call',
-              tool_call: { id: tc.id, name: tc.name, arguments: tc.arguments },
-            };
-          }
-          yield { type: 'done' };
-          return;
+    for await (const payload of readSSEData(response.body)) {
+      const chunk = payload.trim();
+      if (chunk === '[DONE]') {
+        for (const [, tc] of pendingCalls) {
+          yield {
+            type: 'tool_call',
+            tool_call: { id: tc.id, name: tc.name, arguments: tc.arguments },
+          };
         }
+        yield { type: 'done' };
+        return;
+      }
 
-        const data = JSON.parse(chunk) as Record<string, unknown>;
-        const choices = data.choices as Array<Record<string, unknown>>;
-        const delta = choices[0]?.delta as Record<string, unknown> | undefined;
+      const data = JSON.parse(chunk) as Record<string, unknown>;
+      const choices = data.choices as Array<Record<string, unknown>>;
+      const delta = choices[0]?.delta as Record<string, unknown> | undefined;
 
-        if (delta?.content) {
-          yield { type: 'token', text: delta.content as string };
-        }
+      if (delta?.content) {
+        yield { type: 'token', text: delta.content as string };
+      }
 
-        const toolCalls = delta?.tool_calls as Array<Record<string, unknown>> | undefined;
-        if (toolCalls) {
-          for (const tc of toolCalls) {
-            const idx = (tc.index as number) ?? 0;
-            let entry = pendingCalls.get(idx);
-            if (!entry) {
-              entry = { id: '', name: '', arguments: '' };
-              pendingCalls.set(idx, entry);
-            }
-            if (tc.id) entry.id = tc.id as string;
-            const fn = tc.function as Record<string, string> | undefined;
-            if (fn?.name) entry.name = fn.name;
-            if (fn?.arguments) entry.arguments += fn.arguments;
+      const toolCalls = delta?.tool_calls as Array<Record<string, unknown>> | undefined;
+      if (toolCalls) {
+        for (const tc of toolCalls) {
+          const idx = (tc.index as number) ?? 0;
+          let entry = pendingCalls.get(idx);
+          if (!entry) {
+            entry = { id: '', name: '', arguments: '' };
+            pendingCalls.set(idx, entry);
           }
+          if (tc.id) entry.id = tc.id as string;
+          const fn = tc.function as Record<string, string> | undefined;
+          if (fn?.name) entry.name = fn.name;
+          if (fn?.arguments) entry.arguments += fn.arguments;
         }
       }
     }
   }
 }
 
-export function createDeepSeekProvider(apiKey: string): OpenAICompatibleProvider {
+/**
+ * General-purpose factory for any OpenAI-compatible endpoint. The named
+ * factories below delegate to this; callers wiring a custom endpoint can use it
+ * directly. Defaults to the OpenAI base URL/model and the standard
+ * `/v1/chat/completions` path.
+ */
+export function createOpenAICompatibleProvider(
+  name: string,
+  apiKey: string,
+  opts: { baseUrl?: string; model?: string; completionsPath?: string } = {},
+): OpenAICompatibleProvider {
   return new OpenAICompatibleProvider(
-    'deepseek',
+    name,
     apiKey,
-    'https://api.deepseek.com',
-    'deepseek-chat',
+    opts.baseUrl ?? 'https://api.openai.com',
+    opts.model ?? 'gpt-4o',
+    opts.completionsPath ?? '/v1/chat/completions',
   );
+}
+
+export function createDeepSeekProvider(apiKey: string): OpenAICompatibleProvider {
+  return createOpenAICompatibleProvider('deepseek', apiKey, {
+    baseUrl: 'https://api.deepseek.com',
+    model: 'deepseek-chat',
+  });
 }
 
 export function createOpenAIProvider(apiKey: string): OpenAICompatibleProvider {
-  return new OpenAICompatibleProvider('openai', apiKey, 'https://api.openai.com', 'gpt-4o');
+  return createOpenAICompatibleProvider('openai', apiKey, {
+    baseUrl: 'https://api.openai.com',
+    model: 'gpt-4o',
+  });
 }
 
 export function createQwenProvider(apiKey: string): OpenAICompatibleProvider {
-  return new OpenAICompatibleProvider(
-    'qwen',
-    apiKey,
-    'https://dashscope.aliyuncs.com/compatible-mode',
-    'qwen-plus',
-  );
+  return createOpenAICompatibleProvider('qwen', apiKey, {
+    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode',
+    model: 'qwen-plus',
+  });
 }
 
 export function createGlmProvider(apiKey: string): OpenAICompatibleProvider {
   // GLM API uses /chat/completions directly under its v4 base path
-  return new OpenAICompatibleProvider(
-    'glm',
-    apiKey,
-    'https://open.bigmodel.cn/api/paas/v4',
-    'glm-4-flash',
-    '/chat/completions',
-  );
+  return createOpenAICompatibleProvider('glm', apiKey, {
+    baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+    model: 'glm-4-flash',
+    completionsPath: '/chat/completions',
+  });
 }
 
 export function createOllamaProvider(baseUrl = 'http://localhost:11434'): OpenAICompatibleProvider {
-  return new OpenAICompatibleProvider('ollama', '', baseUrl, 'llama3');
+  return createOpenAICompatibleProvider('ollama', '', { baseUrl, model: 'llama3' });
 }

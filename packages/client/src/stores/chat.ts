@@ -53,6 +53,23 @@ interface ChatState {
   setAgentStatus: (status: string | null) => void;
 }
 
+// Backend stores RAG citations as `citations_json` (an array of raw doc/kb/excerpt
+// rows). The UI renders the typed `citations` shape, so map at this boundary when
+// the message hasn't already been normalized. Pure — exported for testing.
+export function normalizeMessage(apiMsg: Message & { citations_json?: unknown }): Message {
+  if (!apiMsg.citations && apiMsg.citations_json) {
+    const raw = apiMsg.citations_json as Array<Record<string, unknown>>;
+    return {
+      ...apiMsg,
+      citations: raw.map((c) => ({
+        source: `${c.doc_name as string}（${c.kb_name as string}）`,
+        passage: c.excerpt as string | undefined,
+      })),
+    };
+  }
+  return apiMsg;
+}
+
 export const useChatStore = create<ChatState>((set, get) => ({
   conversations: [],
   activeConversationId: null,
@@ -82,20 +99,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const data = await api.get<{ messages: Array<Message & { citations_json?: unknown }> }>(
         `/conversations/${id}/messages`,
       );
-      const mapped = data.messages.map((m) => {
-        if (!m.citations && m.citations_json) {
-          const raw = m.citations_json as Array<Record<string, unknown>>;
-          return {
-            ...m,
-            citations: raw.map((c) => ({
-              source: `${c.doc_name as string}（${c.kb_name as string}）`,
-              passage: c.excerpt as string | undefined,
-            })),
-          };
-        }
-        return m;
-      });
-      set({ messages: mapped, messagesLoading: false });
+      set({ messages: data.messages.map(normalizeMessage), messagesLoading: false });
     } catch {
       set({ messagesLoading: false });
     }

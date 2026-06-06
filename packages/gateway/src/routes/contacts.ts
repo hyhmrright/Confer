@@ -5,6 +5,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { getDb } from '../db/connection.js';
 import { agents, peerAgents, peerContacts } from '../db/schema.js';
+import { upsertPeerAgent } from '../lib/peer-agent.js';
 import { authMiddleware } from '../middleware/auth.js';
 import type { AppEnv } from '../types.js';
 
@@ -27,45 +28,6 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
     promise,
     new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), ms)),
   ]);
-}
-
-interface DiscoveredPeer {
-  did: string;
-  name?: string;
-  description?: string;
-  endpoint: string;
-  agentFacts?: unknown;
-}
-
-// Persist a discovered peer agent so it can be added as a contact, returning
-// the local row (including the 26-char id that `POST /contacts` requires).
-async function upsertPeerAgent(peer: DiscoveredPeer) {
-  const db = getDb();
-  const agentFacts = (peer.agentFacts ?? {}) as Record<string, unknown>;
-  const [row] = await db
-    .insert(peerAgents)
-    .values({
-      id: newId(),
-      did: peer.did,
-      name: peer.name,
-      description: peer.description,
-      endpoint: peer.endpoint,
-      public_key_json: {},
-      agent_facts_json: agentFacts,
-    })
-    .onConflictDoUpdate({
-      target: peerAgents.did,
-      set: {
-        name: peer.name,
-        description: peer.description,
-        endpoint: peer.endpoint,
-        agent_facts_json: agentFacts,
-        fetched_at: new Date(),
-        updated_at: new Date(),
-      },
-    })
-    .returning();
-  return row;
 }
 
 export const contactRoutes = new Hono<AppEnv>();
@@ -156,13 +118,30 @@ interface LookupResult {
   error?: string;
 }
 
-async function lookupByDomain(value: string): Promise<LookupResult> {
+// Shared timeout for the two network-bound lookups (well-known fetch, DID
+// resolution).
+const LOOKUP_TIMEOUT_MS = 5000;
+
+// Run a network lookup body, mapping any thrown error to the uniform
+// LookupResult error shape so a single transport failure can't bubble a 500.
+async function safeLookup(fn: () => Promise<LookupResult>): Promise<LookupResult> {
   try {
+    return await fn();
+  } catch (e) {
+    return { candidates: [], error: (e as Error).message };
+  }
+}
+
+function lookupByDomain(value: string): Promise<LookupResult> {
+  return safeLookup(async () => {
     const hostname = new URL(`https://${value}`).hostname;
     if (/^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(hostname)) {
       return { candidates: [], error: 'Private addresses not allowed' };
     }
-    const res = await withTimeout(fetch(`https://${hostname}/.well-known/agents.json`), 5000);
+    const res = await withTimeout(
+      fetch(`https://${hostname}/.well-known/agents.json`),
+      LOOKUP_TIMEOUT_MS,
+    );
     const data = (await res.json()) as { agents?: unknown[] };
     // Every agent on a did:web:<host> instance shares the instance A2A
     // endpoint, mirroring the service entry we publish in did.json.
@@ -187,14 +166,12 @@ async function lookupByDomain(value: string): Promise<LookupResult> {
       );
     }
     return { candidates };
-  } catch (e) {
-    return { candidates: [], error: (e as Error).message };
-  }
+  });
 }
 
-async function lookupByDid(value: string): Promise<LookupResult> {
-  try {
-    const result = await withTimeout(resolveDID(value), 5000);
+function lookupByDid(value: string): Promise<LookupResult> {
+  return safeLookup(async () => {
+    const result = await withTimeout(resolveDID(value), LOOKUP_TIMEOUT_MS);
     if (!result.ok) {
       return { candidates: [], error: result.error };
     }
@@ -210,9 +187,7 @@ async function lookupByDid(value: string): Promise<LookupResult> {
     }
     const row = await upsertPeerAgent({ did: value, endpoint, agentFacts: doc });
     return { candidates: [row] };
-  } catch (e) {
-    return { candidates: [], error: (e as Error).message };
-  }
+  });
 }
 
 async function lookupByUsername(value: string): Promise<LookupResult> {

@@ -76,6 +76,59 @@ describe('evaluatePolicy', () => {
     expect(evaluatePolicy(req({ peer_did: 'did:web:trusted.com' }), config)).toBe('allow');
     expect(evaluatePolicy(req({ peer_did: 'did:web:other.com' }), config)).toBe('deny');
   });
+
+  test('a rule with no peer_did matches any peer', () => {
+    const config: PolicyConfig = {
+      default_decision: 'deny',
+      rules: [{ action: 'send_message', decision: 'allow' }],
+    };
+    expect(evaluatePolicy(req({ peer_did: 'did:web:a.com' }), config)).toBe('allow');
+    expect(evaluatePolicy(req({ peer_did: 'did:web:b.com' }), config)).toBe('allow');
+  });
+
+  test('a rule with an explicitly undefined peer_did still matches any peer', () => {
+    const config: PolicyConfig = {
+      default_decision: 'deny',
+      rules: [{ action: 'send_message', peer_did: undefined, decision: 'allow' }],
+    };
+    expect(evaluatePolicy(req({ peer_did: 'did:web:anything.com' }), config)).toBe('allow');
+  });
+
+  test('wildcard action combined with a peer restriction gates strictly on the peer', () => {
+    const config: PolicyConfig = {
+      default_decision: 'ask_user',
+      rules: [{ action: '*', peer_did: 'did:web:trusted.com', decision: 'allow' }],
+    };
+    // any action from the trusted peer is allowed by the wildcard
+    expect(
+      evaluatePolicy(
+        req({ action: 'some_random_action', peer_did: 'did:web:trusted.com' }),
+        config,
+      ),
+    ).toBe('allow');
+    // same action from a different peer does not match -> default
+    expect(
+      evaluatePolicy(req({ action: 'some_random_action', peer_did: 'did:web:other.com' }), config),
+    ).toBe('ask_user');
+  });
+
+  test('an empty-string rule action matches every request action via startsWith', () => {
+    const config: PolicyConfig = {
+      default_decision: 'deny',
+      rules: [{ action: '', decision: 'allow' }],
+    };
+    expect(evaluatePolicy(req({ action: 'anything' }), config)).toBe('allow');
+    expect(evaluatePolicy(req({ action: '' }), config)).toBe('allow');
+  });
+
+  test('an empty-string request action falls through to the default when no rule matches', () => {
+    const config: PolicyConfig = {
+      default_decision: 'deny',
+      rules: [{ action: 'send_message', decision: 'allow' }],
+    };
+    // '' does not start with 'send_message', so no rule matches
+    expect(evaluatePolicy(req({ action: '' }), config)).toBe('deny');
+  });
 });
 
 describe('parsePolicyConfig', () => {

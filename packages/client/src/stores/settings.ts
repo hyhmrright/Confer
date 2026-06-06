@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import i18n from '../i18n/index.js';
 import { api } from '../lib/api.js';
+import { captureError } from '../lib/error.js';
 
 interface ModelConfig {
   provider?: string;
@@ -72,7 +73,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
         success: i18n.t('settings.saveSuccess'),
       }));
     } catch (e) {
-      set({ saving: false, error: e instanceof Error ? e.message : i18n.t('settings.saveFailed') });
+      set({ saving: false, error: captureError(e, i18n.t('settings.saveFailed')) });
     }
   },
 
@@ -95,7 +96,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
         llmKeys: s.llmKeys.map((k) => (k.provider === provider ? { ...k, configured: true } : k)),
       }));
     } catch (e) {
-      set({ saving: false, error: e instanceof Error ? e.message : i18n.t('settings.saveFailed') });
+      set({ saving: false, error: captureError(e, i18n.t('settings.saveFailed')) });
     }
   },
 
@@ -109,10 +110,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
         llmKeys: s.llmKeys.map((k) => (k.provider === provider ? { ...k, configured: false } : k)),
       }));
     } catch (e) {
-      set({
-        saving: false,
-        error: e instanceof Error ? e.message : i18n.t('settings.deleteFailed'),
-      });
+      set({ saving: false, error: captureError(e, i18n.t('settings.deleteFailed')) });
     }
   },
 

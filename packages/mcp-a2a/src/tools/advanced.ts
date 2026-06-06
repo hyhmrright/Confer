@@ -1,4 +1,5 @@
 import type { GatewayClient } from '../gateway-client.js';
+import type { ReplyResponse } from '../types.js';
 import { type AskResult, askAgent } from './consult.js';
 
 const MAX_PARALLEL = 5; // do not burn many recipients' tokens at once
@@ -31,11 +32,6 @@ export async function askMultiple(
       }
     }),
   );
-}
-
-interface ReplyResponse {
-  status: 'answered' | 'pending';
-  message?: { content: string | null };
 }
 
 export async function checkReply(

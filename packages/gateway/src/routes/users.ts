@@ -208,15 +208,18 @@ agentRoutes.get('/me/llm-keys/:provider/models', async (c) => {
   return c.json({ models });
 });
 
-const PROVIDER_MODEL_URLS: Partial<Record<Provider, string>> = {
-  anthropic: 'https://api.anthropic.com/v1/models',
-  openai: 'https://api.openai.com/v1/models',
-  deepseek: 'https://api.deepseek.com/models',
-  qwen: 'https://dashscope.aliyuncs.com/compatible-mode/v1/models',
-};
+// URL of the provider's "list models" endpoint, or null for providers that
+// don't expose one (only anthropic/openai/deepseek/qwen do).
+function providerModelUrl(provider: Provider): string | null {
+  if (provider === 'anthropic') return 'https://api.anthropic.com/v1/models';
+  if (provider === 'openai') return 'https://api.openai.com/v1/models';
+  if (provider === 'deepseek') return 'https://api.deepseek.com/models';
+  if (provider === 'qwen') return 'https://dashscope.aliyuncs.com/compatible-mode/v1/models';
+  return null;
+}
 
 async function fetchProviderModels(provider: Provider, apiKey: string): Promise<{ id: string }[]> {
-  const url = PROVIDER_MODEL_URLS[provider];
+  const url = providerModelUrl(provider);
   if (!url) return [];
   try {
     const headers: Record<string, string> =

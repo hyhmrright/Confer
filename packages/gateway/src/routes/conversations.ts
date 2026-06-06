@@ -3,6 +3,7 @@ import { and, desc, eq, inArray, lt } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { getDb } from '../db/connection.js';
 import { conversationParticipants, conversations, messages } from '../db/schema.js';
+import { assertIsConversationParticipant } from '../lib/conversation-auth.js';
 import { authMiddleware } from '../middleware/auth.js';
 import type { AppEnv } from '../types.js';
 
@@ -87,20 +88,7 @@ conversationRoutes.get('/:id', async (c) => {
     throw new AppError('not_found', 'Conversation not found', 404);
   }
 
-  const [participant] = await db
-    .select()
-    .from(conversationParticipants)
-    .where(
-      and(
-        eq(conversationParticipants.conversation_id, convId),
-        eq(conversationParticipants.user_id, user.sub),
-      ),
-    )
-    .limit(1);
-
-  if (!participant) {
-    throw new AppError('forbidden', 'Not a participant', 403);
-  }
+  await assertIsConversationParticipant(user.sub, convId);
 
   return c.json({ conversation: conv });
 });
@@ -112,20 +100,7 @@ conversationRoutes.get('/:id/messages', async (c) => {
   const before = c.req.query('before');
   const limit = Math.min(Number(c.req.query('limit') ?? 50), 100);
 
-  const [participant] = await db
-    .select()
-    .from(conversationParticipants)
-    .where(
-      and(
-        eq(conversationParticipants.conversation_id, convId),
-        eq(conversationParticipants.user_id, user.sub),
-      ),
-    )
-    .limit(1);
-
-  if (!participant) {
-    throw new AppError('forbidden', 'Not a participant', 403);
-  }
+  await assertIsConversationParticipant(user.sub, convId);
 
   // Admin-hidden messages are filtered from regular reads.
   const visible = eq(messages.moderation_status, 'visible');
@@ -150,20 +125,7 @@ conversationRoutes.delete('/:id', async (c) => {
   const db = getDb();
   const convId = c.req.param('id');
 
-  const [participant] = await db
-    .select()
-    .from(conversationParticipants)
-    .where(
-      and(
-        eq(conversationParticipants.conversation_id, convId),
-        eq(conversationParticipants.user_id, user.sub),
-      ),
-    )
-    .limit(1);
-
-  if (!participant) {
-    throw new AppError('forbidden', 'Not a participant', 403);
-  }
+  await assertIsConversationParticipant(user.sub, convId);
 
   await db
     .delete(conversationParticipants)
@@ -179,20 +141,7 @@ conversationRoutes.post('/:id/messages', async (c) => {
   const db = getDb();
   const convId = c.req.param('id');
 
-  const [participant] = await db
-    .select()
-    .from(conversationParticipants)
-    .where(
-      and(
-        eq(conversationParticipants.conversation_id, convId),
-        eq(conversationParticipants.user_id, user.sub),
-      ),
-    )
-    .limit(1);
-
-  if (!participant) {
-    throw new AppError('forbidden', 'Not a participant', 403);
-  }
+  await assertIsConversationParticipant(user.sub, convId);
 
   const body = sendMessageRequestSchema.parse(await c.req.json());
 

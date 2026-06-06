@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { api } from '../lib/api.js';
+import { captureError } from '../lib/error.js';
 
 export interface AdminUser {
   id: string;
@@ -97,129 +98,146 @@ interface AdminState {
   updateConfig: (patch: Partial<AppConfigValues>) => Promise<void>;
 }
 
-export const useAdminStore = create<AdminState>((set, get) => ({
-  users: [],
-  total: 0,
-  page: 1,
-  pageSize: 20,
-  query: '',
-  stats: null,
-  loadingUsers: false,
-  loadingStats: false,
-  error: null,
-  agents: [],
-  agentsTotal: 0,
-  agentsPage: 1,
-  loadingAgents: false,
-  conversations: [],
-  conversationsTotal: 0,
-  conversationsPage: 1,
-  loadingConversations: false,
-  config: null,
-  loadingConfig: false,
-
-  loadUsers: async (opts) => {
-    const page = opts?.page ?? get().page;
-    const query = opts?.query ?? get().query;
-    set({ loadingUsers: true, error: null });
+// The three list views (users/agents/conversations) share the same paginated
+// load shape: toggle a loading flag, build `page`/`page_size` params, fetch, then
+// map the response onto the store. This factory captures that flow; each view
+// supplies its endpoint, the current page, the response→state mapping, and its
+// loading-flag/error-fallback names. Keeping it internal preserves the public
+// hook API (callers still use loadUsers/loadAgents/loadConversations).
+function makePaginatedLoader<R>(config: {
+  endpoint: string;
+  loadingKey: 'loadingUsers' | 'loadingAgents' | 'loadingConversations';
+  errorFallback: string;
+  currentPage: () => number;
+  extraParams?: (opts: { page?: number; query?: string } | undefined) => Record<string, string>;
+  onSuccess: (data: R, opts: { page?: number; query?: string } | undefined) => Partial<AdminState>;
+}) {
+  return async (
+    set: (partial: Partial<AdminState>) => void,
+    pageSize: number,
+    opts?: { page?: number; query?: string },
+  ): Promise<void> => {
+    const page = opts?.page ?? config.currentPage();
+    set({ [config.loadingKey]: true, error: null } as Partial<AdminState>);
     try {
-      const params = new URLSearchParams({ page: String(page), page_size: String(get().pageSize) });
-      if (query) params.set('q', query);
-      const data = await api.get<AdminUserList>(`/admin/users?${params.toString()}`);
-      set({
-        users: data.users,
-        total: data.total,
-        page: data.page,
-        query,
-        loadingUsers: false,
-      });
-    } catch (e) {
-      set({ loadingUsers: false, error: e instanceof Error ? e.message : 'Failed to load users' });
-    }
-  },
-
-  loadStats: async () => {
-    set({ loadingStats: true, error: null });
-    try {
-      const data = await api.get<AdminStats>('/admin/stats');
-      set({ stats: data, loadingStats: false });
-    } catch (e) {
-      set({ loadingStats: false, error: e instanceof Error ? e.message : 'Failed to load stats' });
-    }
-  },
-
-  updateUser: async (id, patch) => {
-    await api.patch(`/admin/users/${id}`, patch);
-    await get().loadUsers();
-  },
-
-  loadAgents: async (opts) => {
-    const page = opts?.page ?? get().agentsPage;
-    set({ loadingAgents: true, error: null });
-    try {
-      const params = new URLSearchParams({ page: String(page), page_size: String(get().pageSize) });
-      const data = await api.get<AdminAgentList>(`/admin/agents?${params.toString()}`);
-      set({
-        agents: data.agents,
-        agentsTotal: data.total,
-        agentsPage: data.page,
-        loadingAgents: false,
-      });
+      const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
+      for (const [k, v] of Object.entries(config.extraParams?.(opts) ?? {})) params.set(k, v);
+      const data = await api.get<R>(`${config.endpoint}?${params.toString()}`);
+      set({ ...config.onSuccess(data, opts), [config.loadingKey]: false } as Partial<AdminState>);
     } catch (e) {
       set({
-        loadingAgents: false,
-        error: e instanceof Error ? e.message : 'Failed to load agents',
-      });
+        [config.loadingKey]: false,
+        error: captureError(e, config.errorFallback),
+      } as Partial<AdminState>);
     }
-  },
+  };
+}
 
-  updateAgent: async (id, status) => {
-    await api.patch(`/admin/agents/${id}`, { status });
-    await get().loadAgents();
-  },
+export const useAdminStore = create<AdminState>((set, get) => {
+  const usersLoader = makePaginatedLoader<AdminUserList>({
+    endpoint: '/admin/users',
+    loadingKey: 'loadingUsers',
+    errorFallback: 'Failed to load users',
+    currentPage: () => get().page,
+    extraParams: (opts): Record<string, string> => {
+      const query = opts?.query ?? get().query;
+      return query ? { q: query } : {};
+    },
+    onSuccess: (data, opts) => ({
+      users: data.users,
+      total: data.total,
+      page: data.page,
+      query: opts?.query ?? get().query,
+    }),
+  });
+  const agentsLoader = makePaginatedLoader<AdminAgentList>({
+    endpoint: '/admin/agents',
+    loadingKey: 'loadingAgents',
+    errorFallback: 'Failed to load agents',
+    currentPage: () => get().agentsPage,
+    onSuccess: (data) => ({
+      agents: data.agents,
+      agentsTotal: data.total,
+      agentsPage: data.page,
+    }),
+  });
+  const conversationsLoader = makePaginatedLoader<AdminConversationList>({
+    endpoint: '/admin/conversations',
+    loadingKey: 'loadingConversations',
+    errorFallback: 'Failed to load conversations',
+    currentPage: () => get().conversationsPage,
+    onSuccess: (data) => ({
+      conversations: data.conversations,
+      conversationsTotal: data.total,
+      conversationsPage: data.page,
+    }),
+  });
 
-  loadConversations: async (opts) => {
-    const page = opts?.page ?? get().conversationsPage;
-    set({ loadingConversations: true, error: null });
-    try {
-      const params = new URLSearchParams({ page: String(page), page_size: String(get().pageSize) });
-      const data = await api.get<AdminConversationList>(
-        `/admin/conversations?${params.toString()}`,
-      );
-      set({
-        conversations: data.conversations,
-        conversationsTotal: data.total,
-        conversationsPage: data.page,
-        loadingConversations: false,
-      });
-    } catch (e) {
-      set({
-        loadingConversations: false,
-        error: e instanceof Error ? e.message : 'Failed to load conversations',
-      });
-    }
-  },
+  return {
+    users: [],
+    total: 0,
+    page: 1,
+    pageSize: 20,
+    query: '',
+    stats: null,
+    loadingUsers: false,
+    loadingStats: false,
+    error: null,
+    agents: [],
+    agentsTotal: 0,
+    agentsPage: 1,
+    loadingAgents: false,
+    conversations: [],
+    conversationsTotal: 0,
+    conversationsPage: 1,
+    loadingConversations: false,
+    config: null,
+    loadingConfig: false,
 
-  updateConversation: async (id, moderationStatus) => {
-    await api.patch(`/admin/conversations/${id}`, { moderation_status: moderationStatus });
-    await get().loadConversations();
-  },
+    loadUsers: (opts) => usersLoader(set, get().pageSize, opts),
 
-  loadConfig: async () => {
-    set({ loadingConfig: true, error: null });
-    try {
-      const data = await api.get<{ config: AppConfigValues }>('/admin/config');
-      set({ config: data.config, loadingConfig: false });
-    } catch (e) {
-      set({
-        loadingConfig: false,
-        error: e instanceof Error ? e.message : 'Failed to load config',
-      });
-    }
-  },
+    loadStats: async () => {
+      set({ loadingStats: true, error: null });
+      try {
+        const data = await api.get<AdminStats>('/admin/stats');
+        set({ stats: data, loadingStats: false });
+      } catch (e) {
+        set({ loadingStats: false, error: captureError(e, 'Failed to load stats') });
+      }
+    },
 
-  updateConfig: async (patch) => {
-    const data = await api.patch<{ config: AppConfigValues }>('/admin/config', patch);
-    set({ config: data.config });
-  },
-}));
+    updateUser: async (id, patch) => {
+      await api.patch(`/admin/users/${id}`, patch);
+      await get().loadUsers();
+    },
+
+    loadAgents: (opts) => agentsLoader(set, get().pageSize, opts),
+
+    updateAgent: async (id, status) => {
+      await api.patch(`/admin/agents/${id}`, { status });
+      await get().loadAgents();
+    },
+
+    loadConversations: (opts) => conversationsLoader(set, get().pageSize, opts),
+
+    updateConversation: async (id, moderationStatus) => {
+      await api.patch(`/admin/conversations/${id}`, { moderation_status: moderationStatus });
+      await get().loadConversations();
+    },
+
+    loadConfig: async () => {
+      set({ loadingConfig: true, error: null });
+      try {
+        const data = await api.get<{ config: AppConfigValues }>('/admin/config');
+        set({ config: data.config, loadingConfig: false });
+      } catch (e) {
+        set({ loadingConfig: false, error: captureError(e, 'Failed to load config') });
+      }
+    },
+
+    updateConfig: async (patch) => {
+      const data = await api.patch<{ config: AppConfigValues }>('/admin/config', patch);
+      set({ config: data.config });
+    },
+  };
+});

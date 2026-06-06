@@ -1,5 +1,7 @@
-const BATCH_SIZE = 50;
-export const VECTOR_SIZE = 1536;
+import { BATCH_SIZE, EMBEDDING_API_TIMEOUT_MS, VECTOR_SIZE } from './rag-config.js';
+
+// Re-exported so existing importers keep resolving VECTOR_SIZE from embedding.
+export { VECTOR_SIZE };
 
 // All providers output (or can be configured to output) VECTOR_SIZE dimensions.
 const PROVIDERS = {
@@ -41,7 +43,7 @@ async function embedBatch(
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(30_000),
+    signal: AbortSignal.timeout(EMBEDDING_API_TIMEOUT_MS),
   });
 
   if (!res.ok) {

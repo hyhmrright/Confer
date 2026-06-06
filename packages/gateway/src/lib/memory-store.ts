@@ -1,6 +1,11 @@
-import { VECTOR_SIZE } from './embedding.js';
-import { QDRANT_HEALTHCHECK_TIMEOUT_MS, qdrantRequest, qdrantUrl } from './qdrant-client.js';
+import {
+  deleteQdrantPoints,
+  ensureQdrantCollection,
+  searchQdrantCollection,
+  upsertQdrantPoints,
+} from './qdrant-client.js';
 import { toUUID } from './qdrant.js';
+import { VECTOR_SIZE } from './rag-config.js';
 
 const COLLECTION = 'agent_memories_vec';
 
@@ -18,29 +23,17 @@ export interface UpsertMemoryInput {
 }
 
 export async function ensureMemoryCollection(): Promise<void> {
-  const res = await fetch(qdrantUrl(`/collections/${COLLECTION}`), {
-    signal: AbortSignal.timeout(QDRANT_HEALTHCHECK_TIMEOUT_MS),
-  });
-  if (res.status === 404) {
-    await qdrantRequest('PUT', `/collections/${COLLECTION}`, {
-      vectors: { size: VECTOR_SIZE, distance: 'Cosine' },
-    });
-  } else if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Qdrant GET /collections/${COLLECTION} failed (${res.status}): ${text}`);
-  }
+  await ensureQdrantCollection(COLLECTION, { vectorSize: VECTOR_SIZE, distance: 'Cosine' });
 }
 
 export async function upsertMemory(input: UpsertMemoryInput): Promise<void> {
-  await qdrantRequest('PUT', `/collections/${COLLECTION}/points?wait=true`, {
-    points: [
-      {
-        id: toUUID(input.memoryId),
-        vector: input.vector,
-        payload: { user_id: input.userId, memory_id: input.memoryId, text: input.text },
-      },
-    ],
-  });
+  await upsertQdrantPoints(COLLECTION, [
+    {
+      id: toUUID(input.memoryId),
+      vector: input.vector,
+      payload: { user_id: input.userId, memory_id: input.memoryId, text: input.text },
+    },
+  ]);
 }
 
 export async function searchMemories(
@@ -49,17 +42,11 @@ export async function searchMemories(
   topK = 5,
   minScore = 0.3,
 ): Promise<MemoryHit[]> {
-  const body: Record<string, unknown> = {
-    vector,
-    limit: topK,
-    with_payload: true,
+  const result = await searchQdrantCollection(COLLECTION, vector, topK, {
     filter: { must: [{ key: 'user_id', match: { value: userId } }] },
-  };
-  if (minScore > 0) body.score_threshold = minScore;
-  const data = (await qdrantRequest('POST', `/collections/${COLLECTION}/points/search`, body)) as {
-    result: Array<{ score: number; payload: Record<string, unknown> }>;
-  };
-  return data.result
+    scoreThreshold: minScore,
+  });
+  return result
     .filter((r) => typeof r.payload.memory_id === 'string' && typeof r.payload.text === 'string')
     .map((r) => ({
       memoryId: r.payload.memory_id as string,
@@ -75,5 +62,5 @@ export async function deleteMemory(userId: string, memoryId: string | undefined)
   if (memoryId !== undefined) {
     must.push({ key: 'memory_id', match: { value: memoryId } });
   }
-  await qdrantRequest('POST', `/collections/${COLLECTION}/points/delete`, { filter: { must } });
+  await deleteQdrantPoints(COLLECTION, { must });
 }
