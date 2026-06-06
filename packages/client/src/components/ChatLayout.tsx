@@ -9,6 +9,7 @@ import { connectWs, disconnectWs, onWsMessage, reconnectWs } from '../lib/ws.js'
 import { useAuthStore } from '../stores/auth.js';
 import { useChatStore } from '../stores/chat.js';
 import { usePermissionsStore } from '../stores/permissions.js';
+import { AccountMenu, type AccountUser } from './AccountMenu.js';
 import { AddContactDialog } from './AddContactDialog.js';
 import { BookOpen, Database, MessageCircle, Settings, Shield, Users } from './Icons.js';
 import { LanguageSwitcherCompact } from './LanguageSwitcher.js';
@@ -56,6 +57,8 @@ function NavRail({
   isAdmin,
   onAdmin,
   onSettings,
+  user,
+  onLogout,
 }: {
   tab: Tab;
   setTab: (t: Tab) => void;
@@ -63,6 +66,8 @@ function NavRail({
   isAdmin: boolean;
   onAdmin: () => void;
   onSettings: () => void;
+  user: AccountUser | null;
+  onLogout: () => void;
 }) {
   const { t } = useTranslation();
   return (
@@ -123,14 +128,8 @@ function NavRail({
         <Settings className="w-[18px] h-[18px]" />
       </button>
 
-      {/* Avatar / logout */}
-      <button
-        type="button"
-        title={t('nav.account')}
-        className="w-7 h-7 mt-1 rounded-full bg-primary-600/20 border border-primary-600/30 flex items-center justify-center hover:bg-primary-600/30 transition-colors"
-      >
-        <span className="text-[11px] font-semibold text-primary-400 font-mono">{initials}</span>
-      </button>
+      {/* Account menu */}
+      <AccountMenu user={user} initials={initials} onLogout={onLogout} />
     </nav>
   );
 }
@@ -189,6 +188,11 @@ export function ChatLayout() {
 
   const initials = (user?.display_name ?? user?.username ?? '?').charAt(0).toUpperCase();
 
+  const handleLogout = () => {
+    disconnectWs();
+    logout();
+  };
+
   return (
     <div className="h-screen flex bg-dark-base text-ink-primary overflow-hidden">
       <NavRail
@@ -198,15 +202,11 @@ export function ChatLayout() {
         isAdmin={user?.role === 'admin'}
         onAdmin={() => navigate('/admin')}
         onSettings={() => navigate('/settings')}
+        user={user}
+        onLogout={handleLogout}
       />
 
-      <Sidebar
-        tab={tab}
-        onLogout={() => {
-          disconnectWs();
-          logout();
-        }}
-      />
+      <Sidebar tab={tab} onLogout={handleLogout} />
 
       {activeConversationId ? (
         <MessageView />

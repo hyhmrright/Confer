@@ -87,6 +87,7 @@ export const zh = {
     knowledge: '知识库',
     settings: '设置',
     account: '账号',
+    did: '去中心化身份',
     logout: '退出登录',
     emptyTitle: '选择或创建一个对话',
     emptyHint: '从左侧点击对话，或新建一个',

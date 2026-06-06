@@ -90,6 +90,7 @@ export const ja: Resources = {
     knowledge: 'ナレッジベース',
     settings: '設定',
     account: 'アカウント',
+    did: '分散型 ID',
     logout: 'サインアウト',
     emptyTitle: '会話を選択または作成',
     emptyHint: '左側の会話を選ぶか、新しく作成してください',
