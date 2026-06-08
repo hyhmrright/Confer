@@ -9,7 +9,14 @@ import { newId } from '@confer/shared';
 import { eq } from 'drizzle-orm';
 import { app } from '../app.js';
 import { getDb } from '../db/connection.js';
-import { agents, messages, peerAgents, peerContacts, permissions } from '../db/schema.js';
+import {
+  agents,
+  conversations,
+  messages,
+  peerAgents,
+  peerContacts,
+  permissions,
+} from '../db/schema.js';
 import { type SeededUser, headers, mockFetch, resetDb, seedUser } from '../test/helpers.js';
 
 const MESSAGES = 'http://localhost/a2a/v1/messages';
@@ -222,5 +229,108 @@ describe('A2A signed message (real Ed25519, mocked DID resolution)', () => {
     });
     const res = await app.request(tampered);
     expect(res.status).toBe(401);
+  });
+});
+
+describe('A2A reply stream authorization (IDOR)', () => {
+  const SENDER_DID = 'did:web:localhost';
+  const SENDER_KEY = 'did:web:localhost#key-1';
+  const OTHER_DID = 'did:web:peer-b.example';
+  const OTHER_KEY = 'did:web:peer-b.example#key-1';
+  let restoreFetch: () => void;
+
+  afterEach(() => {
+    restoreFetch();
+    clearDIDCache();
+  });
+
+  function didDoc(id: string, keyId: string, publicKeyMultibase: string) {
+    return {
+      '@context': ['https://www.w3.org/ns/did/v1'],
+      id,
+      verificationMethod: [
+        { id: keyId, type: 'Ed25519VerificationKey2020', controller: id, publicKeyMultibase },
+      ],
+    };
+  }
+
+  // Serve a DID document per peer from the mocked resolver, each carrying its
+  // own Ed25519 public key. Returns the matching private keys for signing.
+  async function servePeers() {
+    const sender = await generateEd25519KeyPair();
+    const other = await generateEd25519KeyPair();
+    const docs: Record<string, unknown> = {
+      'localhost/.well-known/did.json': didDoc(
+        SENDER_DID,
+        SENDER_KEY,
+        await publicKeyToMultibase(sender.publicKey),
+      ),
+      'peer-b.example/.well-known/did.json': didDoc(
+        OTHER_DID,
+        OTHER_KEY,
+        await publicKeyToMultibase(other.publicKey),
+      ),
+    };
+    restoreFetch = mockFetch((url) => {
+      for (const [needle, doc] of Object.entries(docs)) {
+        if (url.includes(needle)) return Response.json(doc);
+      }
+      return undefined;
+    });
+    return { senderKey: sender.privateKey, otherKey: other.privateKey };
+  }
+
+  // Seed an inbound message from SENDER_DID plus the agent's reply to it.
+  async function seedMessageWithReply(): Promise<string> {
+    const db = getDb();
+    const convId = newId();
+    await db
+      .insert(conversations)
+      .values({ id: convId, type: 'direct_agent_agent', created_by: user.id });
+    const inboundId = newId();
+    await db.insert(messages).values({
+      id: inboundId,
+      conversation_id: convId,
+      sender_type: 'agent',
+      sender_id: newId(),
+      sender_did: SENDER_DID,
+      content: 'question',
+      via: 'a2a',
+    });
+    await db.insert(messages).values({
+      id: newId(),
+      conversation_id: convId,
+      sender_type: 'agent',
+      sender_id: newId(),
+      in_reply_to: inboundId,
+      content: 'the secret answer',
+    });
+    return inboundId;
+  }
+
+  function streamRequest(messageId: string): Request {
+    return new Request(`http://localhost/a2a/v1/stream/${messageId}`, { method: 'GET' });
+  }
+
+  test('lets the original sender read its own reply (200)', async () => {
+    const { senderKey } = await servePeers();
+    const messageId = await seedMessageWithReply();
+
+    const signed = await signRequest(streamRequest(messageId), senderKey, SENDER_KEY);
+    const res = await app.request(signed);
+
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain('the secret answer');
+  });
+
+  test('rejects a different signed peer reading the reply (403)', async () => {
+    const { otherKey } = await servePeers();
+    const messageId = await seedMessageWithReply();
+
+    const signed = await signRequest(streamRequest(messageId), otherKey, OTHER_KEY);
+    const res = await app.request(signed);
+
+    expect(res.status).toBe(403);
+    expect((await res.json()).error.code).toBe('forbidden');
   });
 });
