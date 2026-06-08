@@ -171,12 +171,15 @@ async function handleReadAck(userId: string, conversationId: string): Promise<vo
 async function broadcastPresence(userId: string, username: string, online: boolean): Promise<void> {
   const db = getDb();
 
+  // Notify the local users who added THIS user as a contact (peer_id resolves
+  // to this user's agent), not the contacts this user has added. Contacts are
+  // an asymmetric consent gate, so presence must fan out to followers.
   const rows = await db
-    .select({ userId: users.id })
+    .select({ userId: peerContacts.user_id })
     .from(peerContacts)
     .innerJoin(peerAgents, eq(peerContacts.peer_id, peerAgents.id))
     .innerJoin(users, eq(peerAgents.did, users.did))
-    .where(eq(peerContacts.user_id, userId));
+    .where(eq(users.id, userId));
 
   if (rows.length === 0) return;
 

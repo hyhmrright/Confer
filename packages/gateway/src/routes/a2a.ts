@@ -383,6 +383,13 @@ a2aRoutes.get('/stream/:messageId', verifyA2ASignature, async (c) => {
     throw new AppError('not_found', 'Message not found', 404);
   }
 
+  // Only the peer that originally sent the message may poll for its reply —
+  // the signature proves who the caller is, but not that the message is theirs.
+  const callerDid = c.get('a2aSenderDid' as never) as string | undefined;
+  if (inbound.sender_did !== callerDid) {
+    throw new AppError('forbidden', 'Not authorized to read this message', 403);
+  }
+
   const [reply] = await db
     .select()
     .from(messages)
