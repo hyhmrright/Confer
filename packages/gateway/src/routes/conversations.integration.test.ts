@@ -1,4 +1,7 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
+import { newId } from '@confer/shared';
+import { getDb } from '../db/connection.js';
+import { conversationParticipants } from '../db/schema.js';
 import { type SeededUser, del, get, post, resetDb, seedUser } from '../test/helpers.js';
 
 const BASE = '/api/v1/conversations';
@@ -77,11 +80,24 @@ describe('conversations', () => {
     expect(res.status).toBe(403);
   });
 
-  test('only a participant may delete a conversation', async () => {
+  test('only the creator may delete a conversation, not a mere participant', async () => {
     const id = await createConversation(user.token);
-    const outsider = await seedUser();
 
-    expect((await del(`${BASE}/${id}`, { token: outsider.token })).status).toBe(403);
+    // A non-creator participant must not be able to destroy a shared thread.
+    const participant = await seedUser();
+    await getDb().insert(conversationParticipants).values({
+      id: newId(),
+      conversation_id: id,
+      participant_type: 'user',
+      user_id: participant.id,
+    });
+    expect((await del(`${BASE}/${id}`, { token: participant.token })).status).toBe(404);
+
+    // An unrelated outsider is likewise refused (404 — existence not leaked).
+    const outsider = await seedUser();
+    expect((await del(`${BASE}/${id}`, { token: outsider.token })).status).toBe(404);
+
+    // The conversation still exists and its creator can delete it.
     expect((await del(`${BASE}/${id}`, { token: user.token })).status).toBe(200);
   });
 

@@ -17,7 +17,6 @@ import { and, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import type { MiddlewareHandler } from 'hono';
 import { streamSSE } from 'hono/streaming';
-import * as jose from 'jose';
 import { z } from 'zod';
 import { sendA2AMessage } from '../a2a/outbound.js';
 import { loadActiveAgentKey } from '../a2a/signing.js';
@@ -222,36 +221,7 @@ const verifyA2ASignature: MiddlewareHandler = async (c, next) => {
   await next();
 };
 
-const verifyCapabilityToken: MiddlewareHandler = async (c, next) => {
-  const capHeader = c.req.header('authorization');
-  if (!capHeader || !capHeader.startsWith('Capability ')) {
-    await next();
-    return;
-  }
-
-  const token = capHeader.slice('Capability '.length);
-  try {
-    const decoded = jose.decodeJwt(token);
-
-    if (decoded.exp !== undefined && decoded.exp < Math.floor(Date.now() / 1000)) {
-      throw new AppError('capability_invalid', 'Capability token has expired', 401);
-    }
-
-    const delegationDepth = decoded.delegation_depth;
-    if (typeof delegationDepth === 'number' && delegationDepth > 3) {
-      throw new AppError('capability_invalid', 'Delegation depth exceeds maximum of 3', 401);
-    }
-
-    c.set('capability' as never, decoded as never);
-  } catch (e) {
-    if (e instanceof AppError) throw e;
-    throw new AppError('capability_invalid', 'Invalid capability token', 401);
-  }
-
-  await next();
-};
-
-a2aRoutes.post('/messages', verifyA2ASignature, verifyCapabilityToken, async (c) => {
+a2aRoutes.post('/messages', verifyA2ASignature, async (c) => {
   const body = a2aMessageSchema.parse(await c.req.json());
   const db = getDb();
 

@@ -5,6 +5,7 @@ import { Hono } from 'hono';
 import { deliverConsult } from '../a2a/consult.js';
 import { getDb } from '../db/connection.js';
 import { conversationParticipants, conversations, messages, peerContacts } from '../db/schema.js';
+import { assertOwnsConversation } from '../lib/conversation-auth.js';
 import { authMiddleware } from '../middleware/auth.js';
 import type { AppEnv } from '../types.js';
 
@@ -69,16 +70,6 @@ async function getOrCreateConsultConversation(userId: string, peerId: string): P
 }
 
 // Verify the user owns the conversation before exposing its messages.
-async function assertOwnsConversation(userId: string, convId: string): Promise<void> {
-  const db = getDb();
-  const [conv] = await db
-    .select()
-    .from(conversations)
-    .where(and(eq(conversations.id, convId), eq(conversations.created_by, userId)))
-    .limit(1);
-  if (!conv) throw new AppError('not_found', 'Conversation not found', 404);
-}
-
 consultRoutes.post('/:peerId', async (c) => {
   const user = c.get('user');
   const db = getDb();

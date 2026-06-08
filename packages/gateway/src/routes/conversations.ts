@@ -3,7 +3,7 @@ import { and, desc, eq, inArray, lt } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { getDb } from '../db/connection.js';
 import { conversationParticipants, conversations, messages } from '../db/schema.js';
-import { assertIsConversationParticipant } from '../lib/conversation-auth.js';
+import { assertIsConversationParticipant, assertOwnsConversation } from '../lib/conversation-auth.js';
 import { authMiddleware } from '../middleware/auth.js';
 import type { AppEnv } from '../types.js';
 
@@ -125,7 +125,9 @@ conversationRoutes.delete('/:id', async (c) => {
   const db = getDb();
   const convId = c.req.param('id');
 
-  await assertIsConversationParticipant(user.sub, convId);
+  // Deleting wipes the conversation for every participant, so restrict it to the
+  // creator — a mere participant must not be able to destroy a shared thread.
+  await assertOwnsConversation(user.sub, convId);
 
   await db
     .delete(conversationParticipants)
