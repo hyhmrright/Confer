@@ -126,7 +126,6 @@ export async function signRequest(
   privateKey: CryptoKey,
   keyId: string,
 ): Promise<Request> {
-  const headers = ['(request-target)', 'host', 'date', 'digest'];
   const url = new URL(request.url);
 
   const newHeaders = new Headers(request.headers);
@@ -137,10 +136,14 @@ export async function signRequest(
     newHeaders.set('host', url.host);
   }
 
+  // Digest covers the request body, so only sign it when there is one. A
+  // body-less GET that declared `digest` in its signing set would be rejected
+  // at verification, since the verifier then demands a Digest header.
+  const headers = ['(request-target)', 'host', 'date'];
   const body = await request.clone().text();
   if (body) {
-    const digest = await computeDigest(body);
-    newHeaders.set('digest', digest);
+    newHeaders.set('digest', await computeDigest(body));
+    headers.push('digest');
   }
 
   const signed = new Request(request.url, {

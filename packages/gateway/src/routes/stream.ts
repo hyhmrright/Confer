@@ -1,12 +1,15 @@
 import { createProvider } from '@confer/agent-runtime';
 import type { LLMMessage, LLMToolDefinition } from '@confer/agent-runtime';
+import type { LLMProvider } from '@confer/agent-runtime';
 import { AppError, newId } from '@confer/shared';
 import { and, asc, eq, lt } from 'drizzle-orm';
 import { Hono } from 'hono';
+import type { SSEStreamingApi } from 'hono/streaming';
 import { streamSSE } from 'hono/streaming';
 import { getDb } from '../db/connection.js';
-import { agents, conversationParticipants, knowledgeBases, messages } from '../db/schema.js';
+import { agents, knowledgeBases, messages } from '../db/schema.js';
 import { getEnv } from '../env.js';
+import { assertIsConversationParticipant } from '../lib/conversation-auth.js';
 import type { EmbeddingProvider } from '../lib/embedding.js';
 import { decryptUserKey, getUserLlmKeys, resolveEmbeddingKey } from '../lib/llm-keys.js';
 import { ensureMemoryCollection } from '../lib/memory-store.js';
@@ -35,6 +38,134 @@ function buildSystemPrompt(base: string, hasKb: boolean): string {
 const DEFAULT_SYSTEM_PROMPT =
   '你是一个智能助手，能够帮助用户回答问题、处理任务。你可以使用 web_search 工具搜索实时信息。回答时请用用户使用的语言。';
 
+// Assemble the tool set offered to the LLM: web search when a Tavily key
+// resolves, knowledge-base search when the user has at least one KB.
+function buildToolDefinitions(tavilyApiKey: string, hasKb: boolean): LLMToolDefinition[] {
+  return [
+    ...(tavilyApiKey ? [tavilyToolDefinition] : []),
+    ...(hasKb ? [knowledgeBaseToolDefinition] : []),
+  ];
+}
+
+interface ToolExecContext {
+  userId: string;
+  embeddingKey: string;
+  embeddingProvider: EmbeddingProvider;
+  tavilyApiKey: string;
+  citations: KbCitation[];
+}
+
+// Execute a single tool call and return its textual result. Knowledge-base
+// citations are appended to `ctx.citations` and streamed live so the capsule
+// shows during the response. Tool errors are caught and returned as text so a
+// failing tool never aborts the agent loop.
+async function executeToolCall(
+  tc: { id: string; name: string; arguments: string },
+  ctx: ToolExecContext,
+  stream: SSEStreamingApi,
+): Promise<string> {
+  try {
+    if (tc.name === 'web_search') {
+      const args = JSON.parse(tc.arguments) as { query: string };
+      return await tavilySearch(args.query, ctx.tavilyApiKey);
+    }
+    if (tc.name === 'search_knowledge_base') {
+      const args = JSON.parse(tc.arguments) as { query: string; kb_ids?: string[] };
+      const kbResult = await searchKnowledgeBase(
+        args.query,
+        ctx.userId,
+        ctx.embeddingKey,
+        args.kb_ids,
+        ctx.embeddingProvider,
+      );
+      ctx.citations.push(...kbResult.citations);
+      // Stream citations live so the capsule shows during the response,
+      // matching the shape the client maps persisted citations to.
+      for (const cite of kbResult.citations) {
+        await stream.writeSSE({
+          event: 'citation',
+          data: JSON.stringify({
+            source: `${cite.doc_name}（${cite.kb_name}）`,
+            passage: cite.excerpt,
+          }),
+        });
+      }
+      return kbResult.text;
+    }
+    return `未知工具: ${tc.name}`;
+  } catch (err) {
+    return `工具调用失败: ${err instanceof Error ? err.message : String(err)}`;
+  }
+}
+
+// Drive the agentic tool loop (up to 5 rounds), streaming tokens, tool calls,
+// and tool results over SSE. Returns the accumulated reply text; collected
+// knowledge-base citations are accumulated into `ctx.citations`.
+async function runAgentWithTools(
+  provider: LLMProvider,
+  initialMessages: LLMMessage[],
+  tools: LLMToolDefinition[],
+  ctx: ToolExecContext,
+  stream: SSEStreamingApi,
+): Promise<string> {
+  let agentMessages = initialMessages;
+  let fullContent = '';
+
+  for (let round = 0; round < 5; round++) {
+    const pendingToolCalls: Array<{ id: string; name: string; arguments: string }> = [];
+    let turnContent = '';
+
+    for await (const event of provider.stream(agentMessages, { tools })) {
+      switch (event.type) {
+        case 'token':
+          if (event.text) {
+            turnContent += event.text;
+            fullContent += event.text;
+            await stream.writeSSE({
+              event: 'token',
+              data: JSON.stringify({ text: event.text }),
+            });
+          }
+          break;
+        case 'tool_call':
+          if (event.tool_call) pendingToolCalls.push(event.tool_call);
+          break;
+      }
+    }
+
+    if (pendingToolCalls.length === 0) break;
+
+    // Append assistant turn with tool_calls in proper format
+    agentMessages = [
+      ...agentMessages,
+      {
+        role: 'assistant',
+        content: turnContent || null,
+        tool_calls: pendingToolCalls.map((tc) => ({
+          id: tc.id,
+          type: 'function' as const,
+          function: { name: tc.name, arguments: tc.arguments },
+        })),
+      },
+    ];
+
+    for (const tc of pendingToolCalls) {
+      await stream.writeSSE({ event: 'tool', data: JSON.stringify({ tool: tc.name }) });
+
+      const result = await executeToolCall(tc, ctx, stream);
+
+      await stream.writeSSE({
+        event: 'tool_result',
+        data: JSON.stringify({ result }),
+      });
+
+      agentMessages = [...agentMessages, { role: 'tool', content: result, tool_call_id: tc.id }];
+    }
+  }
+
+  return fullContent;
+}
+
 streamRoutes.get('/:conversationId/:messageId', async (c) => {
   const user = c.get('user');
   const db = getDb();
@@ -48,20 +179,7 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
     throw new AppError('not_found', 'Message not found', 404);
   }
 
-  const [participant] = await db
-    .select()
-    .from(conversationParticipants)
-    .where(
-      and(
-        eq(conversationParticipants.conversation_id, conversationId),
-        eq(conversationParticipants.user_id, user.sub),
-      ),
-    )
-    .limit(1);
-
-  if (!participant) {
-    throw new AppError('forbidden', 'Not a participant of this conversation', 403);
-  }
+  await assertIsConversationParticipant(user.sub, conversationId);
 
   const [agent] = await db.select().from(agents).where(eq(agents.user_id, user.sub)).limit(1);
 
@@ -121,10 +239,7 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
       const userTavilyKey = await decryptUserKey(llmKeys, 'tavily', env.ENCRYPTION_KEY);
       const tavilyApiKey = userTavilyKey || env.TAVILY_API_KEY;
 
-      const tools: LLMToolDefinition[] = [
-        ...(tavilyApiKey ? [tavilyToolDefinition] : []),
-        ...(userKbs.length > 0 ? [knowledgeBaseToolDefinition] : []),
-      ];
+      const tools = buildToolDefinitions(tavilyApiKey, userKbs.length > 0);
 
       // Recall durable memories for this user and inject them into the system
       // prompt. Best-effort: never fail the request on memory errors.
@@ -146,102 +261,20 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
       const effectiveSystemPrompt =
         buildSystemPrompt(systemPrompt, userKbs.length > 0) + memoryFragment;
 
-      let agentMessages: LLMMessage[] = [
+      const initialMessages: LLMMessage[] = [
         { role: 'system', content: effectiveSystemPrompt },
         ...history,
         { role: 'user', content: msg.content ?? '' },
       ];
 
-      let fullContent = '';
       const citations: KbCitation[] = [];
-
-      // Agentic loop: up to 5 tool-call rounds
-      for (let round = 0; round < 5; round++) {
-        const pendingToolCalls: Array<{ id: string; name: string; arguments: string }> = [];
-        let turnContent = '';
-
-        for await (const event of provider.stream(agentMessages, { tools })) {
-          switch (event.type) {
-            case 'token':
-              if (event.text) {
-                turnContent += event.text;
-                fullContent += event.text;
-                await stream.writeSSE({
-                  event: 'token',
-                  data: JSON.stringify({ text: event.text }),
-                });
-              }
-              break;
-            case 'tool_call':
-              if (event.tool_call) pendingToolCalls.push(event.tool_call);
-              break;
-          }
-        }
-
-        if (pendingToolCalls.length === 0) break;
-
-        // Append assistant turn with tool_calls in proper format
-        agentMessages = [
-          ...agentMessages,
-          {
-            role: 'assistant',
-            content: turnContent || null,
-            tool_calls: pendingToolCalls.map((tc) => ({
-              id: tc.id,
-              type: 'function' as const,
-              function: { name: tc.name, arguments: tc.arguments },
-            })),
-          },
-        ];
-
-        for (const tc of pendingToolCalls) {
-          await stream.writeSSE({ event: 'tool', data: JSON.stringify({ tool: tc.name }) });
-
-          let result = '';
-          try {
-            if (tc.name === 'web_search') {
-              const args = JSON.parse(tc.arguments) as { query: string };
-              result = await tavilySearch(args.query, tavilyApiKey);
-            } else if (tc.name === 'search_knowledge_base') {
-              const args = JSON.parse(tc.arguments) as { query: string; kb_ids?: string[] };
-              const kbResult = await searchKnowledgeBase(
-                args.query,
-                user.sub,
-                embeddingKey,
-                args.kb_ids,
-                embeddingProvider,
-              );
-              result = kbResult.text;
-              citations.push(...kbResult.citations);
-              // Stream citations live so the capsule shows during the response,
-              // matching the shape the client maps persisted citations to.
-              for (const cite of kbResult.citations) {
-                await stream.writeSSE({
-                  event: 'citation',
-                  data: JSON.stringify({
-                    source: `${cite.doc_name}（${cite.kb_name}）`,
-                    passage: cite.excerpt,
-                  }),
-                });
-              }
-            } else {
-              result = `未知工具: ${tc.name}`;
-            }
-          } catch (err) {
-            result = `工具调用失败: ${err instanceof Error ? err.message : String(err)}`;
-          }
-
-          await stream.writeSSE({
-            event: 'tool_result',
-            data: JSON.stringify({ result }),
-          });
-
-          agentMessages = [
-            ...agentMessages,
-            { role: 'tool', content: result, tool_call_id: tc.id },
-          ];
-        }
-      }
+      const fullContent = await runAgentWithTools(
+        provider,
+        initialMessages,
+        tools,
+        { userId: user.sub, embeddingKey, embeddingProvider, tavilyApiKey, citations },
+        stream,
+      );
 
       const replyId = newId();
       await db.insert(messages).values({

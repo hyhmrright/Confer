@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { newId } from '@confer/shared';
+import { getDb } from '../db/connection.js';
+import { knowledgeDocuments } from '../db/schema.js';
 import { VECTOR_SIZE } from '../lib/embedding.js';
 import {
   type SeededUser,
@@ -49,6 +52,36 @@ describe('knowledge base CRUD', () => {
     expect(
       (await get(`${BASE}/01HZZZZZZZZZZZZZZZZZZZZZZZ/documents`, { token: user.token })).status,
     ).toBe(404);
+  });
+
+  test('only the owner may delete a document (outsider gets 404)', async () => {
+    const kbId = await createKb('Owner KB');
+
+    // Seed a document owned by `user` directly (no ingestion needed for this
+    // authorization check).
+    const docId = newId();
+    await getDb().insert(knowledgeDocuments).values({
+      id: docId,
+      kb_id: kbId,
+      user_id: user.id,
+      filename: 'secret.txt',
+      content_type: 'text/plain',
+      status: 'ready',
+    });
+
+    // A different user must not be able to delete it: the handler scopes the
+    // lookup to user_id, so the row is invisible and the delete reads as 404.
+    const outsider = await seedUser('outsider');
+    expect(
+      (await del(`${BASE}/${kbId}/documents/${docId}`, { token: outsider.token })).status,
+    ).toBe(404);
+
+    // The document is still there for its owner, who can delete it.
+    const ownerList = await (await get(`${BASE}/${kbId}/documents`, { token: user.token })).json();
+    expect(ownerList.documents).toHaveLength(1);
+    expect((await del(`${BASE}/${kbId}/documents/${docId}`, { token: user.token })).status).toBe(
+      200,
+    );
   });
 });
 

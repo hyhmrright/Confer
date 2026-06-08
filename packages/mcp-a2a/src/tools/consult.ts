@@ -1,15 +1,11 @@
 import type { GatewayClient } from '../gateway-client.js';
+import type { ReplyResponse } from '../types.js';
 
 interface InitiateResponse {
   conversation_id: string;
   message_id: string;
   status: 'sent' | 'failed';
   error?: string;
-}
-
-interface ReplyResponse {
-  status: 'answered' | 'pending';
-  message?: { content: string | null };
 }
 
 export interface AskInput {

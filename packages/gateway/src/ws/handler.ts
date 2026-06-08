@@ -168,24 +168,31 @@ async function handleReadAck(userId: string, conversationId: string): Promise<vo
     );
 }
 
-async function broadcastPresence(userId: string, username: string, online: boolean): Promise<void> {
-  const db = getDb();
-
-  const rows = await db
-    .select({ userId: users.id })
+// Local users who should see this user's presence: those who added THIS user
+// as a contact (peer_id resolves to this user's agent), not the contacts this
+// user has added. Contacts are an asymmetric consent gate, so presence fans out
+// to followers.
+export async function getPresenceAudience(userId: string): Promise<string[]> {
+  const rows = await getDb()
+    .select({ userId: peerContacts.user_id })
     .from(peerContacts)
     .innerJoin(peerAgents, eq(peerContacts.peer_id, peerAgents.id))
     .innerJoin(users, eq(peerAgents.did, users.did))
-    .where(eq(peerContacts.user_id, userId));
+    .where(eq(users.id, userId));
 
-  if (rows.length === 0) return;
+  return rows.map((row) => row.userId);
+}
+
+async function broadcastPresence(userId: string, username: string, online: boolean): Promise<void> {
+  const audience = await getPresenceAudience(userId);
+  if (audience.length === 0) return;
 
   const message: WsServerMessage = {
     type: 'presence.update',
     data: { user_id: userId, username, online },
   };
 
-  for (const row of rows) {
-    sendToUser(row.userId, message);
+  for (const recipientId of audience) {
+    sendToUser(recipientId, message);
   }
 }

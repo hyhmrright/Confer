@@ -1,6 +1,11 @@
 import { createHash } from 'node:crypto';
-import { VECTOR_SIZE } from './embedding.js';
-import { QDRANT_HEALTHCHECK_TIMEOUT_MS, qdrantRequest, qdrantUrl } from './qdrant-client.js';
+import {
+  deleteQdrantPoints,
+  ensureQdrantCollection,
+  searchQdrantCollection,
+  upsertQdrantPoints,
+} from './qdrant-client.js';
+import { VECTOR_SIZE } from './rag-config.js';
 
 const COLLECTION = 'knowledge_chunks';
 
@@ -32,14 +37,7 @@ export interface SearchResult {
 }
 
 export async function ensureCollection(): Promise<void> {
-  const res = await fetch(qdrantUrl(`/collections/${COLLECTION}`), {
-    signal: AbortSignal.timeout(QDRANT_HEALTHCHECK_TIMEOUT_MS),
-  });
-  if (res.status === 404) {
-    await qdrantRequest('PUT', `/collections/${COLLECTION}`, {
-      vectors: { size: VECTOR_SIZE, distance: 'Cosine' },
-    });
-  }
+  await ensureQdrantCollection(COLLECTION, { vectorSize: VECTOR_SIZE, distance: 'Cosine' });
 }
 
 export async function upsertChunks(chunks: KnowledgeChunk[]): Promise<void> {
@@ -57,7 +55,7 @@ export async function upsertChunks(chunks: KnowledgeChunk[]): Promise<void> {
       chunk_index: c.chunk_index,
     },
   }));
-  await qdrantRequest('PUT', `/collections/${COLLECTION}/points?wait=true`, { points });
+  await upsertQdrantPoints(COLLECTION, points);
 }
 
 export async function searchChunks(
@@ -71,18 +69,11 @@ export async function searchChunks(
     mustFilters.push({ key: 'kb_id', match: { any: kbIds } });
   }
 
-  const body = {
-    vector,
-    limit: topK,
-    with_payload: true,
+  const result = await searchQdrantCollection(COLLECTION, vector, topK, {
     filter: { must: mustFilters },
-  };
+  });
 
-  const data = (await qdrantRequest('POST', `/collections/${COLLECTION}/points/search`, body)) as {
-    result: Array<{ id: string; score: number; payload: Record<string, unknown> }>;
-  };
-
-  return data.result.map((r) => ({
+  return result.map((r) => ({
     chunk_id: r.id as string,
     kb_id: r.payload.kb_id as string,
     kb_name: r.payload.kb_name as string,
@@ -94,13 +85,9 @@ export async function searchChunks(
 }
 
 export async function deleteByDocId(docId: string): Promise<void> {
-  await qdrantRequest('POST', `/collections/${COLLECTION}/points/delete`, {
-    filter: { must: [{ key: 'doc_id', match: { value: docId } }] },
-  });
+  await deleteQdrantPoints(COLLECTION, { must: [{ key: 'doc_id', match: { value: docId } }] });
 }
 
 export async function deleteByKbId(kbId: string): Promise<void> {
-  await qdrantRequest('POST', `/collections/${COLLECTION}/points/delete`, {
-    filter: { must: [{ key: 'kb_id', match: { value: kbId } }] },
-  });
+  await deleteQdrantPoints(COLLECTION, { must: [{ key: 'kb_id', match: { value: kbId } }] });
 }

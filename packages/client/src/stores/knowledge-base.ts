@@ -38,27 +38,6 @@ interface KbState {
 
 const TERMINAL_STATUSES = new Set(['ready', 'error', 'failed']);
 
-// Embedding runs server-side after upload, so a freshly uploaded document stays
-// "processing" until it finishes. Poll a few times to reflect the terminal
-// status without making the user reload. Best-effort: stops on error or timeout.
-async function pollDocumentStatus(kbId: string, docId: string): Promise<void> {
-  for (let i = 0; i < 20; i++) {
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    let docs: KnowledgeDocument[];
-    try {
-      const data = await api.get<{ documents: KnowledgeDocument[] }>(
-        `/knowledge-bases/${kbId}/documents`,
-      );
-      docs = data.documents;
-    } catch {
-      return;
-    }
-    useKbStore.setState((s) => ({ documents: { ...s.documents, [kbId]: docs } }));
-    const doc = docs.find((d) => d.id === docId);
-    if (!doc || (doc.status != null && TERMINAL_STATUSES.has(doc.status))) return;
-  }
-}
-
 export const useKbStore = create<KbState>((set) => ({
   kbs: [],
   documents: {},
@@ -113,8 +92,28 @@ export const useKbStore = create<KbState>((set) => ({
           [kbId]: [data.document, ...(s.documents[kbId] ?? [])],
         },
       }));
+      // Embedding runs server-side after upload, so a freshly uploaded document
+      // stays "processing" until it finishes. Poll a few times to reflect the
+      // terminal status without a reload. Best-effort: stops on error or timeout.
       if (data.document.status == null || !TERMINAL_STATUSES.has(data.document.status)) {
-        void pollDocumentStatus(kbId, data.document.id);
+        const docId = data.document.id;
+        void (async () => {
+          for (let i = 0; i < 20; i++) {
+            await new Promise((resolve) => setTimeout(resolve, 1500));
+            let docs: KnowledgeDocument[];
+            try {
+              const polled = await api.get<{ documents: KnowledgeDocument[] }>(
+                `/knowledge-bases/${kbId}/documents`,
+              );
+              docs = polled.documents;
+            } catch {
+              return;
+            }
+            set((s) => ({ documents: { ...s.documents, [kbId]: docs } }));
+            const doc = docs.find((d) => d.id === docId);
+            if (!doc || (doc.status != null && TERMINAL_STATUSES.has(doc.status))) return;
+          }
+        })();
       }
     } finally {
       set({ uploading: false });

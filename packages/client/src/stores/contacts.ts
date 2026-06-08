@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { api } from '../lib/api.js';
+import { captureError } from '../lib/error.js';
 
 interface PeerAgent {
   id: string;
@@ -50,7 +51,7 @@ export const useContactsStore = create<ContactsState>((set, get) => ({
       await get().loadContacts();
       set({ loading: false, dialogOpen: false });
     } catch (e) {
-      set({ loading: false, error: e instanceof Error ? e.message : 'Failed to add contact' });
+      set({ loading: false, error: captureError(e, 'Failed to add contact') });
     }
   },
 

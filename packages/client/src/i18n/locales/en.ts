@@ -90,6 +90,7 @@ export const en: Resources = {
     knowledge: 'Knowledge base',
     settings: 'Settings',
     account: 'Account',
+    did: 'Decentralized ID',
     logout: 'Sign out',
     emptyTitle: 'Select or create a conversation',
     emptyHint: 'Pick a conversation on the left, or start a new one',

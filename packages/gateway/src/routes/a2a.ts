@@ -17,7 +17,6 @@ import { and, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import type { MiddlewareHandler } from 'hono';
 import { streamSSE } from 'hono/streaming';
-import * as jose from 'jose';
 import { z } from 'zod';
 import { sendA2AMessage } from '../a2a/outbound.js';
 import { loadActiveAgentKey } from '../a2a/signing.js';
@@ -33,6 +32,7 @@ import {
 } from '../db/schema.js';
 import { getEnv } from '../env.js';
 import { decryptUserKey, getUserLlmKeys } from '../lib/llm-keys.js';
+import { upsertPeerAgent } from '../lib/peer-agent.js';
 import { rateLimit } from '../middleware/rate-limit.js';
 import { broadcastToConversation } from '../ws/handler.js';
 
@@ -95,6 +95,82 @@ async function upsertConnectionRequest(
   });
 }
 
+// Look up the sending peer by DID, creating it on first contact. The endpoint
+// is resolved from the sender's DID document up front so a reply can be sent
+// once the owner approves the connection. Returns null if the peer can't be
+// persisted.
+async function ensurePeerAgent(fromDid: string): Promise<typeof peerAgents.$inferSelect | null> {
+  const db = getDb();
+  const [existing] = await db.select().from(peerAgents).where(eq(peerAgents.did, fromDid)).limit(1);
+  if (existing) return existing;
+
+  const created = await upsertPeerAgent({
+    did: fromDid,
+    endpoint: await resolvePeerEndpoint(fromDid),
+  });
+  return created ?? null;
+}
+
+// Consent gate: an agent only spends its owner's LLM budget for peers the owner
+// has connected to. Returns true when a connection exists; false means the
+// message must be held as a pending connection request (no conversation, no
+// stored message, no LLM) until the owner approves it.
+async function checkConsentGate(userId: string, peerId: string): Promise<boolean> {
+  const db = getDb();
+  const [connection] = await db
+    .select()
+    .from(peerContacts)
+    .where(and(eq(peerContacts.user_id, userId), eq(peerContacts.peer_id, peerId)))
+    .limit(1);
+  return Boolean(connection);
+}
+
+// Resolve the conversation for this inbound message: reuse the supplied
+// thread_id only if the peer is already a participant of it (otherwise a
+// connected peer could inject into another peer's thread), else create a fresh
+// agent-to-agent conversation seeded with the peer participant.
+async function resolveOrCreateThread(
+  threadId: string | undefined,
+  peerId: string,
+  userId: string,
+): Promise<string> {
+  const db = getDb();
+  let convId = threadId;
+
+  if (convId) {
+    const [member] = await db
+      .select({ id: conversationParticipants.id })
+      .from(conversationParticipants)
+      .where(
+        and(
+          eq(conversationParticipants.conversation_id, convId),
+          eq(conversationParticipants.peer_id, peerId),
+        ),
+      )
+      .limit(1);
+    if (!member) convId = undefined;
+  }
+
+  if (!convId) {
+    convId = newId();
+    await db.insert(conversations).values({
+      id: convId,
+      type: 'direct_agent_agent',
+      created_by: userId,
+    });
+
+    await db.insert(conversationParticipants).values({
+      id: newId(),
+      conversation_id: convId,
+      participant_type: 'peer_agent',
+      peer_id: peerId,
+      role: 'member',
+    });
+  }
+
+  return convId;
+}
+
 export const a2aRoutes = new Hono();
 
 a2aRoutes.use('/*', rateLimit(60, 60_000));
@@ -145,36 +221,7 @@ const verifyA2ASignature: MiddlewareHandler = async (c, next) => {
   await next();
 };
 
-const verifyCapabilityToken: MiddlewareHandler = async (c, next) => {
-  const capHeader = c.req.header('authorization');
-  if (!capHeader || !capHeader.startsWith('Capability ')) {
-    await next();
-    return;
-  }
-
-  const token = capHeader.slice('Capability '.length);
-  try {
-    const decoded = jose.decodeJwt(token);
-
-    if (decoded.exp !== undefined && decoded.exp < Math.floor(Date.now() / 1000)) {
-      throw new AppError('capability_invalid', 'Capability token has expired', 401);
-    }
-
-    const delegationDepth = decoded.delegation_depth;
-    if (typeof delegationDepth === 'number' && delegationDepth > 3) {
-      throw new AppError('capability_invalid', 'Delegation depth exceeds maximum of 3', 401);
-    }
-
-    c.set('capability' as never, decoded as never);
-  } catch (e) {
-    if (e instanceof AppError) throw e;
-    throw new AppError('capability_invalid', 'Invalid capability token', 401);
-  }
-
-  await next();
-};
-
-a2aRoutes.post('/messages', verifyA2ASignature, verifyCapabilityToken, async (c) => {
+a2aRoutes.post('/messages', verifyA2ASignature, async (c) => {
   const body = a2aMessageSchema.parse(await c.req.json());
   const db = getDb();
 
@@ -198,38 +245,17 @@ a2aRoutes.post('/messages', verifyA2ASignature, verifyCapabilityToken, async (c)
     throw new AppError('not_found', 'Target agent not found on this instance', 404);
   }
 
-  let [peer] = await db.select().from(peerAgents).where(eq(peerAgents.did, body.from)).limit(1);
-
-  if (!peer) {
-    [peer] = await db
-      .insert(peerAgents)
-      .values({
-        id: newId(),
-        did: body.from,
-        // Resolve the sender's A2A endpoint up front so a reply can be sent
-        // once the owner approves the connection.
-        endpoint: await resolvePeerEndpoint(body.from),
-        public_key_json: {},
-        agent_facts_json: {},
-      })
-      .returning();
-  }
+  const peer = await ensurePeerAgent(body.from);
 
   if (!peer) {
     throw new AppError('peer_unavailable', 'Failed to resolve peer agent', 500);
   }
 
-  // Consent gate: an agent only spends its owner's LLM budget for peers the
-  // owner has connected to. A message from an unconnected peer is held as a
-  // pending connection request — no conversation, no stored message, no LLM —
+  // A message from an unconnected peer is held as a pending connection request
   // until the owner approves it in the permission inbox.
-  const [connection] = await db
-    .select()
-    .from(peerContacts)
-    .where(and(eq(peerContacts.user_id, targetAgent.user_id), eq(peerContacts.peer_id, peer.id)))
-    .limit(1);
+  const connected = await checkConsentGate(targetAgent.user_id, peer.id);
 
-  if (!connection) {
+  if (!connected) {
     await upsertConnectionRequest(targetAgent.user_id, peer, body.message.content);
     return c.json(
       {
@@ -252,42 +278,7 @@ a2aRoutes.post('/messages', verifyA2ASignature, verifyCapabilityToken, async (c)
     throw new AppError('policy_denied', 'Agent policy denied this request', 403);
   }
 
-  let convId = body.thread_id;
-
-  if (convId) {
-    // The sender may only reuse a thread it is already a participant of.
-    // Otherwise a connected peer could target another peer's conversation id
-    // and inject a message into it (the reply would then be broadcast and
-    // surfaced to the owner as if it came from the real participant).
-    const [member] = await db
-      .select({ id: conversationParticipants.id })
-      .from(conversationParticipants)
-      .where(
-        and(
-          eq(conversationParticipants.conversation_id, convId),
-          eq(conversationParticipants.peer_id, peer.id),
-        ),
-      )
-      .limit(1);
-    if (!member) convId = undefined;
-  }
-
-  if (!convId) {
-    convId = newId();
-    await db.insert(conversations).values({
-      id: convId,
-      type: 'direct_agent_agent',
-      created_by: targetAgent.user_id,
-    });
-
-    await db.insert(conversationParticipants).values({
-      id: newId(),
-      conversation_id: convId,
-      participant_type: 'peer_agent',
-      peer_id: peer.id,
-      role: 'member',
-    });
-  }
+  const convId = await resolveOrCreateThread(body.thread_id, peer.id, targetAgent.user_id);
 
   const msgId = newId();
   await db.insert(messages).values({
@@ -360,6 +351,13 @@ a2aRoutes.get('/stream/:messageId', verifyA2ASignature, async (c) => {
 
   if (!inbound) {
     throw new AppError('not_found', 'Message not found', 404);
+  }
+
+  // Only the peer that originally sent the message may poll for its reply —
+  // the signature proves who the caller is, but not that the message is theirs.
+  const callerDid = c.get('a2aSenderDid' as never) as string | undefined;
+  if (inbound.sender_did !== callerDid) {
+    throw new AppError('forbidden', 'Not authorized to read this message', 403);
   }
 
   const [reply] = await db

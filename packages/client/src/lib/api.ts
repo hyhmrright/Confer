@@ -102,7 +102,19 @@ export class ApiError extends Error {
   }
 }
 
-export const api = {
+// Structural type for the HTTP client. Exported as a seam so callers (and tests)
+// can depend on the interface rather than the concrete `api` object's inferred
+// shape. Adding this changes no runtime behavior.
+export interface ApiClient {
+  get: <T>(path: string) => Promise<T>;
+  post: <T>(path: string, body: unknown) => Promise<T>;
+  patch: <T>(path: string, body: unknown) => Promise<T>;
+  put: <T>(path: string, body: unknown) => Promise<T>;
+  delete: <T>(path: string) => Promise<T>;
+  postForm: <T>(path: string, form: FormData) => Promise<T>;
+}
+
+export const api: ApiClient = {
   post: <T>(path: string, body: unknown) =>
     request<T>(path, { method: 'POST', body: JSON.stringify(body) }),
 

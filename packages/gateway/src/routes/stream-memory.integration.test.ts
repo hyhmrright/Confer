@@ -209,4 +209,75 @@ describe('stream long-term memory', () => {
     const sysPrompt = capturedSystemPrompts[0];
     expect(sysPrompt).toContain(FACT);
   });
+
+  test('stream completes and persists the reply even if memory (embedding) fails', async () => {
+    const { u, convId } = await setupUserWithAgent();
+
+    // Embeddings always 503 → both the recall (pre-reply, try/catch best-effort)
+    // and the fire-and-forget extraction path fail. The /chat/completions reply
+    // is served normally so the agent still answers.
+    const replyText = '这是回答';
+    restore = mockFetch((url, init) => {
+      if (url.includes('/embeddings')) {
+        return new Response('embedding unavailable', { status: 503 });
+      }
+      if (url.includes('/chat/completions')) {
+        const body = JSON.parse(String(init?.body ?? '{}')) as { stream?: boolean };
+        if (body.stream) {
+          const chunks = [
+            `data: ${JSON.stringify({ choices: [{ delta: { content: replyText } }] })}\n\n`,
+            'data: [DONE]\n\n',
+          ];
+          return new Response(chunks.join(''), {
+            status: 200,
+            headers: { 'content-type': 'text/event-stream' },
+          });
+        }
+        return new Response(
+          JSON.stringify({
+            choices: [{ message: { content: '[]' }, finish_reason: 'stop' }],
+            usage: {},
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      // Short-circuit any other external call so a stray request can't hang.
+      if (url.includes('openai.com') || url.includes('tavily.com')) {
+        return new Response(
+          JSON.stringify({ choices: [{ message: { content: '[]' } }], data: [] }),
+          {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          },
+        );
+      }
+      return undefined;
+    });
+
+    const msgId = await postUserMessage(convId, u.id, '帮我回答一个问题');
+    const res = await apiRequest(`/api/v1/stream/${convId}/${msgId}`, {
+      method: 'GET',
+      headers: headers({ token: u.token }),
+    });
+
+    // The SSE stream must succeed (200) and stream the reply tokens + a done
+    // event — the memory failure is swallowed, not propagated.
+    expect(res.status).toBe(200);
+    const sse = await res.text();
+    expect(sse).toContain(replyText);
+    expect(sse).toContain('event: done');
+    expect(sse).not.toContain('event: error');
+
+    // The assistant reply was persisted despite the embedding outage.
+    const reply = await (
+      await apiRequest(`/api/v1/conversations/${convId}/messages`, {
+        method: 'GET',
+        headers: headers({ token: u.token }),
+      })
+    ).json();
+    const agentMsg = reply.messages.find(
+      (m: { sender_type: string; content: string }) => m.sender_type === 'agent',
+    );
+    expect(agentMsg?.content).toBe(replyText);
+  });
 });

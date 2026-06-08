@@ -5,6 +5,7 @@ import type {
   LLMResponse,
   LLMStreamEvent,
 } from './provider.js';
+import { readSSEData } from './stream-utils.js';
 
 function toAnthropicMessages(messages: LLMMessage[]): unknown[] {
   return messages
@@ -76,9 +77,11 @@ export class AnthropicProvider implements LLMProvider {
       .map((b) => b.text)
       .join('');
 
+    const stopReason = data.stop_reason as string | undefined;
     return {
       content,
-      finish_reason: 'stop',
+      finish_reason:
+        stopReason === 'max_tokens' ? 'length' : stopReason === 'tool_use' ? 'tool_use' : 'stop',
       usage: {
         prompt_tokens: (data.usage as Record<string, number>).input_tokens ?? 0,
         completion_tokens: (data.usage as Record<string, number>).output_tokens ?? 0,
@@ -119,53 +122,39 @@ export class AnthropicProvider implements LLMProvider {
       throw new Error(`Anthropic stream error: ${response.status}`);
     }
 
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-
     // Track tool_use blocks being streamed
     const pendingToolBlocks = new Map<number, { id: string; name: string; input: string }>();
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+    for await (const payload of readSSEData(response.body)) {
+      const data = JSON.parse(payload) as Record<string, unknown>;
 
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() ?? '';
-
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue;
-        const data = JSON.parse(line.slice(6)) as Record<string, unknown>;
-
-        if (data.type === 'content_block_start') {
-          const block = data.content_block as Record<string, unknown>;
-          const index = data.index as number;
-          if (block.type === 'tool_use') {
-            pendingToolBlocks.set(index, {
-              id: block.id as string,
-              name: block.name as string,
-              input: '',
-            });
-          }
-        } else if (data.type === 'content_block_delta') {
-          const delta = data.delta as Record<string, string>;
-          const index = data.index as number;
-          if (delta.type === 'text_delta' && delta.text) {
-            yield { type: 'token', text: delta.text };
-          } else if (delta.type === 'input_json_delta' && delta.partial_json) {
-            const block = pendingToolBlocks.get(index);
-            if (block) block.input += delta.partial_json;
-          }
-        } else if (data.type === 'message_stop') {
-          for (const [, block] of pendingToolBlocks) {
-            yield {
-              type: 'tool_call',
-              tool_call: { id: block.id, name: block.name, arguments: block.input || '{}' },
-            };
-          }
-          yield { type: 'done' };
+      if (data.type === 'content_block_start') {
+        const block = data.content_block as Record<string, unknown>;
+        const index = data.index as number;
+        if (block.type === 'tool_use') {
+          pendingToolBlocks.set(index, {
+            id: block.id as string,
+            name: block.name as string,
+            input: '',
+          });
         }
+      } else if (data.type === 'content_block_delta') {
+        const delta = data.delta as Record<string, string>;
+        const index = data.index as number;
+        if (delta.type === 'text_delta' && delta.text) {
+          yield { type: 'token', text: delta.text };
+        } else if (delta.type === 'input_json_delta' && delta.partial_json) {
+          const block = pendingToolBlocks.get(index);
+          if (block) block.input += delta.partial_json;
+        }
+      } else if (data.type === 'message_stop') {
+        for (const [, block] of pendingToolBlocks) {
+          yield {
+            type: 'tool_call',
+            tool_call: { id: block.id, name: block.name, arguments: block.input || '{}' },
+          };
+        }
+        yield { type: 'done' };
       }
     }
   }

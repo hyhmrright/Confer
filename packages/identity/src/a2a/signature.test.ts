@@ -80,6 +80,17 @@ describe('signRequest / verifyRequestSignature', () => {
     expect(result).toEqual({ ok: true, value: true });
   });
 
+  test('a signed body-less GET verifies (digest omitted from the signing set)', async () => {
+    const { publicKey, privateKey } = await generateEd25519KeyPair();
+    const signed = await signRequest(new Request(ENDPOINT, { method: 'GET' }), privateKey, 'k');
+
+    // No body means no Digest header, and `digest` must not be referenced in
+    // the signing set — otherwise the verifier rejects the missing header.
+    expect(signed.headers.get('digest')).toBeNull();
+    expect(signed.headers.get('signature')).not.toContain('digest');
+    expect(await verifyRequestSignature(signed, publicKey)).toEqual({ ok: true, value: true });
+  });
+
   test('fails verification with the wrong public key', async () => {
     const signer = await generateEd25519KeyPair();
     const attacker = await generateEd25519KeyPair();

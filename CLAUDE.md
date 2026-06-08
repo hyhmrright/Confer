@@ -114,7 +114,7 @@ Local infra via Docker: `docker compose up -d` starts PostgreSQL (5432), Redis (
 
 `.claude/` ships project-specific automation — prefer it over manual steps:
 
-- **Hooks** (`settings.local.json`): after every Edit/Write, `lint:fix` + `typecheck` run automatically — no need to invoke them by hand. PreToolUse **blocks** edits to `*/migrations/*.sql` (immutable) and `.env*` (live credentials).
+- **Hooks** (`settings.local.json`): after every Edit/Write, `lint:fix` + `typecheck` run automatically — no need to invoke them by hand. PreToolUse **blocks** edits to `*/migrations/*.sql` (immutable) and `.env*` (live credentials), and **blocks Bash `cat`/`head`/`tail`/`sed` used to view a file** — use the Read tool instead (guard: `.claude/hooks/guard-bash-file-view.py`; it still allows `tail -f`, piping a viewer into another command, redirects/heredocs, and `sed -i`). Note: the migrations/`.env` guards read `tool_input.file_path` (nested) — earlier they read top-level `file_path` and silently never fired.
 - **Skills**: `deploy` (rebuild/redeploy a service), `create-migration` (Drizzle migration + journal), `rag-debug` (Qdrant/embedding/MinIO diagnostics), `sync-env` (`.env` vs `.env.example`).
 - **Agents**: `a2a-contract-reviewer` (A2A signature/DID/AgentFacts compliance), `migration-reviewer` (migration safety).
 

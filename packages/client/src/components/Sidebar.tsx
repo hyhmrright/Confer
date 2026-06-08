@@ -40,6 +40,10 @@ export function Sidebar({ tab, onLogout }: { tab: Tab; onLogout: () => void }) {
   const { t } = useTranslation();
   return (
     <aside className="w-[260px] shrink-0 flex flex-col bg-dark-panel border-r border-dark-border overflow-hidden">
+      {/* Page-as-Panel: MemoryPage / KnowledgePage are full-height list views
+          authored to fit this 260px sidebar column (they own their own header +
+          scroll area), so they render here as sidebar panels rather than routed
+          pages. The "Page" suffix is historical — treat them as panels here. */}
       {tab === 'conversations' ? (
         <ConversationsPanel />
       ) : tab === 'contacts' ? (

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { api, setRefreshToken, setToken } from '../lib/api.js';
+import { captureError } from '../lib/error.js';
 
 interface User {
   id: string;
@@ -58,7 +59,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         loading: false,
       });
     } catch (e) {
-      set({ loading: false, error: e instanceof Error ? e.message : 'Login failed' });
+      set({ loading: false, error: captureError(e, 'Login failed') });
       throw e;
     }
   },
@@ -81,7 +82,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         loading: false,
       });
     } catch (e) {
-      set({ loading: false, error: e instanceof Error ? e.message : 'Registration failed' });
+      set({ loading: false, error: captureError(e, 'Registration failed') });
       throw e;
     }
   },
