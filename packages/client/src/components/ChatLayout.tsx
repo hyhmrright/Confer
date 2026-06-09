@@ -8,9 +8,11 @@ import { permissionRequestSchema } from '../lib/schemas.js';
 import { connectWs, disconnectWs, onWsMessage, reconnectWs } from '../lib/ws.js';
 import { useAuthStore } from '../stores/auth.js';
 import { useChatStore } from '../stores/chat.js';
+import { useErrandsStore } from '../stores/errands.js';
 import { usePermissionsStore } from '../stores/permissions.js';
 import { AccountMenu, type AccountUser } from './AccountMenu.js';
 import { AddContactDialog } from './AddContactDialog.js';
+import { ErrandInbox } from './ErrandInbox.js';
 import { BookOpen, Database, MessageCircle, Settings, Shield, Users } from './Icons.js';
 import { LanguageSwitcherCompact } from './LanguageSwitcher.js';
 import { MessageView } from './MessageView.js';
@@ -140,7 +142,16 @@ export function ChatLayout() {
   const { user, logout } = useAuthStore();
   const { loadConversations, activeConversationId, addMessage, setAgentStatus } = useChatStore();
   const { addRequest: addPermissionRequest, loadPending } = usePermissionsStore();
+  const loadPendingCards = useErrandsStore((s) => s.loadPendingCards);
   const navigate = useNavigate();
+
+  // Errand decision cards arrive by polling (not WebSocket): pull the pending
+  // inbox on mount and on a fixed interval while the layout is open.
+  useEffect(() => {
+    loadPendingCards();
+    const timer = setInterval(loadPendingCards, 15_000);
+    return () => clearInterval(timer);
+  }, [loadPendingCards]);
 
   useEffect(() => {
     loadConversations();
@@ -223,6 +234,7 @@ export function ChatLayout() {
       )}
 
       <PermissionInbox />
+      <ErrandInbox />
       <AddContactDialog />
     </div>
   );

@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { loadConfig } from './config.js';
 import { GatewayClient } from './gateway-client.js';
 import { askMultiple, checkReply } from './tools/advanced.js';
+import { askPerson } from './tools/ask-person.js';
 import { askAgent, followUp, getConversation } from './tools/consult.js';
 import { findAgents, getAgentCapabilities, listAgents } from './tools/discovery.js';
 import { whoami } from './tools/ops.js';
@@ -112,6 +113,18 @@ server.registerTool(
   'whoami',
   { description: 'Show which Confer user this MCP server acts as.', inputSchema: {} },
   async () => json(whoami(client)),
+);
+
+// --- Domain 5: ask a specific person's agent ---
+server.registerTool(
+  'ask_person_agent',
+  {
+    description:
+      "Ask a specific person's agent a question that only that person can answer. " +
+      'Returns immediately with a conversation handle; poll check_reply for the answer.',
+    inputSchema: { person: z.string(), question: z.string() },
+  },
+  async ({ person, question }) => json(await askPerson(client, { person, question })),
 );
 
 await server.connect(new StdioServerTransport());
