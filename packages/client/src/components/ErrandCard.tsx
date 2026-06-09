@@ -15,8 +15,8 @@ function formatCents(cents: number, currency: string): string {
   }
 }
 
-// Human countdown to expiry: whole minutes remaining (floored at 0) plus an
-// expired flag once the deadline has passed.
+// Human countdown to expiry: whole minutes remaining (rounded to nearest, clamped
+// at 0) plus an expired flag once the deadline has passed.
 function expiryLabel(expiresAt: string): { minutes: number; expired: boolean } {
   const ms = new Date(expiresAt).getTime() - Date.now();
   return { minutes: Math.max(0, Math.round(ms / 60000)), expired: ms <= 0 };
@@ -57,7 +57,8 @@ export function ErrandCard({ card }: { card: ErrandCardData }) {
 
   const submitChangePrice = () => {
     const value = Number(newPrice);
-    if (!Number.isFinite(value)) return;
+    // A counter-offer must be a positive amount; reject empty / 0 / negative input.
+    if (!Number.isFinite(value) || value <= 0) return;
     decide('change_price', Math.round(value * 100));
   };
 
