@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, test } from 'bun:test';
 import { newId } from '@confer/shared';
 import { eq } from 'drizzle-orm';
 import { getDb } from '../db/connection.js';
-import { errandCards } from '../db/schema.js';
+import { errandCards, errands } from '../db/schema.js';
 import { type SeededUser, get, post, resetDb, seedUser } from '../test/helpers.js';
 
 const ERRANDS = '/api/v1/errands';
@@ -239,5 +239,160 @@ describe('errands', () => {
       body: { kind: 'approve', summary: 's', expires_at: future() },
     });
     expect(res.status).toBe(404);
+  });
+});
+
+// Admin-gated WoZ operator path: an admin (≠ owner) creates errands and pushes
+// cards on a target owner's behalf. The owner still solely decides — admins
+// never decide, and non-admins never escalate via owner_user_id or cross-owner
+// card pushes.
+describe('errands — admin operator path', () => {
+  test('admin creates an errand for a target owner (owner_user_id honored)', async () => {
+    const admin = await seedUser(undefined, { role: 'admin' });
+    const res = await post(ERRANDS, {
+      token: admin.token,
+      body: { title: 'Rebook flight', owner_user_id: user.id },
+    });
+    expect(res.status).toBe(201);
+
+    // The errand belongs to the target owner, not the admin operator.
+    const ownerList = await (await get(ERRANDS, { token: user.token })).json();
+    expect(ownerList.errands).toHaveLength(1);
+    expect(ownerList.errands[0].owner_user_id).toBe(user.id);
+
+    const adminList = await (await get(ERRANDS, { token: admin.token })).json();
+    expect(adminList.errands).toHaveLength(0);
+  });
+
+  test('admin creating for an unknown owner returns 404', async () => {
+    const admin = await seedUser(undefined, { role: 'admin' });
+    const res = await post(ERRANDS, {
+      token: admin.token,
+      body: { title: 'Rebook flight', owner_user_id: newId() },
+    });
+    expect(res.status).toBe(404);
+  });
+
+  test('non-admin owner_user_id is ignored — owner is always the caller', async () => {
+    const victim = await seedUser();
+    const res = await post(ERRANDS, {
+      token: user.token,
+      body: { title: 'Sneaky', owner_user_id: victim.id },
+    });
+    expect(res.status).toBe(201);
+
+    // The errand landed under the caller, not the injected victim id.
+    const callerList = await (await get(ERRANDS, { token: user.token })).json();
+    expect(callerList.errands).toHaveLength(1);
+    expect(callerList.errands[0].owner_user_id).toBe(user.id);
+
+    const victimList = await (await get(ERRANDS, { token: victim.token })).json();
+    expect(victimList.errands).toHaveLength(0);
+  });
+
+  test("admin pushes a card onto another owner's errand (201)", async () => {
+    const admin = await seedUser(undefined, { role: 'admin' });
+    const errandId = await createErrand(user.token);
+    const res = await post(`${ERRANDS}/${errandId}/cards`, {
+      token: admin.token,
+      body: { kind: 'approve', summary: 'Confirm?', expires_at: future() },
+    });
+    expect(res.status).toBe(201);
+
+    // The card surfaces in the OWNER's pending inbox (the card is the owner's).
+    const pending = await (await get(`${ERRANDS}/cards/pending`, { token: user.token })).json();
+    expect(pending.cards).toHaveLength(1);
+  });
+
+  test("non-admin cannot push onto another owner's errand (404)", async () => {
+    const errandId = await createErrand(user.token);
+    const other = await seedUser();
+    const res = await post(`${ERRANDS}/${errandId}/cards`, {
+      token: other.token,
+      body: { kind: 'approve', summary: 's', expires_at: future() },
+    });
+    expect(res.status).toBe(404);
+  });
+
+  test('owner decides a card the admin pushed for them (success)', async () => {
+    const admin = await seedUser(undefined, { role: 'admin' });
+    const errandId = await createErrand(user.token);
+    const pushRes = await post(`${ERRANDS}/${errandId}/cards`, {
+      token: admin.token,
+      body: { kind: 'approve', summary: 'Confirm?', expires_at: future() },
+    });
+    const cardId = (await pushRes.json()).id;
+
+    const res = await post(`${ERRANDS}/cards/${cardId}/decide`, {
+      token: user.token,
+      body: { decision: 'approve' },
+    });
+    expect(res.status).toBe(200);
+
+    const [row] = await getDb().select().from(errandCards).where(eq(errandCards.id, cardId));
+    expect(row?.decision).toBe('approve');
+    expect(row?.decided_by).toBe(user.id);
+  });
+
+  test("admin still cannot decide another owner's card (403 — the red line)", async () => {
+    const admin = await seedUser(undefined, { role: 'admin' });
+    const errandId = await createErrand(user.token);
+    const cardId = await pushCard(user.token, errandId, {
+      kind: 'approve',
+      summary: 'Confirm?',
+      expires_at: future(),
+    });
+
+    const res = await post(`${ERRANDS}/cards/${cardId}/decide`, {
+      token: admin.token,
+      body: { decision: 'approve' },
+    });
+    expect(res.status).toBe(403);
+
+    // The card is untouched — admin authority stops at the decide boundary.
+    const [row] = await getDb().select().from(errandCards).where(eq(errandCards.id, cardId));
+    expect(row?.decision).toBe('pending');
+  });
+});
+
+// Operator audit trail: cross-owner writes record their actual caller, so an
+// admin operating on a target owner's behalf is traceable (operator != owner).
+describe('errands — operator audit trail', () => {
+  test('owner self-create records created_by = the owner themselves', async () => {
+    const errandId = await createErrand(user.token);
+    const [row] = await getDb().select().from(errands).where(eq(errands.id, errandId));
+    expect(row?.owner_user_id).toBe(user.id);
+    expect(row?.created_by).toBe(user.id);
+  });
+
+  test('admin delegate-create records created_by = the admin operator (≠ owner)', async () => {
+    const admin = await seedUser(undefined, { role: 'admin' });
+    const res = await post(ERRANDS, {
+      token: admin.token,
+      body: { title: 'Rebook flight', owner_user_id: user.id },
+    });
+    expect(res.status).toBe(201);
+    const errandId = (await res.json()).id;
+
+    const [row] = await getDb().select().from(errands).where(eq(errands.id, errandId));
+    // Owner is the target, but the audit trail points at the admin operator.
+    expect(row?.owner_user_id).toBe(user.id);
+    expect(row?.created_by).toBe(admin.id);
+    expect(row?.created_by).not.toBe(row?.owner_user_id);
+  });
+
+  test('admin push records pushed_by = the admin operator (≠ owner)', async () => {
+    const admin = await seedUser(undefined, { role: 'admin' });
+    const errandId = await createErrand(user.token);
+    const pushRes = await post(`${ERRANDS}/${errandId}/cards`, {
+      token: admin.token,
+      body: { kind: 'approve', summary: 'Confirm?', expires_at: future() },
+    });
+    expect(pushRes.status).toBe(201);
+    const cardId = (await pushRes.json()).id;
+
+    const [row] = await getDb().select().from(errandCards).where(eq(errandCards.id, cardId));
+    expect(row?.pushed_by).toBe(admin.id);
+    expect(row?.pushed_by).not.toBe(user.id);
   });
 });

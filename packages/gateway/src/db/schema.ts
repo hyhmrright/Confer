@@ -434,6 +434,11 @@ export const errands = pgTable(
     status: varchar('status', { length: 16 }).notNull().default('in_progress'),
     // Optional chat thread the errand was handed off through (for write-back).
     conversation_id: char('conversation_id', { length: 26 }).references(() => conversations.id),
+    // Operator audit trail: the actual caller of create (the owner self-creating,
+    // OR an admin WoZ operator creating on the owner's behalf). Makes cross-owner
+    // creates traceable when operator != owner. Nullable — historical rows predate
+    // this column; every new write path fills it.
+    created_by: char('created_by', { length: 26 }).references(() => users.id),
     created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     completed_at: timestamp('completed_at', { withTimezone: true }),
@@ -466,6 +471,11 @@ export const errandCards = pgTable(
     expires_at: timestamp('expires_at', { withTimezone: true }).notNull(),
     decided_at: timestamp('decided_at', { withTimezone: true }),
     decided_by: char('decided_by', { length: 26 }).references(() => users.id),
+    // Operator audit trail: the actual caller of push card (the owner pushing their
+    // own card, OR an admin WoZ operator pushing onto the owner's errand). Makes
+    // cross-owner card pushes traceable when pusher != owner. Nullable — historical
+    // rows predate this column; every new write path fills it.
+    pushed_by: char('pushed_by', { length: 26 }).references(() => users.id),
     created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index('idx_errand_cards_errand').on(t.errand_id)],

@@ -22,10 +22,16 @@ const centsSchema = z.number().int();
 
 // External input: create an errand. Used by both the WoZ operator (acting for the
 // owner) and the owner self-creating from the client.
+//
+// `owner_user_id` lets an admin operator create on a target owner's behalf. It is
+// honored ONLY when the caller is a server-verified admin; for everyone else the
+// route ignores it and the owner is always the caller (it cannot be used to
+// escalate). The field is optional and validated as a ULID.
 export const createErrandSchema = z.object({
   title: z.string().min(1).max(255),
   kind: z.string().max(64).optional(),
   conversation_id: z.string().length(26).optional(),
+  owner_user_id: z.string().length(26).optional(),
 });
 
 // External input: a WoZ operator pushes a decision card onto an errand.

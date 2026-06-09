@@ -37,11 +37,16 @@ export interface SeededUser {
   token: string;
 }
 
-export async function seedUser(username?: string): Promise<SeededUser> {
+export async function seedUser(
+  username?: string,
+  opts: { role?: 'member' | 'admin' } = {},
+): Promise<SeededUser> {
   const id = newId();
   const name = username ?? `u${id.slice(-10).toLowerCase()}`;
   const did = `did:web:localhost:agents:${name}`;
-  await getDb().insert(users).values({ id, username: name, did });
+  await getDb()
+    .insert(users)
+    .values({ id, username: name, did, role: opts.role ?? 'member' });
   return { id, username: name, did, token: await mintToken(id, name) };
 }
 

@@ -8,7 +8,8 @@ import {
 import { and, desc, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { getDb } from '../db/connection.js';
-import { errandCards, errands } from '../db/schema.js';
+import { errandCards, errands, users } from '../db/schema.js';
+import { isAdminUser } from '../middleware/admin.js';
 import { authMiddleware } from '../middleware/auth.js';
 import type { AppEnv } from '../types.js';
 
@@ -33,21 +34,49 @@ async function loadOwnedErrand(userId: string, errandId: string) {
   return row;
 }
 
-// Create an errand. Supports both paths: a WoZ operator creating on the owner's
-// behalf and the owner self-creating from the client. The authenticated user is
-// the owner either way.
+// Load any errand by id, ignoring ownership. ONLY for admin operator branches
+// that are allowed to act across owners; never reachable by a non-admin.
+async function loadAnyErrand(errandId: string) {
+  const db = getDb();
+  const [row] = await db.select().from(errands).where(eq(errands.id, errandId)).limit(1);
+  if (!row) throw new AppError('not_found', 'Errand not found', 404);
+  return row;
+}
+
+// Create an errand. Two paths:
+//  - owner self-creates from the client → owner = caller;
+//  - an admin WoZ operator creates on a target owner's behalf by passing
+//    `owner_user_id` → owner = that target.
+// The admin check is server-side (DB role), never trusted from the client. A
+// non-admin's `owner_user_id` is ignored outright, so the field cannot be used
+// to create an errand under someone else's account.
 errandRoutes.post('/', async (c) => {
   const user = c.get('user');
   const db = getDb();
   const body = createErrandSchema.parse(await c.req.json());
 
+  let ownerId = user.sub;
+  if (body.owner_user_id && body.owner_user_id !== user.sub && (await isAdminUser(user.sub))) {
+    // Admin operator delegating: the target owner must exist (avoids a bare FK
+    // 500 and does not leak existence to non-admins, who never reach here).
+    const [target] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.id, body.owner_user_id))
+      .limit(1);
+    if (!target) throw new AppError('not_found', 'Target owner not found', 404);
+    ownerId = target.id;
+  }
+
   const id = newId();
   await db.insert(errands).values({
     id,
-    owner_user_id: user.sub,
+    owner_user_id: ownerId,
     title: body.title,
     kind: body.kind,
     conversation_id: body.conversation_id,
+    // Audit trail: the actual caller (owner self-create or admin operator).
+    created_by: user.sub,
   });
 
   return c.json({ id, status: 'in_progress' }, 201);
@@ -113,11 +142,17 @@ errandRoutes.get('/:id', async (c) => {
   return c.json({ errand, cards });
 });
 
-// WoZ operator pushes a decision card onto an errand the owner owns.
+// Push a decision card onto an errand. An admin WoZ operator may push onto ANY
+// errand (operating on behalf of its owner); everyone else is owner-only, and a
+// non-owner sees a 404 (existence is not leaked). The card is always pending and
+// only the errand's owner can ever decide it — the operator never decides.
 errandRoutes.post('/:id/cards', async (c) => {
   const user = c.get('user');
   const db = getDb();
-  const errand = await loadOwnedErrand(user.sub, c.req.param('id'));
+  const errandId = c.req.param('id');
+  const errand = (await isAdminUser(user.sub))
+    ? await loadAnyErrand(errandId)
+    : await loadOwnedErrand(user.sub, errandId);
   const body = pushCardSchema.parse(await c.req.json());
 
   const id = newId();
@@ -131,6 +166,8 @@ errandRoutes.post('/:id/cards', async (c) => {
     price_delta_cents: body.price_delta_cents,
     strictly_necessary: body.strictly_necessary,
     expires_at: body.expires_at,
+    // Audit trail: the actual caller (owner pushing, or admin operator pushing).
+    pushed_by: user.sub,
   });
 
   return c.json({ id, decision: 'pending' }, 201);
