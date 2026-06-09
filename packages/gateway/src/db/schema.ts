@@ -382,3 +382,101 @@ export const appConfig = pgTable('app_config', {
   value: text('value').notNull(),
   updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+// Idea C — MCP↔A2A bridge probe instrumentation. One row per `ask_person_agent`
+// call: who asked, the question text (verification needs it; never logged), and
+// the signals used to compute the unprompted active-use rate. The answer is
+// relayed back through a placeholder conversation (`conversation_id`) by a human
+// Wizard. `is_founder_test` lets the experiment lead audit-exclude founder
+// dual-account self-tests from all success counts (NON-FOUNDER GATE).
+export const probeAsks = pgTable(
+  'probe_asks',
+  {
+    id: char('id', { length: 26 }).primaryKey(),
+    asker_user_id: char('asker_user_id', { length: 26 })
+      .notNull()
+      .references(() => users.id),
+    // Free text — the MVP deliberately does not resolve this to a peer agent.
+    person: varchar('person', { length: 255 }).notNull(),
+    // Stored for verification; truncated to 4000 chars in the route, never logged.
+    question: text('question').notNull(),
+    // Placeholder conversation the Wizard fills the answer into (retrieved via
+    // the existing consult reply path). Created with the row.
+    conversation_id: char('conversation_id', { length: 26 }).references(() => conversations.id),
+    // Wizard's after-the-fact judgment: could the host model have answered itself?
+    could_self_answer: boolean('could_self_answer'),
+    // Whether a Slack-DM alternative was available at call time.
+    had_slack_dm_alt: boolean('had_slack_dm_alt').notNull().default(false),
+    // Whether this call was prompted (vs unprompted) — drives the unprompted rate.
+    prompted: boolean('prompted').notNull().default(false),
+    // Audit flag to exclude founder dual-account self-tests from success counts.
+    is_founder_test: boolean('is_founder_test').notNull().default(false),
+    filled_at: timestamp('filled_at', { withTimezone: true }),
+    created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('idx_probe_asks_asker').on(t.asker_user_id)],
+);
+
+// Idea A — outbound delegate-assistant errand. A chore the owner delegates; a WoZ
+// operator runs the back-and-forth and pushes decision cards. This is the
+// OUTBOUND direction (the owner's own agent pauses to ask the owner) and is fully
+// separate from the inbound connection-consent `permissions` table.
+export const errands = pgTable(
+  'errands',
+  {
+    id: char('id', { length: 26 }).primaryKey(),
+    owner_user_id: char('owner_user_id', { length: 26 })
+      .notNull()
+      .references(() => users.id),
+    title: varchar('title', { length: 255 }).notNull(),
+    // Free-text chore type (A-EXP1 high-frequency categories surface here later).
+    kind: varchar('kind', { length: 64 }),
+    status: varchar('status', { length: 16 }).notNull().default('in_progress'),
+    // Optional chat thread the errand was handed off through (for write-back).
+    conversation_id: char('conversation_id', { length: 26 }).references(() => conversations.id),
+    // Operator audit trail: the actual caller of create (the owner self-creating,
+    // OR an admin WoZ operator creating on the owner's behalf). Makes cross-owner
+    // creates traceable when operator != owner. Nullable — historical rows predate
+    // this column; every new write path fills it.
+    created_by: char('created_by', { length: 26 }).references(() => users.id),
+    created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    completed_at: timestamp('completed_at', { withTimezone: true }),
+  },
+  (t) => [index('idx_errands_owner').on(t.owner_user_id)],
+);
+
+// A decision card on an errand: approve / change_price / info. The owner decides
+// approve / change_price / reject. Prices are integer cents in a single currency.
+// The card's scope is the single owning errand (the FK is the scope boundary).
+export const errandCards = pgTable(
+  'errand_cards',
+  {
+    id: char('id', { length: 26 }).primaryKey(),
+    errand_id: char('errand_id', { length: 26 })
+      .notNull()
+      .references(() => errands.id),
+    kind: varchar('kind', { length: 32 }).notNull(),
+    summary: text('summary').notNull(),
+    currency: varchar('currency', { length: 3 }).notNull().default('USD'),
+    // Integer cents — never floats. delta may be negative (a discount).
+    base_price_cents: integer('base_price_cents'),
+    price_delta_cents: integer('price_delta_cents'),
+    strictly_necessary: boolean('strictly_necessary').notNull().default(true),
+    // 'pending' until the owner decides: approve / change_price / reject.
+    decision: varchar('decision', { length: 16 }).notNull().default('pending'),
+    // Owner's counter price (change_price decision), integer cents.
+    new_price_cents: integer('new_price_cents'),
+    // Past this instant the card can no longer be decided (decide returns 409).
+    expires_at: timestamp('expires_at', { withTimezone: true }).notNull(),
+    decided_at: timestamp('decided_at', { withTimezone: true }),
+    decided_by: char('decided_by', { length: 26 }).references(() => users.id),
+    // Operator audit trail: the actual caller of push card (the owner pushing their
+    // own card, OR an admin WoZ operator pushing onto the owner's errand). Makes
+    // cross-owner card pushes traceable when pusher != owner. Nullable — historical
+    // rows predate this column; every new write path fills it.
+    pushed_by: char('pushed_by', { length: 26 }).references(() => users.id),
+    created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('idx_errand_cards_errand').on(t.errand_id)],
+);

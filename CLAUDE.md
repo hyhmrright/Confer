@@ -95,6 +95,12 @@ Determine which packages changed and run only the necessary steps:
 
 Run from the repo root. Deployment happens **before** commit & push (not after).
 
+**If the change includes a new migration**, also rebuild and re-run the `migrate` service — it is a *separate image* from `gateway` (same `infra/gateway.Dockerfile`), so `build gateway client` does **not** pick up new migration files. The stale `migrate` then runs the old set and still prints `Migrations complete`, leaving the new tables uncreated:
+```
+docker compose -f docker-compose.prod.yml build migrate && docker compose -f docker-compose.prod.yml run --rm migrate
+```
+Verify by querying the actual tables/columns (and the drizzle journal count), not by trusting the `Migrations complete` log line.
+
 ## Environment
 
 Local infra via Docker: `docker compose up -d` starts PostgreSQL (5432), Redis (6379), NATS (4222), MinIO (9000/9001), Qdrant (6333). Copy `.env.example` to `.env` before first run. Gateway dev server on :3000, client Vite on :1420 (proxies `/api` to gateway).
