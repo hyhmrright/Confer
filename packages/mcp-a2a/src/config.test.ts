@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { basename } from 'node:path';
 import { loadConfig } from './config.js';
 
 const base = { CONFER_USERNAME: 'alice', CONFER_PASSWORD: 'secret' };
@@ -9,12 +10,14 @@ describe('loadConfig', () => {
       ...base,
       CONFER_GATEWAY_URL: 'http://gw:3000',
       CONFER_CONSULT_WAIT: '40',
+      CONFER_PROJECT_ID: 'my-project',
     });
     expect(cfg).toEqual({
       gatewayUrl: 'http://gw:3000',
       username: 'alice',
       password: 'secret',
       defaultWaitSeconds: 40,
+      projectId: 'my-project',
     });
   });
 
@@ -42,5 +45,13 @@ describe('loadConfig', () => {
     expect(loadConfig({ ...base, CONFER_GATEWAY_URL: 'http://gw:3000/' }).gatewayUrl).toBe(
       'http://gw:3000',
     );
+  });
+
+  test('defaults the project id to the cwd basename', () => {
+    expect(loadConfig(base).projectId).toBe(basename(process.cwd()));
+  });
+
+  test('parses an overridden project id', () => {
+    expect(loadConfig({ ...base, CONFER_PROJECT_ID: 'widgets' }).projectId).toBe('widgets');
   });
 });

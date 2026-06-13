@@ -1,8 +1,11 @@
+import { basename } from 'node:path';
+
 export interface McpConfig {
   gatewayUrl: string;
   username: string;
   password: string;
   defaultWaitSeconds: number;
+  projectId: string;
 }
 
 export function loadConfig(env: Record<string, string | undefined> = process.env): McpConfig {
@@ -15,5 +18,14 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     );
   }
   const defaultWaitSeconds = Number(env.CONFER_CONSULT_WAIT ?? '25');
-  return { gatewayUrl: gatewayUrl.replace(/\/$/, ''), username, password, defaultWaitSeconds };
+  // Default the project scope to the working directory's name so memory is keyed
+  // per checkout without extra config; override with CONFER_PROJECT_ID.
+  const projectId = env.CONFER_PROJECT_ID ?? basename(process.cwd());
+  return {
+    gatewayUrl: gatewayUrl.replace(/\/$/, ''),
+    username,
+    password,
+    defaultWaitSeconds,
+    projectId,
+  };
 }

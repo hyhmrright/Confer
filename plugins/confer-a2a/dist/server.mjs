@@ -19576,6 +19576,7 @@ class StdioServerTransport {
   }
 }
 // src/config.ts
+import { basename } from "node:path";
 function loadConfig(env = process.env) {
   const gatewayUrl = env.CONFER_GATEWAY_URL ?? "http://localhost:3000";
   const username = env.CONFER_USERNAME;
@@ -19584,7 +19585,14 @@ function loadConfig(env = process.env) {
     throw new Error("CONFER_USERNAME and CONFER_PASSWORD must be set for the MCP server to authenticate");
   }
   const defaultWaitSeconds = Number(env.CONFER_CONSULT_WAIT ?? "25");
-  return { gatewayUrl: gatewayUrl.replace(/\/$/, ""), username, password, defaultWaitSeconds };
+  const projectId = env.CONFER_PROJECT_ID ?? basename(process.cwd());
+  return {
+    gatewayUrl: gatewayUrl.replace(/\/$/, ""),
+    username,
+    password,
+    defaultWaitSeconds,
+    projectId
+  };
 }
 
 // src/gateway-client.ts
@@ -19647,6 +19655,9 @@ class GatewayClient {
   }
   post(path, body) {
     return this.request("POST", path, body);
+  }
+  put(path, body) {
+    return this.request("PUT", path, body);
   }
   whoami() {
     return this.cfg.username;
@@ -19722,6 +19733,19 @@ async function checkReply(client, input) {
   return client.get(`/api/v1/consult/${encodeURIComponent(input.conversationId)}/reply?${after}wait=0`);
 }
 
+// src/tools/ask-person.ts
+async function askPerson(client, input) {
+  const res = await client.post("/api/v1/probe/ask-person", {
+    person: input.person,
+    question: input.question
+  });
+  return {
+    status: "pending",
+    askId: res.ask_id,
+    conversationId: res.conversation_id
+  };
+}
+
 // src/tools/consult.ts
 async function askAgent2(client, input) {
   const peer = encodeURIComponent(input.peerId);
@@ -19765,6 +19789,15 @@ async function getConversation(client, conversationId) {
   return client.get(`/api/v1/consult/${encodeURIComponent(conversationId)}`);
 }
 
+// src/tools/discover.ts
+async function discoverPeer(client, input) {
+  const res = await client.post("/api/v1/contacts/lookup", {
+    method: input.method,
+    value: input.value
+  });
+  return { method: res.method, candidates: res.candidates, error: res.error };
+}
+
 // src/tools/discovery.ts
 async function listAgents(client) {
   const { contacts } = await client.get("/api/v1/contacts");
@@ -19791,6 +19824,110 @@ async function findAgents(client, capability) {
 // src/tools/ops.ts
 function whoami(client) {
   return { acting_as: client.whoami() };
+}
+
+// src/tools/project-memory.ts
+function basePath(projectId, peerId) {
+  return `/api/v1/projects/${encodeURIComponent(projectId)}/peers/${encodeURIComponent(peerId)}`;
+}
+async function readProjectMemory(client, input) {
+  const base = basePath(input.projectId, input.peerId);
+  if (input.section === "facts") {
+    const r = await client.get(`${base}/facts`);
+    return {
+      projectId: input.projectId,
+      peerId: input.peerId,
+      facts: r.facts_md,
+      version: r.version,
+      updated_at: r.updated_at
+    };
+  }
+  if (input.section === "decisions") {
+    const r = await client.get(`${base}/decisions`);
+    return {
+      projectId: input.projectId,
+      peerId: input.peerId,
+      decisions: r.decisions_md,
+      version: r.version,
+      updated_at: r.updated_at
+    };
+  }
+  const [facts, decisions] = await Promise.all([
+    client.get(`${base}/facts`),
+    client.get(`${base}/decisions`)
+  ]);
+  return {
+    projectId: input.projectId,
+    peerId: input.peerId,
+    facts: facts.facts_md,
+    decisions: decisions.decisions_md,
+    version: facts.version,
+    updated_at: facts.updated_at
+  };
+}
+async function writeProjectMemory(client, input) {
+  const base = basePath(input.projectId, input.peerId);
+  if (input.section === "facts") {
+    const r2 = await client.put(`${base}/facts`, { facts_md: input.content });
+    return {
+      projectId: input.projectId,
+      peerId: input.peerId,
+      section: "facts",
+      version: r2.version,
+      updated_at: r2.updated_at
+    };
+  }
+  const r = await client.put(`${base}/decisions`, {
+    decisions_md: input.content
+  });
+  return {
+    projectId: input.projectId,
+    peerId: input.peerId,
+    section: "decisions",
+    version: r.version,
+    updated_at: r.updated_at
+  };
+}
+
+// src/tools/review.ts
+function buildDesignReviewQuestion(plan, scope) {
+  const heading = scope ? `# Design review request — ${scope}` : "# Design review request";
+  return `${heading}
+
+Please review this plan before I implement it. Flag vendor-specific gotchas,
+wrong assumptions, and missing steps.
+
+## Plan
+${plan}`;
+}
+async function requestDesignReview(client, input) {
+  return askAgent(client, {
+    peerId: input.peerId,
+    question: buildDesignReviewQuestion(input.plan, input.scope),
+    language: input.language,
+    waitSeconds: input.waitSeconds
+  });
+}
+function buildCodeReviewQuestion(focus) {
+  return `# Code review request
+Please review the following file(s). Focus: ${focus ?? "correctness + vendor gotchas"}.`;
+}
+function buildCodeReviewContext(files) {
+  return files.map((f) => `## ${f.path}
+\`\`\`
+${f.content}
+\`\`\``).join(`
+
+`);
+}
+async function requestCodeReview(client, input) {
+  return askAgent(client, {
+    peerId: input.peerId,
+    question: buildCodeReviewQuestion(input.focus),
+    codeContext: buildCodeReviewContext(input.files),
+    language: input.language,
+    waitSeconds: input.waitSeconds
+  });
 }
 
 // src/server.ts
@@ -19849,4 +19986,61 @@ server.registerTool("check_reply", {
   inputSchema: { conversationId: exports_external.string(), afterMessageId: exports_external.string().optional() }
 }, async (a) => json(await checkReply(client, a)));
 server.registerTool("whoami", { description: "Show which Confer user this MCP server acts as.", inputSchema: {} }, async () => json(whoami(client)));
+server.registerTool("ask_person_agent", {
+  description: "Ask a specific person's agent a question that only that person can answer. " + "Returns immediately with a conversation handle; poll check_reply for the answer.",
+  inputSchema: { person: exports_external.string(), question: exports_external.string() }
+}, async ({ person, question }) => json(await askPerson(client, { person, question })));
+server.registerTool("read_project_memory", {
+  description: "Read what you've recorded about a peer agent in this project (facts and/or decisions). " + "Omit `section` to read both. Empty result means no notes yet for this peer in this project.",
+  inputSchema: {
+    peerId: exports_external.string(),
+    section: exports_external.enum(["facts", "decisions"]).optional(),
+    project: exports_external.string().optional()
+  }
+}, async ({ peerId, section, project }) => json(await readProjectMemory(client, {
+  projectId: project ?? cfg.projectId,
+  peerId,
+  section
+})));
+server.registerTool("write_project_memory", {
+  description: 'Record durable notes about a peer agent for this project. `section` is "facts" ' + '(stable knowledge) or "decisions" (choices made). Writing one section never clears ' + "the other. Versions increment on each write.",
+  inputSchema: {
+    peerId: exports_external.string(),
+    section: exports_external.enum(["facts", "decisions"]),
+    content: exports_external.string().min(1),
+    project: exports_external.string().optional()
+  }
+}, async ({ peerId, section, content, project }) => json(await writeProjectMemory(client, {
+  projectId: project ?? cfg.projectId,
+  peerId,
+  section,
+  content
+})));
+server.registerTool("discover_peer", {
+  description: "Discover a peer agent by domain, DID, or username. Returns candidates (each with a " + "peer_id) and records the peer locally, but does NOT add it as a contact: you must " + "accept the peer in the main Confer app before you can write its memory or consult it " + "(otherwise those calls return 403). This is the consent gate.",
+  inputSchema: {
+    method: exports_external.enum(["domain", "did", "username"]),
+    value: exports_external.string()
+  }
+}, async ({ method, value }) => json(await discoverPeer(client, { method, value })));
+server.registerTool("request_design_review", {
+  description: "Ask a peer agent to review a plan before you implement it. Waits for the reply when " + "waitSeconds > 0. The peer must already be a contact.",
+  inputSchema: {
+    peerId: exports_external.string(),
+    plan: exports_external.string(),
+    scope: exports_external.string().optional(),
+    language: exports_external.string().optional(),
+    waitSeconds: waitSecondsField
+  }
+}, async (a) => json(await requestDesignReview(client, withWait(a))));
+server.registerTool("request_code_review", {
+  description: "Ask a peer agent to review one or more files. Waits for the reply when waitSeconds > 0. " + "The peer must already be a contact.",
+  inputSchema: {
+    peerId: exports_external.string(),
+    files: exports_external.array(exports_external.object({ path: exports_external.string(), content: exports_external.string() })).min(1),
+    focus: exports_external.string().optional(),
+    language: exports_external.string().optional(),
+    waitSeconds: waitSecondsField
+  }
+}, async (a) => json(await requestCodeReview(client, withWait(a))));
 await server.connect(new StdioServerTransport);

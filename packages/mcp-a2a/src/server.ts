@@ -7,8 +7,11 @@ import { GatewayClient } from './gateway-client.js';
 import { askMultiple, checkReply } from './tools/advanced.js';
 import { askPerson } from './tools/ask-person.js';
 import { askAgent, followUp, getConversation } from './tools/consult.js';
+import { discoverPeer } from './tools/discover.js';
 import { findAgents, getAgentCapabilities, listAgents } from './tools/discovery.js';
 import { whoami } from './tools/ops.js';
+import { readProjectMemory, writeProjectMemory } from './tools/project-memory.js';
+import { requestCodeReview, requestDesignReview } from './tools/review.js';
 
 const cfg = loadConfig();
 const client = new GatewayClient(cfg);
@@ -125,6 +128,102 @@ server.registerTool(
     inputSchema: { person: z.string(), question: z.string() },
   },
   async ({ person, question }) => json(await askPerson(client, { person, question })),
+);
+
+// --- Domain 6: project memory (per-project, per-peer facts/decisions) ---
+server.registerTool(
+  'read_project_memory',
+  {
+    description:
+      "Read what you've recorded about a peer agent in this project (facts and/or decisions). " +
+      'Omit `section` to read both. Empty result means no notes yet for this peer in this project.',
+    inputSchema: {
+      peerId: z.string(),
+      section: z.enum(['facts', 'decisions']).optional(),
+      project: z.string().optional(),
+    },
+  },
+  async ({ peerId, section, project }) =>
+    json(
+      await readProjectMemory(client, {
+        projectId: project ?? cfg.projectId,
+        peerId,
+        section,
+      }),
+    ),
+);
+server.registerTool(
+  'write_project_memory',
+  {
+    description:
+      'Record durable notes about a peer agent for this project. `section` is "facts" ' +
+      '(stable knowledge) or "decisions" (choices made). Writing one section never clears ' +
+      'the other. Versions increment on each write.',
+    inputSchema: {
+      peerId: z.string(),
+      section: z.enum(['facts', 'decisions']),
+      content: z.string().min(1),
+      project: z.string().optional(),
+    },
+  },
+  async ({ peerId, section, content, project }) =>
+    json(
+      await writeProjectMemory(client, {
+        projectId: project ?? cfg.projectId,
+        peerId,
+        section,
+        content,
+      }),
+    ),
+);
+
+// --- Domain 7: discovery + review ---
+server.registerTool(
+  'discover_peer',
+  {
+    description:
+      'Discover a peer agent by domain, DID, or username. Returns candidates (each with a ' +
+      'peer_id) and records the peer locally, but does NOT add it as a contact: you must ' +
+      'accept the peer in the main Confer app before you can write its memory or consult it ' +
+      '(otherwise those calls return 403). This is the consent gate.',
+    inputSchema: {
+      method: z.enum(['domain', 'did', 'username']),
+      value: z.string(),
+    },
+  },
+  async ({ method, value }) => json(await discoverPeer(client, { method, value })),
+);
+server.registerTool(
+  'request_design_review',
+  {
+    description:
+      'Ask a peer agent to review a plan before you implement it. Waits for the reply when ' +
+      'waitSeconds > 0. The peer must already be a contact.',
+    inputSchema: {
+      peerId: z.string(),
+      plan: z.string(),
+      scope: z.string().optional(),
+      language: z.string().optional(),
+      waitSeconds: waitSecondsField,
+    },
+  },
+  async (a) => json(await requestDesignReview(client, withWait(a))),
+);
+server.registerTool(
+  'request_code_review',
+  {
+    description:
+      'Ask a peer agent to review one or more files. Waits for the reply when waitSeconds > 0. ' +
+      'The peer must already be a contact.',
+    inputSchema: {
+      peerId: z.string(),
+      files: z.array(z.object({ path: z.string(), content: z.string() })).min(1),
+      focus: z.string().optional(),
+      language: z.string().optional(),
+      waitSeconds: waitSecondsField,
+    },
+  },
+  async (a) => json(await requestCodeReview(client, withWait(a))),
 );
 
 await server.connect(new StdioServerTransport());

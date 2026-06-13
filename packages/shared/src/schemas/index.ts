@@ -7,5 +7,6 @@ export * from './errand.js';
 export * from './message.js';
 export * from './permission.js';
 export * from './probe.js';
+export * from './project-memory.js';
 export * from './ws.js';
 export * from './error.js';

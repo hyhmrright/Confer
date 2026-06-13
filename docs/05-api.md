@@ -162,13 +162,22 @@ GET    /api/v1/permissions/history               # 历史记录
 ### 项目记忆（Claude Code 集成相关）
 
 ```
-GET    /api/v1/projects/{project_id}/peers              # 该项目下注册的 peer
-POST   /api/v1/projects/{project_id}/peers
-GET    /api/v1/projects/{project_id}/peers/{peer_id}/facts
-PUT    /api/v1/projects/{project_id}/peers/{peer_id}/facts
-GET    /api/v1/projects/{project_id}/peers/{peer_id}/decisions
-PUT    /api/v1/projects/{project_id}/peers/{peer_id}/decisions
+GET    /api/v1/projects/{project_id}/peers              # 该项目下有记忆的 peer（join 出 name/did）  ✅ 已实现
+POST   /api/v1/projects/{project_id}/peers              # 显式注册 peer 到项目                       🔜 backlog
+GET    /api/v1/projects/{project_id}/peers/{peer_id}/facts        # ✅ 已实现
+PUT    /api/v1/projects/{project_id}/peers/{peer_id}/facts        # ✅ 已实现
+GET    /api/v1/projects/{project_id}/peers/{peer_id}/decisions    # ✅ 已实现
+PUT    /api/v1/projects/{project_id}/peers/{peer_id}/decisions    # ✅ 已实现
 ```
+
+语义说明（v0.1）：
+
+- 所有查询 scope 到 `user.sub`（跨用户隔离）。
+- PUT 前校验 peer 是该用户联系人（`peer_contacts`），非联系人返回 `403 not_a_contact`。
+- PUT 用 upsert：首次写入 `version=1`，再次写入 `version` 递增并刷新 `updated_at`。facts 与 decisions 各自独立——写一个 section 不会清空另一个。
+- GET facts/decisions 在 (project, peer) 尚无记忆时返回 `200` + 空串 + `version:0`（不返回 404；「该 peer 暂无沉淀」是读语义下的正常态）。
+- `project_id` 受 `^[a-zA-Z0-9._\-/]+$`（1–255 字符）校验，非法返回 `400 invalid_project_id`。
+- `GET peers` 在空项目下返回空数组；记忆通过 PUT facts/decisions 隐式建立 (project, peer) 关系（本期不做 `POST peers` 显式注册）。
 
 ### 文件附件
 
