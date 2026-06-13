@@ -95,6 +95,58 @@ async function upsertConnectionRequest(
   });
 }
 
+// Scope payload stored on a held `ask` permission. Carries exactly what
+// `resumeHeldA2AQuestion` needs to rebuild the agent-loop call after approval;
+// `targetAgent`/`senderPeer` are re-read from the DB at resume time (by
+// user_id/peer_id) so an approval never replays a stale snapshot.
+export interface A2AQuestionScope {
+  kind: 'a2a_question';
+  conversation_id: string;
+  inbound_message_id: string;
+  sender_did: string;
+  // The specific agent the question was addressed to (a user may own several),
+  // so the resume re-reads the right agent rather than an arbitrary one.
+  agent_id: string;
+  content: string;
+}
+
+interface HoldA2AQuestionParams {
+  userId: string;
+  agentId: string;
+  peer: typeof peerAgents.$inferSelect;
+  senderDid: string;
+  conversationId: string;
+  inboundMessageId: string;
+  content: string;
+}
+
+// Record an inbound question from a connected peer as a pending `ask`
+// permission for the owner to approve before the agent answers. The inbound
+// message is already stored and broadcast by the caller; this only adds the
+// approval gate.
+async function holdA2AQuestion(params: HoldA2AQuestionParams): Promise<void> {
+  const db = getDb();
+  const scope: A2AQuestionScope = {
+    kind: 'a2a_question',
+    conversation_id: params.conversationId,
+    inbound_message_id: params.inboundMessageId,
+    sender_did: params.senderDid,
+    agent_id: params.agentId,
+    content: params.content.slice(0, 500),
+  };
+
+  await db.insert(permissions).values({
+    id: newId(),
+    user_id: params.userId,
+    peer_id: params.peer.id,
+    action: 'ask',
+    scope_json: scope,
+    level: classifyPermissionLevel('ask'),
+    decision: 'pending',
+    requested_by: params.peer.id,
+  });
+}
+
 // Look up the sending peer by DID, creating it on first contact. The endpoint
 // is resolved from the sender's DID document up front so a reply can be sent
 // once the owner approves the connection. Returns null if the peer can't be
@@ -278,6 +330,8 @@ a2aRoutes.post('/messages', verifyA2ASignature, async (c) => {
     throw new AppError('policy_denied', 'Agent policy denied this request', 403);
   }
 
+  // Shared for both `allow` and `ask_user`: the owner sees the inbound message
+  // in their IM either way. Only the auto-reply differs (immediate vs. held).
   const convId = await resolveOrCreateThread(body.thread_id, peer.id, targetAgent.user_id);
 
   const msgId = newId();
@@ -295,36 +349,61 @@ a2aRoutes.post('/messages', verifyA2ASignature, async (c) => {
     delivered_at: new Date(),
   });
 
-  const resolvedPeer = peer;
-  const resolvedConvId = convId;
-
   // Broadcast the inbound message so web subscribers and consult long-polls
   // wake up regardless of message type.
-  broadcastToConversation(resolvedConvId, {
+  broadcastToConversation(convId, {
     type: 'message.new',
     data: {
       id: msgId,
-      conversation_id: resolvedConvId,
+      conversation_id: convId,
       sender_type: 'peer_agent',
-      sender_id: resolvedPeer.id,
+      sender_id: peer.id,
       content: body.message.content,
       in_reply_to: body.thread_id,
     },
   });
 
-  // Only an inbound question triggers our local auto-reply loop. An answer or
-  // notification (e.g. a peer responding to one of our outgoing consults) is
-  // stored and broadcast above but must NOT spawn another reply — otherwise
-  // two agents would ping-pong forever.
+  // `ask_user`: hold an inbound question for owner review instead of answering
+  // automatically. The message is already stored + broadcast above; we record a
+  // pending `ask` permission and return without spawning the agent loop. Only a
+  // question can be held — an answer/notification never auto-replies anyway, so
+  // there is nothing to gate.
+  if (decision === 'ask_user') {
+    if (body.message.type === 'question') {
+      await holdA2AQuestion({
+        userId: targetAgent.user_id,
+        agentId: targetAgent.id,
+        peer,
+        senderDid: body.from,
+        conversationId: convId,
+        inboundMessageId: msgId,
+        content: body.message.content,
+      });
+      return c.json({ status: 'pending_approval', message_id: msgId }, 202);
+    }
+    return c.json(
+      {
+        message_id: msgId,
+        thread_id: body.thread_id ?? convId,
+        stream_url: `/a2a/v1/stream/${msgId}`,
+      },
+      201,
+    );
+  }
+
+  // `allow`: only an inbound question triggers our local auto-reply loop. An
+  // answer or notification (e.g. a peer responding to one of our outgoing
+  // consults) is stored and broadcast above but must NOT spawn another reply —
+  // otherwise two agents would ping-pong forever.
   if (body.message.type === 'question') {
     setImmediate(async () => {
       try {
         await processA2AMessage({
           targetAgent,
           senderDid: body.from,
-          senderPeer: resolvedPeer,
+          senderPeer: peer,
           messageContent: body.message.content,
-          conversationId: resolvedConvId,
+          conversationId: convId,
           inboundMessageId: msgId,
         });
       } catch (error) {
@@ -481,4 +560,80 @@ async function processA2AMessage(params: ProcessA2AMessageParams): Promise<void>
   if (!outboundResult.ok) {
     console.error(`Failed to send A2A reply to ${senderDid}: ${outboundResult.error}`);
   }
+}
+
+// Narrow a permission's scope_json to the held-question shape, or null if it's
+// not an a2a_question scope (e.g. a connect request scope).
+function asA2AQuestionScope(scope: unknown): A2AQuestionScope | null {
+  if (!scope || typeof scope !== 'object') return null;
+  const s = scope as Record<string, unknown>;
+  if (
+    s.kind !== 'a2a_question' ||
+    typeof s.conversation_id !== 'string' ||
+    typeof s.inbound_message_id !== 'string' ||
+    typeof s.sender_did !== 'string' ||
+    typeof s.agent_id !== 'string'
+  ) {
+    return null;
+  }
+  return s as unknown as A2AQuestionScope;
+}
+
+// Resume a held A2A question after the owner approves it. Re-reads the target
+// agent (by user_id) and sending peer (by peer_id) from the DB so no stale
+// snapshot is replayed, then runs the same agent loop the `allow` path would
+// have. Idempotent: if a reply to the inbound message already exists (e.g. a
+// double approval), it returns without producing a second answer.
+export async function resumeHeldA2AQuestion(row: typeof permissions.$inferSelect): Promise<void> {
+  const scope = asA2AQuestionScope(row.scope_json);
+  if (!scope || !row.peer_id) return;
+
+  // The owner may have removed the contact between holding the question and
+  // approving it; the consent gate is the authority on who may spend their
+  // budget, so don't answer a peer that is no longer connected.
+  const connected = await checkConsentGate(row.user_id, row.peer_id);
+  if (!connected) return;
+
+  const db = getDb();
+
+  const [inbound] = await db
+    .select({ content: messages.content })
+    .from(messages)
+    .where(eq(messages.id, scope.inbound_message_id))
+    .limit(1);
+  if (!inbound?.content) return;
+
+  const [existingReply] = await db
+    .select({ id: messages.id })
+    .from(messages)
+    .where(eq(messages.in_reply_to, scope.inbound_message_id))
+    .limit(1);
+  if (existingReply) return;
+
+  // Re-read the specific agent the question was addressed to (a user may own
+  // several agents), and confirm it still belongs to the approving owner.
+  const [targetAgent] = await db
+    .select()
+    .from(agents)
+    .where(eq(agents.id, scope.agent_id))
+    .limit(1);
+  if (!targetAgent || targetAgent.user_id !== row.user_id) return;
+
+  const [senderPeer] = await db
+    .select()
+    .from(peerAgents)
+    .where(eq(peerAgents.id, row.peer_id))
+    .limit(1);
+  if (!senderPeer) return;
+
+  // Answer the full stored question, not the (possibly 500-char-truncated)
+  // copy kept in scope_json for the inbox card.
+  await processA2AMessage({
+    targetAgent,
+    senderDid: scope.sender_did,
+    senderPeer,
+    messageContent: inbound.content,
+    conversationId: scope.conversation_id,
+    inboundMessageId: scope.inbound_message_id,
+  });
 }

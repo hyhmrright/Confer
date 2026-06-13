@@ -157,7 +157,11 @@ GET    /api/v1/permissions/history               # 历史记录
 }
 ```
 
-待批请求里 `action='connect'` 的是**连接请求**（陌生 peer 首次接触时由 A2A 入站生成）。批准（`allow_*`）会把该 peer 写入 `peer_contacts`，建立连接；拒绝则不建立。`GET /pending` 为每条请求附带 `description`（含发起方与首条留言）便于主人判断。
+待批请求里 `action='connect'` 的是**连接请求**（陌生 peer 首次接触时由 A2A 入站生成）。批准（`allow_*`）会把该 peer 写入 `peer_contacts`，建立连接；拒绝则不建立。
+
+`action='ask'` 的是**已连接 peer 的待批提问**——当主人的 Agent 策略对该提问判为 `ask_user` 时由 A2A 入站生成（见 `03-protocol.md` 的「Pending inbox（离线代答）」）。批准（`allow_*`）触发 Agent 代答这条挂起的提问；拒绝则不回答。
+
+`GET /pending` 为每条请求附带 `description`（连接请求含发起方与首条留言；提问含发起方与问题正文）便于主人判断。
 
 ### 项目记忆（Claude Code 集成相关）
 

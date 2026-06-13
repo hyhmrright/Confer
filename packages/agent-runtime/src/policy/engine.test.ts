@@ -52,6 +52,15 @@ describe('evaluatePolicy', () => {
     expect(evaluatePolicy(req(), { default_decision: 'deny', rules: [] })).toBe('deny');
   });
 
+  test('an empty policy config allows L2 by default (connection is the consent)', () => {
+    expect(evaluatePolicy(req(), parsePolicyConfig({}))).toBe('allow');
+    expect(evaluatePolicy(req(), parsePolicyConfig(null))).toBe('allow');
+  });
+
+  test('an explicit default of ask_user holds L2 with no matching rule for owner review', () => {
+    expect(evaluatePolicy(req(), parsePolicyConfig({ default: 'ask_user' }))).toBe('ask_user');
+  });
+
   test('applies the first matching L2 rule', () => {
     const config: PolicyConfig = {
       default_decision: 'ask_user',
@@ -134,16 +143,16 @@ describe('evaluatePolicy', () => {
 describe('parsePolicyConfig', () => {
   test('returns the safe default for non-object input', () => {
     for (const input of [null, undefined, 'string', 42]) {
-      expect(parsePolicyConfig(input)).toEqual({ default_decision: 'ask_user', rules: [] });
+      expect(parsePolicyConfig(input)).toEqual({ default_decision: 'allow', rules: [] });
     }
   });
 
   test('reads default_decision from the "default" key', () => {
-    expect(parsePolicyConfig({ default: 'allow', rules: [] }).default_decision).toBe('allow');
+    expect(parsePolicyConfig({ default: 'ask_user', rules: [] }).default_decision).toBe('ask_user');
   });
 
   test('falls back when the default decision is invalid', () => {
-    expect(parsePolicyConfig({ default: 'maybe' }).default_decision).toBe('ask_user');
+    expect(parsePolicyConfig({ default: 'maybe' }).default_decision).toBe('allow');
   });
 
   test('keeps valid rules and drops malformed ones', () => {
