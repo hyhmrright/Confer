@@ -1,7 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import { GatewayClient } from './gateway-client.js';
 
-const cfg = { gatewayUrl: 'http://gw', username: 'u', password: 'p', defaultWaitSeconds: 25 };
+const cfg = {
+  gatewayUrl: 'http://gw',
+  username: 'u',
+  password: 'p',
+  defaultWaitSeconds: 25,
+  projectId: 'test-project',
+};
 
 function fakeFetch(handler: (url: string, init?: RequestInit) => Response) {
   return (async (input: string | URL | Request, init?: RequestInit) =>

@@ -437,7 +437,7 @@ await server.connect(transport);
 - Gateway 新增用户发起的 A2A 出站咨询能力（`/api/v1/consult/*`，见 `docs/05-api.md`）。此前平台只有"入站→自动回复"一条 A2A 发消息路径，无任何用户主动出站路径。
 - `packages/mcp-a2a`：stdio MCP server，以**一个配置的 Confer 用户**身份登录 gateway 取 token，把咨询能力暴露成工具。签名仍在 gateway，私钥不出 gateway。
 
-**已实现工具（9 个）**
+**已实现工具（15 个）**
 
 | 域 | 工具 |
 |----|------|
@@ -445,6 +445,11 @@ await server.connect(transport);
 | 咨询 | `ask_agent`（同步等待）/ `follow_up` / `get_conversation` |
 | 进阶 | `ask_multiple`（并行，上限 5）/ `check_reply`（异步取） |
 | 运维 | `whoami` |
+| 指定人 | `ask_person_agent`（问某个具体人的 agent，Wizard 回填） |
+| 项目记忆 | `read_project_memory`（读 facts/decisions，缺失即空非错）/ `write_project_memory`（写 facts 或 decisions，互不清空，version 递增） |
+| 发现 + 评审 | `discover_peer`（按 domain/did/username 发现并落库 peer，返回 `peer_id`；**不建立联系人关系**——须先在主程序接受为联系人，否则后续写记忆/咨询吃 `403`，这是同意闸门）/ `request_design_review`（请 peer 评审方案）/ `request_code_review`（请 peer 评审文件） |
+
+项目记忆工具的 `project` 参数可省略，省略时回退到 MCP 配置的 `projectId`（`CONFER_PROJECT_ID` 环境变量，缺省取 cwd basename）。
 
 **连接**（`.mcp.json`，需先 `bun run dev` 起 gateway）
 
@@ -457,7 +462,9 @@ await server.connect(transport);
       "env": {
         "CONFER_GATEWAY_URL": "http://localhost:3000",
         "CONFER_USERNAME": "${CONFER_USERNAME}",
-        "CONFER_PASSWORD": "${CONFER_PASSWORD}"
+        "CONFER_PASSWORD": "${CONFER_PASSWORD}",
+        // 可选：项目记忆的作用域 id，缺省取工作目录名
+        "CONFER_PROJECT_ID": "${CONFER_PROJECT_ID}"
       }
     }
   }
