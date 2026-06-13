@@ -26,8 +26,15 @@ export interface PolicyRequest {
   level: PermissionLevel;
 }
 
+// Default to `allow` for L2 with no matching rule. The only runtime caller is
+// the inbound A2A handler, which runs this AFTER the consent gate — so a
+// connected peer asking an ordinary question is already consented ("connection
+// is the consent for ordinary questions", per a2a.ts). Owners opt into the
+// "ask me first" offline-answer gate explicitly, via either
+// `policies_json.default = 'ask_user'` or a `{ action: 'ask', decision:
+// 'ask_user' }` rule. L3 actions still hard-return `ask_user` regardless.
 const DEFAULT_CONFIG: PolicyConfig = {
-  default_decision: 'ask_user',
+  default_decision: 'allow',
   rules: [],
 };
 

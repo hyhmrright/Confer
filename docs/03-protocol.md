@@ -275,11 +275,13 @@ peer.unknown:
 
 ### Pending inbox（离线代答）
 
-主人离线时收到**已连接** peer 的问题：
+主人离线时收到**已连接** peer 的问题，由 policy engine 决定（`evaluatePolicy`，action=`ask`，L2）：
 
-- 符合 standing policy 的 → Agent 直接答
-- 不在白名单的 → 挂起到 pending inbox，主人上线时一键批准/编辑/拒绝
-- 紧急程度高的 → push 通知主人
+- `allow`（默认——连接即同意）→ Agent 直接答（`201` + 自动回复循环）
+- `ask_user`（主人显式设 `policies_json.default='ask_user'` 或 `{action:'ask',decision:'ask_user'}` 规则）→ **已实现**：入站提问仍存库 + 广播（主人能在 IM 看到），但**不自动回复**；落一条 `action='ask'` 待批权限到 pending inbox，`POST /a2a/v1/messages` 返回 `202 { "status": "pending_approval", "message_id" }`。主人在 `GET /permissions/pending` 看到该提问，`POST /permissions/{id}/decide` 判 `allow_*` 即触发 Agent 代答（写 `in_reply_to` 回复 + 出站投递），判 `deny` 则不答。peer 侧 `GET /a2a/v1/stream/{message_id}` 在批准前返回 `status:'pending'`，批准后返回答复。
+- `deny`（显式拒绝规则）→ `403 policy_denied`
+
+> `ask='ask'` 的待批权限 `scope_json` 形如 `{ kind:'a2a_question', conversation_id, inbound_message_id, sender_did, peer_id, content }`，足以在批准时重建并恢复回答（按 `user_id`/`peer_id` 实时取 agent/peer，幂等：已有回复则跳过）。standing-policy 设置 UI、「编辑后回答」、push 通知仍为 backlog。
 
 ## 联邦发现
 

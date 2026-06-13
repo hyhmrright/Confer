@@ -5,8 +5,8 @@ import {
   publicKeyToMultibase,
   signRequest,
 } from '@confer/identity';
-import { newId } from '@confer/shared';
-import { eq } from 'drizzle-orm';
+import { encrypt, newId } from '@confer/shared';
+import { and, eq } from 'drizzle-orm';
 import { app } from '../app.js';
 import { getDb } from '../db/connection.js';
 import {
@@ -16,8 +16,18 @@ import {
   peerAgents,
   peerContacts,
   permissions,
+  users,
 } from '../db/schema.js';
-import { type SeededUser, headers, mockFetch, resetDb, seedUser } from '../test/helpers.js';
+import { getEnv } from '../env.js';
+import {
+  type SeededUser,
+  get,
+  headers,
+  mockFetch,
+  post,
+  resetDb,
+  seedUser,
+} from '../test/helpers.js';
 
 const MESSAGES = 'http://localhost/a2a/v1/messages';
 let user: SeededUser;
@@ -27,13 +37,34 @@ beforeEach(async () => {
   user = await seedUser();
 });
 
-async function seedTargetAgent(did: string): Promise<void> {
-  await getDb().insert(agents).values({ id: newId(), user_id: user.id, did, policies_json: {} });
+// Seed the user's own agent. `policies` defaults to {} (empty config → `allow`
+// for ordinary L2 questions). Pass `{ default: 'ask_user' }` (or an explicit
+// rule) to exercise the offline-answer hold gate. Returns the agent id.
+async function seedTargetAgent(
+  did: string,
+  policies: Record<string, unknown> = {},
+): Promise<string> {
+  const agentId = newId();
+  await getDb()
+    .insert(agents)
+    .values({ id: agentId, user_id: user.id, did, policies_json: policies });
+  return agentId;
+}
+
+// Give the user an AES-encrypted Anthropic key so processA2AMessage can build a
+// provider and reach the (mocked) LLM when a held question is approved.
+async function seedUserLlmKey(): Promise<void> {
+  const enc = await encrypt('sk-test-anthropic', getEnv().ENCRYPTION_KEY);
+  if (!enc.ok) throw new Error('failed to encrypt test LLM key');
+  await getDb()
+    .update(users)
+    .set({ llm_keys_json: { anthropic: enc.value } })
+    .where(eq(users.id, user.id));
 }
 
 // Make `did` a connected contact of the seeded user so the consent gate lets
-// its messages through to the agent loop.
-async function connectPeer(did: string): Promise<void> {
+// its messages through to the agent loop. Returns the peer row id.
+async function connectPeer(did: string): Promise<string> {
   const db = getDb();
   const peerId = newId();
   await db.insert(peerAgents).values({
@@ -46,6 +77,22 @@ async function connectPeer(did: string): Promise<void> {
   await db
     .insert(peerContacts)
     .values({ id: newId(), user_id: user.id, peer_id: peerId, added_via: 'manual' });
+  return peerId;
+}
+
+// Poll until `fn` returns a truthy value or the timeout elapses. Approving a held
+// question runs the agent loop fire-and-forget, so reads must poll, not sleep.
+async function waitFor<T>(
+  fn: () => Promise<T | null | undefined>,
+  timeoutMs = 4000,
+): Promise<T | null> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const v = await fn();
+    if (v) return v;
+    if (Date.now() >= deadline) return null;
+    await new Promise((r) => setTimeout(r, 50));
+  }
 }
 
 describe('A2A signature rejection', () => {
@@ -105,7 +152,7 @@ describe('A2A signed message (real Ed25519, mocked DID resolution)', () => {
   });
 
   // Generate a key pair and serve its public half from the mocked DID document.
-  async function signingKeyResolvedViaDid() {
+  async function signingKeyResolvedViaDid(opts: { llmReply?: string } = {}) {
     const { publicKey, privateKey } = await generateEd25519KeyPair();
     const publicKeyMultibase = await publicKeyToMultibase(publicKey);
     const didDocument = {
@@ -122,9 +169,22 @@ describe('A2A signed message (real Ed25519, mocked DID resolution)', () => {
     };
     restoreFetch = mockFetch((url) => {
       if (url.includes('/.well-known/did.json')) return Response.json(didDocument);
-      // The post-response agent loop calls the LLM; short-circuit it so the
-      // suite makes no real external calls (its failure is caught and ignored).
-      if (url.includes('api.anthropic.com')) return new Response('{}', { status: 401 });
+      // The post-response agent loop calls the LLM. By default short-circuit it
+      // (401) so the suite makes no real external calls. A test that approves a
+      // held question passes `llmReply` to get a valid Anthropic response so the
+      // agent actually produces an answer.
+      if (url.includes('api.anthropic.com')) {
+        return opts.llmReply
+          ? Response.json({
+              id: 'msg_test',
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'text', text: opts.llmReply }],
+              stop_reason: 'end_turn',
+              usage: { input_tokens: 1, output_tokens: 1 },
+            })
+          : new Response('{}', { status: 401 });
+      }
       return undefined;
     });
     return privateKey;
@@ -229,6 +289,155 @@ describe('A2A signed message (real Ed25519, mocked DID resolution)', () => {
     });
     const res = await app.request(tampered);
     expect(res.status).toBe(401);
+  });
+
+  // ---- ask_user offline-answer gate ----
+  // An agent whose policy holds ordinary questions for the owner ("ask me").
+  const ASK_USER = { default: 'ask_user' };
+
+  test('holds a connected peer question for owner review when policy is ask_user (202)', async () => {
+    const targetDid = 'did:web:localhost:agents:held';
+    await seedTargetAgent(targetDid, ASK_USER);
+    await connectPeer('did:web:localhost');
+    const privateKey = await signingKeyResolvedViaDid();
+
+    const signed = await signRequest(
+      messageRequest(targetDid, 'What is your SLA?'),
+      privateKey,
+      KEY_ID,
+    );
+    const res = await app.request(signed);
+
+    expect(res.status).toBe(202);
+    expect((await res.json()).status).toBe('pending_approval');
+
+    // The inbound question is stored (the owner can see it) but the agent did
+    // not auto-reply — no own_agent message exists.
+    const msgs = await getDb().select().from(messages);
+    expect(msgs).toHaveLength(1);
+    expect(msgs[0]?.sender_type).toBe('peer_agent');
+
+    // A pending `ask` permission with the a2a_question scope was recorded.
+    const perms = await getDb()
+      .select()
+      .from(permissions)
+      .where(and(eq(permissions.user_id, user.id), eq(permissions.action, 'ask')));
+    expect(perms).toHaveLength(1);
+    expect(perms[0]?.decision).toBe('pending');
+    expect((perms[0]?.scope_json as { kind?: string })?.kind).toBe('a2a_question');
+  });
+
+  test('a held question appears in the owner pending inbox with the question text', async () => {
+    const targetDid = 'did:web:localhost:agents:held2';
+    await seedTargetAgent(targetDid, ASK_USER);
+    await connectPeer('did:web:localhost');
+    const privateKey = await signingKeyResolvedViaDid();
+    await app.request(
+      await signRequest(messageRequest(targetDid, 'Ship dates?'), privateKey, KEY_ID),
+    );
+
+    const res = await get('/api/v1/permissions/pending', { token: user.token });
+    expect(res.status).toBe(200);
+    const pending = (await res.json()).permissions as Array<{
+      action: string;
+      description: string;
+    }>;
+    const ask = pending.find((p) => p.action === 'ask');
+    expect(ask).toBeTruthy();
+    expect(ask?.description).toContain('Ship dates?');
+  });
+
+  test('approving a held question lets the agent answer it (own_agent reply appears)', async () => {
+    const targetDid = 'did:web:localhost:agents:held3';
+    await seedTargetAgent(targetDid, ASK_USER);
+    await connectPeer('did:web:localhost');
+    await seedUserLlmKey();
+    const privateKey = await signingKeyResolvedViaDid({ llmReply: 'Our SLA is 99.9% uptime.' });
+
+    const inbound = await app.request(
+      await signRequest(messageRequest(targetDid, 'SLA?'), privateKey, KEY_ID),
+    );
+    const inboundMsgId = (await inbound.json()).message_id;
+
+    const [perm] = await getDb()
+      .select()
+      .from(permissions)
+      .where(and(eq(permissions.user_id, user.id), eq(permissions.action, 'ask')));
+    const decided = await post(`/api/v1/permissions/${perm?.id}/decide`, {
+      token: user.token,
+      body: { decision: 'allow_once', scope: 'peer_action' },
+    });
+    expect(decided.status).toBe(200);
+
+    const reply = await waitFor(async () => {
+      const [r] = await getDb()
+        .select()
+        .from(messages)
+        .where(eq(messages.in_reply_to, inboundMsgId));
+      return r;
+    });
+    expect(reply?.sender_type).toBe('own_agent');
+    expect(reply?.content).toContain('99.9%');
+  });
+
+  test('denying a held question produces no reply', async () => {
+    const targetDid = 'did:web:localhost:agents:held4';
+    await seedTargetAgent(targetDid, ASK_USER);
+    await connectPeer('did:web:localhost');
+    const privateKey = await signingKeyResolvedViaDid();
+
+    const inbound = await app.request(
+      await signRequest(messageRequest(targetDid, 'SLA?'), privateKey, KEY_ID),
+    );
+    const inboundMsgId = (await inbound.json()).message_id;
+
+    const [perm] = await getDb()
+      .select()
+      .from(permissions)
+      .where(and(eq(permissions.user_id, user.id), eq(permissions.action, 'ask')));
+    const decided = await post(`/api/v1/permissions/${perm?.id}/decide`, {
+      token: user.token,
+      body: { decision: 'deny', scope: 'peer_action' },
+    });
+    expect(decided.status).toBe(200);
+
+    // Give a (correctly suppressed) resume a window to not run, then assert no reply.
+    await new Promise((r) => setTimeout(r, 300));
+    const replies = await getDb()
+      .select()
+      .from(messages)
+      .where(eq(messages.in_reply_to, inboundMsgId));
+    expect(replies).toHaveLength(0);
+  });
+
+  test('a connected peer under the default (allow) policy is answered immediately (201)', async () => {
+    const targetDid = 'did:web:localhost:agents:allow';
+    await seedTargetAgent(targetDid); // empty policy => default allow (connection is consent)
+    await connectPeer('did:web:localhost');
+    await seedUserLlmKey();
+    const privateKey = await signingKeyResolvedViaDid({ llmReply: 'Sure — happy to help.' });
+
+    const inbound = await app.request(
+      await signRequest(messageRequest(targetDid, 'hi'), privateKey, KEY_ID),
+    );
+    expect(inbound.status).toBe(201);
+    const inboundMsgId = (await inbound.json()).message_id;
+
+    // Nothing was held for approval under the default policy.
+    const perms = await getDb()
+      .select()
+      .from(permissions)
+      .where(and(eq(permissions.user_id, user.id), eq(permissions.action, 'ask')));
+    expect(perms).toHaveLength(0);
+
+    const reply = await waitFor(async () => {
+      const [r] = await getDb()
+        .select()
+        .from(messages)
+        .where(eq(messages.in_reply_to, inboundMsgId));
+      return r;
+    });
+    expect(reply?.sender_type).toBe('own_agent');
   });
 });
 
