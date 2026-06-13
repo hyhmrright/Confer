@@ -104,12 +104,15 @@ export interface A2AQuestionScope {
   conversation_id: string;
   inbound_message_id: string;
   sender_did: string;
-  peer_id: string;
+  // The specific agent the question was addressed to (a user may own several),
+  // so the resume re-reads the right agent rather than an arbitrary one.
+  agent_id: string;
   content: string;
 }
 
 interface HoldA2AQuestionParams {
   userId: string;
+  agentId: string;
   peer: typeof peerAgents.$inferSelect;
   senderDid: string;
   conversationId: string;
@@ -128,7 +131,7 @@ async function holdA2AQuestion(params: HoldA2AQuestionParams): Promise<void> {
     conversation_id: params.conversationId,
     inbound_message_id: params.inboundMessageId,
     sender_did: params.senderDid,
-    peer_id: params.peer.id,
+    agent_id: params.agentId,
     content: params.content.slice(0, 500),
   };
 
@@ -369,6 +372,7 @@ a2aRoutes.post('/messages', verifyA2ASignature, async (c) => {
     if (body.message.type === 'question') {
       await holdA2AQuestion({
         userId: targetAgent.user_id,
+        agentId: targetAgent.id,
         peer,
         senderDid: body.from,
         conversationId: convId,
@@ -567,7 +571,8 @@ function asA2AQuestionScope(scope: unknown): A2AQuestionScope | null {
     s.kind !== 'a2a_question' ||
     typeof s.conversation_id !== 'string' ||
     typeof s.inbound_message_id !== 'string' ||
-    typeof s.sender_did !== 'string'
+    typeof s.sender_did !== 'string' ||
+    typeof s.agent_id !== 'string'
   ) {
     return null;
   }
@@ -582,6 +587,12 @@ function asA2AQuestionScope(scope: unknown): A2AQuestionScope | null {
 export async function resumeHeldA2AQuestion(row: typeof permissions.$inferSelect): Promise<void> {
   const scope = asA2AQuestionScope(row.scope_json);
   if (!scope || !row.peer_id) return;
+
+  // The owner may have removed the contact between holding the question and
+  // approving it; the consent gate is the authority on who may spend their
+  // budget, so don't answer a peer that is no longer connected.
+  const connected = await checkConsentGate(row.user_id, row.peer_id);
+  if (!connected) return;
 
   const db = getDb();
 
@@ -599,12 +610,14 @@ export async function resumeHeldA2AQuestion(row: typeof permissions.$inferSelect
     .limit(1);
   if (existingReply) return;
 
+  // Re-read the specific agent the question was addressed to (a user may own
+  // several agents), and confirm it still belongs to the approving owner.
   const [targetAgent] = await db
     .select()
     .from(agents)
-    .where(eq(agents.user_id, row.user_id))
+    .where(eq(agents.id, scope.agent_id))
     .limit(1);
-  if (!targetAgent) return;
+  if (!targetAgent || targetAgent.user_id !== row.user_id) return;
 
   const [senderPeer] = await db
     .select()

@@ -439,6 +439,41 @@ describe('A2A signed message (real Ed25519, mocked DID resolution)', () => {
     });
     expect(reply?.sender_type).toBe('own_agent');
   });
+
+  test('a held question is not answered if the contact was removed before approval', async () => {
+    const targetDid = 'did:web:localhost:agents:held5';
+    await seedTargetAgent(targetDid, ASK_USER);
+    const peerId = await connectPeer('did:web:localhost');
+    await seedUserLlmKey();
+    const privateKey = await signingKeyResolvedViaDid({ llmReply: 'should not be sent' });
+
+    const inbound = await app.request(
+      await signRequest(messageRequest(targetDid, 'SLA?'), privateKey, KEY_ID),
+    );
+    const inboundMsgId = (await inbound.json()).message_id;
+
+    const [perm] = await getDb()
+      .select()
+      .from(permissions)
+      .where(and(eq(permissions.user_id, user.id), eq(permissions.action, 'ask')));
+
+    // Owner disconnects the peer, then approves the now-stale held question.
+    await getDb()
+      .delete(peerContacts)
+      .where(and(eq(peerContacts.user_id, user.id), eq(peerContacts.peer_id, peerId)));
+    const decided = await post(`/api/v1/permissions/${perm?.id}/decide`, {
+      token: user.token,
+      body: { decision: 'allow_once', scope: 'peer_action' },
+    });
+    expect(decided.status).toBe(200);
+
+    await new Promise((r) => setTimeout(r, 300));
+    const replies = await getDb()
+      .select()
+      .from(messages)
+      .where(eq(messages.in_reply_to, inboundMsgId));
+    expect(replies).toHaveLength(0);
+  });
 });
 
 describe('A2A reply stream authorization (IDOR)', () => {

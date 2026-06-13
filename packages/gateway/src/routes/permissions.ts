@@ -91,7 +91,10 @@ permissionRoutes.post('/:id/decide', async (c) => {
     throw new AppError('not_found', 'Permission request not found', 404);
   }
 
-  await db
+  // Claim the decision atomically: only the first decider moves it out of
+  // pending, so two concurrent approvals can't both establish the contact or
+  // fire the held-question resume (which would double-answer the peer).
+  const claimed = await db
     .update(permissions)
     .set({
       decision: body.decision,
@@ -99,7 +102,16 @@ permissionRoutes.post('/:id/decide', async (c) => {
       decided_at: new Date(),
       decided_by: user.sub,
     })
-    .where(eq(permissions.id, id));
+    .where(
+      and(
+        eq(permissions.id, id),
+        or(eq(permissions.decision, 'pending'), isNull(permissions.decision)),
+      ),
+    )
+    .returning({ id: permissions.id });
+
+  // Already decided by a concurrent request — don't run the side effects twice.
+  if (claimed.length === 0) return c.json({ ok: true });
 
   // Approving a connection request establishes the contact, which is what the
   // A2A consent gate checks before letting the peer spend the owner's budget.
