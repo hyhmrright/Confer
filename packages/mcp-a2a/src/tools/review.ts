@@ -48,8 +48,8 @@ export interface CodeReviewInput {
   waitSeconds: number;
 }
 
-// The explanatory question (focus goes here; the code body goes in code_context
-// to stay under the consult question length cap).
+// The explanatory question (focus goes here; the code body goes in code_context,
+// which has a larger length cap (20000) than question (8000)).
 export function buildCodeReviewQuestion(focus?: string): string {
   return `# Code review request
 Please review the following file(s). Focus: ${focus ?? 'correctness + vendor gotchas'}.`;

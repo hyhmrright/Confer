@@ -20007,7 +20007,7 @@ server.registerTool("write_project_memory", {
   inputSchema: {
     peerId: exports_external.string(),
     section: exports_external.enum(["facts", "decisions"]),
-    content: exports_external.string(),
+    content: exports_external.string().min(1),
     project: exports_external.string().optional()
   }
 }, async ({ peerId, section, content, project }) => json(await writeProjectMemory(client, {

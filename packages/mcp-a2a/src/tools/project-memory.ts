@@ -73,7 +73,8 @@ export async function readProjectMemory(
     peerId: input.peerId,
     facts: facts.facts_md,
     decisions: decisions.decisions_md,
-    // facts/decisions share one row, so their versions match; report either.
+    // facts and decisions live in the same row, so absent a write landing between
+    // these two GETs their versions are identical; report facts'.
     version: facts.version,
     updated_at: facts.updated_at,
   };

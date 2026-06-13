@@ -1,11 +1,17 @@
 import { z } from 'zod';
 
-// PUT body for project memory. Both fields are optional because a write targets a
-// single section (facts OR decisions) — the route picks the one field it owns and
-// never touches the other, so one PUT can't clobber the sibling section.
-export const projectMemoryWriteSchema = z.object({
-  facts_md: z.string().optional(),
-  decisions_md: z.string().optional(),
+// PUT body for a project-memory write. Each section has its own schema with its
+// field REQUIRED (non-empty): a write targets exactly one section, so making the
+// field required rejects an empty or mis-keyed body with a 400 instead of silently
+// inserting NULL into the column. The route only ever sets the field it owns, so a
+// write still can't clobber the sibling section.
+export const projectFactsWriteSchema = z.object({
+  facts_md: z.string().min(1),
 });
 
-export type ProjectMemoryWrite = z.infer<typeof projectMemoryWriteSchema>;
+export const projectDecisionsWriteSchema = z.object({
+  decisions_md: z.string().min(1),
+});
+
+export type ProjectFactsWrite = z.infer<typeof projectFactsWriteSchema>;
+export type ProjectDecisionsWrite = z.infer<typeof projectDecisionsWriteSchema>;

@@ -181,4 +181,27 @@ describe('projects memory', () => {
     });
     expect(res.status).toBe(400);
   });
+
+  test('write with missing/empty section field returns 400 (never inserts NULL)', async () => {
+    const peerId = await seedPeer({ contactOf: user.id });
+    // Body with the wrong field for this endpoint — facts_md absent.
+    const wrongField = await put(`${PROJECTS}/${PROJECT}/peers/${peerId}/facts`, {
+      token: user.token,
+      body: { decisions_md: 'oops' },
+    });
+    expect(wrongField.status).toBe(400);
+
+    // Empty string is rejected too (min length 1).
+    const empty = await put(`${PROJECTS}/${PROJECT}/peers/${peerId}/facts`, {
+      token: user.token,
+      body: { facts_md: '' },
+    });
+    expect(empty.status).toBe(400);
+
+    // The rejected writes left no row behind: the read is still the "no memory" state.
+    const read = await get(`${PROJECTS}/${PROJECT}/peers/${peerId}/facts`, { token: user.token });
+    const body = await read.json();
+    expect(body.facts_md).toBe('');
+    expect(body.version).toBe(0);
+  });
 });

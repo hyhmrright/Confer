@@ -1,4 +1,9 @@
-import { AppError, newId, projectMemoryWriteSchema } from '@confer/shared';
+import {
+  AppError,
+  newId,
+  projectDecisionsWriteSchema,
+  projectFactsWriteSchema,
+} from '@confer/shared';
 import { and, eq, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { z } from 'zod';
@@ -11,14 +16,16 @@ export const projectsRoutes = new Hono<AppEnv>();
 
 projectsRoutes.use('/*', authMiddleware);
 
-// project_id is a path segment that ends up in a varchar(255). Validate it
+// project_id is a single path segment that ends up in a varchar(255). Validate it
 // explicitly to reject path-injection / junk before it reaches the query, and to
-// keep the stored value within the column width.
+// keep the stored value within the column width. Slash is intentionally excluded:
+// the MCP client encodeURIComponent()s the id, and a %2F is decoded back to a path
+// separator before routing, so a slashed id would never match `/:projectId/...`.
 const projectIdSchema = z
   .string()
   .min(1)
   .max(255)
-  .regex(/^[a-zA-Z0-9._\-/]+$/);
+  .regex(/^[a-zA-Z0-9._-]+$/);
 
 function parseProjectId(raw: string): string {
   const parsed = projectIdSchema.safeParse(raw);
@@ -107,7 +114,7 @@ projectsRoutes.put('/:projectId/peers/:peerId/facts', async (c) => {
   const db = getDb();
   const projectId = parseProjectId(c.req.param('projectId'));
   const peerId = c.req.param('peerId');
-  const body = projectMemoryWriteSchema.parse(await c.req.json());
+  const body = projectFactsWriteSchema.parse(await c.req.json());
 
   await assertContact(user.sub, peerId);
 
@@ -144,7 +151,7 @@ projectsRoutes.put('/:projectId/peers/:peerId/decisions', async (c) => {
   const db = getDb();
   const projectId = parseProjectId(c.req.param('projectId'));
   const peerId = c.req.param('peerId');
-  const body = projectMemoryWriteSchema.parse(await c.req.json());
+  const body = projectDecisionsWriteSchema.parse(await c.req.json());
 
   await assertContact(user.sub, peerId);
 

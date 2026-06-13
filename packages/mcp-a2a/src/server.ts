@@ -162,7 +162,7 @@ server.registerTool(
     inputSchema: {
       peerId: z.string(),
       section: z.enum(['facts', 'decisions']),
-      content: z.string(),
+      content: z.string().min(1),
       project: z.string().optional(),
     },
   },
