@@ -3,9 +3,8 @@ import {
   createProvider,
   evaluatePolicy,
   parsePolicyConfig,
-  runAgentLoop,
 } from '@confer/agent-runtime';
-import type { AgentContext } from '@confer/agent-runtime';
+import type { LLMMessage } from '@confer/agent-runtime';
 import {
   multibaseToPublicKey,
   parseSignatureHeader,
@@ -13,7 +12,7 @@ import {
   verifyRequestSignature,
 } from '@confer/identity';
 import { AppError, newId } from '@confer/shared';
-import { and, eq } from 'drizzle-orm';
+import { and, asc, eq, lt } from 'drizzle-orm';
 import { Hono } from 'hono';
 import type { MiddlewareHandler } from 'hono';
 import { streamSSE } from 'hono/streaming';
@@ -25,15 +24,19 @@ import {
   agents,
   conversationParticipants,
   conversations,
+  knowledgeBases,
   messages,
   peerAgents,
   peerContacts,
   permissions,
 } from '../db/schema.js';
 import { getEnv } from '../env.js';
-import { decryptUserKey, getUserLlmKeys } from '../lib/llm-keys.js';
+import { runAgentTurn } from '../lib/agent-orchestrator.js';
+import type { EmbeddingProvider } from '../lib/embedding.js';
+import { decryptUserKey, getUserLlmKeys, resolveEmbeddingKey } from '../lib/llm-keys.js';
 import { upsertPeerAgent } from '../lib/peer-agent.js';
 import { rateLimit } from '../middleware/rate-limit.js';
+import { extractAndStore } from '../tools/memory.js';
 import { broadcastToConversation } from '../ws/handler.js';
 
 const a2aMessageSchema = z.object({
@@ -473,6 +476,33 @@ interface ProcessA2AMessageParams {
   inboundMessageId: string;
 }
 
+// Load up to 20 prior visible messages of an A2A thread as LLM history,
+// excluding the current inbound message. The peer asking is the `user`; this
+// agent's own prior replies are `assistant`, mirroring the chat path's role
+// mapping. Moderator-hidden messages are excluded from the LLM context.
+async function loadA2AHistory(
+  conversationId: string,
+  inboundMessageId: string,
+): Promise<LLMMessage[]> {
+  const rows = await getDb()
+    .select()
+    .from(messages)
+    .where(
+      and(
+        eq(messages.conversation_id, conversationId),
+        lt(messages.id, inboundMessageId),
+        eq(messages.moderation_status, 'visible'),
+      ),
+    )
+    .orderBy(asc(messages.created_at))
+    .limit(20);
+
+  return rows.map((m) => ({
+    role: m.sender_type === 'peer_agent' ? 'user' : 'assistant',
+    content: m.content ?? '',
+  }));
+}
+
 async function processA2AMessage(params: ProcessA2AMessageParams): Promise<void> {
   const { targetAgent, senderDid, senderPeer, messageContent, conversationId, inboundMessageId } =
     params;
@@ -481,8 +511,9 @@ async function processA2AMessage(params: ProcessA2AMessageParams): Promise<void>
   const providerName = (modelConfig?.provider as string) ?? 'anthropic';
 
   const db = getDb();
+  const env = getEnv();
   const llmKeys = await getUserLlmKeys(targetAgent.user_id);
-  const apiKey = await decryptUserKey(llmKeys, providerName, getEnv().ENCRYPTION_KEY);
+  const apiKey = await decryptUserKey(llmKeys, providerName, env.ENCRYPTION_KEY);
 
   const provider = createProvider(providerName, apiKey);
   if (!provider) {
@@ -492,15 +523,35 @@ async function processA2AMessage(params: ProcessA2AMessageParams): Promise<void>
     return;
   }
 
-  const agentCtx: AgentContext = {
-    agentId: targetAgent.id,
-    userId: targetAgent.user_id,
-    provider,
-    systemPrompt: targetAgent.description ?? 'You are a helpful AI agent.',
-    conversationHistory: [],
-  };
+  // Tools, recall, and extraction all spend the owner's budget against the
+  // owner's keys — never the requesting peer's. Each capability degrades
+  // gracefully when its key is absent (no KB / no web_search / no memory).
+  const embeddingConfig = await resolveEmbeddingKey(llmKeys, env.ENCRYPTION_KEY);
+  const embeddingKey = embeddingConfig?.apiKey ?? '';
+  const embeddingProvider: EmbeddingProvider = embeddingConfig?.provider ?? 'openai';
+  const userKbs = embeddingKey
+    ? await db
+        .select({ id: knowledgeBases.id })
+        .from(knowledgeBases)
+        .where(eq(knowledgeBases.user_id, targetAgent.user_id))
+    : [];
 
-  const replyContent = await runAgentLoop(agentCtx, messageContent);
+  const userTavilyKey = await decryptUserKey(llmKeys, 'tavily', env.ENCRYPTION_KEY);
+  const tavilyApiKey = userTavilyKey || env.TAVILY_API_KEY;
+
+  const history = await loadA2AHistory(conversationId, inboundMessageId);
+
+  const { content: replyContent, citations } = await runAgentTurn({
+    provider,
+    systemPromptBase: targetAgent.description ?? 'You are a helpful AI agent.',
+    history,
+    userMessage: messageContent,
+    userId: targetAgent.user_id,
+    embeddingKey,
+    embeddingProvider,
+    tavilyApiKey,
+    hasKb: userKbs.length > 0,
+  });
 
   const replyId = newId();
 
@@ -513,6 +564,7 @@ async function processA2AMessage(params: ProcessA2AMessageParams): Promise<void>
     content_type: 'text',
     content: replyContent,
     in_reply_to: inboundMessageId,
+    citations_json: citations.length > 0 ? citations : undefined,
     via: 'a2a',
     delivered_at: new Date(),
   });
@@ -528,6 +580,23 @@ async function processA2AMessage(params: ProcessA2AMessageParams): Promise<void>
       in_reply_to: inboundMessageId,
     },
   });
+
+  // Fire-and-forget: distil durable facts from this A2A turn into long-term
+  // memory, mirroring the chat path. Runs before the outbound delivery block so
+  // an unsendable reply (no peer endpoint / unsignable) still feeds memory.
+  // Best-effort: log userId only on failure, never the message content (PII).
+  if (embeddingKey && replyContent) {
+    const recentTurns = `peer：${messageContent}\n本agent：${replyContent}`;
+    void extractAndStore({
+      userId: targetAgent.user_id,
+      provider,
+      embeddingKey,
+      embeddingProvider,
+      recentTurns,
+    }).catch((err) => {
+      console.error(`Memory extraction failed for user ${targetAgent.user_id}:`, err);
+    });
+  }
 
   const peerEndpoint = senderPeer.endpoint;
 

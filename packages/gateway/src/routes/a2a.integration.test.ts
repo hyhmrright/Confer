@@ -10,8 +10,10 @@ import { and, eq } from 'drizzle-orm';
 import { app } from '../app.js';
 import { getDb } from '../db/connection.js';
 import {
+  agentMemories,
   agents,
   conversations,
+  knowledgeBases,
   messages,
   peerAgents,
   peerContacts,
@@ -19,6 +21,8 @@ import {
   users,
 } from '../db/schema.js';
 import { getEnv } from '../env.js';
+import { ensureMemoryCollection } from '../lib/memory-store.js';
+import { ensureCollection, upsertChunks } from '../lib/qdrant.js';
 import {
   type SeededUser,
   get,
@@ -31,6 +35,51 @@ import {
 
 const MESSAGES = 'http://localhost/a2a/v1/messages';
 let user: SeededUser;
+
+// Encode Anthropic SSE events into a text/event-stream Response, matching the
+// event shapes AnthropicProvider.stream() parses (content_block_start /
+// content_block_delta text_delta+input_json_delta / message_stop).
+function sseResponse(events: Array<Record<string, unknown>>): Response {
+  const body = events.map((e) => `event: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`).join('');
+  return new Response(body, {
+    status: 200,
+    headers: { 'content-type': 'text/event-stream' },
+  });
+}
+
+// A streamed plain-text Anthropic reply (no tool calls).
+function anthropicTextStream(text: string): Response {
+  return sseResponse([
+    { type: 'message_start', message: { id: 'msg_test', role: 'assistant' } },
+    { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } },
+    { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text } },
+    { type: 'content_block_stop', index: 0 },
+    { type: 'message_delta', delta: { stop_reason: 'end_turn' } },
+    { type: 'message_stop' },
+  ]);
+}
+
+// A streamed Anthropic reply that emits a single tool_use block (no text). The
+// orchestrator runs the tool, then re-streams; the second stream returns text.
+function anthropicToolUseStream(toolName: string, args: Record<string, unknown>): Response {
+  const json = JSON.stringify(args);
+  return sseResponse([
+    { type: 'message_start', message: { id: 'msg_tool', role: 'assistant' } },
+    {
+      type: 'content_block_start',
+      index: 0,
+      content_block: { type: 'tool_use', id: 'toolu_1', name: toolName, input: {} },
+    },
+    {
+      type: 'content_block_delta',
+      index: 0,
+      delta: { type: 'input_json_delta', partial_json: json },
+    },
+    { type: 'content_block_stop', index: 0 },
+    { type: 'message_delta', delta: { stop_reason: 'tool_use' } },
+    { type: 'message_stop' },
+  ]);
+}
 
 beforeEach(async () => {
   await resetDb();
@@ -169,20 +218,14 @@ describe('A2A signed message (real Ed25519, mocked DID resolution)', () => {
     };
     restoreFetch = mockFetch((url) => {
       if (url.includes('/.well-known/did.json')) return Response.json(didDocument);
-      // The post-response agent loop calls the LLM. By default short-circuit it
-      // (401) so the suite makes no real external calls. A test that approves a
-      // held question passes `llmReply` to get a valid Anthropic response so the
-      // agent actually produces an answer.
+      // The post-response agent loop calls the LLM via provider.stream (the
+      // shared orchestrator is streaming end-to-end), so the mock must return a
+      // text/event-stream Anthropic response. By default short-circuit it (401)
+      // so the suite makes no real external calls; a test that approves a held
+      // question passes `llmReply` to get a valid streamed answer.
       if (url.includes('api.anthropic.com')) {
         return opts.llmReply
-          ? Response.json({
-              id: 'msg_test',
-              type: 'message',
-              role: 'assistant',
-              content: [{ type: 'text', text: opts.llmReply }],
-              stop_reason: 'end_turn',
-              usage: { input_tokens: 1, output_tokens: 1 },
-            })
+          ? anthropicTextStream(opts.llmReply)
           : new Response('{}', { status: 401 });
       }
       return undefined;
@@ -473,6 +516,191 @@ describe('A2A signed message (real Ed25519, mocked DID resolution)', () => {
       .from(messages)
       .where(eq(messages.in_reply_to, inboundMsgId));
     expect(replies).toHaveLength(0);
+  });
+});
+
+describe('A2A agent reply with KB tool calls + citations', () => {
+  const KEY_ID = 'did:web:localhost#key-1';
+  let restoreFetch: () => void;
+
+  beforeEach(async () => {
+    await ensureCollection();
+    await ensureMemoryCollection();
+  });
+
+  afterEach(() => {
+    restoreFetch?.();
+    clearDIDCache();
+  });
+
+  function messageRequest(targetDid: string, content: string): Request {
+    return new Request(MESSAGES, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        from: 'did:web:localhost',
+        to: targetDid,
+        message: { type: 'question', content },
+      }),
+    });
+  }
+
+  // Give the user both an Anthropic key (chat provider) and an OpenAI key
+  // (embeddings → enables KB search + recall).
+  async function seedChatAndEmbeddingKeys(): Promise<void> {
+    const env = getEnv();
+    const anthropic = await encrypt('sk-test-anthropic', env.ENCRYPTION_KEY);
+    const openai = await encrypt('sk-test-openai', env.ENCRYPTION_KEY);
+    if (!anthropic.ok || !openai.ok) throw new Error('failed to encrypt test keys');
+    await getDb()
+      .update(users)
+      .set({ llm_keys_json: { anthropic: anthropic.value, openai: openai.value } })
+      .where(eq(users.id, user.id));
+  }
+
+  // A fixed unit vector so every embedded text (chunk, recall query, KB query)
+  // collides → cosine 1.0, clearing the search threshold deterministically.
+  function fixedVector(): number[] {
+    const v = new Array(1536).fill(0);
+    v[7] = 1;
+    return v;
+  }
+
+  // Seed a KB row plus one Qdrant chunk owned by the user so search_knowledge_base
+  // returns a citable hit. Returns the doc_name used for the citation assertion.
+  async function seedKbChunk(docName: string, text: string): Promise<string> {
+    const kbId = newId();
+    await getDb().insert(knowledgeBases).values({ id: kbId, user_id: user.id, name: 'Ops KB' });
+    await upsertChunks([
+      {
+        chunk_id: newId(),
+        kb_id: kbId,
+        kb_name: 'Ops KB',
+        doc_id: newId(),
+        doc_name: docName,
+        user_id: user.id,
+        text,
+        chunk_index: 0,
+        vector: fixedVector(),
+      },
+    ]);
+    return docName;
+  }
+
+  test('answers a connected peer using KB search and persists citations', async () => {
+    const targetDid = 'did:web:localhost:agents:kb';
+    await seedTargetAgent(targetDid);
+    await connectPeer('did:web:localhost');
+    await seedChatAndEmbeddingKeys();
+    const docName = await seedKbChunk('runbook.md', 'Our SLA target is 99.95% uptime.');
+
+    const { publicKey, privateKey } = await generateEd25519KeyPair();
+    const publicKeyMultibase = await publicKeyToMultibase(publicKey);
+    const didDocument = {
+      '@context': ['https://www.w3.org/ns/did/v1'],
+      id: 'did:web:localhost',
+      verificationMethod: [
+        {
+          id: KEY_ID,
+          type: 'Ed25519VerificationKey2020',
+          controller: 'did:web:localhost',
+          publicKeyMultibase,
+        },
+      ],
+    };
+
+    // Round 0: ask for a KB search. Round 1: answer in text. Embeddings always
+    // return the fixed vector so the chunk is found.
+    let anthropicCall = 0;
+    restoreFetch = mockFetch((url) => {
+      if (url.includes('/.well-known/did.json')) return Response.json(didDocument);
+      if (url.includes('api.openai.com')) {
+        return Response.json({ data: [{ embedding: fixedVector(), index: 0 }] });
+      }
+      if (url.includes('api.anthropic.com')) {
+        return anthropicCall++ === 0
+          ? anthropicToolUseStream('search_knowledge_base', { query: 'SLA target' })
+          : anthropicTextStream('Our SLA target is 99.95% uptime.');
+      }
+      return undefined;
+    });
+
+    const inbound = await app.request(
+      await signRequest(messageRequest(targetDid, 'What is your SLA target?'), privateKey, KEY_ID),
+    );
+    expect(inbound.status).toBe(201);
+    const inboundMsgId = (await inbound.json()).message_id;
+
+    const reply = await waitFor(async () => {
+      const [r] = await getDb()
+        .select()
+        .from(messages)
+        .where(eq(messages.in_reply_to, inboundMsgId));
+      return r;
+    });
+    expect(reply?.sender_type).toBe('own_agent');
+    expect(reply?.content).toContain('99.95%');
+
+    const citations = reply?.citations_json as Array<{ doc_name: string }> | null;
+    expect(citations).toBeTruthy();
+    expect(citations?.length).toBeGreaterThan(0);
+    expect(citations?.some((c) => c.doc_name === docName)).toBe(true);
+  });
+
+  test('degrades gracefully with no embedding/tavily key: answers, no citations', async () => {
+    const targetDid = 'did:web:localhost:agents:plain';
+    await seedTargetAgent(targetDid);
+    await connectPeer('did:web:localhost');
+    // Only an Anthropic chat key — no OpenAI (embeddings) → no KB/recall/extract.
+    await seedUserLlmKey();
+
+    const { publicKey, privateKey } = await generateEd25519KeyPair();
+    const publicKeyMultibase = await publicKeyToMultibase(publicKey);
+    const didDocument = {
+      '@context': ['https://www.w3.org/ns/did/v1'],
+      id: 'did:web:localhost',
+      verificationMethod: [
+        {
+          id: KEY_ID,
+          type: 'Ed25519VerificationKey2020',
+          controller: 'did:web:localhost',
+          publicKeyMultibase,
+        },
+      ],
+    };
+
+    restoreFetch = mockFetch((url) => {
+      if (url.includes('/.well-known/did.json')) return Response.json(didDocument);
+      // No tool calls offered (no tavily, no KB) → a single plain-text turn.
+      if (url.includes('api.anthropic.com')) return anthropicTextStream('Plain answer.');
+      // Any stray embedding call would mean the degraded path wrongly tried KB.
+      if (url.includes('api.openai.com')) return new Response('unexpected', { status: 500 });
+      return undefined;
+    });
+
+    const inbound = await app.request(
+      await signRequest(messageRequest(targetDid, 'hello there'), privateKey, KEY_ID),
+    );
+    expect(inbound.status).toBe(201);
+    const inboundMsgId = (await inbound.json()).message_id;
+
+    const reply = await waitFor(async () => {
+      const [r] = await getDb()
+        .select()
+        .from(messages)
+        .where(eq(messages.in_reply_to, inboundMsgId));
+      return r;
+    });
+    expect(reply?.sender_type).toBe('own_agent');
+    expect(reply?.content).toBe('Plain answer.');
+    expect(reply?.citations_json).toBeNull();
+
+    // No embedding key → nothing extracted into long-term memory.
+    const memories = await getDb()
+      .select()
+      .from(agentMemories)
+      .where(eq(agentMemories.user_id, user.id));
+    expect(memories).toHaveLength(0);
   });
 });
 
