@@ -207,6 +207,20 @@ describe('contact detail + metadata + policies', () => {
     expect(contact.alias).toBeNull();
   });
 
+  test('PATCH /:id with no recognized fields is a no-op (not a 500)', async () => {
+    const peerId = await seedPeer();
+    const contactId = await addContact(user.token, peerId, 'Bob');
+
+    // Empty body, and a body of only unknown keys (Zod strips them), must both
+    // return the unchanged contact rather than emit an empty SET and 500.
+    for (const body of [{}, { unknown_field: 'x' }]) {
+      const res = await patch(`${BASE}/${contactId}`, { token: user.token, body });
+      expect(res.status).toBe(200);
+      const { contact } = await res.json();
+      expect(contact.alias).toBe('Bob');
+    }
+  });
+
   test('PATCH /:id returns 404 for a missing id', async () => {
     const res = await patch(`${BASE}/01HZZZZZZZZZZZZZZZZZZZZZZZ`, {
       token: user.token,

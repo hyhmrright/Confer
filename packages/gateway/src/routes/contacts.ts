@@ -153,7 +153,7 @@ contactRoutes.patch('/:id', async (c) => {
   const contactId = c.req.param('id');
   const body = patchContactSchema.parse(await c.req.json());
 
-  await loadContact(contactId, user.sub);
+  const existing = await loadContact(contactId, user.sub);
 
   // Build the update from only the keys the client sent (`.partial()` leaves
   // absent fields `undefined`), so an unsent field is never overwritten.
@@ -164,6 +164,12 @@ contactRoutes.patch('/:id', async (c) => {
   if (body.tags !== undefined) updates.tags = body.tags;
   if (body.pinned !== undefined) updates.pinned = body.pinned;
   if (body.muted !== undefined) updates.muted = body.muted;
+
+  // No recognized fields (empty body, or only unknown keys Zod stripped) → no-op:
+  // return the loaded row. A `.set({})` would emit an empty SET clause and 500.
+  if (Object.keys(updates).length === 0) {
+    return c.json({ contact: existing });
+  }
 
   const [updated] = await db
     .update(peerContacts)
