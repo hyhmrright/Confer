@@ -24,7 +24,7 @@ const req = (id: string) => ({
 
 beforeEach(() => {
   get.mockReset();
-  usePermissionsStore.setState({ pending: [] });
+  usePermissionsStore.setState({ pending: [], history: [] });
 });
 
 afterEach(() => {
@@ -45,6 +45,38 @@ describe('permissions store', () => {
     get.mockRejectedValueOnce(new Error('endpoint missing'));
     await usePermissionsStore.getState().loadPending();
     expect(usePermissionsStore.getState().pending.map((p) => p.id)).toEqual(['existing']);
+  });
+
+  test('loadHistory fetches and stores decided permission rows', async () => {
+    const permissions = [
+      {
+        id: 'h1',
+        action: 'send_message',
+        level: 'L2',
+        decision: 'allow',
+        peer_id: 'p1',
+        decided_at: '2026-05-31T00:00:00Z',
+      },
+      {
+        id: 'h2',
+        action: 'read_memory',
+        level: 'L1',
+        decision: 'deny',
+        peer_id: null,
+        decided_at: '2026-05-30T00:00:00Z',
+      },
+    ];
+    get.mockResolvedValueOnce({ permissions });
+    await usePermissionsStore.getState().loadHistory();
+    expect(get).toHaveBeenCalledWith('/permissions/history');
+    expect(usePermissionsStore.getState().history).toEqual(permissions as never);
+  });
+
+  test('loadHistory swallows errors and leaves history unchanged', async () => {
+    usePermissionsStore.setState({ history: [{ id: 'existing' }] as never });
+    get.mockRejectedValueOnce(new Error('endpoint missing'));
+    await usePermissionsStore.getState().loadHistory();
+    expect(usePermissionsStore.getState().history.map((h) => h.id)).toEqual(['existing']);
   });
 
   test('addRequest prepends the new request', () => {

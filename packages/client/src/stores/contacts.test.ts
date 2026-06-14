@@ -19,7 +19,16 @@ beforeEach(() => {
   get.mockReset();
   post.mockReset();
   del.mockReset();
-  useContactsStore.setState({ contacts: [], dialogOpen: false, loading: false, error: null });
+  useContactsStore.setState({
+    contacts: [],
+    selectedContactId: null,
+    selectedContact: null,
+    dialogOpen: false,
+    loading: false,
+    saving: false,
+    error: null,
+    success: null,
+  });
 });
 
 afterEach(() => {
@@ -66,6 +75,49 @@ describe('contacts store', () => {
     await useContactsStore.getState().removeContact('c1');
     expect(del).toHaveBeenCalledWith('/contacts/c1');
     expect(useContactsStore.getState().contacts.map((c) => c.id)).toEqual(['c2']);
+  });
+
+  test('setContactPolicy posts the whole engine-shape override', async () => {
+    post.mockResolvedValueOnce({
+      contact: { id: 'c1', policy_overrides_json: { default: 'deny' } },
+    });
+    const overrides = {
+      default: 'deny' as const,
+      rules: [{ action: 'send_message', decision: 'allow' as const }],
+    };
+    await useContactsStore.getState().setContactPolicy('c1', overrides);
+    expect(post).toHaveBeenCalledWith('/contacts/c1/policies', {
+      default: 'deny',
+      rules: [{ action: 'send_message', decision: 'allow' }],
+    });
+  });
+
+  test('setContactPolicy preserves the cached peer on the peer-less write response', async () => {
+    const peer = {
+      id: 'p1',
+      did: 'did:web:vendor.example.com',
+      name: 'Vendor',
+      trust_level: 'unknown',
+    };
+    useContactsStore.setState({
+      contacts: [{ id: 'c1', user_id: 'u1', peer_id: 'p1', peer }] as never,
+      selectedContact: { id: 'c1', user_id: 'u1', peer_id: 'p1', peer } as never,
+      selectedContactId: 'c1',
+    });
+    // Write response omits `peer` (matches POST /contacts/:id/policies).
+    post.mockResolvedValueOnce({
+      contact: {
+        id: 'c1',
+        user_id: 'u1',
+        peer_id: 'p1',
+        policy_overrides_json: { default: 'ask_user' },
+      },
+    });
+    await useContactsStore.getState().setContactPolicy('c1', { default: 'ask_user' });
+    const state = useContactsStore.getState();
+    expect(state.contacts[0]?.peer).toEqual(peer as never);
+    expect(state.contacts[0]?.policy_overrides_json).toEqual({ default: 'ask_user' } as never);
+    expect(state.selectedContact?.peer).toEqual(peer as never);
   });
 
   test('lookupByDomain sends method+value and returns candidates', async () => {

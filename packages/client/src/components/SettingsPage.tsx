@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Bot, Key, User } from './Icons.js';
+import { ArrowLeft, Bot, Key, Shield, User } from './Icons.js';
+import { PermissionHistory } from './PermissionHistory.js';
 import { AgentTab } from './settings/AgentTab.js';
 import { KeysTab } from './settings/KeysTab.js';
+import { PolicyTab } from './settings/PolicyTab.js';
 import { ProfileTab } from './settings/ProfileTab.js';
 
-type Tab = 'profile' | 'agent' | 'keys';
+type Tab = 'profile' | 'agent' | 'keys' | 'policy' | 'history';
 
 export function SettingsPage() {
   const { t } = useTranslation();
@@ -17,6 +19,8 @@ export function SettingsPage() {
     { id: 'profile', label: t('settings.tabProfile'), icon: User },
     { id: 'agent', label: t('settings.tabAgent'), icon: Bot },
     { id: 'keys', label: t('settings.tabKeys'), icon: Key },
+    { id: 'policy', label: t('settings.tabPolicy'), icon: Shield },
+    { id: 'history', label: t('settings.tabHistory'), icon: Shield },
   ];
 
   return (
@@ -59,6 +63,8 @@ export function SettingsPage() {
             {tab === 'profile' && <ProfileTab />}
             {tab === 'agent' && <AgentTab />}
             {tab === 'keys' && <KeysTab />}
+            {tab === 'policy' && <PolicyTab />}
+            {tab === 'history' && <PermissionHistory />}
           </div>
         </div>
       </div>
