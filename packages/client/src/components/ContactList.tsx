@@ -2,11 +2,12 @@ import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useChatStore } from '../stores/chat.js';
 import { useContactsStore } from '../stores/contacts.js';
-import { Bot, Trash } from './Icons.js';
+import { ContactDetail } from './ContactDetail.js';
+import { Bot, Shield, Trash } from './Icons.js';
 
 export function ContactList() {
   const { t } = useTranslation();
-  const { contacts, loadContacts, removeContact } = useContactsStore();
+  const { contacts, loadContacts, removeContact, openDetail } = useContactsStore();
   const { createConversation, selectConversation } = useChatStore();
 
   useEffect(() => {
@@ -57,6 +58,15 @@ export function ContactList() {
           </button>
           <button
             type="button"
+            onClick={() => openDetail(contact.id)}
+            aria-label={t('contacts.openDetail')}
+            title={t('contacts.openDetail')}
+            className="opacity-0 group-hover:opacity-100 p-1 text-ink-muted hover:text-primary-400 transition-all"
+          >
+            <Shield className="w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button"
             onClick={() => removeContact(contact.id)}
             className="opacity-0 group-hover:opacity-100 p-1 text-ink-muted hover:text-red-400 transition-all"
           >
@@ -64,6 +74,7 @@ export function ContactList() {
           </button>
         </div>
       ))}
+      <ContactDetail />
     </div>
   );
 }

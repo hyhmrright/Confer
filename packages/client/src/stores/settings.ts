@@ -1,3 +1,4 @@
+import type { PolicyOverrides } from '@confer/shared';
 import { create } from 'zustand';
 import i18n from '../i18n/index.js';
 import { api } from '../lib/api.js';
@@ -14,6 +15,10 @@ interface AgentConfig {
   name?: string;
   description?: string;
   model_config_json?: ModelConfig;
+  // Agent-level default policy (DB column `agents.policies_json`). Engine
+  // vocabulary (`{ default?, rules? }` with `allow`/`ask_user`/`deny`) — the
+  // same shared shape as a per-contact override.
+  policies_json?: PolicyOverrides;
   is_public?: boolean;
 }
 
@@ -38,6 +43,7 @@ interface SettingsState {
 
   loadAgent: () => Promise<void>;
   updateAgent: (patch: AgentPatch) => Promise<void>;
+  updatePolicies: (policies: PolicyOverrides) => Promise<void>;
   loadLlmKeys: () => Promise<void>;
   saveLlmKey: (provider: string, apiKey: string) => Promise<void>;
   removeLlmKey: (provider: string) => Promise<void>;
@@ -69,6 +75,23 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       await api.patch('/agents/me', patch);
       set((s) => ({
         agent: s.agent ? { ...s.agent, ...patch } : s.agent,
+        saving: false,
+        success: i18n.t('settings.saveSuccess'),
+      }));
+    } catch (e) {
+      set({ saving: false, error: captureError(e, i18n.t('settings.saveFailed')) });
+    }
+  },
+
+  updatePolicies: async (policies) => {
+    set({ saving: true, error: null, success: null });
+    try {
+      // Whole-object replace. The server stores the body verbatim
+      // (`z.record(z.unknown())`), so the client is the only guard that the
+      // shape is the correct engine vocabulary — hence the `PolicyOverrides` type.
+      await api.put('/agents/me/policies', policies);
+      set((s) => ({
+        agent: s.agent ? { ...s.agent, policies_json: policies } : s.agent,
         saving: false,
         success: i18n.t('settings.saveSuccess'),
       }));
