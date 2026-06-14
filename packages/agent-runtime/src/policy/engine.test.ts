@@ -4,6 +4,7 @@ import {
   type PolicyRequest,
   classifyPermissionLevel,
   evaluatePolicy,
+  mergePolicyConfig,
   parsePolicyConfig,
 } from './engine.js';
 
@@ -171,5 +172,76 @@ describe('parsePolicyConfig', () => {
 
   test('treats a non-array rules field as empty', () => {
     expect(parsePolicyConfig({ default: 'allow', rules: 'nope' }).rules).toEqual([]);
+  });
+});
+
+describe('mergePolicyConfig', () => {
+  const agent: PolicyConfig = {
+    default_decision: 'allow',
+    rules: [{ action: 'send_message', decision: 'allow' }],
+  };
+
+  test('contact.default overrides the agent default when present', () => {
+    expect(mergePolicyConfig(agent, { default: 'ask_user' }).default_decision).toBe('ask_user');
+    // A contact default of `deny` overrides an agent `allow` too.
+    expect(
+      mergePolicyConfig({ default_decision: 'allow', rules: [] }, { default: 'deny' })
+        .default_decision,
+    ).toBe('deny');
+  });
+
+  test('an invalid contact.default falls back to the agent default', () => {
+    expect(mergePolicyConfig(agent, { default: 'maybe' }).default_decision).toBe('allow');
+  });
+
+  test('contact rules are prepended so they match before agent rules', () => {
+    const merged = mergePolicyConfig(agent, {
+      rules: [{ action: 'send_message', peer_did: 'did:web:peer.com', decision: 'deny' }],
+    });
+    expect(merged.rules[0]).toEqual({
+      action: 'send_message',
+      peer_did: 'did:web:peer.com',
+      decision: 'deny',
+    });
+    // evaluatePolicy walks rules in order, so the contact rule wins for that peer.
+    expect(
+      evaluatePolicy({ action: 'send_message', peer_did: 'did:web:peer.com', level: 'L2' }, merged),
+    ).toBe('deny');
+    // A different peer falls through the contact rule to the agent rule (allow).
+    expect(
+      evaluatePolicy(
+        { action: 'send_message', peer_did: 'did:web:other.com', level: 'L2' },
+        merged,
+      ),
+    ).toBe('allow');
+  });
+
+  test('a contact ask_user default plus an allow agent default holds the peer', () => {
+    const merged = mergePolicyConfig(
+      { default_decision: 'allow', rules: [] },
+      { default: 'ask_user' },
+    );
+    expect(
+      evaluatePolicy({ action: 'ask', peer_did: 'did:web:peer.com', level: 'L2' }, merged),
+    ).toBe('ask_user');
+  });
+
+  test('an empty override is the identity (deep-equals the agent config)', () => {
+    expect(mergePolicyConfig(agent, {})).toEqual(agent);
+    expect(mergePolicyConfig(agent, undefined)).toEqual(agent);
+    expect(mergePolicyConfig(agent, null)).toEqual(agent);
+    // Non-object overrides are also no-ops.
+    expect(mergePolicyConfig(agent, 'nonsense')).toEqual(agent);
+  });
+
+  test('the identity preserves agent rule order', () => {
+    const multiRule: PolicyConfig = {
+      default_decision: 'ask_user',
+      rules: [
+        { action: 'a', decision: 'allow' },
+        { action: 'b', decision: 'deny' },
+      ],
+    };
+    expect(mergePolicyConfig(multiRule, {}).rules).toEqual(multiRule.rules);
   });
 });

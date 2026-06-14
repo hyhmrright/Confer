@@ -3,7 +3,16 @@ import { newId } from '@confer/shared';
 import { eq } from 'drizzle-orm';
 import { getDb } from '../db/connection.js';
 import { agents, peerAgents } from '../db/schema.js';
-import { type SeededUser, del, get, mockFetch, post, resetDb, seedUser } from '../test/helpers.js';
+import {
+  type SeededUser,
+  del,
+  get,
+  mockFetch,
+  patch,
+  post,
+  resetDb,
+  seedUser,
+} from '../test/helpers.js';
 
 const BASE = '/api/v1/contacts';
 let user: SeededUser;
@@ -130,5 +139,156 @@ describe('contacts', () => {
     const json = await res.json();
     expect(json.candidates).toEqual([]);
     expect(json.error).toBe('Private addresses not allowed');
+  });
+});
+
+// Add `peerId` as a contact of `token`'s user and return the new contact id.
+async function addContact(token: string, peerId: string, alias?: string): Promise<string> {
+  const res = await post(BASE, { token, body: { peer_id: peerId, alias } });
+  return (await res.json()).contact.id;
+}
+
+describe('contact detail + metadata + policies', () => {
+  test('GET /:id reads back a single contact with its peer', async () => {
+    const peerId = await seedPeer();
+    const contactId = await addContact(user.token, peerId, 'Bob');
+
+    const res = await get(`${BASE}/${contactId}`, { token: user.token });
+    expect(res.status).toBe(200);
+    const { contact } = await res.json();
+    expect(contact.id).toBe(contactId);
+    expect(contact.alias).toBe('Bob');
+    expect(contact.peer.id).toBe(peerId);
+  });
+
+  test('GET /:id returns 404 for a missing id', async () => {
+    const res = await get(`${BASE}/01HZZZZZZZZZZZZZZZZZZZZZZZ`, { token: user.token });
+    expect(res.status).toBe(404);
+  });
+
+  test('PATCH /:id updates only the supplied fields (pinned toggle keeps alias)', async () => {
+    const peerId = await seedPeer();
+    const contactId = await addContact(user.token, peerId, 'Bob');
+
+    const res = await patch(`${BASE}/${contactId}`, {
+      token: user.token,
+      body: { pinned: true, tags: ['work'] },
+    });
+    expect(res.status).toBe(200);
+    const { contact } = await res.json();
+    expect(contact.pinned).toBe(true);
+    expect(contact.tags).toEqual(['work']);
+    // The unsent alias is untouched, not cleared.
+    expect(contact.alias).toBe('Bob');
+
+    // muting next leaves pinned/alias/tags intact.
+    const res2 = await patch(`${BASE}/${contactId}`, {
+      token: user.token,
+      body: { muted: true },
+    });
+    const { contact: c2 } = await res2.json();
+    expect(c2.muted).toBe(true);
+    expect(c2.pinned).toBe(true);
+    expect(c2.alias).toBe('Bob');
+    expect(c2.tags).toEqual(['work']);
+  });
+
+  test('PATCH /:id with alias:null clears the alias', async () => {
+    const peerId = await seedPeer();
+    const contactId = await addContact(user.token, peerId, 'Bob');
+
+    const res = await patch(`${BASE}/${contactId}`, {
+      token: user.token,
+      body: { alias: null },
+    });
+    expect(res.status).toBe(200);
+    const { contact } = await res.json();
+    // Explicit null clears the column (not coerced to undefined and dropped).
+    expect(contact.alias).toBeNull();
+  });
+
+  test('PATCH /:id with no recognized fields is a no-op (not a 500)', async () => {
+    const peerId = await seedPeer();
+    const contactId = await addContact(user.token, peerId, 'Bob');
+
+    // Empty body, and a body of only unknown keys (Zod strips them), must both
+    // return the unchanged contact rather than emit an empty SET and 500.
+    for (const body of [{}, { unknown_field: 'x' }]) {
+      const res = await patch(`${BASE}/${contactId}`, { token: user.token, body });
+      expect(res.status).toBe(200);
+      const { contact } = await res.json();
+      expect(contact.alias).toBe('Bob');
+    }
+  });
+
+  test('PATCH /:id returns 404 for a missing id', async () => {
+    const res = await patch(`${BASE}/01HZZZZZZZZZZZZZZZZZZZZZZZ`, {
+      token: user.token,
+      body: { pinned: true },
+    });
+    expect(res.status).toBe(404);
+  });
+
+  test('POST /:id/policies writes the override and GET /:id reflects it', async () => {
+    const peerId = await seedPeer();
+    const contactId = await addContact(user.token, peerId);
+
+    const overrides = {
+      default: 'ask_user',
+      rules: [{ action: 'ask', peer_did: 'did:web:peer.example.com', decision: 'deny' }],
+    };
+    const written = await post(`${BASE}/${contactId}/policies`, {
+      token: user.token,
+      body: overrides,
+    });
+    expect(written.status).toBe(200);
+
+    const res = await get(`${BASE}/${contactId}`, { token: user.token });
+    const { contact } = await res.json();
+    expect(contact.policy_overrides_json).toEqual(overrides);
+  });
+
+  test('POST /:id/policies rejects a malformed override body with 400', async () => {
+    const peerId = await seedPeer();
+    const contactId = await addContact(user.token, peerId);
+
+    const res = await post(`${BASE}/${contactId}/policies`, {
+      token: user.token,
+      body: { default: 'maybe' },
+    });
+    expect(res.status).toBe(400);
+  });
+
+  test('POST /:id/policies returns 404 for a missing id', async () => {
+    const res = await post(`${BASE}/01HZZZZZZZZZZZZZZZZZZZZZZZ/policies`, {
+      token: user.token,
+      body: { default: 'ask_user' },
+    });
+    expect(res.status).toBe(404);
+  });
+
+  test("the three endpoints 404 on another user's contact (no existence leak)", async () => {
+    const peerId = await seedPeer();
+    const contactId = await addContact(user.token, peerId, 'Mine');
+
+    const other = await seedUser();
+    expect((await get(`${BASE}/${contactId}`, { token: other.token })).status).toBe(404);
+    expect(
+      (await patch(`${BASE}/${contactId}`, { token: other.token, body: { pinned: true } })).status,
+    ).toBe(404);
+    expect(
+      (
+        await post(`${BASE}/${contactId}/policies`, {
+          token: other.token,
+          body: { default: 'deny' },
+        })
+      ).status,
+    ).toBe(404);
+
+    // The owner's contact is untouched by the rejected cross-user writes.
+    const mine = await get(`${BASE}/${contactId}`, { token: user.token });
+    const { contact } = await mine.json();
+    expect(contact.pinned).not.toBe(true);
+    expect(contact.alias).toBe('Mine');
   });
 });
