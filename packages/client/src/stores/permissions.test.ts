@@ -24,7 +24,7 @@ const req = (id: string) => ({
 
 beforeEach(() => {
   get.mockReset();
-  usePermissionsStore.setState({ pending: [], history: [] });
+  usePermissionsStore.setState({ pending: [], history: [], historyError: null });
 });
 
 afterEach(() => {
@@ -72,11 +72,13 @@ describe('permissions store', () => {
     expect(usePermissionsStore.getState().history).toEqual(permissions as never);
   });
 
-  test('loadHistory swallows errors and leaves history unchanged', async () => {
+  test('loadHistory surfaces errors without clobbering existing history', async () => {
     usePermissionsStore.setState({ history: [{ id: 'existing' }] as never });
-    get.mockRejectedValueOnce(new Error('endpoint missing'));
+    get.mockRejectedValueOnce(new Error('boom'));
     await usePermissionsStore.getState().loadHistory();
+    // History is left intact, and the failure is surfaced (not silently empty).
     expect(usePermissionsStore.getState().history.map((h) => h.id)).toEqual(['existing']);
+    expect(usePermissionsStore.getState().historyError).toBeTruthy();
   });
 
   test('addRequest prepends the new request', () => {

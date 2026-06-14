@@ -15,11 +15,20 @@ function formatDecidedAt(value: string | null): string {
 
 export function PermissionHistory() {
   const { t } = useTranslation();
-  const { history, loadHistory } = usePermissionsStore();
+  const { history, historyError, loadHistory } = usePermissionsStore();
 
   useEffect(() => {
     loadHistory();
   }, [loadHistory]);
+
+  if (historyError) {
+    return (
+      <div className="flex flex-col items-center justify-center text-red-400 py-12">
+        <Shield className="w-10 h-10 mb-3 opacity-40" />
+        <p className="text-sm">{historyError}</p>
+      </div>
+    );
+  }
 
   if (history.length === 0) {
     return (
@@ -33,7 +42,8 @@ export function PermissionHistory() {
   return (
     <ul className="space-y-2">
       {history.map((entry) => {
-        const allowed = entry.decision === 'allow' || entry.decision?.startsWith('allow');
+        // Decided rows are `allow_once`/`allow_always` or `deny`/`deny_always`.
+        const allowed = entry.decision?.startsWith('allow') ?? false;
         const decisionColor = allowed ? 'text-green-400' : 'text-red-400';
         const decisionLabel = allowed ? t('history.decisionAllow') : t('history.decisionDeny');
         return (

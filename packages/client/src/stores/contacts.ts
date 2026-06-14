@@ -131,8 +131,11 @@ export const useContactsStore = create<ContactsState>((set, get) => ({
     set({ selectedContactId: contactId, loading: true, error: null, success: null });
     try {
       const data = await api.get<{ contact: Contact }>(`/contacts/${contactId}`);
+      // Discard a stale response if the user already switched to another contact.
+      if (get().selectedContactId !== contactId) return;
       set({ selectedContact: data.contact, loading: false });
     } catch (e) {
+      if (get().selectedContactId !== contactId) return;
       set({ loading: false, error: captureError(e, i18n.t('settings.loadFailed')) });
     }
   },

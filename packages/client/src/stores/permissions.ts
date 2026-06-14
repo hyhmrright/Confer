@@ -1,5 +1,7 @@
 import { create } from 'zustand';
+import i18n from '../i18n/index.js';
 import { api } from '../lib/api.js';
+import { captureError } from '../lib/error.js';
 
 interface PermissionRequest {
   id: string;
@@ -27,6 +29,7 @@ interface PermissionHistoryEntry {
 interface PermissionsState {
   pending: PermissionRequest[];
   history: PermissionHistoryEntry[];
+  historyError: string | null;
   loadPending: () => Promise<void>;
   loadHistory: () => Promise<void>;
   addRequest: (req: PermissionRequest) => void;
@@ -36,22 +39,25 @@ interface PermissionsState {
 export const usePermissionsStore = create<PermissionsState>((set) => ({
   pending: [],
   history: [],
+  historyError: null,
 
   loadPending: async () => {
     try {
       const data = await api.get<{ permissions: PermissionRequest[] }>('/permissions/pending');
       set({ pending: data.permissions });
     } catch {
-      // endpoint might not exist yet
+      // Background poll — a transient failure is retried on the next tick.
     }
   },
 
   loadHistory: async () => {
     try {
       const data = await api.get<{ permissions: PermissionHistoryEntry[] }>('/permissions/history');
-      set({ history: data.permissions });
-    } catch {
-      // endpoint might not exist yet
+      set({ history: data.permissions, historyError: null });
+    } catch (e) {
+      // The history tab is user-triggered: surface the failure instead of
+      // silently showing an empty list (which reads as "no history").
+      set({ historyError: captureError(e, i18n.t('settings.loadFailed')) });
     }
   },
 

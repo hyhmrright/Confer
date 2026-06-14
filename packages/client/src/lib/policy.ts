@@ -23,7 +23,8 @@ export const POLICY_INHERIT = '' as const;
 
 // Map a <select> value back to the override `default` field: the inherit
 // sentinel omits `default` (undefined), every other value passes through.
-export function decisionFromSelect(value: string): PolicyDecision | undefined {
+// Module-private — only `mergePolicyDefault` consumes it.
+function decisionFromSelect(value: string): PolicyDecision | undefined {
   return value === POLICY_INHERIT ? undefined : (value as PolicyDecision);
 }
 
