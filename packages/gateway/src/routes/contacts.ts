@@ -1,5 +1,5 @@
 import { resolveDID } from '@confer/identity';
-import { AppError, contactLookupSchema, newId } from '@confer/shared';
+import { AppError, contactLookupSchema, newId, policyOverridesSchema } from '@confer/shared';
 import { and, eq, like } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { z } from 'zod';
@@ -15,6 +15,19 @@ const addContactSchema = z.object({
   added_via: z.string().max(32).optional(),
 });
 
+// Partial metadata update for an existing contact. Every field is optional —
+// only the keys actually present in the body are written, so e.g. toggling
+// `pinned` never clears `alias`. `alias` is nullable so the owner can clear it;
+// the other fields keep their column shapes.
+const patchContactSchema = z
+  .object({
+    alias: z.string().max(128).nullable(),
+    tags: z.array(z.string()),
+    pinned: z.boolean(),
+    muted: z.boolean(),
+  })
+  .partial();
+
 // Shape of an entry in a remote `/.well-known/agents.json`. Only `did` is
 // required; the rest is best-effort metadata we surface to the user.
 const remoteAgentSchema = z.object({
@@ -28,6 +41,28 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
     promise,
     new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), ms)),
   ]);
+}
+
+// Scope a contact row to its owner. Used both to load the contact and to target
+// the subsequent write, so a contact id from another user is never reachable.
+function contactScope(contactId: string, userSub: string) {
+  return and(eq(peerContacts.id, contactId), eq(peerContacts.user_id, userSub));
+}
+
+// Load an owner-scoped contact or throw 404 (not 403) so another user's contact
+// ids stay indistinguishable from non-existent ones.
+async function loadContact(contactId: string, userSub: string) {
+  const [contact] = await getDb()
+    .select()
+    .from(peerContacts)
+    .where(contactScope(contactId, userSub))
+    .limit(1);
+
+  if (!contact) {
+    throw new AppError('not_found', 'Contact not found', 404);
+  }
+
+  return contact;
 }
 
 export const contactRoutes = new Hono<AppEnv>();
@@ -88,6 +123,74 @@ contactRoutes.post('/', async (c) => {
     .returning();
 
   return c.json({ contact }, 201);
+});
+
+contactRoutes.get('/:id', async (c) => {
+  const user = c.get('user');
+  const db = getDb();
+  const contactId = c.req.param('id');
+
+  // Scope by user_id and return 404 (not 403) on a miss so another user's
+  // contact ids stay indistinguishable from non-existent ones, matching the
+  // DELETE /:id semantics.
+  const [row] = await db
+    .select()
+    .from(peerContacts)
+    .innerJoin(peerAgents, eq(peerContacts.peer_id, peerAgents.id))
+    .where(and(eq(peerContacts.id, contactId), eq(peerContacts.user_id, user.sub)))
+    .limit(1);
+
+  if (!row) {
+    throw new AppError('not_found', 'Contact not found', 404);
+  }
+
+  return c.json({ contact: { ...row.peer_contacts, peer: row.peer_agents } });
+});
+
+contactRoutes.patch('/:id', async (c) => {
+  const user = c.get('user');
+  const db = getDb();
+  const contactId = c.req.param('id');
+  const body = patchContactSchema.parse(await c.req.json());
+
+  await loadContact(contactId, user.sub);
+
+  // Build the update from only the keys the client sent (`.partial()` leaves
+  // absent fields `undefined`), so an unsent field is never overwritten.
+  const updates: Partial<typeof peerContacts.$inferInsert> = {};
+  // Pass `null` through unchanged so an explicit `alias: null` clears the column
+  // (drizzle drops `undefined` keys from the UPDATE but writes `null` as SQL NULL).
+  if (body.alias !== undefined) updates.alias = body.alias;
+  if (body.tags !== undefined) updates.tags = body.tags;
+  if (body.pinned !== undefined) updates.pinned = body.pinned;
+  if (body.muted !== undefined) updates.muted = body.muted;
+
+  const [updated] = await db
+    .update(peerContacts)
+    .set(updates)
+    .where(contactScope(contactId, user.sub))
+    .returning();
+
+  return c.json({ contact: updated });
+});
+
+contactRoutes.post('/:id/policies', async (c) => {
+  const user = c.get('user');
+  const db = getDb();
+  const contactId = c.req.param('id');
+  // Validate but never log the body — it carries the owner's standing policy.
+  const overrides = policyOverridesSchema.parse(await c.req.json());
+
+  await loadContact(contactId, user.sub);
+
+  // PUT semantics (whole-object replace), matching `PUT /me/policies`.
+  const [updated] = await db
+    .update(peerContacts)
+    .set({ policy_overrides_json: overrides })
+    .where(contactScope(contactId, user.sub))
+    .returning();
+
+  return c.json({ contact: updated });
 });
 
 contactRoutes.delete('/:id', async (c) => {

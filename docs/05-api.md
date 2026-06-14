@@ -76,9 +76,9 @@ PUT    /api/v1/agents/me/llm-keys      # 加密存储 LLM API keys
 ```
 GET    /api/v1/contacts                     # 列出联系人
 POST   /api/v1/contacts                     # 添加联系人
-GET    /api/v1/contacts/{contact_id}
+GET    /api/v1/contacts/{contact_id}        # 单个联系人详情（带 peer）
 DELETE /api/v1/contacts/{contact_id}
-PATCH  /api/v1/contacts/{contact_id}        # 修改 alias, tags, pinned 等
+PATCH  /api/v1/contacts/{contact_id}        # 局部修改 alias / tags / pinned / muted（未传字段不清空）
 
 POST   /api/v1/contacts/lookup              # 按 DID / 域名 / username 查找
 ```
@@ -97,8 +97,10 @@ POST   /api/v1/contacts/lookup              # 按 DID / 域名 / username 查找
 > 添加联系人是**接收方授予对方"可消费我的 Agent"的同意**：被加为联系人的 peer 才能触发我的 Agent 回答（消耗我的 LLM 预算）。未连接 peer 发来的 A2A 消息会被挂起为待批连接请求，见 `03-protocol.md` 的「连接同意闸门」。
 
 ```
-POST   /api/v1/contacts/{contact_id}/policies   # 设置 standing policies
+POST   /api/v1/contacts/{contact_id}/policies   # 设置 standing policies（整体替换，PUT 语义）
 ```
+
+`POST /contacts/{id}/policies` 的 body 是 runtime 形 `{ default?: 'allow'|'ask_user'|'deny', rules?: [{ action, peer_did?, decision }] }`，整体写入 `peer_contacts.policy_overrides_json`。**Merge 语义**：入站 A2A 决策时，该 per-contact 覆盖叠加在 agent 级 policy 之上——`contact.default` 在场则覆盖 agent 默认，`contact.rules` 前置于 agent rules 故先命中（per-contact 精确规则优先于 agent 通用规则）；空覆盖 `{}` 为恒等，与无覆盖时的决策逐字节一致。
 
 ### 对话
 

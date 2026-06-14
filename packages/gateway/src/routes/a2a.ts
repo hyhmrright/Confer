@@ -2,6 +2,7 @@ import {
   classifyPermissionLevel,
   createProvider,
   evaluatePolicy,
+  mergePolicyConfig,
   parsePolicyConfig,
 } from '@confer/agent-runtime';
 import type { LLMMessage } from '@confer/agent-runtime';
@@ -322,8 +323,19 @@ a2aRoutes.post('/messages', verifyA2ASignature, async (c) => {
   }
 
   // The connection itself is the consent for ordinary questions; an explicit
-  // policy rule can still deny a specific connected peer.
-  const policyConfig = parsePolicyConfig(targetAgent.policies_json);
+  // policy rule can still deny a specific connected peer. The owner can also set
+  // a per-contact standing policy (e.g. "always ask me first for this peer"),
+  // which layers over the agent-level config: the contact default overrides the
+  // agent default when set, and contact rules match before agent rules. With no
+  // contact row or an empty `{}` override, the merge is the identity — the
+  // decision is byte-identical to the agent-only path.
+  const agentConfig = parsePolicyConfig(targetAgent.policies_json);
+  const [contact] = await db
+    .select({ overrides: peerContacts.policy_overrides_json })
+    .from(peerContacts)
+    .where(and(eq(peerContacts.user_id, targetAgent.user_id), eq(peerContacts.peer_id, peer.id)))
+    .limit(1);
+  const policyConfig = mergePolicyConfig(agentConfig, contact?.overrides);
   const decision = evaluatePolicy(
     { action: 'ask', peer_did: body.from, level: classifyPermissionLevel('ask') },
     policyConfig,

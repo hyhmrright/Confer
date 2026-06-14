@@ -71,6 +71,30 @@ export function evaluatePolicy(
   return config.default_decision;
 }
 
+// Layer a per-contact policy override (the raw `peer_contacts.policy_overrides_json`
+// jsonb) on top of an agent-level `PolicyConfig`. Takes the RAW override object —
+// NOT a `parsePolicyConfig`'d one — so it can tell "contact explicitly set
+// default" apart from "contact set no default": `parsePolicyConfig` would fill a
+// missing default with `allow`, which would let an empty override clobber an
+// agent's `ask_user`. Semantics: contact.default overrides agent.default only when
+// present; contact rules are prepended so they match before agent rules (per-contact
+// precision beats agent-wide defaults). An empty `{}` / undefined override is the
+// identity: it deep-equals `agent` (same default_decision, same rules order).
+export function mergePolicyConfig(agent: PolicyConfig, contactRaw: unknown): PolicyConfig {
+  const c =
+    contactRaw && typeof contactRaw === 'object' ? (contactRaw as Record<string, unknown>) : {};
+
+  const contactDefault = validateDecision(c.default);
+  const contactRules = Array.isArray(c.rules)
+    ? c.rules.map(parseRule).filter((r): r is PolicyRule => r !== null)
+    : [];
+
+  return {
+    default_decision: contactDefault ?? agent.default_decision,
+    rules: [...contactRules, ...agent.rules],
+  };
+}
+
 export function parsePolicyConfig(json: unknown): PolicyConfig {
   if (!json || typeof json !== 'object') {
     return DEFAULT_CONFIG;

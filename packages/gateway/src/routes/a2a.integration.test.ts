@@ -129,6 +129,32 @@ async function connectPeer(did: string): Promise<string> {
   return peerId;
 }
 
+// Like `connectPeer` but also writes a per-contact `policy_overrides_json`, so
+// the inbound A2A gate exercises the per-contact override merge. Returns the
+// peer row id.
+async function connectPeerWithOverride(
+  did: string,
+  overrides: Record<string, unknown>,
+): Promise<string> {
+  const db = getDb();
+  const peerId = newId();
+  await db.insert(peerAgents).values({
+    id: peerId,
+    did,
+    endpoint: 'https://localhost/a2a/v1',
+    public_key_json: {},
+    agent_facts_json: {},
+  });
+  await db.insert(peerContacts).values({
+    id: newId(),
+    user_id: user.id,
+    peer_id: peerId,
+    added_via: 'manual',
+    policy_overrides_json: overrides,
+  });
+  return peerId;
+}
+
 // Poll until `fn` returns a truthy value or the timeout elapses. Approving a held
 // question runs the agent loop fire-and-forget, so reads must poll, not sleep.
 async function waitFor<T>(
@@ -467,6 +493,67 @@ describe('A2A signed message (real Ed25519, mocked DID resolution)', () => {
     const inboundMsgId = (await inbound.json()).message_id;
 
     // Nothing was held for approval under the default policy.
+    const perms = await getDb()
+      .select()
+      .from(permissions)
+      .where(and(eq(permissions.user_id, user.id), eq(permissions.action, 'ask')));
+    expect(perms).toHaveLength(0);
+
+    const reply = await waitFor(async () => {
+      const [r] = await getDb()
+        .select()
+        .from(messages)
+        .where(eq(messages.in_reply_to, inboundMsgId));
+      return r;
+    });
+    expect(reply?.sender_type).toBe('own_agent');
+  });
+
+  test('a per-contact ask_user override holds a peer the agent would otherwise allow (202)', async () => {
+    const targetDid = 'did:web:localhost:agents:perpeer-hold';
+    // Agent default is `allow` (empty policy) — only the per-contact override
+    // turns this peer's questions into held approvals.
+    await seedTargetAgent(targetDid);
+    await connectPeerWithOverride('did:web:localhost', { default: 'ask_user' });
+    const privateKey = await signingKeyResolvedViaDid();
+
+    const res = await app.request(
+      await signRequest(messageRequest(targetDid, 'What is your SLA?'), privateKey, KEY_ID),
+    );
+
+    expect(res.status).toBe(202);
+    expect((await res.json()).status).toBe('pending_approval');
+
+    // The inbound question is stored but no auto-reply was produced.
+    const msgs = await getDb().select().from(messages);
+    expect(msgs).toHaveLength(1);
+    expect(msgs[0]?.sender_type).toBe('peer_agent');
+
+    // A pending `ask` permission was recorded for owner review.
+    const perms = await getDb()
+      .select()
+      .from(permissions)
+      .where(and(eq(permissions.user_id, user.id), eq(permissions.action, 'ask')));
+    expect(perms).toHaveLength(1);
+    expect(perms[0]?.decision).toBe('pending');
+    expect((perms[0]?.scope_json as { kind?: string })?.kind).toBe('a2a_question');
+  });
+
+  test('a peer with an empty override is answered immediately, identical to no override (201)', async () => {
+    const targetDid = 'did:web:localhost:agents:perpeer-empty';
+    await seedTargetAgent(targetDid); // agent default allow
+    // An explicit but empty override must be a no-op (identity merge).
+    await connectPeerWithOverride('did:web:localhost', {});
+    await seedUserLlmKey();
+    const privateKey = await signingKeyResolvedViaDid({ llmReply: 'Sure — happy to help.' });
+
+    const inbound = await app.request(
+      await signRequest(messageRequest(targetDid, 'hi'), privateKey, KEY_ID),
+    );
+    expect(inbound.status).toBe(201);
+    const inboundMsgId = (await inbound.json()).message_id;
+
+    // Nothing was held — the empty override did not perturb the allow path.
     const perms = await getDb()
       .select()
       .from(permissions)

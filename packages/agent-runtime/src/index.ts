@@ -16,6 +16,7 @@ export {
   evaluatePolicy,
   classifyPermissionLevel,
   parsePolicyConfig,
+  mergePolicyConfig,
 } from './policy/engine.js';
 export type {
   PolicyConfig,
