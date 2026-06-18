@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """PostToolUse(Edit|Write|MultiEdit): format the edited file with Biome, then
-type-check the package that file belongs to. Stays silent unless tsc errors.
+type-check the package that file belongs to. Stays silent unless tsc errors,
+which it surfaces to the model as PostToolUse additionalContext.
 
 Reads the edited path from tool_input.file_path. The earlier inline hooks read a
 top-level `file_path` that is always empty in this payload (the same nesting bug
@@ -9,8 +10,10 @@ files and the type-check never covered the client package — client is excluded
 from the root tsconfig, so its files reached CI/build with no on-edit feedback.
 
 This routes client files to the client tsconfig and everything else to the root
-tsconfig, closing that gap. Fails open (exit 0) on any error so it never wedges
-an edit.
+tsconfig, closing that gap. tsc errors are emitted as `additionalContext` JSON
+so the model actually sees them — a plain stdout print on exit 0 only reaches
+the debug log, never the model. Fails open (exit 0) on any error so it never
+wedges an edit.
 """
 import json
 import os
@@ -59,7 +62,20 @@ def main():
             if "error TS" in line
         ]
         if errors:
-            print("\n".join(errors[:10]))
+            joined = "\n".join(errors[:10])
+            print(
+                json.dumps(
+                    {
+                        "hookSpecificOutput": {
+                            "hookEventName": "PostToolUse",
+                            "additionalContext": (
+                                f"tsc -p {project} reported type errors after "
+                                f"this edit:\n{joined}"
+                            ),
+                        }
+                    }
+                )
+            )
     return 0
 
 
