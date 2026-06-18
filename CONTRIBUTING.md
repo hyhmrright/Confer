@@ -99,11 +99,12 @@ independent and order-insensitive.
 
 ## Submitting changes
 
-1. Branch off `main` into a `feat/*` or `fix/*` branch.
+1. Branch off `dev` into a `feat/*` or `fix/*` branch. `dev` is the everyday development branch.
 2. Make focused commits; keep changes reviewable (prefer < ~300 lines per change).
 3. Ensure `bun run lint`, `bun run typecheck`, and `bun run test` pass.
 4. If you touch API, A2A, or MCP behavior, update the corresponding `docs/` file.
-5. Open a pull request against `main`. `main` is protected — all changes land via PR.
+5. Open a pull request against `dev`. `main` is the protected release branch — it
+   only receives `dev` via PR at release time, after which tags are cut from `main`.
 
 ## See also
 
