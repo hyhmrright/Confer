@@ -53,7 +53,7 @@ description: Orchestrate end-to-end feature development on the Confer A2A platfo
 审查 `PASS` 后，按全局工作流与项目部署规则：
 
 1. **部署**（提交之前）：用 `deploy` skill 按改动的包重建并重启，确认 http://localhost/ 生效
-2. **提交并推送当前分支**（任务完成即触发，不再询问）；被分支保护拒绝则走 feature 分支 → `gh pr create` → `code-review:code-review <PR URL>`
+2. **提交并推送到工作分支 `dev`（或从 `dev` 切出的 feature 分支）**（任务完成即触发，不再询问）；被分支保护拒绝则走 feature 分支 → `gh pr create --base dev` → `code-review:code-review <PR URL>`。`main` 是受保护的发布分支，仅在发布时由 `dev` 经 PR 合入（见 Release rules），随后从 `main` 打 tag
 3. 提交信息按全局规则附 Co-Authored-By 行
 4. 向用户汇报：做了什么、验证结果、是否已部署，并征询改进反馈（Phase 7 进化入口）
 
