@@ -99,7 +99,7 @@ independent and order-insensitive.
 
 ## Submitting changes
 
-1. Branch off `dev` (the default working branch).
+1. Branch off `main` into a `feat/*` or `fix/*` branch.
 2. Make focused commits; keep changes reviewable (prefer < ~300 lines per change).
 3. Ensure `bun run lint`, `bun run typecheck`, and `bun run test` pass.
 4. If you touch API, A2A, or MCP behavior, update the corresponding `docs/` file.
