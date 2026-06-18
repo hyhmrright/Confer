@@ -20,9 +20,10 @@ disable-model-invocation: true
      "select id, username, role from users where username = '<USERNAME>';"
    ```
 
-2. 在 gateway 容器内生成 Argon2id 哈希（真实 `.cjs` 文件 + 绝对路径 require，避开 Bun eval 限制；密码经 `-e` 走环境变量，不进 argv）：
+2. 在 gateway 容器内生成 Argon2id 哈希（真实 `.cjs` 文件 + 绝对路径 require，避开 Bun eval 限制）。先用 `read -rs` 把新密码读入环境变量——**不回显、不进 shell 历史、不出现在命令行 argv**，后续步骤复用同一 `$NEWPW`：
    ```bash
-   docker compose -f docker-compose.prod.yml exec -e NEWPW='<NEW_PASSWORD>' gateway sh -c '
+   read -rs NEWPW   # 输入新密码后回车（终端不回显）
+   docker compose -f docker-compose.prod.yml exec -e NEWPW="$NEWPW" gateway sh -c '
      cat > /tmp/hash.cjs <<EOF
    const argon2 = require(process.cwd() + "/node_modules/argon2/argon2.cjs");
    argon2.hash(process.env.NEWPW).then((h) => process.stdout.write(h));
@@ -39,14 +40,14 @@ disable-model-invocation: true
    ```
    确认返回 `UPDATE 1`。
 
-4. 验证：用新密码登录，应返回 HTTP 200 + `access_token`：
+4. 验证：复用步骤 2 的 `$NEWPW`（同一 shell 会话）登录，应返回 HTTP 200。用 `jq` 构造 body 以正确转义、且不把明文写进命令：
    ```bash
    curl -s -o /dev/null -w '%{http_code}\n' -X POST http://localhost/api/v1/auth/login \
      -H 'Content-Type: application/json' \
-     -d '{"username":"<USERNAME>","password":"<NEW_PASSWORD>","device_id":"reset-check"}'
+     -d "$(jq -nc --arg u '<USERNAME>' --arg p "$NEWPW" '{username:$u, password:$p, device_id:"reset-check"}')"
    ```
    （登录需要 `device_id`；具体字段以 `packages/gateway/src/routes/auth.ts` 的登录 schema 为准。）
 
-5. 清理：步骤 2 已 `rm` 临时文件；确认 shell 历史/会话里不残留明文密码。
+5. 清理：步骤 2 已 `rm` 容器内临时文件；`unset NEWPW` 清掉会话变量。密码全程经 `read -rs` + 环境变量传递、未出现在任何命令行 argv，shell 历史里不会留明文。
 
 **注意**：这是手动破窗流程，仅供运维临时使用；长期应做成管理员 API 端点（见项目记忆中的待办）。

@@ -17,7 +17,9 @@ import os
 import subprocess
 import sys
 
-REPO = "/Users/hyh/code/Confer"
+# Repo root, derived from this file's location (.claude/hooks/<this>) so the
+# tracked hook stays portable across checkouts instead of hardcoding a path.
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 BIOME = "./node_modules/.bin/biome"
 TSC = "./node_modules/.bin/tsc"
 FORMAT_EXTS = {".ts", ".tsx", ".js", ".jsx", ".json", ".jsonc", ".css"}
