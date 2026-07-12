@@ -43,6 +43,20 @@ describe('parseSignatureHeader', () => {
     const result = parseSignatureHeader('headers="host",signature="abc"');
     expect(result).toEqual({ ok: false, error: 'Incomplete signature header' });
   });
+
+  test('extracts the unquoted (created) integer parameter', () => {
+    const result = parseSignatureHeader(
+      'keyId="k",algorithm="ed25519",created=1618884475,headers="(created) host",signature="abc"',
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.created).toBe(1618884475);
+  });
+
+  test('leaves created undefined when absent', () => {
+    const result = parseSignatureHeader('keyId="k",headers="host",signature="abc"');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.created).toBeUndefined();
+  });
 });
 
 describe('computeDigest', () => {
@@ -144,5 +158,61 @@ describe('signRequest / verifyRequestSignature', () => {
 
     const result = await verifyRequestSignature(bad, publicKey);
     expect(result).toEqual({ ok: false, error: 'Invalid Date header format' });
+  });
+});
+
+describe('verifyRequestSignature with a (created) pseudo-header', () => {
+  // Our own `signRequest` doesn't sign `(created)`, so build the signed request
+  // by hand: sign the string that includes the signer's own timestamp and pack
+  // that same `created` into the Signature header as an unquoted integer.
+  async function signWithCreated(
+    privateKey: CryptoKey,
+    created: number,
+  ): Promise<{ request: Request; date: string }> {
+    const date = new Date().toUTCString();
+    const signHeaders = ['(request-target)', '(created)', 'host', 'date'];
+    const toSign = new Request(ENDPOINT, {
+      method: 'POST',
+      headers: { host: 'agent.example.com', date },
+      body: JSON.stringify({ task: 'ping' }),
+    });
+    const sigString = await buildSignatureString(toSign, signHeaders, created);
+    const sig = await crypto.subtle.sign(
+      'Ed25519',
+      privateKey,
+      new TextEncoder().encode(sigString),
+    );
+    const sigBase64 = btoa(String.fromCharCode(...new Uint8Array(sig)));
+    const request = new Request(ENDPOINT, {
+      method: 'POST',
+      headers: {
+        host: 'agent.example.com',
+        date,
+        signature: `keyId="k",algorithm="ed25519",created=${created},headers="${signHeaders.join(' ')}",signature="${sigBase64}"`,
+      },
+      body: JSON.stringify({ task: 'ping' }),
+    });
+    return { request, date };
+  }
+
+  test('verifies against the signer-supplied created timestamp', async () => {
+    const { publicKey, privateKey } = await generateEd25519KeyPair();
+    const created = Math.floor(Date.now() / 1000);
+    const { request } = await signWithCreated(privateKey, created);
+
+    expect(await verifyRequestSignature(request, publicKey)).toEqual({ ok: true, value: true });
+  });
+
+  test('rejects a created timestamp outside the clock-skew window', async () => {
+    const { publicKey, privateKey } = await generateEd25519KeyPair();
+    // 10 minutes in the past — the Date header stays fresh, so only the
+    // (created) window check can reject this request.
+    const created = Math.floor(Date.now() / 1000) - 10 * 60;
+    const { request } = await signWithCreated(privateKey, created);
+
+    expect(await verifyRequestSignature(request, publicKey)).toEqual({
+      ok: false,
+      error: 'Signature (created) outside acceptable window',
+    });
   });
 });

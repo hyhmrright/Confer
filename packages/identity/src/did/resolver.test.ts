@@ -101,6 +101,33 @@ describe('resolveDID', () => {
     expect(calls[1]?.headers['If-None-Match']).toBe('"etag-1"');
   });
 
+  test('honors a Cache-Control max-age longer than the default TTL', async () => {
+    const base = new Date('2030-01-01T00:00:00Z');
+    setSystemTime(base);
+    mockFetch(() =>
+      jsonResponse(document, { headers: { 'cache-control': 'public, max-age=3600' } }),
+    );
+
+    expect((await resolveDID(DID)).ok).toBe(true);
+    expect(calls).toHaveLength(1);
+
+    // 10 minutes later — past the 60s default TTL but well inside max-age.
+    setSystemTime(new Date(base.getTime() + 600_000));
+    expect((await resolveDID(DID)).ok).toBe(true);
+    // Still served from cache; no second network call.
+    expect(calls).toHaveLength(1);
+  });
+
+  test('does not cache a response marked Cache-Control: no-store', async () => {
+    mockFetch(() => jsonResponse(document, { headers: { 'cache-control': 'no-store' } }));
+
+    expect((await resolveDID(DID)).ok).toBe(true);
+    expect(calls).toHaveLength(1);
+    // Second resolve must refetch because the first result was never cached.
+    expect((await resolveDID(DID)).ok).toBe(true);
+    expect(calls).toHaveLength(2);
+  });
+
   test('HTTP 4xx returns an err result', async () => {
     mockFetch(() => new Response('not found', { status: 404 }));
     const res = await resolveDID(DID);

@@ -5,6 +5,7 @@ export interface SignatureParams {
   algorithm: string;
   headers: string[];
   signature: string;
+  created?: number;
 }
 
 const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;
@@ -37,6 +38,13 @@ export function parseSignatureHeader(header: string): Result<SignatureParams, st
     match = regex.exec(header);
   }
 
+  // `created` is an unquoted integer (RFC 9421 / cavage), so the quoted-value
+  // loop above never captures it. Pull it out separately; absence is fine.
+  const createdMatch = header.match(/(?:^|,)\s*created=(\d+)/);
+  if (createdMatch?.[1]) {
+    params.created = Number(createdMatch[1]);
+  }
+
   if (!params.keyId || !params.signature || !params.headers) {
     return err('Incomplete signature header');
   }
@@ -44,7 +52,11 @@ export function parseSignatureHeader(header: string): Result<SignatureParams, st
   return ok(params as SignatureParams);
 }
 
-export async function buildSignatureString(request: Request, headers: string[]): Promise<string> {
+export async function buildSignatureString(
+  request: Request,
+  headers: string[],
+  created?: number,
+): Promise<string> {
   const url = new URL(request.url);
   const lines: string[] = [];
 
@@ -52,7 +64,9 @@ export async function buildSignatureString(request: Request, headers: string[]):
     if (h === '(request-target)') {
       lines.push(`(request-target): ${request.method.toLowerCase()} ${url.pathname}`);
     } else if (h === '(created)') {
-      lines.push(`(created): ${Math.floor(Date.now() / 1000)}`);
+      // Prefer the signer's own timestamp so the verifier reproduces the exact
+      // string the signature covers; fall back to now only when none is given.
+      lines.push(`(created): ${created ?? Math.floor(Date.now() / 1000)}`);
     } else {
       const value = request.headers.get(h);
       if (value !== null) {
@@ -96,6 +110,20 @@ export async function verifyRequestSignature(
     return err('Request date outside acceptable window');
   }
 
+  // When `(created)` is part of the signed set, validate the signer's timestamp
+  // against the same skew window (replay protection) and feed it back into the
+  // signing string so we reproduce exactly what the signer covered rather than
+  // stamping our own "now".
+  if (parsed.value.headers.includes('(created)')) {
+    const created = parsed.value.created;
+    if (typeof created !== 'number') {
+      return err('Signature references (created) but no created parameter');
+    }
+    if (Math.abs(Date.now() - created * 1000) > MAX_CLOCK_SKEW_MS) {
+      return err('Signature (created) outside acceptable window');
+    }
+  }
+
   if (parsed.value.headers.includes('digest')) {
     const digestHeader = request.headers.get('digest');
     if (!digestHeader) {
@@ -108,7 +136,7 @@ export async function verifyRequestSignature(
     }
   }
 
-  const sigString = await buildSignatureString(request, parsed.value.headers);
+  const sigString = await buildSignatureString(request, parsed.value.headers, parsed.value.created);
   const sigBytes = Uint8Array.from(atob(parsed.value.signature), (c) => c.charCodeAt(0));
   const sigData = new TextEncoder().encode(sigString);
 

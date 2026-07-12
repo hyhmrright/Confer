@@ -60,7 +60,10 @@ permissionRoutes.get('/pending', async (c) => {
         eq(permissions.user_id, user.sub),
         or(eq(permissions.decision, 'pending'), isNull(permissions.decision)),
       ),
-    );
+    )
+    // Bound the inbox and show newest first, mirroring `/history`.
+    .orderBy(desc(permissions.created_at))
+    .limit(50);
 
   return c.json({
     permissions: rows.map((r) => ({

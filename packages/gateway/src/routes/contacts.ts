@@ -1,4 +1,4 @@
-import { resolveDID } from '@confer/identity';
+import { SsrfBlockedError, assertPublicHostname, resolveDID } from '@confer/identity';
 import { AppError, contactLookupSchema, newId, policyOverridesSchema } from '@confer/shared';
 import { and, eq, like } from 'drizzle-orm';
 import { Hono } from 'hono';
@@ -243,9 +243,17 @@ async function safeLookup(fn: () => Promise<LookupResult>): Promise<LookupResult
 
 function lookupByDomain(value: string): Promise<LookupResult> {
   return safeLookup(async () => {
-    const hostname = new URL(`https://${value}`).hostname;
-    if (/^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(hostname)) {
-      return { candidates: [], error: 'Private addresses not allowed' };
+    // Strip IPv6-literal brackets so the SSRF guard sees a bare address.
+    const hostname = new URL(`https://${value}`).hostname.replace(/^\[|\]$/g, '');
+    try {
+      await assertPublicHostname(hostname);
+    } catch (e) {
+      if (e instanceof SsrfBlockedError) {
+        return { candidates: [], error: 'Private addresses not allowed' };
+      }
+      // A name that doesn't resolve isn't an SSRF block; fall through and let
+      // the fetch below fail on its own (safeLookup maps transport errors to
+      // the uniform empty-candidates result).
     }
     const res = await withTimeout(
       fetch(`https://${hostname}/.well-known/agents.json`),

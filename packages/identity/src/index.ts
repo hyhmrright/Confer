@@ -13,3 +13,4 @@ export {
   importPrivateKey,
 } from './crypto/keypair.js';
 export type { KeyPair } from './crypto/keypair.js';
+export { assertPublicHostname, isBlockedIp, SsrfBlockedError } from './net/ssrf-guard.js';
