@@ -6,6 +6,12 @@ let socket: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 const handlers = new Map<string, Set<MessageHandler>>();
 
+// The conversations the client *wants* subscribed, independent of the current
+// socket's state. This is the source of truth replayed on every (re)connect so
+// the server's fresh per-socket subscription set is repopulated after a drop,
+// token refresh, or a subscribe issued before the socket finished opening.
+const desiredSubscriptions = new Set<string>();
+
 export function connectWs(): void {
   const token = getToken();
   if (!token || socket?.readyState === WebSocket.OPEN) return;
@@ -17,6 +23,12 @@ export function connectWs(): void {
     if (reconnectTimer) {
       clearTimeout(reconnectTimer);
       reconnectTimer = null;
+    }
+    // Replay every desired subscription onto the fresh socket: the server's
+    // per-socket set is empty on each connect, and any subscribe issued before
+    // this socket opened was dropped by sendWs. Covers reconnect + boot race.
+    for (const conversationId of desiredSubscriptions) {
+      sendWs('subscribe.conversation', { conversation_id: conversationId });
     }
   };
 
@@ -49,6 +61,10 @@ export function disconnectWs(): void {
     socket.close();
     socket = null;
   }
+  // Logout/unmount: forget intended subscriptions so a later login as a
+  // different user never replays a stale one. reconnectWs keeps them (same user,
+  // new token) so onopen can re-establish the active conversation.
+  desiredSubscriptions.clear();
 }
 
 // Drop the current socket (without scheduling the usual delayed retry) and open
@@ -73,10 +89,14 @@ export function sendWs(type: string, data?: Record<string, unknown>): void {
 }
 
 export function subscribeConversation(conversationId: string): void {
+  desiredSubscriptions.add(conversationId);
+  // Sends now if the socket is open; otherwise the id waits in
+  // desiredSubscriptions and onopen replays it.
   sendWs('subscribe.conversation', { conversation_id: conversationId });
 }
 
 export function unsubscribeConversation(conversationId: string): void {
+  desiredSubscriptions.delete(conversationId);
   sendWs('unsubscribe.conversation', { conversation_id: conversationId });
 }
 

@@ -39,6 +39,7 @@ import { upsertPeerAgent } from '../lib/peer-agent.js';
 import { rateLimit } from '../middleware/rate-limit.js';
 import { extractAndStore } from '../tools/memory.js';
 import { broadcastToConversation } from '../ws/handler.js';
+import { notifyPermissionRequest } from './permission-notify.js';
 
 const a2aMessageSchema = z.object({
   from: z.string().startsWith('did:'),
@@ -83,19 +84,36 @@ async function upsertConnectionRequest(
 
   if (existing) return;
 
-  await db.insert(permissions).values({
-    id: newId(),
-    user_id: userId,
-    peer_id: peer.id,
-    action: 'connect',
-    scope_json: {
-      peer_did: peer.did,
-      peer_name: peer.name,
-      first_message: firstMessage.slice(0, 500),
-    },
+  const id = newId();
+  const scope = {
+    peer_did: peer.did,
+    peer_name: peer.name,
+    first_message: firstMessage.slice(0, 500),
+  };
+  const [inserted] = await db
+    .insert(permissions)
+    .values({
+      id,
+      user_id: userId,
+      peer_id: peer.id,
+      action: 'connect',
+      scope_json: scope,
+      level: 'L2',
+      decision: 'pending',
+      requested_by: peer.id,
+    })
+    .returning({ created_at: permissions.created_at });
+
+  // Only a genuinely new insert reaches here (the dedup early-return above
+  // short-circuits repeats), so this never double-notifies the owner.
+  notifyPermissionRequest(userId, {
+    id,
     level: 'L2',
-    decision: 'pending',
-    requested_by: peer.id,
+    action: 'connect',
+    scope_json: scope,
+    peer_name: peer.name,
+    peer_did: peer.did,
+    created_at: inserted?.created_at ?? new Date(),
   });
 }
 
@@ -139,15 +157,30 @@ async function holdA2AQuestion(params: HoldA2AQuestionParams): Promise<void> {
     content: params.content.slice(0, 500),
   };
 
-  await db.insert(permissions).values({
-    id: newId(),
-    user_id: params.userId,
-    peer_id: params.peer.id,
+  const id = newId();
+  const level = classifyPermissionLevel('ask');
+  const [inserted] = await db
+    .insert(permissions)
+    .values({
+      id,
+      user_id: params.userId,
+      peer_id: params.peer.id,
+      action: 'ask',
+      scope_json: scope,
+      level,
+      decision: 'pending',
+      requested_by: params.peer.id,
+    })
+    .returning({ created_at: permissions.created_at });
+
+  notifyPermissionRequest(params.userId, {
+    id,
+    level,
     action: 'ask',
     scope_json: scope,
-    level: classifyPermissionLevel('ask'),
-    decision: 'pending',
-    requested_by: params.peer.id,
+    peer_name: params.peer.name,
+    peer_did: params.peer.did,
+    created_at: inserted?.created_at ?? new Date(),
   });
 }
 

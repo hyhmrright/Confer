@@ -158,4 +158,111 @@ describe('ws layer', () => {
     timers[0]();
     expect(FakeWebSocket.instances).toHaveLength(2);
   });
+
+  test('subscribeConversation before OPEN records and flushes on open', async () => {
+    const { connectWs, subscribeConversation } = await importWs();
+    connectWs();
+    const sock = FakeWebSocket.instances[0];
+
+    // Socket still CONNECTING -> the frame is dropped but the desire is recorded.
+    subscribeConversation('c1');
+    expect(sock.sent).toHaveLength(0);
+
+    // Opening replays every desired subscription onto the now-open socket.
+    sock.readyState = FakeWebSocket.OPEN;
+    sock.onopen?.();
+    expect(sock.sent).toHaveLength(1);
+    expect(JSON.parse(sock.sent[0])).toEqual({
+      type: 'subscribe.conversation',
+      data: { conversation_id: 'c1' },
+    });
+  });
+
+  test('onopen replays desired subscriptions after an auto-reconnect', async () => {
+    const { connectWs, subscribeConversation } = await importWs();
+    connectWs();
+    const sock1 = FakeWebSocket.instances[0];
+    sock1.readyState = FakeWebSocket.OPEN;
+    sock1.onopen?.();
+
+    subscribeConversation('c1');
+    expect(sock1.sent.map((s) => JSON.parse(s))).toContainEqual({
+      type: 'subscribe.conversation',
+      data: { conversation_id: 'c1' },
+    });
+
+    // Drop the socket and run the scheduled reconnect.
+    sock1.onclose?.();
+    timers[0]();
+    const sock2 = FakeWebSocket.instances[1];
+
+    // The server's per-socket set is fresh; opening replays the desired sub.
+    sock2.readyState = FakeWebSocket.OPEN;
+    sock2.onopen?.();
+    expect(sock2.sent.map((s) => JSON.parse(s))).toContainEqual({
+      type: 'subscribe.conversation',
+      data: { conversation_id: 'c1' },
+    });
+  });
+
+  test('unsubscribeConversation removes from the desired set and sends the frame', async () => {
+    const { connectWs, subscribeConversation, unsubscribeConversation } = await importWs();
+    connectWs();
+    const sock = FakeWebSocket.instances[0];
+    sock.readyState = FakeWebSocket.OPEN;
+    sock.onopen?.();
+
+    subscribeConversation('c1');
+    unsubscribeConversation('c1');
+    expect(sock.sent.map((s) => JSON.parse(s))).toContainEqual({
+      type: 'unsubscribe.conversation',
+      data: { conversation_id: 'c1' },
+    });
+
+    // Removed from the desired set: a reconnect must not replay it.
+    sock.onclose?.();
+    timers[0]();
+    const sock2 = FakeWebSocket.instances[1];
+    sock2.readyState = FakeWebSocket.OPEN;
+    sock2.onopen?.();
+    expect(sock2.sent).toHaveLength(0);
+  });
+
+  test('reconnectWs keeps desired subscriptions for the same user', async () => {
+    const { connectWs, subscribeConversation, reconnectWs } = await importWs();
+    connectWs();
+    const sock1 = FakeWebSocket.instances[0];
+    sock1.readyState = FakeWebSocket.OPEN;
+    sock1.onopen?.();
+    subscribeConversation('c1');
+
+    // Token refresh: drop and immediately reopen with the same desired set.
+    reconnectWs();
+    const sock2 = FakeWebSocket.instances[1];
+    sock2.readyState = FakeWebSocket.OPEN;
+    sock2.onopen?.();
+    expect(sock2.sent.map((s) => JSON.parse(s))).toContainEqual({
+      type: 'subscribe.conversation',
+      data: { conversation_id: 'c1' },
+    });
+  });
+
+  test('disconnectWs clears desired subscriptions so a later session replays nothing', async () => {
+    const { connectWs, subscribeConversation, disconnectWs } = await importWs();
+    connectWs();
+    const sock1 = FakeWebSocket.instances[0];
+    sock1.readyState = FakeWebSocket.OPEN;
+    sock1.onopen?.();
+    subscribeConversation('c1');
+
+    // Logout tears the socket down and forgets what was subscribed.
+    disconnectWs();
+
+    // A fresh connection (e.g. a different user logging in) replays nothing.
+    connectWs();
+    const sock2 = FakeWebSocket.instances[1];
+    sock2.readyState = FakeWebSocket.OPEN;
+    sock2.onopen?.();
+    expect(sock2.sent).toHaveLength(0);
+  });
 });
