@@ -124,11 +124,9 @@ POST /a2a/v1/messages HTTP/1.1
 Host: acme.com
 Content-Type: application/json
 Date: Sun, 24 Nov 2024 14:30:00 GMT
-Digest: SHA-256=X48E9qOokqqrvdts8nOJRJN3OWDUoyWxBf7kbu9DBPE=
-Signature: keyId="did:web:vendor-x.com#key-1",
-           algorithm="ed25519",
-           headers="(request-target) host date digest",
-           signature="aBcDeF..."
+Content-Digest: sha-256=:X48E9qOokqqrvdts8nOJRJN3OWDUoyWxBf7kbu9DBPE=:
+Signature-Input: sig1=("@method" "@authority" "@path" "content-digest" "date");keyid="did:web:vendor-x.com#key-1";created=1732458600;alg="ed25519"
+Signature: sig1=:aBcDeF...:
 Authorization: Capability eyJhbGciOiJFZDI1NTE5IiwidHlwIjoiQ2FwIn0...
 
 {
@@ -149,11 +147,11 @@ Authorization: Capability eyJhbGciOiJFZDI1NTE5IiwidHlwIjoiQ2FwIn0...
 
 ### 検証フロー（受信側）
 
-1. `Signature` header をパースする
-2. `keyId`（DID を含む）を抽出する
+1. `Signature-Input` と `Signature` header をパースする
+2. `Signature-Input` の `keyid` パラメータから DID を抽出する
 3. DID document を取得する（キャッシュ付き: ETag + 60s TTL）
-4. 公開鍵を取り出し、signature を検証する
-5. `Digest` が body のハッシュと一致することを検証する
+4. 公開鍵を取り出し、RFC 9421 §2.5 の署名ベースを再構築して signature を検証する
+5. `Content-Digest` が body のハッシュと一致することを検証する
 6. `Date` が 5 分以内であることをチェックする（リプレイ防止）
 7. `Capability` token を検証する（macaroon スタイル、後述）
 8. **接続同意ゲート**: 送信者は受信側の連絡先としてすでに追加されているか? 未接続 → LLM を実行せず、接続リクエストとして保留する（後述）

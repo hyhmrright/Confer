@@ -124,11 +124,9 @@ POST /a2a/v1/messages HTTP/1.1
 Host: acme.com
 Content-Type: application/json
 Date: Sun, 24 Nov 2024 14:30:00 GMT
-Digest: SHA-256=X48E9qOokqqrvdts8nOJRJN3OWDUoyWxBf7kbu9DBPE=
-Signature: keyId="did:web:vendor-x.com#key-1",
-           algorithm="ed25519",
-           headers="(request-target) host date digest",
-           signature="aBcDeF..."
+Content-Digest: sha-256=:X48E9qOokqqrvdts8nOJRJN3OWDUoyWxBf7kbu9DBPE=:
+Signature-Input: sig1=("@method" "@authority" "@path" "content-digest" "date");keyid="did:web:vendor-x.com#key-1";created=1732458600;alg="ed25519"
+Signature: sig1=:aBcDeF...:
 Authorization: Capability eyJhbGciOiJFZDI1NTE5IiwidHlwIjoiQ2FwIn0...
 
 {
@@ -149,11 +147,11 @@ Authorization: Capability eyJhbGciOiJFZDI1NTE5IiwidHlwIjoiQ2FwIn0...
 
 ### 验证流程（接收方）
 
-1. 解析 `Signature` header
-2. 提取 `keyId`（含 DID）
+1. 解析 `Signature-Input` 与 `Signature` header
+2. 从 `Signature-Input` 的 `keyid` 参数提取 DID
 3. 拉 DID document（带缓存：ETag + 60s TTL）
-4. 取出公钥，验证 signature
-5. 验证 `Digest` 匹配 body 哈希
+4. 取出公钥，按 RFC 9421 §2.5 重建签名基串并验证 signature
+5. 验证 `Content-Digest` 匹配 body 哈希
 6. 检查 `Date` 在 5 分钟内（防 replay）
 7. 验证 `Capability` token（macaroon 风格，下面详述）
 8. **连接同意闸门**：发送方是否已被接收方加为联系人？未连接 → 不跑 LLM，挂起为连接请求（见下）

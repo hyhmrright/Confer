@@ -9,7 +9,7 @@ import type { LLMMessage } from '@confer/agent-runtime';
 import {
   MAX_CLOCK_SKEW_MS,
   multibaseToPublicKey,
-  parseSignatureHeader,
+  parseSignatureInput,
   resolveDID,
   verifyRequestSignature,
 } from '@confer/identity';
@@ -267,17 +267,17 @@ export const a2aRoutes = new Hono();
 a2aRoutes.use('/*', rateLimit(60, 60_000));
 
 const verifyA2ASignature: MiddlewareHandler = async (c, next) => {
-  const sigHeader = c.req.header('signature');
-  if (!sigHeader) {
-    throw new AppError('signature_missing', 'Signature header is required', 401);
+  const sigInputHeader = c.req.header('signature-input');
+  if (!sigInputHeader) {
+    throw new AppError('signature_missing', 'Signature-Input header is required', 401);
   }
 
-  const parsed = parseSignatureHeader(sigHeader);
+  const parsed = parseSignatureInput(sigInputHeader);
   if (!parsed.ok) {
     throw new AppError('signature_invalid', parsed.error, 401);
   }
 
-  const keyId = parsed.value.keyId;
+  const keyId = parsed.value.keyid;
   const didMatch = keyId.match(/^(did:web:[^#]+)/);
   const senderDid = didMatch?.[1];
   if (!senderDid) {
@@ -320,11 +320,12 @@ const verifyA2ASignature: MiddlewareHandler = async (c, next) => {
 
   // Finding C: reject a byte-identical replay of an already-verified signature
   // within the clock-skew window. Ed25519 is deterministic and Finding B binds
-  // the signature to method+path+host+date+body, so the signature value uniquely
-  // identifies this request. Checked only AFTER cryptographic verification so
-  // forged/invalid signatures never consume cache space, and recorded with TTL =
-  // the skew window since anything older is already rejected by the skew check.
-  const nonceKey = `${keyId}:${parsed.value.signature}`;
+  // the signature to method+authority+path+date+content-digest, so the Signature
+  // header value uniquely identifies this request. Checked only AFTER
+  // cryptographic verification so forged/invalid signatures never consume cache
+  // space, and recorded with TTL = the skew window since anything older is
+  // already rejected by the skew check.
+  const nonceKey = `${keyId}:${c.req.header('signature')}`;
   if (hasNonce(nonceKey)) {
     throw new AppError('signature_replayed', 'This signed request has already been processed', 401);
   }

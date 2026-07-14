@@ -124,11 +124,9 @@ POST /a2a/v1/messages HTTP/1.1
 Host: acme.com
 Content-Type: application/json
 Date: Sun, 24 Nov 2024 14:30:00 GMT
-Digest: SHA-256=X48E9qOokqqrvdts8nOJRJN3OWDUoyWxBf7kbu9DBPE=
-Signature: keyId="did:web:vendor-x.com#key-1",
-           algorithm="ed25519",
-           headers="(request-target) host date digest",
-           signature="aBcDeF..."
+Content-Digest: sha-256=:X48E9qOokqqrvdts8nOJRJN3OWDUoyWxBf7kbu9DBPE=:
+Signature-Input: sig1=("@method" "@authority" "@path" "content-digest" "date");keyid="did:web:vendor-x.com#key-1";created=1732458600;alg="ed25519"
+Signature: sig1=:aBcDeF...:
 Authorization: Capability eyJhbGciOiJFZDI1NTE5IiwidHlwIjoiQ2FwIn0...
 
 {
@@ -149,11 +147,11 @@ Authorization: Capability eyJhbGciOiJFZDI1NTE5IiwidHlwIjoiQ2FwIn0...
 
 ### Verification flow (receiver)
 
-1. Parse the `Signature` header
-2. Extract the `keyId` (which contains the DID)
+1. Parse the `Signature-Input` and `Signature` headers
+2. Extract the DID from the `keyid` parameter of `Signature-Input`
 3. Fetch the DID document (with caching: ETag + 60s TTL)
-4. Retrieve the public key and verify the signature
-5. Verify that `Digest` matches the body hash
+4. Retrieve the public key, rebuild the RFC 9421 §2.5 signature base, and verify the signature
+5. Verify that `Content-Digest` matches the body hash
 6. Check that `Date` is within 5 minutes (replay protection)
 7. Verify the `Capability` token (macaroon-style, detailed below)
 8. **Connection consent gate**: has the sender already been added as a contact by the receiver? Not connected → do not run the LLM; hold it as a connection request (see below)
