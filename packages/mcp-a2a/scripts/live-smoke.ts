@@ -15,7 +15,7 @@ async function main(): Promise<void> {
   const reg = await fetch(`${base}/api/v1/auth/register`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ username, password, device_id: 'mcp-smoke' }),
   });
   if (!reg.ok) throw new Error(`register failed: ${reg.status} ${await reg.text()}`);
 

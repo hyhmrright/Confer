@@ -7,6 +7,7 @@ import {
 } from '@confer/agent-runtime';
 import type { LLMMessage } from '@confer/agent-runtime';
 import {
+  MAX_CLOCK_SKEW_MS,
   multibaseToPublicKey,
   parseSignatureHeader,
   resolveDID,
@@ -35,6 +36,7 @@ import { getEnv } from '../env.js';
 import { runAgentTurn } from '../lib/agent-orchestrator.js';
 import type { EmbeddingProvider } from '../lib/embedding.js';
 import { decryptUserKey, getUserLlmKeys, resolveEmbeddingKey } from '../lib/llm-keys.js';
+import { addNonce, hasNonce } from '../lib/nonce-cache.js';
 import { upsertPeerAgent } from '../lib/peer-agent.js';
 import { rateLimit } from '../middleware/rate-limit.js';
 import { extractAndStore } from '../tools/memory.js';
@@ -293,6 +295,19 @@ const verifyA2ASignature: MiddlewareHandler = async (c, next) => {
     throw new AppError('key_not_found', `Key ${keyId} not found in DID document`, 401);
   }
 
+  // Finding E: registration in `verificationMethod` is not authorization to sign
+  // for authentication. When the document declares an `authentication`
+  // relationship, the key must be listed there. Documents that predate this
+  // field (no `authentication` array) keep the legacy behavior — a registered
+  // key is accepted — so minimal third-party docs and our own aren't broken.
+  if (didDoc.authentication && !authenticationAllows(didDoc.authentication, keyId)) {
+    throw new AppError(
+      'key_not_authorized',
+      `Key ${keyId} is not authorized for authentication`,
+      401,
+    );
+  }
+
   const keyResult = await multibaseToPublicKey(vm.publicKeyMultibase);
   if (!keyResult.ok) {
     throw new AppError('key_invalid', keyResult.error, 401);
@@ -303,12 +318,36 @@ const verifyA2ASignature: MiddlewareHandler = async (c, next) => {
     throw new AppError('signature_failed', verifyResult.error, 401);
   }
 
+  // Finding C: reject a byte-identical replay of an already-verified signature
+  // within the clock-skew window. Ed25519 is deterministic and Finding B binds
+  // the signature to method+path+host+date+body, so the signature value uniquely
+  // identifies this request. Checked only AFTER cryptographic verification so
+  // forged/invalid signatures never consume cache space, and recorded with TTL =
+  // the skew window since anything older is already rejected by the skew check.
+  const nonceKey = `${keyId}:${parsed.value.signature}`;
+  if (hasNonce(nonceKey)) {
+    throw new AppError('signature_replayed', 'This signed request has already been processed', 401);
+  }
+  addNonce(nonceKey, MAX_CLOCK_SKEW_MS);
+
   // Expose the cryptographically proven signer DID so the handler can ensure
   // the message `from` isn't forged under another identity.
   c.set('a2aSenderDid' as never, senderDid as never);
 
   await next();
 };
+
+// A DID `authentication` entry is either a bare string reference to a
+// verification method id or an embedded verification-method object; the key is
+// authorized if it matches either form.
+function authenticationAllows(
+  authentication: ReadonlyArray<string | { id: string }>,
+  keyId: string,
+): boolean {
+  return authentication.some((entry) =>
+    typeof entry === 'string' ? entry === keyId : entry.id === keyId,
+  );
+}
 
 a2aRoutes.post('/messages', verifyA2ASignature, async (c) => {
   const body = a2aMessageSchema.parse(await c.req.json());

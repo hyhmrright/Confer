@@ -22,6 +22,7 @@ import {
 } from '../db/schema.js';
 import { getEnv } from '../env.js';
 import { ensureMemoryCollection } from '../lib/memory-store.js';
+import { clearNonceCache } from '../lib/nonce-cache.js';
 import { ensureCollection, upsertChunks } from '../lib/qdrant.js';
 import {
   type SeededUser,
@@ -224,6 +225,9 @@ describe('A2A signed message (real Ed25519, mocked DID resolution)', () => {
     // Each test serves a fresh signing key from the same DID; clear the
     // resolver cache so a stale key from a prior test doesn't fail verification.
     clearDIDCache();
+    // Drop remembered replay nonces so a signature reused across cases (Ed25519
+    // is deterministic) isn't mistaken for a replay.
+    clearNonceCache();
   });
 
   // Generate a key pair and serve its public half from the mocked DID document.
@@ -358,6 +362,29 @@ describe('A2A signed message (real Ed25519, mocked DID resolution)', () => {
     });
     const res = await app.request(tampered);
     expect(res.status).toBe(401);
+  });
+
+  test('rejects a byte-identical replay within the window (401) and creates no duplicate rows', async () => {
+    const targetDid = 'did:web:localhost:agents:replay';
+    await seedTargetAgent(targetDid);
+    const privateKey = await signingKeyResolvedViaDid();
+
+    const signed = await signRequest(messageRequest(targetDid, 'let me in'), privateKey, KEY_ID);
+
+    // Unconnected peer → the first attempt is held as a pending connection request.
+    const first = await app.request(signed.clone());
+    expect(first.status).toBe(202);
+    expect((await first.json()).status).toBe('pending_connection');
+
+    // The exact same signed bytes, replayed, are rejected before the handler runs.
+    const replay = await app.request(signed.clone());
+    expect(replay.status).toBe(401);
+    expect((await replay.json()).error.code).toBe('signature_replayed');
+
+    // The replay produced no second connect request and no stored message.
+    const perms = await getDb().select().from(permissions).where(eq(permissions.user_id, user.id));
+    expect(perms).toHaveLength(1);
+    expect(await getDb().select().from(messages)).toHaveLength(0);
   });
 
   // ---- ask_user offline-answer gate ----
@@ -618,6 +645,7 @@ describe('A2A agent reply with KB tool calls + citations', () => {
   afterEach(() => {
     restoreFetch?.();
     clearDIDCache();
+    clearNonceCache();
   });
 
   function messageRequest(targetDid: string, content: string): Request {
@@ -801,6 +829,7 @@ describe('A2A reply stream authorization (IDOR)', () => {
   afterEach(() => {
     restoreFetch();
     clearDIDCache();
+    clearNonceCache();
   });
 
   function didDoc(id: string, keyId: string, publicKeyMultibase: string) {
@@ -891,5 +920,86 @@ describe('A2A reply stream authorization (IDOR)', () => {
 
     expect(res.status).toBe(403);
     expect((await res.json()).error.code).toBe('forbidden');
+  });
+});
+
+describe('A2A authentication-relationship enforcement (Finding E)', () => {
+  const DID = 'did:web:localhost';
+  const KEY_ID = 'did:web:localhost#key-1';
+  const OTHER_KEY_ID = 'did:web:localhost#key-2';
+  let restoreFetch: () => void;
+
+  afterEach(() => {
+    restoreFetch();
+    clearDIDCache();
+    clearNonceCache();
+  });
+
+  // Serve a DID doc whose single verification method is KEY_ID, with a
+  // caller-supplied `authentication` array (or none, to exercise the legacy
+  // fallback). Returns the private key that signs as KEY_ID.
+  async function serveDidWithAuthentication(authentication?: string[]): Promise<CryptoKey> {
+    const { publicKey, privateKey } = await generateEd25519KeyPair();
+    const publicKeyMultibase = await publicKeyToMultibase(publicKey);
+    const didDocument: Record<string, unknown> = {
+      '@context': ['https://www.w3.org/ns/did/v1'],
+      id: DID,
+      verificationMethod: [
+        { id: KEY_ID, type: 'Ed25519VerificationKey2020', controller: DID, publicKeyMultibase },
+      ],
+    };
+    if (authentication) didDocument.authentication = authentication;
+    restoreFetch = mockFetch((url) => {
+      if (url.includes('/.well-known/did.json')) return Response.json(didDocument);
+      if (url.includes('api.anthropic.com')) return new Response('{}', { status: 401 });
+      return undefined;
+    });
+    return privateKey;
+  }
+
+  function messageRequest(targetDid: string, content: string): Request {
+    return new Request(MESSAGES, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ from: DID, to: targetDid, message: { type: 'question', content } }),
+    });
+  }
+
+  test('accepts a key listed in the authentication relationship', async () => {
+    const targetDid = 'did:web:localhost:agents:e-ok';
+    await seedTargetAgent(targetDid);
+    const privateKey = await serveDidWithAuthentication([KEY_ID]);
+
+    const signed = await signRequest(messageRequest(targetDid, 'hi'), privateKey, KEY_ID);
+    const res = await app.request(signed);
+
+    // Passed the signature + relationship gate; held as a pending connection
+    // (unconnected peer) rather than rejected 401.
+    expect(res.status).toBe(202);
+  });
+
+  test('rejects a registered key absent from the authentication relationship (401)', async () => {
+    const targetDid = 'did:web:localhost:agents:e-bad';
+    await seedTargetAgent(targetDid);
+    // The doc authorizes only OTHER_KEY_ID for authentication; the signing key
+    // KEY_ID exists in verificationMethod but is not authorized to sign auth.
+    const privateKey = await serveDidWithAuthentication([OTHER_KEY_ID]);
+
+    const signed = await signRequest(messageRequest(targetDid, 'hi'), privateKey, KEY_ID);
+    const res = await app.request(signed);
+
+    expect(res.status).toBe(401);
+    expect((await res.json()).error.code).toBe('key_not_authorized');
+  });
+
+  test('accepts a registered key when the document declares no authentication array (legacy fallback)', async () => {
+    const targetDid = 'did:web:localhost:agents:e-legacy';
+    await seedTargetAgent(targetDid);
+    const privateKey = await serveDidWithAuthentication(undefined);
+
+    const signed = await signRequest(messageRequest(targetDid, 'hi'), privateKey, KEY_ID);
+    const res = await app.request(signed);
+
+    expect(res.status).toBe(202);
   });
 });

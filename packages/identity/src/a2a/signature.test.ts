@@ -161,6 +161,75 @@ describe('signRequest / verifyRequestSignature', () => {
   });
 });
 
+describe('verifyRequestSignature minimum covered set (Finding B)', () => {
+  // Hand-sign an arbitrary covered set so we can construct signatures that a
+  // well-behaved signer would never produce (e.g. omitting host, or a body
+  // without digest). The signature is cryptographically valid over `headers`;
+  // the point is that verification must reject it on the covered set alone.
+  async function signWithHeaders(
+    privateKey: CryptoKey,
+    headers: string[],
+    opts: { body?: string } = {},
+  ): Promise<Request> {
+    const reqHeaders: Record<string, string> = {
+      host: 'agent.example.com',
+      date: new Date().toUTCString(),
+    };
+    const toSign = new Request(ENDPOINT, { method: 'POST', headers: reqHeaders, body: opts.body });
+    const sigString = await buildSignatureString(toSign, headers);
+    const sig = await crypto.subtle.sign(
+      'Ed25519',
+      privateKey,
+      new TextEncoder().encode(sigString),
+    );
+    const sigBase64 = btoa(String.fromCharCode(...new Uint8Array(sig)));
+    reqHeaders.signature = `keyId="k",algorithm="ed25519",headers="${headers.join(' ')}",signature="${sigBase64}"`;
+    return new Request(ENDPOINT, { method: 'POST', headers: reqHeaders, body: opts.body });
+  }
+
+  test('rejects a covered set missing (request-target)', async () => {
+    const { publicKey, privateKey } = await generateEd25519KeyPair();
+    const req = await signWithHeaders(privateKey, ['host', 'date']);
+    expect(await verifyRequestSignature(req, publicKey)).toEqual({
+      ok: false,
+      error: 'Signature must cover (request-target)',
+    });
+  });
+
+  test('rejects a covered set missing host', async () => {
+    const { publicKey, privateKey } = await generateEd25519KeyPair();
+    const req = await signWithHeaders(privateKey, ['(request-target)', 'date']);
+    expect(await verifyRequestSignature(req, publicKey)).toEqual({
+      ok: false,
+      error: 'Signature must cover host',
+    });
+  });
+
+  test('rejects a covered set missing date', async () => {
+    const { publicKey, privateKey } = await generateEd25519KeyPair();
+    const req = await signWithHeaders(privateKey, ['(request-target)', 'host']);
+    expect(await verifyRequestSignature(req, publicKey)).toEqual({
+      ok: false,
+      error: 'Signature must cover date',
+    });
+  });
+
+  test('rejects a body-bearing request whose covered set lacks digest (audit PoC)', async () => {
+    const { publicKey, privateKey } = await generateEd25519KeyPair();
+    // Covers the minimum set but NOT digest, over a request that carries a body.
+    // Pre-fix this verified — the body was left unbound, so an attacker could
+    // swap it after signing — so it must now be rejected before the Ed25519
+    // check ever runs.
+    const req = await signWithHeaders(privateKey, ['(request-target)', 'host', 'date'], {
+      body: JSON.stringify({ amount: 1 }),
+    });
+    expect(await verifyRequestSignature(req, publicKey)).toEqual({
+      ok: false,
+      error: 'Signature must cover digest for a request with a body',
+    });
+  });
+});
+
 describe('verifyRequestSignature with a (created) pseudo-header', () => {
   // Our own `signRequest` doesn't sign `(created)`, so build the signed request
   // by hand: sign the string that includes the signer's own timestamp and pack
@@ -170,11 +239,16 @@ describe('verifyRequestSignature with a (created) pseudo-header', () => {
     created: number,
   ): Promise<{ request: Request; date: string }> {
     const date = new Date().toUTCString();
-    const signHeaders = ['(request-target)', '(created)', 'host', 'date'];
+    const body = JSON.stringify({ task: 'ping' });
+    // The request carries a body, so Finding B requires `digest` in the covered
+    // set. Include it here — these cases exercise the `(created)` skew logic, not
+    // the covered-set gate.
+    const digest = await computeDigest(body);
+    const signHeaders = ['(request-target)', '(created)', 'host', 'date', 'digest'];
     const toSign = new Request(ENDPOINT, {
       method: 'POST',
-      headers: { host: 'agent.example.com', date },
-      body: JSON.stringify({ task: 'ping' }),
+      headers: { host: 'agent.example.com', date, digest },
+      body,
     });
     const sigString = await buildSignatureString(toSign, signHeaders, created);
     const sig = await crypto.subtle.sign(
@@ -188,9 +262,10 @@ describe('verifyRequestSignature with a (created) pseudo-header', () => {
       headers: {
         host: 'agent.example.com',
         date,
+        digest,
         signature: `keyId="k",algorithm="ed25519",created=${created},headers="${signHeaders.join(' ')}",signature="${sigBase64}"`,
       },
-      body: JSON.stringify({ task: 'ping' }),
+      body,
     });
     return { request, date };
   }

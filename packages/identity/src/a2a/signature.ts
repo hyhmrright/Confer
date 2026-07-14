@@ -8,7 +8,7 @@ export interface SignatureParams {
   created?: number;
 }
 
-const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;
+export const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;
 
 export function parseSignatureHeader(header: string): Result<SignatureParams, string> {
   const params: Partial<SignatureParams> = {};
@@ -98,6 +98,23 @@ export async function verifyRequestSignature(
     return parsed;
   }
 
+  // Finding B: a signature is only meaningful if it covers the request's
+  // identity-bearing components. Without a mandated minimum an attacker can sign
+  // a trivial set (e.g. just `date`), then swap the method/path/body after
+  // signing and still verify. Require the minimum covered set, and — when the
+  // request carries a body — require `digest` too, so the body is bound to the
+  // signature rather than left free to tamper with.
+  const covered = parsed.value.headers;
+  for (const required of ['(request-target)', 'host', 'date']) {
+    if (!covered.includes(required)) {
+      return err(`Signature must cover ${required}`);
+    }
+  }
+  const body = await request.clone().text();
+  if (body.length > 0 && !covered.includes('digest')) {
+    return err('Signature must cover digest for a request with a body');
+  }
+
   const dateHeader = request.headers.get('date');
   if (!dateHeader) {
     return err('Missing Date header (required for replay protection)');
@@ -129,7 +146,6 @@ export async function verifyRequestSignature(
     if (!digestHeader) {
       return err('Digest header referenced but missing');
     }
-    const body = await request.clone().text();
     const expected = await computeDigest(body);
     if (digestHeader !== expected) {
       return err('Digest mismatch');

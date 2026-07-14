@@ -115,7 +115,7 @@ All A2A communication goes over HTTPS POST/GET, encoded as JSON.
 
 - A bearer token becomes void the moment it is intercepted
 - An HTTP signature is bound to a specific request (method + path + body digest + timestamp)
-- It cannot be replayed; verifying the signature confirms the sender's identity
+- It cannot be replayed: requests are bounded to a 5-minute window and every verified signature is recorded in a replay-nonce cache, so resubmitting the same request within the window is rejected; verifying the signature confirms the sender's identity
 
 ### Inbound request example
 

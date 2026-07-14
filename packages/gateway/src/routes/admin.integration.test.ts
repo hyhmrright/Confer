@@ -379,7 +379,12 @@ describe('registration switch enforcement', () => {
 
   test('allows registration when registration_open is true (default)', async () => {
     const res = await post('/api/v1/auth/register', {
-      body: { username: `ok${Date.now()}`, password: 'password123', display_name: 'Ok' },
+      body: {
+        username: `ok${Date.now()}`,
+        password: 'password123',
+        display_name: 'Ok',
+        device_id: 'dev-admin',
+      },
     });
     expect(res.status).toBe(201);
   });

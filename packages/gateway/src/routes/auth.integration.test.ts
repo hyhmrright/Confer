@@ -12,7 +12,13 @@ const LOGOUT = '/api/v1/auth/logout';
 type Body = Record<string, unknown>;
 
 function registerBody(over: Body = {}): Body {
-  return { username: 'alice', password: 'password123', display_name: 'Alice', ...over };
+  return {
+    username: 'alice',
+    password: 'password123',
+    display_name: 'Alice',
+    device_id: 'dev-1',
+    ...over,
+  };
 }
 
 function post(path: string, body: Body, opts: { token?: string; ip?: string } = {}) {
@@ -62,8 +68,8 @@ describe('POST /auth/register', () => {
 });
 
 describe('POST /auth/login', () => {
-  test('logs in with correct credentials and records a session', async () => {
-    await post(REGISTER, registerBody());
+  test('logs in with correct credentials and records a session with a refresh hash', async () => {
+    await post(REGISTER, registerBody({ device_id: 'reg-dev' }));
     const res = await post(LOGIN, {
       username: 'alice',
       password: 'password123',
@@ -73,9 +79,12 @@ describe('POST /auth/login', () => {
     expect(res.status).toBe(200);
     expect((await res.json()).access_token).toBeTruthy();
 
+    // Register created one session; login adds another for its own device. The
+    // login session stores the refresh-token hash (never the plaintext token).
     const recorded = await getDb().select().from(sessions);
-    expect(recorded).toHaveLength(1);
-    expect(recorded[0]?.device_id).toBe('dev-1');
+    expect(recorded).toHaveLength(2);
+    const loginSession = recorded.find((s) => s.device_id === 'dev-1');
+    expect(loginSession?.refresh_token_hash).toBeTruthy();
   });
 
   test('rejects a wrong password with 401', async () => {
@@ -112,6 +121,27 @@ describe('POST /auth/refresh', () => {
     const res = await post(REFRESH, {});
     expect(res.status).toBe(400);
   });
+
+  test('rotates the refresh token so the previous one stops working', async () => {
+    const { refresh_token: first } = await (await post(REGISTER, registerBody())).json();
+
+    const rotatedRes = await post(REFRESH, { refresh_token: first });
+    expect(rotatedRes.status).toBe(200);
+    const rotated = await rotatedRes.json();
+    expect(rotated.refresh_token).toBeTruthy();
+    expect(rotated.refresh_token).not.toBe(first);
+
+    // Replaying the previous (rotated-away) token is rejected.
+    const reused = await post(REFRESH, { refresh_token: first });
+    expect(reused.status).toBe(401);
+  });
+
+  test('a freshly rotated refresh token is itself usable', async () => {
+    const { refresh_token: first } = await (await post(REGISTER, registerBody())).json();
+    const rotated = await (await post(REFRESH, { refresh_token: first })).json();
+    const again = await post(REFRESH, { refresh_token: rotated.refresh_token });
+    expect(again.status).toBe(200);
+  });
 });
 
 describe('POST /auth/logout', () => {
@@ -124,5 +154,16 @@ describe('POST /auth/logout', () => {
     const { access_token } = await (await post(REGISTER, registerBody())).json();
     const res = await post(LOGOUT, {}, { token: access_token });
     expect(res.status).toBe(200);
+  });
+
+  test('revokes the session so its refresh token can no longer refresh', async () => {
+    const { access_token, refresh_token } = await (await post(REGISTER, registerBody())).json();
+
+    const out = await post(LOGOUT, {}, { token: access_token });
+    expect(out.status).toBe(200);
+
+    // The backing session is gone, so the refresh token is now dead.
+    const refreshed = await post(REFRESH, { refresh_token });
+    expect(refreshed.status).toBe(401);
   });
 });

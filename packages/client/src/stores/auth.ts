@@ -71,6 +71,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         username,
         password,
         display_name: displayName,
+        device_id: getDeviceId(),
       });
       setToken(data.access_token);
       setRefreshToken(data.refresh_token);

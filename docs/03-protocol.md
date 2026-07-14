@@ -115,7 +115,7 @@ https://acme.com/.well-known/agents.json
 
 - Bearer token 被截获即失效
 - HTTP signature 绑定到具体请求（method + path + body digest + 时间戳）
-- 无法重放，签名验证就能确认发送方身份
+- 防重放：请求 `Date` 限定在 5 分钟时间窗口内，且每个已验证的签名会记入重放缓存（nonce），窗口内再次提交同一请求会被拒绝；签名验证即可确认发送方身份
 
 ### 入站请求示例
 

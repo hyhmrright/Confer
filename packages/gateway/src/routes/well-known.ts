@@ -31,6 +31,7 @@ wellKnownRoutes.get('/did.json', async (c) => {
     '@context': ['https://www.w3.org/ns/did/v1'],
     id: did,
     verificationMethod: verificationMethods,
+    authentication: kp ? [kp.key_id] : [],
     service: [
       {
         id: `${did}#confer-agent`,

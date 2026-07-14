@@ -9,6 +9,9 @@ import { getEnv } from '../env.js';
 export interface AuthPayload {
   sub: string;
   username: string;
+  // Session id from the token, used by `/logout` to revoke the exact session.
+  // Absent on legacy tokens minted before session revocation existed.
+  sid?: string;
 }
 
 export const authMiddleware = createMiddleware<{
@@ -25,12 +28,14 @@ export const authMiddleware = createMiddleware<{
 
   let sub: string;
   let username: string;
+  let sid: string | undefined;
   try {
     const { payload } = await jose.jwtVerify(token, secret, {
       issuer: env.JWT_ISSUER,
     });
     sub = payload.sub as string;
     username = payload.username as string;
+    sid = typeof payload.sid === 'string' ? payload.sid : undefined;
   } catch {
     throw new AppError('unauthorized', 'Invalid or expired token', 401);
   }
@@ -51,7 +56,7 @@ export const authMiddleware = createMiddleware<{
     throw new AppError('account_disabled', 'This account has been disabled', 403);
   }
 
-  c.set('user', { sub, username });
+  c.set('user', { sub, username, sid });
 
   await next();
 });

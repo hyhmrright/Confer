@@ -1,3 +1,4 @@
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { exportPrivateKey, generateEd25519KeyPair, publicKeyToMultibase } from '@confer/identity';
 import {
   AppError,
@@ -6,7 +7,7 @@ import {
   newId,
   registerRequestSchema,
 } from '@confer/shared';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import * as jose from 'jose';
 import { getDb } from '../db/connection.js';
@@ -28,20 +29,28 @@ async function verifyPassword(hash: string, password: string): Promise<boolean> 
   return argon2.verify(hash, password);
 }
 
-async function issueTokens(userId: string, username: string) {
+// Both tokens carry the session id (`sid`) so `/refresh` can consult the backing
+// session (revoked on logout) and `/logout` can target the exact session row.
+async function issueTokens(userId: string, username: string, sessionId: string) {
   const env = getEnv();
   const secret = new TextEncoder().encode(env.JWT_SECRET);
 
-  const accessToken = await new jose.SignJWT({ username })
+  // A fresh `jti` per issuance makes every token byte-unique. Without it, two
+  // issuances in the same wall-clock second are identical (JWT `iat` is
+  // second-granular), so refresh rotation would be a silent no-op — the "new"
+  // refresh token would equal the old one and its hash would still match.
+  const accessToken = await new jose.SignJWT({ username, sid: sessionId })
     .setProtectedHeader({ alg: 'HS256' })
+    .setJti(newId())
     .setSubject(userId)
     .setIssuer(env.JWT_ISSUER)
     .setIssuedAt()
     .setExpirationTime('15m')
     .sign(secret);
 
-  const refreshToken = await new jose.SignJWT({ username })
+  const refreshToken = await new jose.SignJWT({ username, sid: sessionId })
     .setProtectedHeader({ alg: 'HS256' })
+    .setJti(newId())
     .setSubject(userId)
     .setIssuer(env.JWT_ISSUER)
     .setIssuedAt()
@@ -50,6 +59,25 @@ async function issueTokens(userId: string, username: string) {
 
   return { accessToken, refreshToken, expiresIn: 900 };
 }
+
+// SHA-256 hex of a token. Refresh tokens are already high-entropy HMAC-signed
+// JWTs, so a fast hash (not Argon2) is enough to avoid storing them in plaintext
+// while still letting `/refresh` validate the presented token against the row.
+function sha256Hex(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
+}
+
+// Constant-time compare of two equal-length hex digests. A length mismatch can
+// only be a structural error (e.g. a legacy NULL hash), so short-circuiting it
+// leaks nothing about the secret.
+function timingSafeEqualHex(a: string, b: string): boolean {
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  if (ab.length !== bb.length) return false;
+  return timingSafeEqual(ab, bb);
+}
+
+const REFRESH_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 
 authRoutes.post('/register', rateLimit(3, 3600_000), async (c) => {
   // Honor the global registration switch before doing any work.
@@ -112,7 +140,20 @@ authRoutes.post('/register', rateLimit(3, 3600_000), async (c) => {
     private_key_jwk_encrypted: encryptedKey.value,
   });
 
-  const tokens = await issueTokens(userId, body.username);
+  // Register gets a backing session too, so its freshly minted refresh token can
+  // be rotated/revoked exactly like a login's (no more stranded, unrevocable
+  // register tokens).
+  const sessionId = newId();
+  const tokens = await issueTokens(userId, body.username, sessionId);
+  await db.insert(sessions).values({
+    id: sessionId,
+    user_id: userId,
+    device_id: body.device_id,
+    platform: body.device_info?.platform,
+    refresh_token_hash: sha256Hex(tokens.refreshToken),
+    last_active_at: new Date(),
+    expires_at: new Date(Date.now() + REFRESH_TTL_MS),
+  });
 
   return c.json(
     {
@@ -151,16 +192,17 @@ authRoutes.post('/login', rateLimit(10, 60_000), async (c) => {
     throw new AppError('account_disabled', 'This account has been disabled', 403);
   }
 
-  const tokens = await issueTokens(user.id, user.username);
-
   const sessionId = newId();
+  const tokens = await issueTokens(user.id, user.username, sessionId);
+
   await db.insert(sessions).values({
     id: sessionId,
     user_id: user.id,
     device_id: body.device_id,
     platform: body.device_info?.platform,
+    refresh_token_hash: sha256Hex(tokens.refreshToken),
     last_active_at: new Date(),
-    expires_at: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
+    expires_at: new Date(Date.now() + REFRESH_TTL_MS),
   });
 
   return c.json({
@@ -204,7 +246,42 @@ authRoutes.post('/refresh', async (c) => {
       throw new AppError('account_disabled', 'This account has been disabled', 403);
     }
 
-    const tokens = await issueTokens(payload.sub as string, payload.username as string);
+    // A refresh token is only honored while its backing session still exists.
+    // Logout deletes the session, so a logged-out token can no longer refresh —
+    // this is what makes revocation real. A token minted before `sid` existed
+    // (legacy) has no session to consult and is rejected, forcing a re-login.
+    const sid = typeof payload.sid === 'string' ? payload.sid : undefined;
+    if (!sid) {
+      throw new AppError('unauthorized', 'Invalid or expired refresh token', 401);
+    }
+    const [session] = await db.select().from(sessions).where(eq(sessions.id, sid)).limit(1);
+    if (!session) {
+      throw new AppError('unauthorized', 'Invalid or expired refresh token', 401);
+    }
+
+    // The presented token must hash to the one stored at issue/last-rotation.
+    // A valid-looking token that doesn't match (e.g. a rotated-away token being
+    // replayed) triggers reuse detection: drop the whole session so neither the
+    // stale nor the current token can be used again.
+    const presentedHash = sha256Hex(refresh_token);
+    if (
+      !session.refresh_token_hash ||
+      !timingSafeEqualHex(presentedHash, session.refresh_token_hash)
+    ) {
+      await db.delete(sessions).where(eq(sessions.id, sid));
+      throw new AppError('unauthorized', 'Invalid or expired refresh token', 401);
+    }
+
+    // Rotate: issue a new pair bound to the same session and store the new hash,
+    // which invalidates the just-used refresh token on the next attempt.
+    const tokens = await issueTokens(payload.sub as string, payload.username as string, sid);
+    await db
+      .update(sessions)
+      .set({
+        refresh_token_hash: sha256Hex(tokens.refreshToken),
+        last_active_at: new Date(),
+      })
+      .where(eq(sessions.id, sid));
 
     return c.json({
       access_token: tokens.accessToken,
@@ -218,5 +295,15 @@ authRoutes.post('/refresh', async (c) => {
 });
 
 authRoutes.post('/logout', authMiddleware, async (c) => {
+  const { sub, sid } = c.get('user');
+  const db = getDb();
+  if (sid) {
+    // Revoke exactly this device's session.
+    await db.delete(sessions).where(and(eq(sessions.user_id, sub), eq(sessions.id, sid)));
+  } else {
+    // Legacy access token minted before `sid` existed: fail safe toward
+    // revocation by clearing every session this user holds.
+    await db.delete(sessions).where(eq(sessions.user_id, sub));
+  }
   return c.json({ ok: true });
 });

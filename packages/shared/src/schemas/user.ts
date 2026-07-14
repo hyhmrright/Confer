@@ -53,6 +53,16 @@ export const registerRequestSchema = z.object({
   email: z.string().email().optional(),
   password: z.string().min(8).max(128),
   display_name: z.string().max(128).optional(),
+  // Register now creates a backing session (mirroring login) so its tokens can
+  // be revoked/rotated, which requires the device the session belongs to.
+  device_id: z.string().max(64),
+  device_info: z
+    .object({
+      platform: z.string().optional(),
+      model: z.string().optional(),
+      os: z.string().optional(),
+    })
+    .optional(),
 });
 
 export const loginRequestSchema = z.object({
