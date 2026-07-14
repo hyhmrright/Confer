@@ -183,12 +183,33 @@ export async function assertPublicHostname(
     }
   };
 
-  if (isIP(hostname) !== 0) {
-    reject(hostname);
-    return [hostname];
+  // `[::1]`-style bracket notation is a URL-serialization convention for an
+  // IPv6 literal — `node:net`'s isIP() and `node:dns`'s lookup() both treat it
+  // as an ordinary (unresolvable) name, not as the address it denotes. Left
+  // unstripped, a bracketed private/loopback/metadata literal fails DNS
+  // resolution, which this function's "resolution failure is not a block"
+  // policy would then silently wave through — while a caller's subsequent
+  // fetch() connects to the bracketed literal directly, since it needs no DNS
+  // step at all. Stripping the brackets before the isIP/lookup checks routes
+  // it through the same literal-IP rejection path as the unbracketed form.
+  const hadBrackets = hostname.startsWith('[') && hostname.endsWith(']');
+  const bareHost = hadBrackets ? hostname.slice(1, -1) : hostname;
+
+  // Bracket notation is reserved for IP literals (RFC 3986 IP-literal), never
+  // a DNS name. A bracketed value that isn't actually a valid IP (including
+  // empty brackets, `[]`) is malformed input, not a hostname to resolve —
+  // fail closed instead of falling through to DNS, where a lookup failure
+  // would otherwise be silently treated as "not a block".
+  if (hadBrackets && isIP(bareHost) === 0) {
+    throw new SsrfBlockedError(hostname, bareHost);
   }
 
-  const resolved = await lookup(hostname, { all: true, verbatim: true });
+  if (isIP(bareHost) !== 0) {
+    reject(bareHost);
+    return [bareHost];
+  }
+
+  const resolved = await lookup(bareHost, { all: true, verbatim: true });
   const addresses = resolved.map((entry) => entry.address);
   for (const address of addresses) reject(address);
   return addresses;

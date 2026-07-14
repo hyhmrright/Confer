@@ -1,3 +1,4 @@
+import { buildDIDDocument } from '@confer/identity';
 import { and, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { getDb } from '../db/connection.js';
@@ -10,36 +11,26 @@ wellKnownRoutes.get('/did.json', async (c) => {
   const did = `did:web:${host}`;
   const db = getDb();
 
+  // Only public columns — never `private_key_jwk_encrypted`.
   const [kp] = await db
-    .select()
+    .select({
+      key_id: keypairs.key_id,
+      public_key_multibase: keypairs.public_key_multibase,
+    })
     .from(keypairs)
     .where(and(eq(keypairs.owner_type, 'instance'), eq(keypairs.is_active, true)))
     .limit(1);
 
-  const verificationMethods = kp
-    ? [
-        {
-          id: kp.key_id,
-          type: 'Ed25519VerificationKey2020',
-          controller: did,
-          publicKeyMultibase: kp.public_key_multibase,
-        },
-      ]
-    : [];
-
-  return c.json({
-    '@context': ['https://www.w3.org/ns/did/v1'],
-    id: did,
-    verificationMethod: verificationMethods,
-    authentication: kp ? [kp.key_id] : [],
-    service: [
-      {
-        id: `${did}#confer-agent`,
-        type: 'ConferAgent',
-        serviceEndpoint: `https://${host}/a2a/v1`,
-      },
-    ],
+  // Shared builder keeps the instance and per-user DID documents in one shape;
+  // with no active instance key the document is served keyless
+  // (`verificationMethod: []`, `authentication: []`) rather than 404ing.
+  const doc = buildDIDDocument({
+    did,
+    serviceEndpoint: `https://${host}/a2a/v1`,
+    key: kp ? { keyId: kp.key_id, publicKeyMultibase: kp.public_key_multibase } : undefined,
   });
+
+  return c.json(doc);
 });
 
 wellKnownRoutes.get('/agents.json', async (c) => {

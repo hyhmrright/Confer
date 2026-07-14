@@ -1,5 +1,5 @@
-export { buildDIDDocument, didFromDomain, domainFromDid } from './did/document.js';
-export type { DIDDocument } from './did/document.js';
+export { buildDIDDocument, didFromDomain, domainFromDid, parseDidWeb } from './did/document.js';
+export type { DIDDocument, DidWebLocation } from './did/document.js';
 export { resolveDID, clearDIDCache } from './did/resolver.js';
 export { verifyRequestSignature, signRequest, MAX_CLOCK_SKEW_MS } from './a2a/signature.js';
 export { parseSignatureInput } from './a2a/structured-fields.js';

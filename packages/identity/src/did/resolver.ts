@@ -1,7 +1,7 @@
 import { type Result, err, ok } from '@confer/shared';
 import { SsrfBlockedError, assertPublicHostname } from '../net/ssrf-guard.js';
 import type { DIDDocument } from './document.js';
-import { didDocumentSchema, domainFromDid } from './document.js';
+import { didDocumentSchema, parseDidWeb } from './document.js';
 
 interface CacheEntry {
   document: DIDDocument;
@@ -57,25 +57,29 @@ export async function resolveDID(did: string): Promise<Result<DIDDocument, strin
     return ok(cached.document);
   }
 
-  const domain = domainFromDid(did);
-  if (!domain) {
+  const loc = parseDidWeb(did);
+  if (!loc) {
     return err(`Invalid DID format: ${did}`);
   }
 
   // SSRF guard: refuse a DID whose host resolves to a LAN / metadata / reserved
-  // address. Loopback stays allowed because a single-machine deployment serves
-  // its own agents at `did:web:localhost` (https://localhost/.well-known/did.json).
-  // A DNS-resolution failure is not a block — the fetch below fails the same way
-  // — so only a positively-resolved blocked address aborts here.
+  // address. The guard receives only the bare hostname — never a path — so a
+  // sub-identifier DID can't smuggle a private target past it. Loopback stays
+  // allowed because a single-machine deployment serves its own agents at
+  // `did:web:localhost`. A DNS-resolution failure is not a block — the fetch
+  // below fails the same way — so only a positively-resolved blocked address
+  // aborts here.
   try {
-    await assertPublicHostname(domain, { allowLoopback: true });
+    await assertPublicHostname(loc.hostname, { allowLoopback: true });
   } catch (e) {
     if (e instanceof SsrfBlockedError) {
       return err(`Refusing to resolve DID pointing at a private address: ${did}`);
     }
   }
 
-  const url = `https://${domain}/.well-known/did.json`;
+  // Sub-identifier DIDs (path segments) resolve to `.../did.json` under their
+  // path; bare-domain DIDs fall back to `/.well-known/did.json` (parseDidWeb).
+  const url = loc.url;
 
   try {
     const headers: Record<string, string> = {};

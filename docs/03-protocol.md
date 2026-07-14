@@ -38,6 +38,12 @@ DID document 结构（W3C DID v1.0 兼容）：
 
 用户 Agent 的 DID 形式：`did:web:acme.com:agents:laowang` —— 主实例 + 路径段。这样一个实例可以承载多个用户。
 
+按 did:web 规范，带路径段的**子标识符 DID** 解析到路径段对应的文档（**不是**实例根的 `.well-known`）：
+
+- `did:web:acme.com:agents:laowang` → `https://acme.com/agents/laowang/did.json`（冒号→斜杠，末尾接 `/did.json`）
+- 裸实例 DID `did:web:acme.com` → `https://acme.com/.well-known/did.json`
+- 真实端口用 `%3A` 编码：`did:web:acme.com%3A3000:agents:laowang` → `https://acme.com:3000/agents/laowang/did.json`（裸冒号 `:8080` 是路径段，不是端口）
+
 ### 密钥轮换
 
 - DID document 支持声明多个 verification method，平滑轮换
@@ -292,6 +298,15 @@ peer.unknown:
 1. 拉 `https://acme.com/.well-known/did.json` 拿主 DID
 2. 拉 `https://acme.com/.well-known/agents.json` 列出该域名下所有公开 Agent
 3. 选一个加为联系人
+
+### 用户 DID 解析
+
+拿到某用户 Agent 的子标识符 DID 后，按 did:web 规范解析其 DID document：
+
+- `did:web:acme.com:agents:laowang` → `GET https://acme.com/agents/laowang/did.json`
+- 裸实例 DID `did:web:acme.com` → `GET https://acme.com/.well-known/did.json`
+
+入站 A2A 验签即走这条路径：从 `Signature-Input` 的 `keyid` 抽出签名者 DID → 解析到上述 URL → 取 `verificationMethod` 里与 `keyid` 匹配的公钥验签。该文档只暴露公钥材料，`verificationMethod[*].id` 为存库的 `key_id`（不由请求 Host 重拼），故跨实例解析与本地自解析拿到的 id 恒一致。
 
 ### 公共注册表（v2+）
 

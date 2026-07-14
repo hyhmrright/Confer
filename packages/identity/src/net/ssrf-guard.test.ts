@@ -92,6 +92,35 @@ describe('assertPublicHostname', () => {
     );
   });
 
+  test('rejects a bracket-notation IPv6 literal (URL-serialization form)', async () => {
+    // `[::1]` is how an IPv6 literal is written inside a URL authority — neither
+    // node:net's isIP() nor node:dns's lookup() recognize the brackets, so an
+    // unstripped bracketed private/metadata address would fail DNS resolution
+    // and be silently waved through by the "resolution failure is not a block"
+    // policy, while a caller's fetch() connects to it directly (no DNS needed
+    // for a literal). Metadata address in its IPv4-mapped-IPv6 bracketed form:
+    await expect(assertPublicHostname('[::ffff:169.254.169.254]')).rejects.toBeInstanceOf(
+      SsrfBlockedError,
+    );
+    await expect(assertPublicHostname('[::1]')).rejects.toBeInstanceOf(SsrfBlockedError);
+    await expect(assertPublicHostname('[fe80::1]')).rejects.toBeInstanceOf(SsrfBlockedError);
+  });
+
+  test('fails closed on malformed bracket notation instead of falling through to DNS', async () => {
+    // Bracket notation is reserved for IP literals (RFC 3986) — a bracketed
+    // value that isn't a valid IP is malformed, not a hostname to look up.
+    await expect(assertPublicHostname('[]')).rejects.toBeInstanceOf(SsrfBlockedError);
+    await expect(assertPublicHostname('[not-an-ip]')).rejects.toBeInstanceOf(SsrfBlockedError);
+  });
+
+  test('allowLoopback permits a bracketed ::1 literal too', async () => {
+    await expect(assertPublicHostname('[::1]', { allowLoopback: true })).resolves.toEqual(['::1']);
+    // A bracketed non-loopback private address stays blocked.
+    await expect(
+      assertPublicHostname('[::ffff:169.254.169.254]', { allowLoopback: true }),
+    ).rejects.toBeInstanceOf(SsrfBlockedError);
+  });
+
   test('returns the address for a literal public IP without DNS', async () => {
     await expect(assertPublicHostname('8.8.8.8')).resolves.toEqual(['8.8.8.8']);
   });
