@@ -17,7 +17,9 @@ export async function searchKnowledgeBase(
 ): Promise<{ text: string; citations: KbCitation[] }> {
   const vectors = await embedTexts([query], apiKey, provider);
   const vector = vectors[0] as number[];
-  const results: SearchResult[] = await searchChunks(vector, userId, kbIds, 5);
+  // Filter to the current provider's points (+ legacy untagged) and drop
+  // low-similarity noise so cross-provider near-random hits stay out of context.
+  const results: SearchResult[] = await searchChunks(vector, userId, kbIds, 5, provider, 0.3);
 
   if (results.length === 0) {
     return { text: '知识库中未找到相关内容。', citations: [] };

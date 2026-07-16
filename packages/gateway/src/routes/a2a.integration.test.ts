@@ -748,6 +748,7 @@ describe('A2A agent reply with KB tool calls + citations', () => {
         text,
         chunk_index: 0,
         vector: fixedVector(),
+        provider: 'openai',
       },
     ]);
     return docName;

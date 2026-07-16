@@ -40,7 +40,13 @@ export async function extractAndStore(input: ExtractAndStoreInput): Promise<void
     seen.add(text);
 
     // Dedup: skip if a near-identical memory already exists.
-    const similar = await searchMemories(vector, input.userId, 1, DEDUP_THRESHOLD);
+    const similar = await searchMemories(
+      vector,
+      input.userId,
+      1,
+      DEDUP_THRESHOLD,
+      input.embeddingProvider,
+    );
     if (similar.length > 0) continue;
 
     const memoryId = newId();
@@ -52,7 +58,13 @@ export async function extractAndStore(input: ExtractAndStoreInput): Promise<void
       content: text,
       source: 'auto',
     });
-    await upsertMemory({ memoryId, userId: input.userId, text, vector });
+    await upsertMemory({
+      memoryId,
+      userId: input.userId,
+      text,
+      vector,
+      provider: input.embeddingProvider,
+    });
   }
 }
 
@@ -67,7 +79,13 @@ export async function recallMemories(
   const vectors = await embedTexts([query], embeddingKey, embeddingProvider);
   const vector = vectors[0];
   if (!vector) return '';
-  const hits = await searchMemories(vector, userId, RECALL_TOP_K, RECALL_MIN_SCORE);
+  const hits = await searchMemories(
+    vector,
+    userId,
+    RECALL_TOP_K,
+    RECALL_MIN_SCORE,
+    embeddingProvider,
+  );
   if (hits.length === 0) return '';
   return `\n关于该用户你已知道：\n${hits.map((h) => `- ${h.text}`).join('\n')}`;
 }

@@ -1,6 +1,8 @@
+import { type EmbeddingProvider, providerModel } from './embedding.js';
 import {
   deleteQdrantPoints,
   ensureQdrantCollection,
+  providerMatchFilter,
   searchQdrantCollection,
   upsertQdrantPoints,
 } from './qdrant-client.js';
@@ -20,6 +22,7 @@ export interface UpsertMemoryInput {
   userId: string;
   text: string;
   vector: number[];
+  provider: EmbeddingProvider;
 }
 
 export async function ensureMemoryCollection(): Promise<void> {
@@ -31,7 +34,13 @@ export async function upsertMemory(input: UpsertMemoryInput): Promise<void> {
     {
       id: toUUID(input.memoryId),
       vector: input.vector,
-      payload: { user_id: input.userId, memory_id: input.memoryId, text: input.text },
+      payload: {
+        user_id: input.userId,
+        memory_id: input.memoryId,
+        text: input.text,
+        embedding_provider: input.provider,
+        embedding_model: providerModel(input.provider),
+      },
     },
   ]);
 }
@@ -41,9 +50,13 @@ export async function searchMemories(
   userId: string,
   topK = 5,
   minScore = 0.3,
+  provider?: EmbeddingProvider,
 ): Promise<MemoryHit[]> {
+  const mustFilters: unknown[] = [{ key: 'user_id', match: { value: userId } }];
+  if (provider) mustFilters.push(providerMatchFilter(provider));
+
   const result = await searchQdrantCollection(COLLECTION, vector, topK, {
-    filter: { must: [{ key: 'user_id', match: { value: userId } }] },
+    filter: { must: mustFilters },
     scoreThreshold: minScore,
   });
   return result

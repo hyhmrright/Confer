@@ -4,6 +4,7 @@
 // request patterns stay in one place.
 
 import { QDRANT_HEALTHCHECK_TIMEOUT_MS, QDRANT_REQUEST_TIMEOUT_MS } from './rag-config.js';
+import { HttpError, retryWithBackoff } from './retry.js';
 
 // Re-exported so existing importers keep resolving these from qdrant-client.
 export { QDRANT_HEALTHCHECK_TIMEOUT_MS, QDRANT_REQUEST_TIMEOUT_MS };
@@ -18,17 +19,31 @@ export async function qdrantRequest(
   path: string,
   body?: unknown,
 ): Promise<unknown> {
-  const res = await fetch(qdrantUrl(path), {
-    method,
-    headers: { 'Content-Type': 'application/json' },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-    signal: AbortSignal.timeout(QDRANT_REQUEST_TIMEOUT_MS),
+  return retryWithBackoff(async () => {
+    const res = await fetch(qdrantUrl(path), {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+      signal: AbortSignal.timeout(QDRANT_REQUEST_TIMEOUT_MS),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new HttpError(res.status, `Qdrant ${method} ${path} failed (${res.status}): ${text}`);
+    }
+    return res.json();
   });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Qdrant ${method} ${path} failed (${res.status}): ${text}`);
-  }
-  return res.json();
+}
+
+// Qdrant filter clause matching the current provider's points OR legacy points
+// with no provider tag, so provider tagging causes zero regression for users
+// who never switched providers.
+export function providerMatchFilter(provider: string): unknown {
+  return {
+    should: [
+      { key: 'embedding_provider', match: { value: provider } },
+      { is_empty: { key: 'embedding_provider' } },
+    ],
+  };
 }
 
 export interface QdrantPoint {
