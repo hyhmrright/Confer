@@ -31,18 +31,23 @@ function jsonResponse(body: unknown, status = 200): Response {
 // is built at runtime + cast so TS still resolves the module's types.
 type ApiModule = typeof import('./api.js');
 const realApiModule = (await import(/* @vite-ignore */ `${'./api.js'}?real`)) as ApiModule;
-const { api, ApiError, setToken, setRefreshToken } = realApiModule;
+const { api, ApiError, setToken, setRefreshToken, setOnAuthExpired } = realApiModule;
+
+const authExpired = mock(() => {});
 
 beforeEach(() => {
   fetchMock.mockReset();
+  authExpired.mockReset();
   localStorage.clear();
   setToken(null);
   setRefreshToken(null);
+  setOnAuthExpired(authExpired);
 });
 
 afterEach(() => {
   setToken(null);
   setRefreshToken(null);
+  setOnAuthExpired(null);
 });
 
 describe('api client', () => {
@@ -160,6 +165,7 @@ describe('api client', () => {
     expect(err.status).toBe(401);
     // Original request + refresh attempt only; no retry happened.
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(authExpired).toHaveBeenCalledTimes(1);
   });
 
   test('does not attempt a refresh on 401 when there is no refresh token', async () => {
@@ -171,6 +177,39 @@ describe('api client', () => {
     expect(err).toBeInstanceOf(ApiError);
     expect(err.status).toBe(401);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(authExpired).toHaveBeenCalledTimes(1);
+  });
+
+  test('calls onAuthExpired when the retried request 401s again after a successful refresh', async () => {
+    setToken('stale');
+    setRefreshToken('refresh-1');
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({}, 401))
+      .mockResolvedValueOnce(jsonResponse({ access_token: 'fresh', refresh_token: 'refresh-2' }))
+      // retry is rejected even with the fresh token (e.g. session revoked mid-flight)
+      .mockResolvedValueOnce(jsonResponse({}, 401));
+
+    const err = (await api.get('/secure').catch((e: unknown) => e)) as InstanceType<
+      typeof ApiError
+    >;
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err.status).toBe(401);
+    expect(authExpired).toHaveBeenCalledTimes(1);
+  });
+
+  test('postForm calls onAuthExpired when the refresh itself fails', async () => {
+    setToken('stale');
+    setRefreshToken('refresh-1');
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({}, 401))
+      .mockResolvedValueOnce(jsonResponse({}, 401));
+
+    const err = (await api
+      .postForm('/upload', new FormData())
+      .catch((e: unknown) => e)) as InstanceType<typeof ApiError>;
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err.status).toBe(401);
+    expect(authExpired).toHaveBeenCalledTimes(1);
   });
 
   test('postForm sends the FormData body with the auth header and no JSON content type', async () => {

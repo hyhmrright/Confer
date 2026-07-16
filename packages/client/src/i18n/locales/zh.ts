@@ -28,6 +28,7 @@ export const zh = {
     welcomeBack: '欢迎回来',
     registerHint: '注册后即可开始使用',
     loginHint: '登录你的账号',
+    sessionExpired: '登录已过期，请重新登录',
     username: '用户名',
     usernamePlaceholder: '至少 3 个字符',
     displayName: '显示名称',

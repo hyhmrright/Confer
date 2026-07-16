@@ -9,6 +9,7 @@ mock.module('../lib/api.js', () => ({
   getToken: mock(() => null),
   setToken: mock(() => {}),
   setRefreshToken: mock(() => {}),
+  setOnAuthExpired: mock(() => {}),
 }));
 
 const { useChatStore } = await import('./chat.js');

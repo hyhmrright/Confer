@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { api, setRefreshToken, setToken } from '../lib/api.js';
+import i18n from '../i18n/index.js';
+import { api, setOnAuthExpired, setRefreshToken, setToken } from '../lib/api.js';
 import { captureError } from '../lib/error.js';
 
 interface User {
@@ -121,6 +122,15 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
   },
 }));
+
+// A refresh-token rejection (expired, revoked, or minted before a breaking
+// session-format change) is unrecoverable — clear local auth state so
+// ProtectedRoute redirects to /login instead of every page showing a stale
+// "session expired" error forever, and leave a message explaining why.
+setOnAuthExpired(() => {
+  useAuthStore.getState().logout();
+  useAuthStore.setState({ error: i18n.t('login.sessionExpired') });
+});
 
 function getDeviceId(): string {
   let id = localStorage.getItem('confer_device_id');
