@@ -15,6 +15,9 @@ if [[ -z "$TAG" ]]; then
   exit 1
 fi
 
+# Bundle filenames carry the bare version (0.3.0), the tag carries the v prefix.
+VERSION="${TAG#v}"
+
 if [[ -z "$PREV_TAG" ]]; then
   PREV_TAG=$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || echo "")
 fi
@@ -141,6 +144,9 @@ else
 fi
 
 # ── Download & Install ───────────────────────────────────────────────────────
+# Rows must track the `desktop` build matrix in .github/workflows/release.yml.
+# Desktop bundles are named by tauri-action from tauri.conf.json; the APK keeps
+# Gradle's own output name because the workflow uploads it unrenamed.
 cat <<EOF
 ---
 
@@ -148,12 +154,15 @@ cat <<EOF
 
 | Platform | File |
 |----------|------|
-| 🍎 macOS (Apple Silicon) | \`Confer_${TAG}_aarch64.dmg\` |
-| 🍎 macOS (Intel) | \`Confer_${TAG}_x64.dmg\` |
-| 🪟 Windows (x64) | \`Confer_${TAG}_x64-setup.exe\` |
-| 🪟 Windows (ARM64) | \`Confer_${TAG}_arm64-setup.exe\` |
-| 🐧 Linux (x64) | \`Confer_${TAG}_amd64.AppImage\` |
-| 🤖 Android APK | \`Confer_${TAG}.apk\` |
+| 🍎 macOS (Apple Silicon) | \`Confer_${VERSION}_aarch64.dmg\` |
+| 🪟 Windows (x64) | \`Confer_${VERSION}_x64-setup.exe\` · \`Confer_${VERSION}_x64_en-US.msi\` |
+| 🪟 Windows (ARM64) | \`Confer_${VERSION}_arm64-setup.exe\` · \`Confer_${VERSION}_arm64_en-US.msi\` |
+| 🐧 Linux (x64) | \`Confer_${VERSION}_amd64.AppImage\` · \`Confer_${VERSION}_amd64.deb\` · \`Confer-${VERSION}-1.x86_64.rpm\` |
+| 🤖 Android | \`app-universal-release.apk\` |
+
+> No macOS Intel build — the release matrix covers Apple Silicon only.
+> 未构建 macOS Intel 版本——发布矩阵仅覆盖 Apple Silicon。
+> macOS Intel 版はビルドされていません（リリースマトリクスは Apple Silicon のみ）。
 
 ### Server · 服务端 · サーバー
 
