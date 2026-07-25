@@ -30,6 +30,7 @@ export const en: Resources = {
     welcomeBack: 'Welcome back',
     registerHint: 'Sign up to get started',
     loginHint: 'Sign in to your account',
+    sessionExpired: 'Your session has expired. Please sign in again.',
     username: 'Username',
     usernamePlaceholder: 'At least 3 characters',
     displayName: 'Display name',

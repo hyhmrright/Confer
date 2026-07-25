@@ -1,8 +1,8 @@
-export { buildDIDDocument, didFromDomain, domainFromDid } from './did/document.js';
-export type { DIDDocument } from './did/document.js';
+export { buildDIDDocument, didFromDomain, domainFromDid, parseDidWeb } from './did/document.js';
+export type { DIDDocument, DidWebLocation } from './did/document.js';
 export { resolveDID, clearDIDCache } from './did/resolver.js';
-export { parseSignatureHeader, verifyRequestSignature, signRequest } from './a2a/signature.js';
-export type { SignatureParams } from './a2a/signature.js';
+export { verifyRequestSignature, signRequest, MAX_CLOCK_SKEW_MS } from './a2a/signature.js';
+export { parseSignatureInput } from './a2a/structured-fields.js';
 export { agentFactsSchema } from './agent-facts/schema.js';
 export type { AgentFacts } from './agent-facts/schema.js';
 export {
@@ -13,3 +13,4 @@ export {
   importPrivateKey,
 } from './crypto/keypair.js';
 export type { KeyPair } from './crypto/keypair.js';
+export { assertPublicHostname, isBlockedIp, SsrfBlockedError } from './net/ssrf-guard.js';

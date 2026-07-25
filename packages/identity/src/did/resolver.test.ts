@@ -40,7 +40,11 @@ beforeEach(async () => {
   calls = [];
   const pair = await generateEd25519KeyPair();
   const multibase = await publicKeyToMultibase(pair.publicKey);
-  document = buildDIDDocument(DOMAIN, multibase);
+  document = buildDIDDocument({
+    did: DID,
+    serviceEndpoint: `https://${DOMAIN}/a2a/v1`,
+    key: { keyId: `${DID}#key-1`, publicKeyMultibase: multibase },
+  });
 });
 
 afterEach(() => {
@@ -57,6 +61,24 @@ describe('resolveDID', () => {
     if (res.ok) expect(res.value.id).toBe(DID);
     expect(calls).toHaveLength(1);
     expect(calls[0]?.url).toBe(`https://${DOMAIN}/.well-known/did.json`);
+  });
+
+  test('resolves a sub-identifier DID against its path URL (not .well-known)', async () => {
+    const subDid = `${DID}:agents:laowang`;
+    const pair = await generateEd25519KeyPair();
+    const multibase = await publicKeyToMultibase(pair.publicKey);
+    const subDoc = buildDIDDocument({
+      did: subDid,
+      serviceEndpoint: `https://${DOMAIN}/a2a/v1`,
+      key: { keyId: `${subDid}#key-1`, publicKeyMultibase: multibase },
+    });
+    mockFetch(() => jsonResponse(subDoc));
+
+    const res = await resolveDID(subDid);
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.value.id).toBe(subDid);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.url).toBe(`https://${DOMAIN}/agents/laowang/did.json`);
   });
 
   test('cache hit within TTL skips the network', async () => {
@@ -99,6 +121,33 @@ describe('resolveDID', () => {
     // A network call was made (conditional), and the cached doc was reused.
     expect(calls).toHaveLength(2);
     expect(calls[1]?.headers['If-None-Match']).toBe('"etag-1"');
+  });
+
+  test('honors a Cache-Control max-age longer than the default TTL', async () => {
+    const base = new Date('2030-01-01T00:00:00Z');
+    setSystemTime(base);
+    mockFetch(() =>
+      jsonResponse(document, { headers: { 'cache-control': 'public, max-age=3600' } }),
+    );
+
+    expect((await resolveDID(DID)).ok).toBe(true);
+    expect(calls).toHaveLength(1);
+
+    // 10 minutes later — past the 60s default TTL but well inside max-age.
+    setSystemTime(new Date(base.getTime() + 600_000));
+    expect((await resolveDID(DID)).ok).toBe(true);
+    // Still served from cache; no second network call.
+    expect(calls).toHaveLength(1);
+  });
+
+  test('does not cache a response marked Cache-Control: no-store', async () => {
+    mockFetch(() => jsonResponse(document, { headers: { 'cache-control': 'no-store' } }));
+
+    expect((await resolveDID(DID)).ok).toBe(true);
+    expect(calls).toHaveLength(1);
+    // Second resolve must refetch because the first result was never cached.
+    expect((await resolveDID(DID)).ok).toBe(true);
+    expect(calls).toHaveLength(2);
   });
 
   test('HTTP 4xx returns an err result', async () => {
@@ -149,6 +198,33 @@ describe('resolveDID', () => {
     const res = await resolveDID('did:key:z6Mk');
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toContain('Invalid DID format');
+    expect(calls).toHaveLength(0);
+  });
+
+  test('rejects a userinfo-smuggled private target without fetching (SSRF)', async () => {
+    // A %40-encoded authority segment decodes to a `user@host` shape that
+    // would put a cloud-metadata address after the `@` while looking like a
+    // public domain before it — parseDidWeb rejects this outright, so
+    // resolveDID must never reach the network for it, not even to have the
+    // SSRF guard "safely" reject a resolved address.
+    mockFetch(() => jsonResponse(document));
+    const res = await resolveDID('did:web:public.example.com%40169.254.169.254');
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toContain('Invalid DID format');
+    expect(calls).toHaveLength(0);
+  });
+
+  test('rejects a bracket-notation IPv6 metadata target without fetching (SSRF)', async () => {
+    // `%5B...%5D` decodes to `[::ffff:169.254.169.254]` — bracket notation for
+    // the IPv4-mapped-IPv6 form of the cloud metadata address. parseDidWeb
+    // correctly parses this as a legitimate-looking hostname (bracket
+    // notation is valid URL syntax), so the block must come from the SSRF
+    // guard recognizing the bracketed literal, not from parseDidWeb rejecting
+    // the input outright.
+    mockFetch(() => jsonResponse(document));
+    const res = await resolveDID('did:web:%5B%3A%3Affff%3A169.254.169.254%5D');
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toContain('private address');
     expect(calls).toHaveLength(0);
   });
 

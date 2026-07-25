@@ -38,13 +38,24 @@ const MSG = {
 
 describe('sendA2AMessage', () => {
   test('POSTs the signed message to <endpoint>/messages and returns the parsed body', async () => {
-    let seen: { url: string; method: string; body: unknown; signature: string | null } | undefined;
+    let seen:
+      | {
+          url: string;
+          method: string;
+          body: unknown;
+          signatureInput: string | null;
+          signature: string | null;
+          contentDigest: string | null;
+        }
+      | undefined;
     stubFetch(async (req) => {
       seen = {
         url: req.url,
         method: req.method,
         body: await req.json(),
+        signatureInput: req.headers.get('signature-input'),
         signature: req.headers.get('signature'),
+        contentDigest: req.headers.get('content-digest'),
       };
       return Response.json({ message_id: 'm1', thread_id: 't-1', stream_url: '/a2a/v1/stream/m1' });
     });
@@ -56,8 +67,10 @@ describe('sendA2AMessage', () => {
     expect(seen?.url).toBe('https://peer.test/a2a/v1/messages');
     expect(seen?.method).toBe('POST');
     expect(seen?.body).toEqual(MSG);
-    // signRequest attached an HTTP-message signature header.
-    expect(seen?.signature).toBeTruthy();
+    // signRequest attached RFC 9421 structured-field headers + an RFC 9530 digest.
+    expect(seen?.signatureInput).toContain('sig1=(');
+    expect(seen?.signature).toMatch(/^sig1=:.+:$/);
+    expect(seen?.contentDigest).toMatch(/^sha-256=:.+:$/);
   });
 
   test('err with status + body text on a non-ok remote response', async () => {

@@ -6,32 +6,7 @@ import { peerAgents, peerContacts, permissions } from '../db/schema.js';
 import { authMiddleware } from '../middleware/auth.js';
 import type { AppEnv } from '../types.js';
 import { resumeHeldA2AQuestion } from './a2a.js';
-
-interface PendingRow {
-  action: string;
-  scope_json: unknown;
-  peer_name: string | null;
-  peer_did: string | null;
-}
-
-// Build a human-readable description for the permission inbox. Connection
-// requests surface who is asking and their opening message; a held A2A question
-// surfaces the question text so the owner can decide whether to let the agent
-// answer it.
-function describePermission(row: PendingRow): string {
-  const who = row.peer_name ?? row.peer_did ?? '某个 Agent';
-  if (row.action === 'connect') {
-    const first = (row.scope_json as { first_message?: string } | null)?.first_message;
-    return first
-      ? `${who} 请求与你的 Agent 建立连接：“${first}”`
-      : `${who} 请求与你的 Agent 建立连接`;
-  }
-  if (row.action === 'ask') {
-    const content = (row.scope_json as { content?: string } | null)?.content;
-    return content ? `${who} 向你的 Agent 提问：“${content}”` : `${who} 向你的 Agent 提问`;
-  }
-  return `${who} 请求执行：${row.action}`;
-}
+import { describePermission } from './permission-notify.js';
 
 export const permissionRoutes = new Hono<AppEnv>();
 
@@ -60,7 +35,10 @@ permissionRoutes.get('/pending', async (c) => {
         eq(permissions.user_id, user.sub),
         or(eq(permissions.decision, 'pending'), isNull(permissions.decision)),
       ),
-    );
+    )
+    // Bound the inbox and show newest first, mirroring `/history`.
+    .orderBy(desc(permissions.created_at))
+    .limit(50);
 
   return c.json({
     permissions: rows.map((r) => ({

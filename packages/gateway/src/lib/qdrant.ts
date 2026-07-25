@@ -1,7 +1,9 @@
 import { createHash } from 'node:crypto';
+import { type EmbeddingProvider, providerModel } from './embedding.js';
 import {
   deleteQdrantPoints,
   ensureQdrantCollection,
+  providerMatchFilter,
   searchQdrantCollection,
   upsertQdrantPoints,
 } from './qdrant-client.js';
@@ -24,6 +26,7 @@ export interface KnowledgeChunk {
   text: string;
   chunk_index: number;
   vector: number[];
+  provider: EmbeddingProvider;
 }
 
 export interface SearchResult {
@@ -53,6 +56,8 @@ export async function upsertChunks(chunks: KnowledgeChunk[]): Promise<void> {
       user_id: c.user_id,
       text: c.text,
       chunk_index: c.chunk_index,
+      embedding_provider: c.provider,
+      embedding_model: providerModel(c.provider),
     },
   }));
   await upsertQdrantPoints(COLLECTION, points);
@@ -63,14 +68,18 @@ export async function searchChunks(
   userId: string,
   kbIds: string[] | undefined,
   topK = 5,
+  provider?: EmbeddingProvider,
+  scoreThreshold?: number,
 ): Promise<SearchResult[]> {
   const mustFilters: unknown[] = [{ key: 'user_id', match: { value: userId } }];
   if (kbIds && kbIds.length > 0) {
     mustFilters.push({ key: 'kb_id', match: { any: kbIds } });
   }
+  if (provider) mustFilters.push(providerMatchFilter(provider));
 
   const result = await searchQdrantCollection(COLLECTION, vector, topK, {
     filter: { must: mustFilters },
+    scoreThreshold,
   });
 
   return result.map((r) => ({

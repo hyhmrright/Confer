@@ -2,6 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import { chunkText } from './chunker.js';
 
 const META = ['doc-1', 'guide.md', 'kb-1', 'user-1'] as const;
+// Mirrors the module's OVERLAP constant (chunks carry this many tail chars).
+const OVERLAP_HINT = 100;
 
 describe('chunkText', () => {
   test('returns no chunks for empty or whitespace-only text', () => {
@@ -29,24 +31,55 @@ describe('chunkText', () => {
     expect(chunks[0]?.text).toBe('line1\nline2');
   });
 
-  test('splits long text into overlapping chunks with incrementing index', () => {
-    // 2000 chars > CHUNK_SIZE (800); step is 800-100=700, so starts at 0,700,1400.
-    const text = 'a'.repeat(2000);
+  test('no chunk exceeds CHUNK_SIZE (800)', () => {
+    // Mixed content: long paragraphs, Chinese sentences, and an unbroken run.
+    const text = `${'句子。'.repeat(400)}\n\n${'word '.repeat(400)}\n\n${'x'.repeat(1500)}`;
     const chunks = chunkText(text, ...META);
-    expect(chunks).toHaveLength(3);
-    expect(chunks.map((c) => c.chunk_index)).toEqual([0, 1, 2]);
-    expect(chunks[0]?.text).toHaveLength(800);
-    // Last chunk runs to the end of the input.
-    expect(chunks[2]?.text.length).toBeGreaterThan(0);
-    expect(chunks[2]?.text.length).toBeLessThanOrEqual(800);
-    // Consecutive chunks overlap by OVERLAP (100) characters.
-    const tailOfFirst = chunks[0]?.text.slice(-100);
-    expect(chunks[1]?.text.startsWith(tailOfFirst ?? 'x')).toBe(true);
+    expect(chunks.length).toBeGreaterThan(1);
+    for (const c of chunks) {
+      expect(c.text.length).toBeLessThanOrEqual(800);
+    }
+    expect(chunks.map((c) => c.chunk_index)).toEqual(chunks.map((_, i) => i));
   });
 
-  test('assigns a unique chunk_id per chunk', () => {
+  test('prefers paragraph boundaries over cutting mid-paragraph', () => {
+    // Two paragraphs that together exceed CHUNK_SIZE but individually fit, so
+    // the split should fall on the blank-line boundary between them.
+    const para1 = `${'A'.repeat(500)}`;
+    const para2 = `${'B'.repeat(500)}`;
+    const chunks = chunkText(`${para1}\n\n${para2}`, ...META);
+    expect(chunks).toHaveLength(2);
+    // Each chunk stays within a single paragraph — no chunk mixes A and B.
+    expect(chunks[0]?.text.includes('B')).toBe(false);
+    expect(chunks[1]?.text.includes('A')).toBe(false);
+  });
+
+  test('breaks on Chinese sentence punctuation rather than mid-sentence', () => {
+    // Sentences sized so two fit per chunk but the third spills to the next.
+    const sentence = `${'中'.repeat(300)}。`;
+    const chunks = chunkText(sentence.repeat(4), ...META);
+    expect(chunks.length).toBeGreaterThan(1);
+    // Every non-final chunk should end at a sentence boundary (。), never mid-sentence.
+    for (let i = 0; i < chunks.length - 1; i++) {
+      expect(chunks[i]?.text.endsWith('。')).toBe(true);
+    }
+  });
+
+  test('consecutive chunks overlap for context continuity', () => {
+    // An unbroken run forces the hard-cut path, whose merge carries overlap.
+    const text = Array.from({ length: 2000 }, (_, i) => String(i % 10)).join('');
+    const chunks = chunkText(text, ...META);
+    expect(chunks.length).toBeGreaterThan(1);
+    // The tail of one chunk reappears at the head of the next.
+    const tail = chunks[0]?.text.slice(-OVERLAP_HINT) ?? '';
+    expect(tail.length).toBeGreaterThan(0);
+    expect(chunks[1]?.text.startsWith(tail)).toBe(true);
+  });
+
+  test('assigns a unique chunk_id per chunk and increments index', () => {
     const chunks = chunkText('b'.repeat(2000), ...META);
     const ids = new Set(chunks.map((c) => c.chunk_id));
     expect(ids.size).toBe(chunks.length);
+    expect(chunks.map((c) => c.chunk_index)).toEqual(chunks.map((_, i) => i));
   });
 });

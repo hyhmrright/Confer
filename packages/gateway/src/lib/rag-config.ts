@@ -8,6 +8,12 @@ export const VECTOR_SIZE = 1536;
 /** Max texts sent to the embedding API per request. */
 export const BATCH_SIZE = 50;
 
+/** Max embedding batches sent concurrently per document (rate-limit friendly). */
+export const EMBED_BATCH_CONCURRENCY = 3;
+
+/** Max documents ingested concurrently across the whole process (backpressure). */
+export const INGEST_CONCURRENCY = 2;
+
 /** Timeout for a single embedding API call. */
 export const EMBEDDING_API_TIMEOUT_MS = 30_000;
 

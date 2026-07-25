@@ -7,8 +7,9 @@ import {
 } from '@confer/agent-runtime';
 import type { LLMMessage } from '@confer/agent-runtime';
 import {
+  MAX_CLOCK_SKEW_MS,
   multibaseToPublicKey,
-  parseSignatureHeader,
+  parseSignatureInput,
   resolveDID,
   verifyRequestSignature,
 } from '@confer/identity';
@@ -35,10 +36,12 @@ import { getEnv } from '../env.js';
 import { runAgentTurn } from '../lib/agent-orchestrator.js';
 import type { EmbeddingProvider } from '../lib/embedding.js';
 import { decryptUserKey, getUserLlmKeys, resolveEmbeddingKey } from '../lib/llm-keys.js';
+import { addNonce, hasNonce } from '../lib/nonce-cache.js';
 import { upsertPeerAgent } from '../lib/peer-agent.js';
 import { rateLimit } from '../middleware/rate-limit.js';
 import { extractAndStore } from '../tools/memory.js';
 import { broadcastToConversation } from '../ws/handler.js';
+import { notifyPermissionRequest } from './permission-notify.js';
 
 const a2aMessageSchema = z.object({
   from: z.string().startsWith('did:'),
@@ -83,19 +86,36 @@ async function upsertConnectionRequest(
 
   if (existing) return;
 
-  await db.insert(permissions).values({
-    id: newId(),
-    user_id: userId,
-    peer_id: peer.id,
-    action: 'connect',
-    scope_json: {
-      peer_did: peer.did,
-      peer_name: peer.name,
-      first_message: firstMessage.slice(0, 500),
-    },
+  const id = newId();
+  const scope = {
+    peer_did: peer.did,
+    peer_name: peer.name,
+    first_message: firstMessage.slice(0, 500),
+  };
+  const [inserted] = await db
+    .insert(permissions)
+    .values({
+      id,
+      user_id: userId,
+      peer_id: peer.id,
+      action: 'connect',
+      scope_json: scope,
+      level: 'L2',
+      decision: 'pending',
+      requested_by: peer.id,
+    })
+    .returning({ created_at: permissions.created_at });
+
+  // Only a genuinely new insert reaches here (the dedup early-return above
+  // short-circuits repeats), so this never double-notifies the owner.
+  notifyPermissionRequest(userId, {
+    id,
     level: 'L2',
-    decision: 'pending',
-    requested_by: peer.id,
+    action: 'connect',
+    scope_json: scope,
+    peer_name: peer.name,
+    peer_did: peer.did,
+    created_at: inserted?.created_at ?? new Date(),
   });
 }
 
@@ -139,15 +159,30 @@ async function holdA2AQuestion(params: HoldA2AQuestionParams): Promise<void> {
     content: params.content.slice(0, 500),
   };
 
-  await db.insert(permissions).values({
-    id: newId(),
-    user_id: params.userId,
-    peer_id: params.peer.id,
+  const id = newId();
+  const level = classifyPermissionLevel('ask');
+  const [inserted] = await db
+    .insert(permissions)
+    .values({
+      id,
+      user_id: params.userId,
+      peer_id: params.peer.id,
+      action: 'ask',
+      scope_json: scope,
+      level,
+      decision: 'pending',
+      requested_by: params.peer.id,
+    })
+    .returning({ created_at: permissions.created_at });
+
+  notifyPermissionRequest(params.userId, {
+    id,
+    level,
     action: 'ask',
     scope_json: scope,
-    level: classifyPermissionLevel('ask'),
-    decision: 'pending',
-    requested_by: params.peer.id,
+    peer_name: params.peer.name,
+    peer_did: params.peer.did,
+    created_at: inserted?.created_at ?? new Date(),
   });
 }
 
@@ -232,17 +267,17 @@ export const a2aRoutes = new Hono();
 a2aRoutes.use('/*', rateLimit(60, 60_000));
 
 const verifyA2ASignature: MiddlewareHandler = async (c, next) => {
-  const sigHeader = c.req.header('signature');
-  if (!sigHeader) {
-    throw new AppError('signature_missing', 'Signature header is required', 401);
+  const sigInputHeader = c.req.header('signature-input');
+  if (!sigInputHeader) {
+    throw new AppError('signature_missing', 'Signature-Input header is required', 401);
   }
 
-  const parsed = parseSignatureHeader(sigHeader);
+  const parsed = parseSignatureInput(sigInputHeader);
   if (!parsed.ok) {
     throw new AppError('signature_invalid', parsed.error, 401);
   }
 
-  const keyId = parsed.value.keyId;
+  const keyId = parsed.value.keyid;
   const didMatch = keyId.match(/^(did:web:[^#]+)/);
   const senderDid = didMatch?.[1];
   if (!senderDid) {
@@ -260,6 +295,19 @@ const verifyA2ASignature: MiddlewareHandler = async (c, next) => {
     throw new AppError('key_not_found', `Key ${keyId} not found in DID document`, 401);
   }
 
+  // Finding E: registration in `verificationMethod` is not authorization to sign
+  // for authentication. When the document declares an `authentication`
+  // relationship, the key must be listed there. Documents that predate this
+  // field (no `authentication` array) keep the legacy behavior — a registered
+  // key is accepted — so minimal third-party docs and our own aren't broken.
+  if (didDoc.authentication && !authenticationAllows(didDoc.authentication, keyId)) {
+    throw new AppError(
+      'key_not_authorized',
+      `Key ${keyId} is not authorized for authentication`,
+      401,
+    );
+  }
+
   const keyResult = await multibaseToPublicKey(vm.publicKeyMultibase);
   if (!keyResult.ok) {
     throw new AppError('key_invalid', keyResult.error, 401);
@@ -270,12 +318,37 @@ const verifyA2ASignature: MiddlewareHandler = async (c, next) => {
     throw new AppError('signature_failed', verifyResult.error, 401);
   }
 
+  // Finding C: reject a byte-identical replay of an already-verified signature
+  // within the clock-skew window. Ed25519 is deterministic and Finding B binds
+  // the signature to method+authority+path+date+content-digest, so the Signature
+  // header value uniquely identifies this request. Checked only AFTER
+  // cryptographic verification so forged/invalid signatures never consume cache
+  // space, and recorded with TTL = the skew window since anything older is
+  // already rejected by the skew check.
+  const nonceKey = `${keyId}:${c.req.header('signature')}`;
+  if (hasNonce(nonceKey)) {
+    throw new AppError('signature_replayed', 'This signed request has already been processed', 401);
+  }
+  addNonce(nonceKey, MAX_CLOCK_SKEW_MS);
+
   // Expose the cryptographically proven signer DID so the handler can ensure
   // the message `from` isn't forged under another identity.
   c.set('a2aSenderDid' as never, senderDid as never);
 
   await next();
 };
+
+// A DID `authentication` entry is either a bare string reference to a
+// verification method id or an embedded verification-method object; the key is
+// authorized if it matches either form.
+function authenticationAllows(
+  authentication: ReadonlyArray<string | { id: string }>,
+  keyId: string,
+): boolean {
+  return authentication.some((entry) =>
+    typeof entry === 'string' ? entry === keyId : entry.id === keyId,
+  );
+}
 
 a2aRoutes.post('/messages', verifyA2ASignature, async (c) => {
   const body = a2aMessageSchema.parse(await c.req.json());

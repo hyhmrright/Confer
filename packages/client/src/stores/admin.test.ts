@@ -12,6 +12,7 @@ mock.module('../lib/api.js', () => ({
   api: { get, post, patch, put, delete: del, postForm },
   setToken: mock(() => {}),
   setRefreshToken: mock(() => {}),
+  setOnAuthExpired: mock(() => {}),
   getToken: mock(() => null),
 }));
 

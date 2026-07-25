@@ -5,7 +5,14 @@ import { z } from 'zod';
 import type { TranslationKey } from '../i18n/index.js';
 import { setOnTokenRefreshed } from '../lib/api.js';
 import { permissionRequestSchema } from '../lib/schemas.js';
-import { connectWs, disconnectWs, onWsMessage, reconnectWs } from '../lib/ws.js';
+import {
+  connectWs,
+  disconnectWs,
+  onWsMessage,
+  reconnectWs,
+  subscribeConversation,
+  unsubscribeConversation,
+} from '../lib/ws.js';
 import { useAuthStore } from '../stores/auth.js';
 import { useChatStore } from '../stores/chat.js';
 import { useErrandsStore } from '../stores/errands.js';
@@ -196,6 +203,17 @@ export function ChatLayout() {
       for (const fn of unsubs) fn();
     };
   }, [loadConversations, addMessage, addPermissionRequest, setAgentStatus, loadPending]);
+
+  // Subscribe the socket to the active conversation so its gateway broadcasts
+  // (inbound peer messages, agent auto-replies) arrive in real time; unsubscribe
+  // on switch/unmount. Kept separate from the socket-lifecycle effect above so
+  // switching conversations never tears down the socket. ws.ts remembers the
+  // desired subscription and replays it on reconnect.
+  useEffect(() => {
+    if (!activeConversationId) return;
+    subscribeConversation(activeConversationId);
+    return () => unsubscribeConversation(activeConversationId);
+  }, [activeConversationId]);
 
   const initials = (user?.display_name ?? user?.username ?? '?').charAt(0).toUpperCase();
 

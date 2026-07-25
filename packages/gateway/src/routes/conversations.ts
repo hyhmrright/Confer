@@ -8,6 +8,7 @@ import {
   assertOwnsConversation,
 } from '../lib/conversation-auth.js';
 import { authMiddleware } from '../middleware/auth.js';
+import { rateLimit } from '../middleware/rate-limit.js';
 import type { AppEnv } from '../types.js';
 
 export const conversationRoutes = new Hono<AppEnv>();
@@ -141,45 +142,52 @@ conversationRoutes.delete('/:id', async (c) => {
   return c.json({ ok: true });
 });
 
-conversationRoutes.post('/:id/messages', async (c) => {
-  const user = c.get('user');
-  const db = getDb();
-  const convId = c.req.param('id');
+conversationRoutes.post(
+  '/:id/messages',
+  // 60 messages/min per user (docs/05-api.md). `authMiddleware` already ran via
+  // the `/*` guard, so `c.get('user')` is populated here. Keyed by user (not IP)
+  // so one user's flood can't throttle another sharing nginx's upstream IP.
+  rateLimit<AppEnv>(60, 60_000, { keyBy: (c) => `msg:${c.get('user').sub}` }),
+  async (c) => {
+    const user = c.get('user');
+    const db = getDb();
+    const convId = c.req.param('id');
 
-  await assertIsConversationParticipant(user.sub, convId);
+    await assertIsConversationParticipant(user.sub, convId);
 
-  const body = sendMessageRequestSchema.parse(await c.req.json());
+    const body = sendMessageRequestSchema.parse(await c.req.json());
 
-  const msgId = newId();
-  const [msg] = await db
-    .insert(messages)
-    .values({
-      id: msgId,
-      conversation_id: convId,
-      sender_type: 'user',
-      sender_id: user.sub,
-      content_type: body.content_type,
-      content: body.content,
-      in_reply_to: body.in_reply_to,
-      via: body.via,
-    })
-    .returning();
+    const msgId = newId();
+    const [msg] = await db
+      .insert(messages)
+      .values({
+        id: msgId,
+        conversation_id: convId,
+        sender_type: 'user',
+        sender_id: user.sub,
+        content_type: body.content_type,
+        content: body.content,
+        in_reply_to: body.in_reply_to,
+        via: body.via,
+      })
+      .returning();
 
-  if (!msg) {
-    throw new AppError('message_creation_failed', 'Failed to create message', 500);
-  }
+    if (!msg) {
+      throw new AppError('message_creation_failed', 'Failed to create message', 500);
+    }
 
-  await db
-    .update(conversations)
-    .set({ updated_at: new Date() })
-    .where(eq(conversations.id, convId));
+    await db
+      .update(conversations)
+      .set({ updated_at: new Date() })
+      .where(eq(conversations.id, convId));
 
-  return c.json(
-    {
-      id: msg.id,
-      delivery_status: 'queued',
-      stream_url: `/api/v1/stream/${convId}/${msgId}`,
-    },
-    201,
-  );
-});
+    return c.json(
+      {
+        id: msg.id,
+        delivery_status: 'queued',
+        stream_url: `/api/v1/stream/${convId}/${msgId}`,
+      },
+      201,
+    );
+  },
+);

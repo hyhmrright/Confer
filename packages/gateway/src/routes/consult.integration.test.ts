@@ -76,7 +76,10 @@ function mockOutbound(opts: { didDocument?: unknown } = {}): void {
   const realFetch = globalThis.fetch;
   globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-    if (opts.didDocument && url.includes('/.well-known/did.json')) {
+    // Match any DID-document URL: bare-domain signers resolve to
+    // `/.well-known/did.json`, sub-identifier signers (e.g. peerb below) to
+    // `/agents/<slug>/did.json`. Both end in `/did.json`.
+    if (opts.didDocument && url.endsWith('/did.json')) {
       return Promise.resolve(Response.json(opts.didDocument));
     }
     if (url.includes('api.anthropic.com'))
@@ -268,8 +271,9 @@ describe('consult', () => {
       .values({ id: newId(), user_id: user.id, peer_id: bPeerId, added_via: 'manual' });
 
     const bKp = await generateEd25519KeyPair();
-    // domainFromDid collapses both DIDs to `localhost`, so B's doc is served at
-    // the same /.well-known/did.json the resolver fetches for the signer.
+    // B's sub-identifier DID resolves to https://localhost/agents/peerb/did.json
+    // (not the instance root); mockOutbound serves any */did.json, so B's doc is
+    // returned when the resolver fetches it for signature verification.
     const bDoc = {
       '@context': ['https://www.w3.org/ns/did/v1'],
       id: bDid,

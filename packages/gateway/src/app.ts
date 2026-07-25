@@ -4,6 +4,7 @@ import { logger } from 'hono/logger';
 import { errorHandler } from './middleware/error-handler.js';
 import { a2aRoutes } from './routes/a2a.js';
 import { adminRoutes } from './routes/admin.js';
+import { agentDidRoutes } from './routes/agent-did.js';
 import { agentFactsRoutes } from './routes/agent-facts.js';
 import { authRoutes } from './routes/auth.js';
 import { consultRoutes } from './routes/consult.js';
@@ -32,6 +33,10 @@ app.onError(errorHandler);
 app.get('/health', (c) => c.json({ status: 'ok', version: '0.1.0' }));
 
 app.route('/.well-known', wellKnownRoutes);
+// Root-level `/agents/:username/did.json` — per-user DID documents for did:web
+// sub-identifier resolution. Distinct prefix from `/api/v1/agents` and
+// `/.well-known`; public (no signature gate), like the instance DID document.
+app.route('/agents', agentDidRoutes);
 
 app.route('/api/v1/auth', authRoutes);
 app.route('/api/v1/users', userRoutes);

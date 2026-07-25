@@ -22,6 +22,7 @@ mock.module('../lib/api.js', () => ({
   api: { get, post },
   setToken,
   setRefreshToken,
+  setOnAuthExpired: mock(() => {}),
   getToken: mock(() => null),
 }));
 
@@ -102,6 +103,7 @@ describe('auth store', () => {
       username: 'alice',
       password: 'secret',
       display_name: 'Alice',
+      device_id: expect.any(String),
     });
     expect(setToken).toHaveBeenCalledWith('access-1');
     expect(setRefreshToken).toHaveBeenCalledWith('refresh-1');

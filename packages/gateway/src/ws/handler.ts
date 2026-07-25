@@ -14,6 +14,9 @@ export interface WsData {
 
 const connectionsByUser = new Map<string, Set<ServerWebSocket<WsData>>>();
 
+// Cap concurrent sockets per user (docs/05-api.md: "单用户最多 10 个并发连接").
+const MAX_CONNECTIONS_PER_USER = 10;
+
 export function getWsConnections(userId: string): Set<ServerWebSocket<WsData>> {
   return connectionsByUser.get(userId) ?? new Set();
 }
@@ -63,6 +66,13 @@ export const websocket = {
     const user = await authenticateUpgrade(req);
     if (!user) {
       return new Response('Unauthorized', { status: 401 });
+    }
+
+    // Per-user connection cap. Only user-scoped: /ws has no XFF, so every user
+    // shares nginx's upstream IP and an IP-based cap would throttle collectively.
+    const existing = connectionsByUser.get(user.sub);
+    if (existing && existing.size >= MAX_CONNECTIONS_PER_USER) {
+      return new Response('Too many connections', { status: 429 });
     }
 
     const success = server.upgrade(req, {

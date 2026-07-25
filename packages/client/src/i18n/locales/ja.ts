@@ -30,6 +30,7 @@ export const ja: Resources = {
     welcomeBack: 'おかえりなさい',
     registerHint: '登録するとすぐに利用できます',
     loginHint: 'アカウントにサインイン',
+    sessionExpired: 'セッションの有効期限が切れました。再度サインインしてください。',
     username: 'ユーザー名',
     usernamePlaceholder: '3 文字以上',
     displayName: '表示名',

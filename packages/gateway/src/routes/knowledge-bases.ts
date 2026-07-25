@@ -6,6 +6,7 @@ import { getDb } from '../db/connection.js';
 import { knowledgeBases, knowledgeDocuments } from '../db/schema.js';
 import { getEnv } from '../env.js';
 import { chunkText } from '../lib/chunker.js';
+import { ingestQueue } from '../lib/concurrency.js';
 import { guessContentType, parseDocument } from '../lib/doc-parser.js';
 import { type EmbeddingProvider, embedTexts } from '../lib/embedding.js';
 import { getUserLlmKeys, resolveEmbeddingKey } from '../lib/llm-keys.js';
@@ -141,14 +142,17 @@ knowledgeBasesRoutes.post('/:kbId/documents', async (c) => {
     })
     .returning();
 
-  // Run ingestion pipeline (async, respond first)
-  ingestDocument(docId, kbId, kb.name, user.sub, file.name, contentType, buffer).catch((err) => {
-    console.error(`Ingestion failed for doc ${docId}:`, err);
-    db.update(knowledgeDocuments)
-      .set({ status: 'failed' })
-      .where(eq(knowledgeDocuments.id, docId))
-      .catch(() => {});
-  });
+  // Run ingestion pipeline (async, respond first). The queue bounds how many
+  // documents ingest at once so concurrent uploads apply backpressure.
+  ingestQueue
+    .submit(() => ingestDocument(docId, kbId, kb.name, user.sub, file.name, contentType, buffer))
+    .catch((err) => {
+      console.error(`Ingestion failed for doc ${docId}:`, err);
+      db.update(knowledgeDocuments)
+        .set({ status: 'failed' })
+        .where(eq(knowledgeDocuments.id, docId))
+        .catch(() => {});
+    });
 
   return c.json({ document: docRow }, 201);
 });
@@ -215,15 +219,17 @@ knowledgeBasesRoutes.post('/:kbId/documents/:docId/retry', async (c) => {
   await deleteByDocId(docId).catch((err) =>
     console.error(`Retry cleanup failed for doc ${docId}:`, err),
   );
-  ingestDocument(docId, kbId, kb.name, user.sub, doc.filename, contentType, fileBuffer).catch(
-    (err) => {
+  ingestQueue
+    .submit(() =>
+      ingestDocument(docId, kbId, kb.name, user.sub, doc.filename, contentType, fileBuffer),
+    )
+    .catch((err) => {
       console.error(`Retry ingestion failed for doc ${docId}:`, err);
       db.update(knowledgeDocuments)
         .set({ status: 'failed' })
         .where(eq(knowledgeDocuments.id, docId))
         .catch(() => {});
-    },
-  );
+    });
 
   return c.json({ document: updated });
 });
@@ -260,7 +266,7 @@ async function ingestDocument(
     apiKey,
     provider,
   );
-  const points = chunks.map((c, i) => ({ ...c, vector: vectors[i] as number[] }));
+  const points = chunks.map((c, i) => ({ ...c, vector: vectors[i] as number[], provider }));
   await upsertChunks(points);
 
   await db
