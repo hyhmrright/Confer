@@ -12,8 +12,10 @@ bun run test                 # run tests across all packages
 bun run typecheck            # tsc --noEmit
 bun run lint                 # biome check
 bun run lint:fix             # biome check --write
-bun run db:migrate           # run gateway DB migrations
+bun run db:generate          # generate Drizzle migration from schema changes
+bun run db:migrate           # run gateway DB migrations (apply generated files)
 bun run test:setup           # start isolated test stack + build test schema (run once before `bun run test`)
+bun run test:stack:down      # tear down the isolated test stack
 ```
 
 ## Testing
@@ -32,10 +34,12 @@ Bun workspaces monorepo (`packages/*`):
 | `agent-runtime` | LLM orchestration engine, policy enforcement |
 | `conversation` | Message bus (NATS), conversation threading |
 | `shared` | Zod schemas, shared types, utility functions |
+| `mcp-a2a` | stdio MCP server — lets an AI coding agent consult peer Agents; ships as the `confer-a2a` plugin (`plugins/confer-a2a/`) |
+| `gateway/lib/` | RAG pipeline — MinIO file storage, Qdrant vector search, multi-provider embedding (OpenAI / GLM / Qwen) |
 
 ## Docs
 
-Design context in `docs/` — files 01 (product) through 08 (mvp-backlog). Default to **MVP scope (v0.1)** per `docs/08-mvp-backlog.md`.
+Design context in `docs/` — files 01 (product) through 09 (deployment). Default to **MVP scope (v0.1)** per `docs/08-mvp-backlog.md`.
 
 ## Tech stack
 
@@ -54,6 +58,7 @@ TypeScript everywhere. Bun + Hono (server), Tauri 2.0 + React 18 + Zustand (clie
 3. AgentFacts must validate against NANDA schema
 4. Migration files are immutable once merged
 5. `.claude/peers/*` must stay human-readable Markdown
+6. Embedding provider auto-selected by the `EMBEDDING_PROVIDER_PRIORITY` constant in `lib/embedding.ts` (openai → glm → qwen) — first provider with a user-configured key wins
 
 ## Forbidden
 
@@ -89,6 +94,12 @@ Determine which packages changed and run only the necessary steps:
 
 Run from the repo root. Deployment happens **before** commit & push (not after).
 
+**If the change includes a new migration**, also rebuild and re-run the `migrate` service — it is a *separate image* from `gateway` (same `infra/gateway.Dockerfile`), so `build gateway client` does **not** pick up new migration files. The stale `migrate` then runs the old set and still prints `Migrations complete`, leaving the new tables uncreated:
+```
+docker compose -f docker-compose.prod.yml build migrate && docker compose -f docker-compose.prod.yml run --rm migrate
+```
+Verify by querying the actual tables/columns (and the drizzle journal count), not by trusting the `Migrations complete` log line.
+
 ## Environment
 
 Local infra via Docker: `docker compose up -d` starts PostgreSQL (5432), Redis (6379), NATS (4222), MinIO (9000/9001), Qdrant (6333). Copy `.env.example` to `.env` before first run. Gateway dev server on :3000, client Vite on :1420 (proxies `/api` to gateway).
@@ -99,3 +110,8 @@ Local infra via Docker: `docker compose up -d` starts PostgreSQL (5432), Redis (
 - `Bun.serve` WebSocket API ≠ Node `ws`
 - HTTP signatures: adding headers invalidates unless in signing set
 - DID document caching: respect TTL/ETag or auth breaks
+- Drizzle migrations: ALWAYS use `bun run db:generate`, never write SQL manually — the journal won't track it and the schema drifts out of sync
+- Qdrant point IDs must be UUID or uint64 — ULIDs are rejected with 400; convert via SHA-256 hash (`toUUID` in `lib/qdrant.ts`)
+- Docker inter-container networking: use service names (`qdrant:6333`, `minio:9000`), not `localhost` — localhost resolves to the container itself
+- LLM / embedding / Tavily keys live encrypted in `users.llm_keys_json` (AES-256-GCM via `ENCRYPTION_KEY`), set per-user via the settings UI — **not** in `.env`
+- Run tests as `bun run test`, never `bun test` — the bare form bypasses the `bunfig.toml` preload (test env + per-test truncation) and points at the shared **dev** DB

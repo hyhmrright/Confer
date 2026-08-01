@@ -36,11 +36,12 @@ Bun workspaces monorepo (`packages/*`):
 | `agent-runtime` | LLM orchestration engine, policy enforcement |
 | `conversation` | Message bus (NATS), conversation threading |
 | `shared` | Zod schemas, shared types, utility functions |
+| `mcp-a2a` | stdio MCP server — lets Claude Code consult peer Agents; ships as the `confer-a2a` plugin (`plugins/confer-a2a/`) |
 | `gateway/lib/` | RAG pipeline — MinIO file storage, Qdrant vector search, multi-provider embedding (OpenAI / GLM / Qwen) |
 
 ## Docs
 
-Design context in `docs/` — files 01 (product) through 08 (mvp-backlog). Default to **MVP scope (v0.1)** per `docs/08-mvp-backlog.md`.
+Design context in `docs/` — files 01 (product) through 09 (deployment). Default to **MVP scope (v0.1)** per `docs/08-mvp-backlog.md`.
 
 ## Tech stack
 
@@ -115,14 +116,17 @@ Local infra via Docker: `docker compose up -d` starts PostgreSQL (5432), Redis (
 - Qdrant point IDs must be UUID or uint64 — ULIDs are rejected with 400; convert via SHA-256 hash (`toUUID` in `lib/qdrant.ts`)
 - Docker inter-container networking: use service names (`qdrant:6333`, `minio:9000`), not `localhost` — localhost resolves to the container itself
 - LLM / embedding / Tavily keys live encrypted in `users.llm_keys_json` (AES-256-GCM via `ENCRYPTION_KEY`), set per-user via the settings UI — **not** in `.env`. The `TAVILY_API_KEY` env var is only a fallback; `web_search` is offered only when a key resolves
+- Run tests as `bun run test`, never `bun test` — the bare form bypasses the `bunfig.toml` preload (test env + per-test truncation) and points at the shared **dev** DB. Blocked by `.claude/hooks/guard-bun-test.py`
+- Any client file importing `@confer/shared` needs the alias in `packages/client/tsconfig.json` `paths` — the root tsconfig `exclude`s `packages/client`, and CI type-checks it separately (`npx tsc --noEmit` + `vite build` inside that dir). Local `node_modules` symlinks hide the breakage; only CI catches it
+- In gateway, don't `mock.module` anything touching `getDb`/`getEnv` in unit tests — it pollutes the process globally and takes the real-stack integration tests down with it (this once caused 102 false failures). Test infra-touching code via integration tests instead
 
 ## Claude Code automation
 
 `.claude/` ships project-specific automation — prefer it over manual steps:
 
-- **Hooks** (`settings.local.json`): after every Edit/Write, `lint:fix` + `typecheck` run automatically — no need to invoke them by hand. PreToolUse **blocks** edits to `*/migrations/*.sql` (immutable) and `.env*` (live credentials), and **blocks Bash `cat`/`head`/`tail`/`sed` used to view a file** — use the Read tool instead (guard: `.claude/hooks/guard-bash-file-view.py`; it still allows `tail -f`, piping a viewer into another command, redirects/heredocs, and `sed -i`). Note: the migrations/`.env` guards read `tool_input.file_path` (nested) — earlier they read top-level `file_path` and silently never fired.
-- **Skills**: `deploy` (rebuild/redeploy a service), `create-migration` (Drizzle migration + journal), `rag-debug` (Qdrant/embedding/MinIO diagnostics), `sync-env` (`.env` vs `.env.example`).
-- **Agents**: `a2a-contract-reviewer` (A2A signature/DID/AgentFacts compliance), `migration-reviewer` (migration safety).
+- **Hooks** (`settings.local.json`): after every Edit/Write, `lint:fix` + `typecheck` run automatically — no need to invoke them by hand. PreToolUse **blocks** edits to `*/migrations/*.sql` (immutable) and `.env*` (live credentials), **blocks Bash `cat`/`head`/`tail`/`sed` used to view a file** — use the Read tool instead (guard: `.claude/hooks/guard-bash-file-view.py`; it still allows `tail -f`, piping a viewer into another command, redirects/heredocs, and `sed -i`), and **blocks bare `bun test`** (guard: `.claude/hooks/guard-bun-test.py`). Note: the migrations/`.env` guards read `tool_input.file_path` (nested) — earlier they read top-level `file_path` and silently never fired.
+- **Skills**: `deploy` (rebuild/redeploy a service), `create-migration` (Drizzle migration + journal), `rag-debug` (Qdrant/embedding/MinIO diagnostics), `sync-env` (`.env` vs `.env.example`), `reset-user-password`.
+- **Agents**: `a2a-contract-reviewer` (A2A signature/DID/AgentFacts compliance), `migration-reviewer` (migration safety), `rag-pipeline-reviewer` (embedding priority, Qdrant point-id format, container networking, key handling), plus the feature-development trio below.
 
 ## 하네스: Confer 功能开发
 
