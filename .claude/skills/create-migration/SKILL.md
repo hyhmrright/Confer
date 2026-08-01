@@ -10,7 +10,8 @@ description: Create a new Drizzle migration file with correct naming and update 
    ```
    bun run db:generate
    ```
-   这会自动生成正确命名的 SQL 文件并更新 `meta/_journal.json`
+   这会在 `packages/gateway/drizzle/` 下生成正确命名的 SQL 文件，并更新
+   `packages/gateway/drizzle/meta/_journal.json`
 3. 检查生成的迁移文件内容是否符合预期
 4. 运行 `bun run db:migrate` 应用到本地数据库并验证
 5. 生产环境额外步骤：
@@ -18,5 +19,6 @@ description: Create a new Drizzle migration file with correct naming and update 
    docker compose -f docker-compose.prod.yml up migrate --build
    ```
 
-**禁止**直接手写 SQL 文件放入 migrations 目录 — Drizzle journal 不会感知，
-会导致迁移状态不同步（本项目曾因此需要手动 ALTER TABLE 修复）。
+**禁止**直接手写 SQL 文件放入 `packages/gateway/drizzle/` — Drizzle journal 不会感知，
+会导致迁移状态不同步（本项目曾因此需要手动 ALTER TABLE 修复）。该目录下的 `.sql`
+和 `meta/_journal.json` 已被 `.claude/hooks/guard-protected-files.py` 硬性拦截。
