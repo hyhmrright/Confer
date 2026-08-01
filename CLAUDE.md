@@ -126,18 +126,6 @@ Local infra via Docker: `docker compose up -d` starts PostgreSQL (5432), Redis (
 
 - **Hooks** (`settings.local.json`): after every Edit/Write, `lint:fix` + `typecheck` run automatically — no need to invoke them by hand. PreToolUse **blocks** edits to `*/migrations/*.sql` (immutable) and `.env*` (live credentials), **blocks Bash `cat`/`head`/`tail`/`sed` used to view a file** — use the Read tool instead (guard: `.claude/hooks/guard-bash-file-view.py`; it still allows `tail -f`, piping a viewer into another command, redirects/heredocs, and `sed -i`), and **blocks bare `bun test`** (guard: `.claude/hooks/guard-bun-test.py`). Note: the migrations/`.env` guards read `tool_input.file_path` (nested) — earlier they read top-level `file_path` and silently never fired.
 - **Skills**: `deploy` (rebuild/redeploy a service), `create-migration` (Drizzle migration + journal), `rag-debug` (Qdrant/embedding/MinIO diagnostics), `sync-env` (`.env` vs `.env.example`), `reset-user-password`.
-- **Agents**: `a2a-contract-reviewer` (A2A signature/DID/AgentFacts compliance), `migration-reviewer` (migration safety), `rag-pipeline-reviewer` (embedding priority, Qdrant point-id format, container networking, key handling), plus the feature-development trio below.
+- **Agents**: `a2a-contract-reviewer` (A2A signature/DID/AgentFacts compliance), `migration-reviewer` (migration safety), `rag-pipeline-reviewer` (embedding priority, Qdrant point-id format, container networking, key handling).
 
-## 하네스: Confer 功能开发
-
-**目标:** 用 3 人 agent 团队把功能需求跑完整开发流程（探索→规划→实现→简化→审查→QA→部署→提交）。
-
-**触发:** 针对本代码库的功能/改动需求（在 gateway/client/identity/agent-runtime/conversation/shared/RAG 中构建、新增、实现、改行为）时，使用 `confer-feature` 编排器 skill。纯问答与纯文档改动直接处理，无需触发。
-
-**团队:** `confer-architect` → `confer-implementer` → `confer-reviewer-qa`（审查阶段按改动委派已有的 `a2a-contract-reviewer` / `migration-reviewer`）。
-
-**변경 이력:**
-| 日期 | 变更内容 | 对象 | 事由 |
-|------|----------|------|------|
-| 2026-06-01 | 初始构成（3 人功能开发团队 + confer-feature 编排器） | 全体 | 已有 harness 仅含审查/运维，缺开发执行团队与编排器 |
-| 2026-06-01 | reviewer-qa 增加 client build / env 透传 / 迁移落库 三项 QA 检查 | agents/confer-reviewer-qa.md | admin 3a 部署时才发现 client 严格 build 与 compose env 透传漏检 |
+There is no feature-development orchestrator at present — the previous `confer-feature` skill and its architect/implementer/reviewer-qa trio were removed on 2026-08-01 pending a rebuild. Drive feature work directly and delegate to the reviewers above by what changed.
