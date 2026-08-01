@@ -5,12 +5,11 @@ import { and, asc, eq, lt } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import { getDb } from '../db/connection.js';
-import { agents, knowledgeBases, messages } from '../db/schema.js';
+import { agents, messages } from '../db/schema.js';
 import { getEnv } from '../env.js';
 import { runAgentTurn } from '../lib/agent-orchestrator.js';
 import { assertIsConversationParticipant } from '../lib/conversation-auth.js';
-import type { EmbeddingProvider } from '../lib/embedding.js';
-import { decryptUserKey, getUserLlmKeys, resolveEmbeddingKey } from '../lib/llm-keys.js';
+import { decryptUserKey, getUserLlmKeys, resolveAgentCapabilities } from '../lib/llm-keys.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { extractAndStore } from '../tools/memory.js';
 import type { AppEnv } from '../types.js';
@@ -82,19 +81,8 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
         content: m.content ?? '',
       }));
 
-      // Resolve embedding provider for knowledge base search
-      const embeddingConfig = await resolveEmbeddingKey(llmKeys, env.ENCRYPTION_KEY);
-      const embeddingKey = embeddingConfig?.apiKey ?? '';
-      const embeddingProvider: EmbeddingProvider = embeddingConfig?.provider ?? 'openai';
-      const userKbs = embeddingKey
-        ? await db
-            .select({ id: knowledgeBases.id })
-            .from(knowledgeBases)
-            .where(eq(knowledgeBases.user_id, user.sub))
-        : [];
-
-      const userTavilyKey = await decryptUserKey(llmKeys, 'tavily', env.ENCRYPTION_KEY);
-      const tavilyApiKey = userTavilyKey || env.TAVILY_API_KEY;
+      const { embeddingKey, embeddingProvider, tavilyApiKey, hasKb } =
+        await resolveAgentCapabilities(user.sub, llmKeys, env);
 
       const { content: fullContent, citations } = await runAgentTurn({
         provider,
@@ -105,7 +93,7 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
         embeddingKey,
         embeddingProvider,
         tavilyApiKey,
-        hasKb: userKbs.length > 0,
+        hasKb,
         emit: {
           onToken: (text) => stream.writeSSE({ event: 'token', data: JSON.stringify({ text }) }),
           onTool: (tool) => stream.writeSSE({ event: 'tool', data: JSON.stringify({ tool }) }),

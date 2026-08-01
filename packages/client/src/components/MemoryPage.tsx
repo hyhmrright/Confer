@@ -4,6 +4,7 @@ import { dateLocale } from '../i18n/index.js';
 import { INPUT_CLS } from '../lib/styles.js';
 import { useMemoriesStore } from '../stores/memories.js';
 import { Plus, Search, Trash } from './Icons.js';
+import { LoadingDots } from './LoadingDots.js';
 
 export function MemoryPage() {
   const { t } = useTranslation();
@@ -113,15 +114,7 @@ export function MemoryPage() {
       <div className="flex-1 overflow-y-auto scrollbar-thin p-3 space-y-2">
         {loading ? (
           <div className="flex justify-center pt-8">
-            <div className="flex gap-1.5">
-              {[0, 150, 300].map((d) => (
-                <span
-                  key={d}
-                  className="w-1.5 h-1.5 rounded-full bg-dark-border animate-bounce"
-                  style={{ animationDelay: `${d}ms` }}
-                />
-              ))}
-            </div>
+            <LoadingDots />
           </div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-ink-muted pt-10">

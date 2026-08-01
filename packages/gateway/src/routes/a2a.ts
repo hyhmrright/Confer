@@ -26,7 +26,6 @@ import {
   agents,
   conversationParticipants,
   conversations,
-  knowledgeBases,
   messages,
   peerAgents,
   peerContacts,
@@ -34,8 +33,7 @@ import {
 } from '../db/schema.js';
 import { getEnv } from '../env.js';
 import { runAgentTurn } from '../lib/agent-orchestrator.js';
-import type { EmbeddingProvider } from '../lib/embedding.js';
-import { decryptUserKey, getUserLlmKeys, resolveEmbeddingKey } from '../lib/llm-keys.js';
+import { decryptUserKey, getUserLlmKeys, resolveAgentCapabilities } from '../lib/llm-keys.js';
 import { addNonce, hasNonce } from '../lib/nonce-cache.js';
 import { upsertPeerAgent } from '../lib/peer-agent.js';
 import { rateLimit } from '../middleware/rate-limit.js';
@@ -608,21 +606,13 @@ async function processA2AMessage(params: ProcessA2AMessageParams): Promise<void>
     return;
   }
 
-  // Tools, recall, and extraction all spend the owner's budget against the
-  // owner's keys — never the requesting peer's. Each capability degrades
-  // gracefully when its key is absent (no KB / no web_search / no memory).
-  const embeddingConfig = await resolveEmbeddingKey(llmKeys, env.ENCRYPTION_KEY);
-  const embeddingKey = embeddingConfig?.apiKey ?? '';
-  const embeddingProvider: EmbeddingProvider = embeddingConfig?.provider ?? 'openai';
-  const userKbs = embeddingKey
-    ? await db
-        .select({ id: knowledgeBases.id })
-        .from(knowledgeBases)
-        .where(eq(knowledgeBases.user_id, targetAgent.user_id))
-    : [];
-
-  const userTavilyKey = await decryptUserKey(llmKeys, 'tavily', env.ENCRYPTION_KEY);
-  const tavilyApiKey = userTavilyKey || env.TAVILY_API_KEY;
+  // Tools, recall, and extraction all spend the budget of the agent's owner —
+  // never the requesting peer's.
+  const { embeddingKey, embeddingProvider, tavilyApiKey, hasKb } = await resolveAgentCapabilities(
+    targetAgent.user_id,
+    llmKeys,
+    env,
+  );
 
   const history = await loadA2AHistory(conversationId, inboundMessageId);
 
@@ -635,7 +625,7 @@ async function processA2AMessage(params: ProcessA2AMessageParams): Promise<void>
     embeddingKey,
     embeddingProvider,
     tavilyApiKey,
-    hasKb: userKbs.length > 0,
+    hasKb,
   });
 
   const replyId = newId();
