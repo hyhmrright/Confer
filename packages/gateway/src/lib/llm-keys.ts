@@ -1,7 +1,7 @@
 import { type EncryptedValue, decrypt } from '@confer/shared';
 import { eq } from 'drizzle-orm';
 import { getDb } from '../db/connection.js';
-import { users } from '../db/schema.js';
+import { knowledgeBases, users } from '../db/schema.js';
 import { EMBEDDING_PROVIDER_PRIORITY, type EmbeddingProvider } from './embedding.js';
 
 // Helpers for reading a user's per-provider encrypted API keys
@@ -44,4 +44,42 @@ export async function resolveEmbeddingKey(
     if (apiKey) return { apiKey, provider };
   }
   return null;
+}
+
+export interface AgentCapabilities {
+  // Empty string when the owner has no usable embedding key: disables recall.
+  embeddingKey: string;
+  embeddingProvider: EmbeddingProvider;
+  // Empty string when no Tavily key resolves: web_search is then not offered.
+  tavilyApiKey: string;
+  hasKb: boolean;
+}
+
+// Resolve the capabilities one agent turn runs with, all against the owner's
+// own keys. Each degrades independently when its key is absent (no KB search /
+// no memory recall / no web_search). Shared by the chat and A2A turn paths so
+// a peer-driven turn is never more or less capable than an owner-driven one.
+export async function resolveAgentCapabilities(
+  userId: string,
+  llmKeys: Record<string, unknown>,
+  env: { ENCRYPTION_KEY: string; TAVILY_API_KEY: string },
+): Promise<AgentCapabilities> {
+  const embeddingConfig = await resolveEmbeddingKey(llmKeys, env.ENCRYPTION_KEY);
+  const embeddingKey = embeddingConfig?.apiKey ?? '';
+
+  const userKbs = embeddingKey
+    ? await getDb()
+        .select({ id: knowledgeBases.id })
+        .from(knowledgeBases)
+        .where(eq(knowledgeBases.user_id, userId))
+    : [];
+
+  const userTavilyKey = await decryptUserKey(llmKeys, 'tavily', env.ENCRYPTION_KEY);
+
+  return {
+    embeddingKey,
+    embeddingProvider: embeddingConfig?.provider ?? 'openai',
+    tavilyApiKey: userTavilyKey || env.TAVILY_API_KEY,
+    hasKb: userKbs.length > 0,
+  };
 }

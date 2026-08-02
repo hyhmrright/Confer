@@ -6,6 +6,7 @@ import { useFileAttachment } from '../hooks/useFileAttachment.js';
 import { useChatStore } from '../stores/chat.js';
 import { CitationCapsule } from './CitationCapsule.js';
 import { Bot, Paperclip, Send, X } from './Icons.js';
+import { LoadingDots } from './LoadingDots.js';
 import { MessageBubble } from './MessageBubble.js';
 import { TypingIndicator } from './TypingIndicator.js';
 
@@ -107,15 +108,7 @@ export function MessageView() {
       <div className="flex-1 overflow-y-auto scrollbar-thin px-5 py-5 space-y-5">
         {messagesLoading ? (
           <div className="flex items-center justify-center h-full">
-            <div className="flex gap-1.5">
-              {[0, 150, 300].map((delay) => (
-                <span
-                  key={delay}
-                  className="w-2 h-2 rounded-full bg-dark-border animate-bounce"
-                  style={{ animationDelay: `${delay}ms` }}
-                />
-              ))}
-            </div>
+            <LoadingDots size="md" />
           </div>
         ) : messages.length === 0 && !streaming ? (
           <div className="flex flex-col items-center justify-center h-full text-ink-muted gap-2">

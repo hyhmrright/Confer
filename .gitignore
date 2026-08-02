@@ -9,6 +9,10 @@ dist/
 !.env.example
 .claude.local.md
 
+# Claude Code runtime artifacts (settings.local.json is ignored globally)
+.claude/scheduled_tasks.lock
+.claude/worktrees/
+
 *.log
 *.tsbuildinfo
 .DS_Store

@@ -3,7 +3,13 @@ import type { Server, ServerWebSocket } from 'bun';
 import { and, eq } from 'drizzle-orm';
 import * as jose from 'jose';
 import { getDb } from '../db/connection.js';
-import { conversationParticipants, peerAgents, peerContacts, users } from '../db/schema.js';
+import {
+  conversationParticipants,
+  conversations,
+  peerAgents,
+  peerContacts,
+  users,
+} from '../db/schema.js';
 import { getEnv } from '../env.js';
 import type { AuthPayload } from '../middleware/auth.js';
 
@@ -120,7 +126,9 @@ export const websocket = {
         break;
 
       case 'subscribe.conversation':
-        ws.data.subscriptions.add(msg.data.conversation_id);
+        authorizeSubscription(ws, msg.data.conversation_id).catch((e) =>
+          console.error('subscription authorization failed:', e),
+        );
         break;
 
       case 'unsubscribe.conversation':
@@ -164,6 +172,50 @@ export const websocket = {
     }
   },
 };
+
+// Grant a live feed for a conversation only to someone entitled to read it.
+// `subscriptions` is the sole gate `broadcastToConversation` consults, so an
+// unchecked subscribe would hand any authenticated user the full message stream
+// of any conversation whose id they learn. Mirrors the REST read gates: a
+// participant row, or the creator (which also covers threads created before the
+// owner participant row was seeded).
+async function authorizeSubscription(
+  ws: ServerWebSocket<WsData>,
+  conversationId: string,
+): Promise<void> {
+  const userId = ws.data.user.sub;
+  const db = getDb();
+
+  const [participant] = await db
+    .select({ id: conversationParticipants.id })
+    .from(conversationParticipants)
+    .where(
+      and(
+        eq(conversationParticipants.conversation_id, conversationId),
+        eq(conversationParticipants.user_id, userId),
+      ),
+    )
+    .limit(1);
+
+  if (!participant) {
+    const [owned] = await db
+      .select({ id: conversations.id })
+      .from(conversations)
+      .where(and(eq(conversations.id, conversationId), eq(conversations.created_by, userId)))
+      .limit(1);
+    if (!owned) {
+      ws.send(
+        JSON.stringify({
+          type: 'error',
+          data: { message: 'Not a participant of that conversation' },
+        }),
+      );
+      return;
+    }
+  }
+
+  ws.data.subscriptions.add(conversationId);
+}
 
 async function handleReadAck(userId: string, conversationId: string): Promise<void> {
   const db = getDb();

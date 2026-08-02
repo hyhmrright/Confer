@@ -39,6 +39,60 @@ async function getEmbeddingConfig(
   return config;
 }
 
+/** Loads a knowledge base, rejecting ids that belong to another user. */
+async function requireKb(
+  kbId: string,
+  userId: string,
+): Promise<typeof knowledgeBases.$inferSelect> {
+  const [kb] = await getDb()
+    .select()
+    .from(knowledgeBases)
+    .where(and(eq(knowledgeBases.id, kbId), eq(knowledgeBases.user_id, userId)))
+    .limit(1);
+
+  if (!kb) throw new AppError('not_found', 'Knowledge base not found', 404);
+  return kb;
+}
+
+/** Loads a document, rejecting ids that belong to another user. */
+async function requireDocument(
+  docId: string,
+  userId: string,
+): Promise<typeof knowledgeDocuments.$inferSelect> {
+  const [doc] = await getDb()
+    .select()
+    .from(knowledgeDocuments)
+    .where(and(eq(knowledgeDocuments.id, docId), eq(knowledgeDocuments.user_id, userId)))
+    .limit(1);
+
+  if (!doc) throw new AppError('not_found', 'Document not found', 404);
+  return doc;
+}
+
+type IngestJob = {
+  docId: string;
+  kbId: string;
+  kbName: string;
+  userId: string;
+  filename: string;
+  contentType: string;
+  buffer: ArrayBuffer;
+};
+
+/** Queues ingestion and marks the document failed if the pipeline throws. */
+function submitIngestion(job: IngestJob, failureLabel: string): void {
+  ingestQueue
+    .submit(() => ingestDocument(job))
+    .catch((err) => {
+      console.error(`${failureLabel} for doc ${job.docId}:`, err);
+      getDb()
+        .update(knowledgeDocuments)
+        .set({ status: 'failed' })
+        .where(eq(knowledgeDocuments.id, job.docId))
+        .catch(() => {});
+    });
+}
+
 // --- Knowledge Base CRUD ---
 
 knowledgeBasesRoutes.get('/', async (c) => {
@@ -66,13 +120,7 @@ knowledgeBasesRoutes.delete('/:kbId', async (c) => {
   const db = getDb();
   const kbId = c.req.param('kbId');
 
-  const [kb] = await db
-    .select()
-    .from(knowledgeBases)
-    .where(and(eq(knowledgeBases.id, kbId), eq(knowledgeBases.user_id, user.sub)))
-    .limit(1);
-
-  if (!kb) throw new AppError('not_found', 'Knowledge base not found', 404);
+  await requireKb(kbId, user.sub);
 
   await deleteByKbId(kbId).catch(() => {});
   await db.delete(knowledgeDocuments).where(eq(knowledgeDocuments.kb_id, kbId));
@@ -88,12 +136,7 @@ knowledgeBasesRoutes.get('/:kbId/documents', async (c) => {
   const db = getDb();
   const kbId = c.req.param('kbId');
 
-  const [kb] = await db
-    .select()
-    .from(knowledgeBases)
-    .where(and(eq(knowledgeBases.id, kbId), eq(knowledgeBases.user_id, user.sub)))
-    .limit(1);
-  if (!kb) throw new AppError('not_found', 'Knowledge base not found', 404);
+  await requireKb(kbId, user.sub);
 
   const docs = await db.select().from(knowledgeDocuments).where(eq(knowledgeDocuments.kb_id, kbId));
 
@@ -105,12 +148,7 @@ knowledgeBasesRoutes.post('/:kbId/documents', async (c) => {
   const db = getDb();
   const kbId = c.req.param('kbId');
 
-  const [kb] = await db
-    .select()
-    .from(knowledgeBases)
-    .where(and(eq(knowledgeBases.id, kbId), eq(knowledgeBases.user_id, user.sub)))
-    .limit(1);
-  if (!kb) throw new AppError('not_found', 'Knowledge base not found', 404);
+  const kb = await requireKb(kbId, user.sub);
 
   const formData = await c.req.formData();
   const file = formData.get('file') as File | null;
@@ -144,15 +182,18 @@ knowledgeBasesRoutes.post('/:kbId/documents', async (c) => {
 
   // Run ingestion pipeline (async, respond first). The queue bounds how many
   // documents ingest at once so concurrent uploads apply backpressure.
-  ingestQueue
-    .submit(() => ingestDocument(docId, kbId, kb.name, user.sub, file.name, contentType, buffer))
-    .catch((err) => {
-      console.error(`Ingestion failed for doc ${docId}:`, err);
-      db.update(knowledgeDocuments)
-        .set({ status: 'failed' })
-        .where(eq(knowledgeDocuments.id, docId))
-        .catch(() => {});
-    });
+  submitIngestion(
+    {
+      docId,
+      kbId,
+      kbName: kb.name,
+      userId: user.sub,
+      filename: file.name,
+      contentType,
+      buffer,
+    },
+    'Ingestion failed',
+  );
 
   return c.json({ document: docRow }, 201);
 });
@@ -162,12 +203,7 @@ knowledgeBasesRoutes.delete('/:kbId/documents/:docId', async (c) => {
   const db = getDb();
   const { docId } = c.req.param();
 
-  const [doc] = await db
-    .select()
-    .from(knowledgeDocuments)
-    .where(and(eq(knowledgeDocuments.id, docId), eq(knowledgeDocuments.user_id, user.sub)))
-    .limit(1);
-  if (!doc) throw new AppError('not_found', 'Document not found', 404);
+  const doc = await requireDocument(docId, user.sub);
 
   await deleteByDocId(docId).catch(() => {});
   await db.delete(knowledgeDocuments).where(eq(knowledgeDocuments.id, docId));
@@ -181,23 +217,13 @@ knowledgeBasesRoutes.post('/:kbId/documents/:docId/retry', async (c) => {
   const db = getDb();
   const { kbId, docId } = c.req.param();
 
-  const [doc] = await db
-    .select()
-    .from(knowledgeDocuments)
-    .where(and(eq(knowledgeDocuments.id, docId), eq(knowledgeDocuments.user_id, user.sub)))
-    .limit(1);
-  if (!doc) throw new AppError('not_found', 'Document not found', 404);
+  const doc = await requireDocument(docId, user.sub);
   if (!doc.storage_key)
     throw new AppError('bad_request', 'Original file not available for retry', 400);
   if (doc.status === 'processing')
     throw new AppError('bad_request', 'Document is already processing', 400);
 
-  const [kb] = await db
-    .select()
-    .from(knowledgeBases)
-    .where(and(eq(knowledgeBases.id, kbId), eq(knowledgeBases.user_id, user.sub)))
-    .limit(1);
-  if (!kb) throw new AppError('not_found', 'Knowledge base not found', 404);
+  const kb = await requireKb(kbId, user.sub);
 
   const [updated] = await db
     .update(knowledgeDocuments)
@@ -219,30 +245,24 @@ knowledgeBasesRoutes.post('/:kbId/documents/:docId/retry', async (c) => {
   await deleteByDocId(docId).catch((err) =>
     console.error(`Retry cleanup failed for doc ${docId}:`, err),
   );
-  ingestQueue
-    .submit(() =>
-      ingestDocument(docId, kbId, kb.name, user.sub, doc.filename, contentType, fileBuffer),
-    )
-    .catch((err) => {
-      console.error(`Retry ingestion failed for doc ${docId}:`, err);
-      db.update(knowledgeDocuments)
-        .set({ status: 'failed' })
-        .where(eq(knowledgeDocuments.id, docId))
-        .catch(() => {});
-    });
+  submitIngestion(
+    {
+      docId,
+      kbId,
+      kbName: kb.name,
+      userId: user.sub,
+      filename: doc.filename,
+      contentType,
+      buffer: fileBuffer,
+    },
+    'Retry ingestion failed',
+  );
 
   return c.json({ document: updated });
 });
 
-async function ingestDocument(
-  docId: string,
-  kbId: string,
-  kbName: string,
-  userId: string,
-  filename: string,
-  contentType: string,
-  buffer: ArrayBuffer,
-): Promise<void> {
+async function ingestDocument(job: IngestJob): Promise<void> {
+  const { docId, kbId, kbName, userId, filename, contentType, buffer } = job;
   const db = getDb();
   const { apiKey, provider } = await getEmbeddingConfig(userId);
 

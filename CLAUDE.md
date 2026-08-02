@@ -36,11 +36,12 @@ Bun workspaces monorepo (`packages/*`):
 | `agent-runtime` | LLM orchestration engine, policy enforcement |
 | `conversation` | Message bus (NATS), conversation threading |
 | `shared` | Zod schemas, shared types, utility functions |
+| `mcp-a2a` | stdio MCP server — lets Claude Code consult peer Agents; ships as the `confer-a2a` plugin (`plugins/confer-a2a/`) |
 | `gateway/lib/` | RAG pipeline — MinIO file storage, Qdrant vector search, multi-provider embedding (OpenAI / GLM / Qwen) |
 
 ## Docs
 
-Design context in `docs/` — files 01 (product) through 08 (mvp-backlog). Default to **MVP scope (v0.1)** per `docs/08-mvp-backlog.md`.
+Design context in `docs/` — files 01 (product) through 09 (deployment). Default to **MVP scope (v0.1)** per `docs/08-mvp-backlog.md`.
 
 ## Tech stack
 
@@ -76,6 +77,10 @@ TypeScript everywhere. Bun + Hono (server), Tauri 2.0 + React 18 + Zustand (clie
 - Use existing libraries for crypto/DID/HTTP signatures/MCP; LLM calls via `LLMProvider`
 - Adding/changing API, A2A, or MCP features → update corresponding `docs/` file
 - Outside MVP scope → check `docs/08-mvp-backlog.md`, ask before expanding
+
+## Branching
+
+`dev` is the daily working branch (unprotected — push directly). `main` is the release branch, protected by a GitHub **ruleset** (not classic protection — the `/protection` API returns 404). Feature branches and PRs target `dev`; releases go `dev` → `main`, then tag from `main`. CI `check` is the only required status.
 
 ## Release rules
 
@@ -114,26 +119,19 @@ Local infra via Docker: `docker compose up -d` starts PostgreSQL (5432), Redis (
 - Drizzle migrations: ALWAYS use `bun run db:generate`, never write SQL manually — the journal won't track it and schema gets out of sync requiring manual `ALTER TABLE` in prod (this bit us once: migrations 0002-0004 were hand-written and untracked; the journal was repaired by regenerating a tracked, idempotent `0002` from `schema.ts`)
 - Qdrant point IDs must be UUID or uint64 — ULIDs are rejected with 400; convert via SHA-256 hash (`toUUID` in `lib/qdrant.ts`)
 - Docker inter-container networking: use service names (`qdrant:6333`, `minio:9000`), not `localhost` — localhost resolves to the container itself
+- `peer_agents` rows are globally unique by DID — one peer connected to several users shares a single row and a single `peer_id`. Any query scoped only by `peer_id` is **not** tenant-isolated; always add the owner constraint (`conversations.created_by` / `*.user_id`). This produced a real cross-tenant A2A thread injection, fixed in `1a4308b`
 - LLM / embedding / Tavily keys live encrypted in `users.llm_keys_json` (AES-256-GCM via `ENCRYPTION_KEY`), set per-user via the settings UI — **not** in `.env`. The `TAVILY_API_KEY` env var is only a fallback; `web_search` is offered only when a key resolves
+- Run tests as `bun run test`, never `bun test` — the bare form bypasses the `bunfig.toml` preload (test env + per-test truncation) and points at the shared **dev** DB. Blocked by `.claude/hooks/guard-bun-test.py`
+- Any client file importing `@confer/shared` needs the alias in `packages/client/tsconfig.json` `paths` — the root tsconfig `exclude`s `packages/client`, and CI type-checks it separately (`npx tsc --noEmit` + `vite build` inside that dir). Local `node_modules` symlinks hide the breakage; only CI catches it
+- In gateway, don't `mock.module` anything touching `getDb`/`getEnv` in unit tests — it pollutes the process globally and takes the real-stack integration tests down with it (this once caused 102 false failures). Test infra-touching code via integration tests instead
 
 ## Claude Code automation
 
 `.claude/` ships project-specific automation — prefer it over manual steps:
 
-- **Hooks** (`settings.local.json`): after every Edit/Write, `lint:fix` + `typecheck` run automatically — no need to invoke them by hand. PreToolUse **blocks** edits to `*/migrations/*.sql` (immutable) and `.env*` (live credentials), and **blocks Bash `cat`/`head`/`tail`/`sed` used to view a file** — use the Read tool instead (guard: `.claude/hooks/guard-bash-file-view.py`; it still allows `tail -f`, piping a viewer into another command, redirects/heredocs, and `sed -i`). Note: the migrations/`.env` guards read `tool_input.file_path` (nested) — earlier they read top-level `file_path` and silently never fired.
-- **Skills**: `deploy` (rebuild/redeploy a service), `create-migration` (Drizzle migration + journal), `rag-debug` (Qdrant/embedding/MinIO diagnostics), `sync-env` (`.env` vs `.env.example`).
-- **Agents**: `a2a-contract-reviewer` (A2A signature/DID/AgentFacts compliance), `migration-reviewer` (migration safety).
+- **Settings**: hooks live in tracked `.claude/settings.json` (shared by every checkout, paths via `$CLAUDE_PROJECT_DIR`); personal permissions and MCP toggles stay in `.claude/settings.local.json` (gitignored). Don't move hooks back into the local file — a fresh clone would silently lose every guard.
+- **Hooks** (all in `.claude/hooks/`, each fails *open* so a bug can't wedge work): `post-edit-check.py` runs Biome + the owning package's `tsc` after every Edit/Write (client files route to `packages/client/tsconfig.json`) — no need to invoke lint/typecheck by hand. PreToolUse guards **block**: edits to Drizzle migration state (`packages/gateway/drizzle/*.sql` and `meta/_journal.json`) and to `.env*` (`guard-protected-files.py`), Bash `cat`/`head`/`tail`/`sed` used to *view* a file — use the Read tool (`guard-bash-file-view.py`; still allows `tail -f`, piping a viewer into another command, redirects/heredocs, `sed -i`), and bare `bun test` (`guard-bun-test.py`). All of them read the path/command from **`tool_input.*`** (nested). The earlier inline versions were silent no-ops twice over: they read a top-level `file_path`, *and* the migration one matched a `*/migrations/*` path this repo doesn't have (Drizzle's `out` is `packages/gateway/drizzle`). When you add a guard, prove it fires against a real path before trusting it.
+- **Skills**: `deploy` (rebuild/redeploy, incl. the separate `migrate` image), `create-migration` (Drizzle migration + journal), `rag-debug` (Qdrant/embedding/MinIO diagnostics), `sync-env` (`.env` vs `.env.example`), `reset-user-password` (break-glass).
+- **Agents**: `a2a-contract-reviewer` (A2A signature/DID/AgentFacts compliance), `migration-reviewer` (migration safety), `rag-pipeline-reviewer` (embedding priority, Qdrant point-id format, container networking, key handling).
 
-## 하네스: Confer 功能开发
-
-**目标:** 用 3 人 agent 团队把功能需求跑完整开发流程（探索→规划→实现→简化→审查→QA→部署→提交）。
-
-**触发:** 针对本代码库的功能/改动需求（在 gateway/client/identity/agent-runtime/conversation/shared/RAG 中构建、新增、实现、改行为）时，使用 `confer-feature` 编排器 skill。纯问答与纯文档改动直接处理，无需触发。
-
-**团队:** `confer-architect` → `confer-implementer` → `confer-reviewer-qa`（审查阶段按改动委派已有的 `a2a-contract-reviewer` / `migration-reviewer`）。
-
-**변경 이력:**
-| 日期 | 变更内容 | 对象 | 事由 |
-|------|----------|------|------|
-| 2026-06-01 | 初始构成（3 人功能开发团队 + confer-feature 编排器） | 全体 | 已有 harness 仅含审查/运维，缺开发执行团队与编排器 |
-| 2026-06-01 | reviewer-qa 增加 client build / env 透传 / 迁移落库 三项 QA 检查 | agents/confer-reviewer-qa.md | admin 3a 部署时才发现 client 严格 build 与 compose env 透传漏检 |
+There is no feature-development orchestrator here — the previous `confer-feature` skill and its architect/implementer/reviewer-qa trio were removed on 2026-08-01. Drive feature work directly, and delegate to the reviewers above by what changed. General-purpose review/simplification comes from installed plugins, not from this repo.

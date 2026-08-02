@@ -4,6 +4,24 @@ import { createMiddleware } from 'hono/factory';
 
 const counters = new Map<string, { count: number; resetAt: number }>();
 
+// A counter is dead the moment its window closes, but nothing reads it again
+// unless the same key returns — so without a sweep the map grows once per
+// distinct ip:path and never shrinks. Sweeps are O(n), so bound their frequency
+// rather than running one per request; the per-key expiry check below keeps
+// correctness exact in between.
+const SWEEP_INTERVAL_MS = 60_000;
+let lastSweepAt = 0;
+
+function sweepExpired(now: number): void {
+  if (now - lastSweepAt < SWEEP_INTERVAL_MS) return;
+  lastSweepAt = now;
+  for (const [key, entry] of counters) {
+    if (now > entry.resetAt) {
+      counters.delete(key);
+    }
+  }
+}
+
 // Resolve the real client IP behind nginx. `x-real-ip` is set (overwritten, not
 // appended) by our nginx on the /api/, /a2a/ and /ws locations, so a client
 // can't forge it. The whole `x-forwarded-for` header is client-controllable, so
@@ -38,6 +56,7 @@ export function rateLimit<E extends Env = Env>(
   return createMiddleware<E>(async (c, next) => {
     const key = opts?.keyBy ? opts.keyBy(c) : `${clientIp(c)}:${c.req.path}`;
     const now = Date.now();
+    sweepExpired(now);
 
     let entry = counters.get(key);
     if (!entry || now > entry.resetAt) {

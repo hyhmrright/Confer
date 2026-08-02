@@ -277,6 +277,17 @@ peer.unknown:
 1. 接收方主动通过 `POST /contacts/lookup` → `POST /contacts` 添加该 peer；
 2. peer 先发起，接收方在收件箱批准其连接请求。
 
+### 线程绑定（thread_id 的作用域）
+
+入站消息里的 `thread_id` 是 peer 的**请求**，不是权威指令。gateway 只在同时满足两个条件时复用它，否则新建一条会话：
+
+1. 该 peer 已是这条会话的参与者；
+2. 这条会话**属于被寻址 Agent 的主人**（`conversations.created_by`）。
+
+第 2 条不可省略：`peer_agents` 按 DID 全局唯一，同一个 peer 可以同时连接多个主人。只校验第 1 条的话，一个连接了 A 和 B 的 peer 就能在给 B 的 Agent 发消息时带上 A 的 `thread_id`，把消息灌进 A 的会话——B 的 Agent 会以 A 的历史为上下文作答，回复被写进 A 的线程并广播给 A，A 的会话内容还会经记忆沉淀进 B 的长期记忆。
+
+新建会话时，**主人与 peer 同时**写入 `conversation_participants`。主人那条参与者行是会话列表和逐会话读取闸门的依据，缺了它主人就看不到自己 Agent 正在应答的线程。
+
 ### Pending inbox（离线代答）
 
 主人离线时收到**已连接** peer 的问题，由 policy engine 决定（`evaluatePolicy`，action=`ask`，L2）：

@@ -5,6 +5,7 @@ import { captureError } from '../../lib/error.js';
 import { INPUT_FIELD_CLS } from '../../lib/styles.js';
 import { useAuthStore } from '../../stores/auth.js';
 import { LanguageSwitcher } from '../LanguageSwitcher.js';
+import { SaveButton } from '../SaveButton.js';
 import { FieldLabel, StatusMsg } from './SettingsShared.js';
 
 export function ProfileTab() {
@@ -112,14 +113,7 @@ export function ProfileTab() {
 
       <StatusMsg error={error} success={success} />
 
-      <button
-        type="button"
-        onClick={handleSave}
-        disabled={saving}
-        className="px-5 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-500 disabled:opacity-40 transition-colors"
-      >
-        {saving ? t('common.saving') : t('common.save')}
-      </button>
+      <SaveButton onClick={handleSave} saving={saving} />
     </div>
   );
 }

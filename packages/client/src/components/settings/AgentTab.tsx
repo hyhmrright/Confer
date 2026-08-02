@@ -4,6 +4,8 @@ import { useProviderModelFetch } from '../../hooks/useProviderModelFetch.js';
 import { LLM_PROVIDERS, STATIC_MODELS, llmProviderName, modelLabel } from '../../lib/providers.js';
 import { INPUT_FIELD_CLS, SELECT_FIELD_CLS } from '../../lib/styles.js';
 import { useSettingsStore } from '../../stores/settings.js';
+import { LoadingDots } from '../LoadingDots.js';
+import { SaveButton } from '../SaveButton.js';
 import { FieldLabel, StatusMsg } from './SettingsShared.js';
 
 export function AgentTab() {
@@ -65,15 +67,7 @@ export function AgentTab() {
   if (loading) {
     return (
       <div className="flex justify-center pt-12">
-        <div className="flex gap-1.5">
-          {[0, 150, 300].map((d) => (
-            <span
-              key={d}
-              className="w-1.5 h-1.5 rounded-full bg-dark-border animate-bounce"
-              style={{ animationDelay: `${d}ms` }}
-            />
-          ))}
-        </div>
+        <LoadingDots />
       </div>
     );
   }
@@ -166,14 +160,7 @@ export function AgentTab() {
 
       <StatusMsg error={error} success={success} />
 
-      <button
-        type="button"
-        onClick={handleSave}
-        disabled={saving}
-        className="px-5 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-500 disabled:opacity-40 transition-colors"
-      >
-        {saving ? t('common.saving') : t('common.save')}
-      </button>
+      <SaveButton onClick={handleSave} saving={saving} />
     </div>
   );
 }

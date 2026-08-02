@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { getDb } from '../db/connection.js';
 import { agents, users } from '../db/schema.js';
 import { getEnv } from '../env.js';
+import { getUserLlmKeys } from '../lib/llm-keys.js';
 import { authMiddleware } from '../middleware/auth.js';
 import type { AppEnv } from '../types.js';
 
@@ -107,17 +108,15 @@ agentRoutes.patch('/me', async (c) => {
   return c.json({ ok: true });
 });
 
+// Same read as the shared helper, narrowed to this file's provider-keyed view.
+async function loadLlmKeys(userId: string): Promise<LlmKeysJson> {
+  return (await getUserLlmKeys(userId)) as LlmKeysJson;
+}
+
 agentRoutes.get('/me/llm-keys', async (c) => {
   const user = c.get('user');
-  const db = getDb();
 
-  const [row] = await db
-    .select({ llm_keys_json: users.llm_keys_json })
-    .from(users)
-    .where(eq(users.id, user.sub))
-    .limit(1);
-
-  const stored = (row?.llm_keys_json ?? {}) as LlmKeysJson;
+  const stored = await loadLlmKeys(user.sub);
   const keys = PROVIDERS.map((provider) => ({
     provider,
     configured: provider in stored,
@@ -137,13 +136,7 @@ agentRoutes.put('/me/llm-keys', async (c) => {
     throw new AppError('encryption_failed', result.error, 500);
   }
 
-  const [row] = await db
-    .select({ llm_keys_json: users.llm_keys_json })
-    .from(users)
-    .where(eq(users.id, user.sub))
-    .limit(1);
-
-  const stored = (row?.llm_keys_json ?? {}) as LlmKeysJson;
+  const stored = await loadLlmKeys(user.sub);
   const updated: LlmKeysJson = { ...stored, [body.provider]: result.value };
 
   await db.update(users).set({ llm_keys_json: updated }).where(eq(users.id, user.sub));
@@ -160,13 +153,7 @@ agentRoutes.delete('/me/llm-keys/:provider', async (c) => {
     throw new AppError('invalid_provider', `Unknown provider: ${provider}`, 400);
   }
 
-  const [row] = await db
-    .select({ llm_keys_json: users.llm_keys_json })
-    .from(users)
-    .where(eq(users.id, user.sub))
-    .limit(1);
-
-  const stored = (row?.llm_keys_json ?? {}) as LlmKeysJson;
+  const stored = await loadLlmKeys(user.sub);
   const { [provider]: _removed, ...rest } = stored;
 
   await db.update(users).set({ llm_keys_json: rest }).where(eq(users.id, user.sub));
@@ -176,7 +163,6 @@ agentRoutes.delete('/me/llm-keys/:provider', async (c) => {
 
 agentRoutes.get('/me/llm-keys/:provider/models', async (c) => {
   const user = c.get('user');
-  const db = getDb();
   const provider = c.req.param('provider') as Provider;
 
   if (!(PROVIDERS as readonly string[]).includes(provider)) {
@@ -187,13 +173,7 @@ agentRoutes.get('/me/llm-keys/:provider/models', async (c) => {
     return c.json({ models: [] });
   }
 
-  const [row] = await db
-    .select({ llm_keys_json: users.llm_keys_json })
-    .from(users)
-    .where(eq(users.id, user.sub))
-    .limit(1);
-
-  const stored = (row?.llm_keys_json ?? {}) as LlmKeysJson;
+  const stored = await loadLlmKeys(user.sub);
   const encryptedKey = stored[provider];
   if (!encryptedKey) {
     return c.json({ models: [] });

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { mergePolicyDefault } from '../lib/policy.js';
 import { useContactsStore } from '../stores/contacts.js';
 import { Bot, X } from './Icons.js';
+import { SaveButton } from './SaveButton.js';
 import { PolicyEditor } from './settings/PolicyEditor.js';
 import { FieldLabel, StatusMsg } from './settings/SettingsShared.js';
 
@@ -113,14 +114,7 @@ export function ContactDetail() {
         </div>
 
         <div className="px-6 py-4 border-t border-dark-border shrink-0">
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving}
-            className="px-5 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-500 disabled:opacity-40 transition-colors"
-          >
-            {saving ? t('common.saving') : t('contacts.savePolicy')}
-          </button>
+          <SaveButton onClick={handleSave} saving={saving} label={t('contacts.savePolicy')} />
         </div>
       </div>
     </div>

@@ -12,6 +12,7 @@ import { getDb } from '../db/connection.js';
 import {
   agentMemories,
   agents,
+  conversationParticipants,
   conversations,
   knowledgeBases,
   messages,
@@ -1053,5 +1054,149 @@ describe('A2A authentication-relationship enforcement (Finding E)', () => {
     const res = await app.request(signed);
 
     expect(res.status).toBe(202);
+  });
+});
+
+describe('A2A thread scoping', () => {
+  const KEY_ID = 'did:web:localhost#key-1';
+  const PEER_DID = 'did:web:localhost';
+  let restoreFetch: () => void;
+
+  afterEach(() => {
+    restoreFetch?.();
+    clearDIDCache();
+    clearNonceCache();
+  });
+
+  async function servePeerKey() {
+    const { publicKey, privateKey } = await generateEd25519KeyPair();
+    const publicKeyMultibase = await publicKeyToMultibase(publicKey);
+    const didDocument = {
+      '@context': ['https://www.w3.org/ns/did/v1'],
+      id: PEER_DID,
+      verificationMethod: [
+        {
+          id: KEY_ID,
+          type: 'Ed25519VerificationKey2020',
+          controller: PEER_DID,
+          publicKeyMultibase,
+        },
+      ],
+    };
+    restoreFetch = mockFetch((url) => {
+      if (url.includes('/.well-known/did.json')) return Response.json(didDocument);
+      if (url.includes('api.anthropic.com')) return new Response('{}', { status: 401 });
+      return undefined;
+    });
+    return privateKey;
+  }
+
+  function inbound(targetDid: string, content: string, threadId?: string): Request {
+    return new Request(MESSAGES, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        from: PEER_DID,
+        to: targetDid,
+        thread_id: threadId,
+        message: { type: 'question', content },
+      }),
+    });
+  }
+
+  // One global peer row (peerAgents is keyed by DID) connected to both owners.
+  async function seedTwoOwnersSharingAPeer() {
+    const db = getDb();
+    const other = await seedUser();
+    const didOwn = 'did:web:localhost:agents:own';
+    const didOther = 'did:web:localhost:agents:other';
+    await db
+      .insert(agents)
+      .values({ id: newId(), user_id: user.id, did: didOwn, policies_json: {} });
+    await db
+      .insert(agents)
+      .values({ id: newId(), user_id: other.id, did: didOther, policies_json: {} });
+
+    const peerId = newId();
+    await db.insert(peerAgents).values({
+      id: peerId,
+      did: PEER_DID,
+      endpoint: 'https://localhost/a2a/v1',
+      public_key_json: {},
+      agent_facts_json: {},
+    });
+    for (const uid of [user.id, other.id]) {
+      await db
+        .insert(peerContacts)
+        .values({ id: newId(), user_id: uid, peer_id: peerId, added_via: 'manual' });
+    }
+    return { didOwn, didOther };
+  }
+
+  test('a peer cannot steer a message into another owner thread via thread_id', async () => {
+    const { didOwn, didOther } = await seedTwoOwnersSharingAPeer();
+    const privateKey = await servePeerKey();
+
+    // Thread created under the first owner.
+    const res1 = await app.request(
+      await signRequest(inbound(didOwn, 'question for own'), privateKey, KEY_ID),
+    );
+    expect(res1.status).toBe(201);
+    const ownThread = (await res1.json()).thread_id as string;
+
+    // The same peer addresses the OTHER owner's agent, replaying that thread id.
+    const res2 = await app.request(
+      await signRequest(inbound(didOther, 'injected', ownThread), privateKey, KEY_ID),
+    );
+    expect(res2.status).toBe(201);
+    const injectedId = (await res2.json()).message_id as string;
+
+    const [injected] = await getDb().select().from(messages).where(eq(messages.id, injectedId));
+    // It must land in a fresh thread of its own owner, never in the first one.
+    expect(injected?.conversation_id).not.toBe(ownThread);
+
+    const inOwnThread = await getDb()
+      .select()
+      .from(messages)
+      .where(eq(messages.conversation_id, ownThread));
+    expect(inOwnThread).toHaveLength(1);
+  });
+
+  test('the addressed owner is seeded as a participant so the thread is listable', async () => {
+    const { didOwn } = await seedTwoOwnersSharingAPeer();
+    const privateKey = await servePeerKey();
+
+    const res = await app.request(await signRequest(inbound(didOwn, 'hello'), privateKey, KEY_ID));
+    expect(res.status).toBe(201);
+    const convId = (await res.json()).thread_id as string;
+
+    const parts = await getDb()
+      .select()
+      .from(conversationParticipants)
+      .where(eq(conversationParticipants.conversation_id, convId));
+    expect(parts.some((p) => p.user_id === user.id)).toBe(true);
+
+    const listed = await get('/api/v1/conversations', { token: user.token });
+    const convs = (await listed.json()).conversations as Array<{ id: string }>;
+    expect(convs.some((cv) => cv.id === convId)).toBe(true);
+  });
+
+  test('an owner reusing their own thread id keeps the same conversation', async () => {
+    const { didOwn } = await seedTwoOwnersSharingAPeer();
+    const privateKey = await servePeerKey();
+
+    const first = await app.request(
+      await signRequest(inbound(didOwn, 'first'), privateKey, KEY_ID),
+    );
+    const thread = (await first.json()).thread_id as string;
+
+    const second = await app.request(
+      await signRequest(inbound(didOwn, 'second', thread), privateKey, KEY_ID),
+    );
+    expect(second.status).toBe(201);
+    expect((await second.json()).thread_id).toBe(thread);
+
+    const rows = await getDb().select().from(messages).where(eq(messages.conversation_id, thread));
+    expect(rows).toHaveLength(2);
   });
 });

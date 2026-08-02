@@ -26,7 +26,6 @@ import {
   agents,
   conversationParticipants,
   conversations,
-  knowledgeBases,
   messages,
   peerAgents,
   peerContacts,
@@ -34,8 +33,7 @@ import {
 } from '../db/schema.js';
 import { getEnv } from '../env.js';
 import { runAgentTurn } from '../lib/agent-orchestrator.js';
-import type { EmbeddingProvider } from '../lib/embedding.js';
-import { decryptUserKey, getUserLlmKeys, resolveEmbeddingKey } from '../lib/llm-keys.js';
+import { decryptUserKey, getUserLlmKeys, resolveAgentCapabilities } from '../lib/llm-keys.js';
 import { addNonce, hasNonce } from '../lib/nonce-cache.js';
 import { upsertPeerAgent } from '../lib/peer-agent.js';
 import { rateLimit } from '../middleware/rate-limit.js';
@@ -217,9 +215,15 @@ async function checkConsentGate(userId: string, peerId: string): Promise<boolean
 }
 
 // Resolve the conversation for this inbound message: reuse the supplied
-// thread_id only if the peer is already a participant of it (otherwise a
-// connected peer could inject into another peer's thread), else create a fresh
-// agent-to-agent conversation seeded with the peer participant.
+// thread_id only if the peer is already a participant of it AND the thread
+// belongs to the addressed agent's owner, else create a fresh agent-to-agent
+// conversation seeded with both the owner and the peer as participants.
+//
+// Both halves of that check matter. Peer rows are global (keyed by DID), so a
+// peer connected to two owners passes a peer-only participant check on either
+// owner's thread — it could then steer a message addressed to one owner's agent
+// into the other owner's conversation, where the reply would be broadcast to
+// the wrong owner and that owner's history would feed the wrong agent's context.
 async function resolveOrCreateThread(
   threadId: string | undefined,
   peerId: string,
@@ -232,10 +236,12 @@ async function resolveOrCreateThread(
     const [member] = await db
       .select({ id: conversationParticipants.id })
       .from(conversationParticipants)
+      .innerJoin(conversations, eq(conversations.id, conversationParticipants.conversation_id))
       .where(
         and(
           eq(conversationParticipants.conversation_id, convId),
           eq(conversationParticipants.peer_id, peerId),
+          eq(conversations.created_by, userId),
         ),
       )
       .limit(1);
@@ -250,13 +256,26 @@ async function resolveOrCreateThread(
       created_by: userId,
     });
 
-    await db.insert(conversationParticipants).values({
-      id: newId(),
-      conversation_id: convId,
-      participant_type: 'peer_agent',
-      peer_id: peerId,
-      role: 'member',
-    });
+    // The owner is seeded as a participant alongside the peer: the conversation
+    // list and the per-conversation read gates are both keyed on a participant
+    // row, so without it the owner cannot see the thread their own agent is
+    // answering in.
+    await db.insert(conversationParticipants).values([
+      {
+        id: newId(),
+        conversation_id: convId,
+        participant_type: 'user',
+        user_id: userId,
+        role: 'owner',
+      },
+      {
+        id: newId(),
+        conversation_id: convId,
+        participant_type: 'peer_agent',
+        peer_id: peerId,
+        role: 'member',
+      },
+    ]);
   }
 
   return convId;
@@ -608,21 +627,13 @@ async function processA2AMessage(params: ProcessA2AMessageParams): Promise<void>
     return;
   }
 
-  // Tools, recall, and extraction all spend the owner's budget against the
-  // owner's keys — never the requesting peer's. Each capability degrades
-  // gracefully when its key is absent (no KB / no web_search / no memory).
-  const embeddingConfig = await resolveEmbeddingKey(llmKeys, env.ENCRYPTION_KEY);
-  const embeddingKey = embeddingConfig?.apiKey ?? '';
-  const embeddingProvider: EmbeddingProvider = embeddingConfig?.provider ?? 'openai';
-  const userKbs = embeddingKey
-    ? await db
-        .select({ id: knowledgeBases.id })
-        .from(knowledgeBases)
-        .where(eq(knowledgeBases.user_id, targetAgent.user_id))
-    : [];
-
-  const userTavilyKey = await decryptUserKey(llmKeys, 'tavily', env.ENCRYPTION_KEY);
-  const tavilyApiKey = userTavilyKey || env.TAVILY_API_KEY;
+  // Tools, recall, and extraction all spend the budget of the agent's owner —
+  // never the requesting peer's.
+  const { embeddingKey, embeddingProvider, tavilyApiKey, hasKb } = await resolveAgentCapabilities(
+    targetAgent.user_id,
+    llmKeys,
+    env,
+  );
 
   const history = await loadA2AHistory(conversationId, inboundMessageId);
 
@@ -635,7 +646,7 @@ async function processA2AMessage(params: ProcessA2AMessageParams): Promise<void>
     embeddingKey,
     embeddingProvider,
     tavilyApiKey,
-    hasKb: userKbs.length > 0,
+    hasKb,
   });
 
   const replyId = newId();

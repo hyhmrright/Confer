@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { mergePolicyDefault } from '../../lib/policy.js';
 import { useSettingsStore } from '../../stores/settings.js';
+import { LoadingDots } from '../LoadingDots.js';
+import { SaveButton } from '../SaveButton.js';
 import { PolicyEditor } from './PolicyEditor.js';
 import { FieldLabel, StatusMsg } from './SettingsShared.js';
 
@@ -34,15 +36,7 @@ export function PolicyTab() {
   if (loading) {
     return (
       <div className="flex justify-center pt-12">
-        <div className="flex gap-1.5">
-          {[0, 150, 300].map((d) => (
-            <span
-              key={d}
-              className="w-1.5 h-1.5 rounded-full bg-dark-border animate-bounce"
-              style={{ animationDelay: `${d}ms` }}
-            />
-          ))}
-        </div>
+        <LoadingDots />
       </div>
     );
   }
@@ -62,14 +56,7 @@ export function PolicyTab() {
 
       <StatusMsg error={error} success={success} />
 
-      <button
-        type="button"
-        onClick={handleSave}
-        disabled={saving}
-        className="px-5 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-500 disabled:opacity-40 transition-colors"
-      >
-        {saving ? t('common.saving') : t('common.save')}
-      </button>
+      <SaveButton onClick={handleSave} saving={saving} />
     </div>
   );
 }

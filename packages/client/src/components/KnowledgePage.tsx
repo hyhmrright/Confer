@@ -4,6 +4,7 @@ import i18n from '../i18n/index.js';
 import { INPUT_CLS } from '../lib/styles.js';
 import { type KnowledgeDocument, useKbStore } from '../stores/knowledge-base.js';
 import { ChevronDown, Plus, Trash } from './Icons.js';
+import { LoadingDots } from './LoadingDots.js';
 
 function statusBadge(status: string | null) {
   const s = status ?? 'processing';
@@ -257,15 +258,7 @@ export function KnowledgePage() {
       <div className="flex-1 overflow-y-auto scrollbar-thin p-3 space-y-2">
         {loading ? (
           <div className="flex justify-center pt-8">
-            <div className="flex gap-1.5">
-              {[0, 150, 300].map((d) => (
-                <span
-                  key={d}
-                  className="w-1.5 h-1.5 rounded-full bg-dark-border animate-bounce"
-                  style={{ animationDelay: `${d}ms` }}
-                />
-              ))}
-            </div>
+            <LoadingDots />
           </div>
         ) : kbs.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-ink-muted pt-10">
