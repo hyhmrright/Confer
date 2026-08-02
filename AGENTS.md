@@ -76,6 +76,10 @@ TypeScript everywhere. Bun + Hono (server), Tauri 2.0 + React 18 + Zustand (clie
 - Adding/changing API, A2A, or MCP features → update corresponding `docs/` file
 - Outside MVP scope → check `docs/08-mvp-backlog.md`, ask before expanding
 
+## Branching
+
+`dev` is the daily working branch (unprotected — push directly). `main` is the release branch, protected by a GitHub **ruleset** (not classic protection — the `/protection` API returns 404). Feature branches and PRs target `dev`; releases go `dev` → `main`, then tag from `main`. CI `check` is the only required status.
+
 ## Release rules
 
 Every release: merge to `main` first, then `git tag v* && git push origin v*` from main. Workflow rejects tags not reachable from `origin/main`. Run `.github/scripts/gen-release-notes.sh <tag>`, review draft, **translate ZH/JA sections** before publishing. Workflow auto-updates GitHub About + labels on finalize. Never publish untranslated placeholder text.
@@ -110,8 +114,11 @@ Local infra via Docker: `docker compose up -d` starts PostgreSQL (5432), Redis (
 - `Bun.serve` WebSocket API ≠ Node `ws`
 - HTTP signatures: adding headers invalidates unless in signing set
 - DID document caching: respect TTL/ETag or auth breaks
-- Drizzle migrations: ALWAYS use `bun run db:generate`, never write SQL manually — the journal won't track it and the schema drifts out of sync
+- Drizzle migrations: ALWAYS use `bun run db:generate`, never write SQL manually — the journal won't track it and schema gets out of sync requiring manual `ALTER TABLE` in prod (this bit us once: migrations 0002-0004 were hand-written and untracked; the journal was repaired by regenerating a tracked, idempotent `0002` from `schema.ts`)
 - Qdrant point IDs must be UUID or uint64 — ULIDs are rejected with 400; convert via SHA-256 hash (`toUUID` in `lib/qdrant.ts`)
 - Docker inter-container networking: use service names (`qdrant:6333`, `minio:9000`), not `localhost` — localhost resolves to the container itself
-- LLM / embedding / Tavily keys live encrypted in `users.llm_keys_json` (AES-256-GCM via `ENCRYPTION_KEY`), set per-user via the settings UI — **not** in `.env`
+- `peer_agents` rows are globally unique by DID — one peer connected to several users shares a single row and a single `peer_id`. Any query scoped only by `peer_id` is **not** tenant-isolated; always add the owner constraint (`conversations.created_by` / `*.user_id`). This produced a real cross-tenant A2A thread injection, fixed in `1a4308b`
+- LLM / embedding / Tavily keys live encrypted in `users.llm_keys_json` (AES-256-GCM via `ENCRYPTION_KEY`), set per-user via the settings UI — **not** in `.env`. The `TAVILY_API_KEY` env var is only a fallback; `web_search` is offered only when a key resolves
 - Run tests as `bun run test`, never `bun test` — the bare form bypasses the `bunfig.toml` preload (test env + per-test truncation) and points at the shared **dev** DB
+- Any client file importing `@confer/shared` needs the alias in `packages/client/tsconfig.json` `paths` — the root tsconfig `exclude`s `packages/client`, and CI type-checks it separately (`npx tsc --noEmit` + `vite build` inside that dir). Local `node_modules` symlinks hide the breakage; only CI catches it
+- In gateway, don't `mock.module` anything touching `getDb`/`getEnv` in unit tests — it pollutes the process globally and takes the real-stack integration tests down with it (this once caused 102 false failures). Test infra-touching code via integration tests instead
