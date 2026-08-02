@@ -1,6 +1,6 @@
 [package]
 name = "confer"
-version = "0.3.0"
+version = "0.3.1"
 description = "Confer - Agent-to-Agent Communication Platform"
 authors = []
 edition = "2021"
