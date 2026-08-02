@@ -1,0 +1,38 @@
+name: Feature request
+description: Suggest something Confer should be able to do
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Confer is pre-1.0 and scope is tracked in
+        [`docs/08-mvp-backlog.md`](https://github.com/hyhmrright/Confer/blob/main/docs/08-mvp-backlog.md).
+        Worth a look before filing — the idea may already be planned.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you hitting
+      description: Describe the situation, not the solution. What are you trying to do that you can't?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you'd like Confer to do
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you've tried or considered
+      description: Workarounds, other tools, other shapes this could take.
+
+  - type: checkboxes
+    id: contribute
+    attributes:
+      label: Would you be up for implementing it?
+      options:
+        - label: I'd be willing to open a PR for this

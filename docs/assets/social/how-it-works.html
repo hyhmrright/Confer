@@ -1,0 +1,197 @@
+<!doctype html>
+<!-- Source for docs/assets/social/how-it-works.png (README diagram, 1200x520).
+     Regenerate by screenshotting this file at 1200x520. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=IBM+Plex+Mono:wght@400;500&family=Newsreader:opsz,wght@6..72,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #100e0c;
+    --paper: #f3ece0;
+    --paper-dim: #a99c89;
+    --paper-faint: #6f6557;
+    --amber: #e6a23c;
+    --amber-soft: #f3c982;
+    --sage: #93b29c;
+    --line: rgba(243, 236, 224, 0.11);
+    --display: "Fraunces", Georgia, serif;
+    --body: "Newsreader", Georgia, serif;
+    --mono: "IBM Plex Mono", ui-monospace, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1200px; height: 450px; overflow: hidden; }
+  body {
+    background: var(--ink);
+    color: var(--paper);
+    font-family: var(--body);
+    position: relative;
+  }
+  .grid {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(var(--line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--line) 1px, transparent 1px);
+    background-size: 60px 60px;
+    mask-image: radial-gradient(ellipse 85% 75% at 50% 45%, #000 35%, transparent 80%);
+  }
+
+  .stage { position: relative; padding: 44px 52px; height: 100%; }
+
+  .title {
+    font-family: var(--display);
+    font-size: 27px;
+    letter-spacing: -0.015em;
+    margin-bottom: 4px;
+  }
+  .lede {
+    font-size: 16.5px;
+    color: var(--paper-faint);
+    margin-bottom: 40px;
+  }
+
+  .row { display: flex; align-items: stretch; gap: 0; }
+
+  .card {
+    flex: 1 1 0;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: linear-gradient(165deg, #171411, #100e0c);
+    padding: 20px 22px 22px;
+    position: relative;
+    min-width: 0;
+  }
+  .card.accent { border-color: rgba(230, 162, 60, 0.32); }
+  .card.peer   { border-color: rgba(147, 178, 156, 0.3); }
+
+  .step {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    color: var(--paper-faint);
+    margin-bottom: 12px;
+  }
+  .card.accent .step { color: var(--amber); }
+  .card.peer   .step { color: var(--sage); }
+
+  .name {
+    font-family: var(--display);
+    font-size: 19px;
+    margin-bottom: 8px;
+    letter-spacing: -0.01em;
+  }
+  .desc {
+    font-size: 14.5px;
+    line-height: 1.5;
+    color: var(--paper-dim);
+  }
+  .desc code {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--amber-soft);
+  }
+
+  .arrow {
+    flex: 0 0 92px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding-top: 8px;
+  }
+  .arrow .lbl {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.06em;
+    color: var(--paper-faint);
+    white-space: nowrap;
+  }
+  .arrow svg { display: block; }
+
+  /* return path */
+  .return { margin-top: 4px; }
+  .return svg { display: block; }
+  .persist {
+    border: 1px dashed rgba(230, 162, 60, 0.32);
+    border-radius: 14px;
+    padding: 15px 20px;
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    background: rgba(230, 162, 60, 0.045);
+  }
+  .persist .path {
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--amber-soft);
+    white-space: nowrap;
+  }
+  .persist .note {
+    font-size: 14.5px;
+    color: var(--paper-dim);
+  }
+</style>
+</head>
+<body>
+  <div class="grid"></div>
+
+  <div class="stage">
+    <div class="title">How Confer works</div>
+    <div class="lede">Neither side reads the other's documentation. The agents do it.</div>
+
+    <div class="row">
+      <div class="card">
+        <div class="step">01 · YOU ASK</div>
+        <div class="name">Claude Code</div>
+        <div class="desc">You write code as usual. The <code>confer-a2a</code> MCP plugin notices it needs vendor-specific knowledge.</div>
+      </div>
+
+      <div class="arrow">
+        <svg width="66" height="14" viewBox="0 0 66 14" fill="none">
+          <path d="M0 7 H56" stroke="#6f6557" stroke-width="1.2" stroke-dasharray="4 5"/>
+          <path d="M56 2.5 L64 7 L56 11.5 Z" fill="#6f6557"/>
+        </svg>
+        <div class="lbl">MCP</div>
+      </div>
+
+      <div class="card accent">
+        <div class="step">02 · YOUR AGENT</div>
+        <div class="name">Confer instance</div>
+        <div class="desc">Your self-hosted Agent holds your keys, your knowledge base, and your permission rules.</div>
+      </div>
+
+      <div class="arrow">
+        <svg width="66" height="14" viewBox="0 0 66 14" fill="none">
+          <path d="M0 7 H56" stroke="#e6a23c" stroke-width="1.2" stroke-dasharray="4 5"/>
+          <path d="M56 2.5 L64 7 L56 11.5 Z" fill="#e6a23c"/>
+        </svg>
+        <div class="lbl">A2A · signed</div>
+      </div>
+
+      <div class="card peer">
+        <div class="step">03 · THEIR AGENT</div>
+        <div class="name">The other side</div>
+        <div class="desc">A vendor, a teammate, another instance. Identified by <code>DID:web</code>, verified per request.</div>
+      </div>
+    </div>
+
+    <div class="return">
+      <svg width="1096" height="44" viewBox="0 0 1096 44" fill="none">
+        <path d="M968 0 V14 Q968 24 958 24 H 34 Q24 24 24 34 V 36"
+              stroke="#e6a23c" stroke-opacity="0.5"
+              stroke-width="1.2" stroke-dasharray="4 5" fill="none"/>
+        <path d="M18.5 34 L24 43 L29.5 34 Z" fill="#e6a23c" fill-opacity="0.5"/>
+        <text x="978" y="18" fill="#6f6557" font-family="IBM Plex Mono, monospace"
+              font-size="10.5" letter-spacing="0.06em">cited answer</text>
+      </svg>
+      <div class="persist">
+        <div class="path">.claude/peers/{vendor}/facts.md</div>
+        <div class="note">The cited answer is written into project memory — it travels with git and is reused automatically.</div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
