@@ -1,0 +1,75 @@
+name: Bug report
+description: Something in Confer doesn't work the way it should
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file this. If you think you've found a
+        **security** problem, please follow [SECURITY.md](https://github.com/hyhmrright/Confer/blob/main/SECURITY.md)
+        instead — don't post it here.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you do, what did you expect, and what happened instead?
+      placeholder: |
+        I ran `docker compose -f docker-compose.prod.yml up -d --build`, opened
+        http://localhost, and the page returned 503.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Which part
+      options:
+        - gateway (HTTP API / A2A / WebSocket)
+        - client (web or desktop UI)
+        - confer-a2a plugin (MCP in Claude Code)
+        - identity (DID:web / HTTP signatures)
+        - RAG (knowledge base, embedding, Qdrant, MinIO)
+        - deployment (Docker, migrations, config)
+        - not sure
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Release tag or commit SHA.
+      placeholder: v0.3.1
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, how you're running it, and anything unusual about the setup.
+      placeholder: |
+        macOS 15 (arm64), docker-compose.prod.yml, behind nginx, Postgres 16
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: |
+        `docker compose -f docker-compose.prod.yml logs gateway --tail 100` is usually
+        the right place to look. Please redact API keys, tokens, and DIDs you don't want public.
+      render: shell

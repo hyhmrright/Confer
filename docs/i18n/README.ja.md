@@ -1,94 +1,117 @@
-# Confer
+<div align="center">
 
-> あなたのAIが、誰とでも会議する。
+<img src="../assets/social/og.png" alt="Confer — あなたの AI が、誰の AI とも話せる" width="840">
 
-🌐 **Language / 语言 / 言語**: [English](../../README.md) | [简体中文](./README.zh-CN.md) | [日本語](./README.ja.md)
+**[ウェブサイト](https://hyhmrright.github.io/Confer/)** · **[ドキュメント](../)** · **[Claude Code プラグイン](../../plugins/confer-a2a/README.md)** · **[リリース](https://github.com/hyhmrright/Confer/releases)**
+
+[![Release](https://img.shields.io/github/v/release/hyhmrright/Confer?style=flat-square&color=e6a23c)](https://github.com/hyhmrright/Confer/releases)
+[![License](https://img.shields.io/github/license/hyhmrright/Confer?style=flat-square&color=e6a23c)](../../LICENSE)
+[![CI](https://img.shields.io/github/actions/workflow/status/hyhmrright/Confer/ci.yml?branch=main&style=flat-square)](https://github.com/hyhmrright/Confer/actions/workflows/ci.yml)
+[![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?style=flat-square)](../../tsconfig.json)
+
+[English](../../README.md) · [简体中文](./README.zh-CN.md) · 日本語
+
+</div>
 
 ---
 
-Conferは、AIエージェント同士がオーナーの代わりに通信するためのプロトコルとプラットフォームです。各ユーザー・組織が独自のAgentをデプロイし、自分の知識とサービス能力を持たせます。ユーザーは相手のドキュメントを読まなくても、自分のAgentを通じて相手のAgentと対話できます。
+## Confer とは
 
-## なぜConferか
+> **あなたの AI が、誰の AI とも話せる。**
 
-**課題**: サードパーティのハードウェアやSDKを統合する開発者は、数千ページのドキュメントを読み込む必要があります。ベンダーのテクニカルサポートは遅く高コスト。Claude Codeなどの AIコーディングツールは、ベンダー固有の知識がなければ頻繁に誤りを犯します。
+あなたのコーディングエージェントは、社内システムもチームの規約も、いま統合しようとしている
+サードパーティ SDK の癖も知りません。だから推測で書き、あなたは一日中ドキュメントを
+チャット欄に貼り付けることになります。
 
-**Conferの解決策**: ベンダーが自社のドキュメントやサポート能力を外部公開Agentとしてパッケージ化する。開発者がClaude Codeでコードを書くとき、Claude Codeは自動的にベンダーのAgentに問い合わせ、引用付きの回答を取得し、`.claude/peers/{vendor}/facts.md`に蓄積して次回以降に自動再利用します。
+**Confer は、その知識にアドレスを与えます。** 自分の Agent を立ち上げ、そこにドキュメント、
+ナレッジベース、ルールを持たせる。Claude Code は MCP 経由でその Agent に問い合わせ、
+**出典付きの回答**を受け取り、検証済みの事実を `.claude/peers/` に書き込みます。
+ファイルは git と共に移動し、次回から自動で再利用されます。
 
-## 主な機能
+同じ経路は組織をまたいでも機能します。相手側も Agent を運用していれば——ベンダー、
+パートナー、他チーム——2 つの Agent が署名付き・ID 検証済みのプロトコルで直接対話します。
+どちらの人間も、相手のドキュメントを読む必要がありません。
 
-- 🌐 **Agent-to-Agentネットワーク** — オープンプロトコル（A2A、DID:web、NANDA AgentFacts）ベースで、プラットフォームロックインなし
-- 🔌 **Claude Code MCPプラグイン** — コーディング中にClaude Codeがベンダーのエージェントに直接問い合わせ可能
-- 📚 **プロジェクトレベルの知識永続化** — `.claude/peers/`はgitで管理され、セッション・開発者・デバイスをまたいで保持
-- 🔐 **三層権限モデル** — Claude CodeのL1/L2/L3設計に着想を得た、安全で制御可能な権限管理
-- 🌍 **多言語対応** — エージェント間のクロスランゲージ対話、引用は原文のまま保持
-- 🏢 **フェデレーション** — セルフホストインスタンスとパブリッククラウドが相互接続
+<img src="../assets/social/how-it-works.png" alt="Confer の仕組み：Claude Code が MCP 経由で自分の Confer インスタンスに問い合わせ、インスタンスが署名付き A2A で相手の Agent に照会し、出典付きの回答が .claude/peers/ に蓄積される" width="100%">
+
+## 注目に値する理由
+
+- **ノード 1 つでも役に立つ。** 自分のドキュメントに向けるだけで、コーディングエージェントは
+  推測をやめます。誰かが先に参加するのを待つ必要はありません。
+- **回答には出典が付く。** すべての事実は元のドキュメントまで遡れ、原文の言語が保持されます。
+- **知識はセッションを越えて残る。** `.claude/peers/{peer}/facts.md` はプレーンな Markdown で、
+  リポジトリにコミットされます——コンテキストウィンドウ、マシン、チームメイトを越えて残ります。
+- **中間にプラットフォームがない。** A2A、W3C DID:web、HTTP メッセージ署名（RFC 9421）、
+  NANDA AgentFacts、MCP といったオープンプロトコル上に構築。セルフホストし、誰とでも
+  フェデレーションできます。
+- **鍵はあなたのもの。** LLM と embedding のキーはユーザーごとに AES-256-GCM で暗号化され、
+  gateway の外には出ません。
+- **同意は形式ではなくゲート。** 相手はあなたが承認するまで到達できません。3 層の権限モデル
+  （L1/L2/L3）が、無人時に Agent が何をしてよいかを決めます。
 
 ## クイックスタート
 
-### 1. 自分で動かす（コマンド1つ）
+### 1 · 自分のインスタンスを起動する
 
-必要なのは Docker だけ。このコマンドが gateway + Web クライアントをビルドし、
-マイグレーションを実行し、すべてのサービスを起動します：
+必要なのは Docker だけ。gateway と Web クライアントをビルドし、マイグレーションを実行し、
+すべてのサービスを起動します：
 
 ```bash
 git clone https://github.com/hyhmrright/Confer.git
 cd Confer
-cp .env.example .env          # ローカルはデフォルトで動作。外部公開前にシークレットを変更すること
+cp .env.example .env    # ローカルなら既定値で可——公開する前にシークレットを必ず変更
 docker compose -f docker-compose.prod.yml up -d --build
 ```
 
-**http://localhost** を開き、**注册 / Register** をクリックして最初のアカウントを作成、
-**設定**で LLM API キーを登録します（キーはユーザーごとに暗号化して保存されます）。
+**http://localhost** を開き、最初のアカウントを登録してから、**設定**で LLM API キーを
+入力してください（ユーザーごとに暗号化して保存されます）。
 
-詳しい手順・設定・トラブルシューティングは **[`docs/09-deployment.md`](../09-deployment.md)** を参照。
+設定・リバースプロキシ・トラブルシュートは **[`docs/09-deployment.md`](../09-deployment.md)** を参照。
 
-### 2. Claude Code からピア Agent に問い合わせる（プラグイン）
+### 2 · Claude Code をつなぐ
 
-稼働中の gateway（上で起動したもの、またはアカウントを持つ任意の Confer インスタンス）に対して
-`confer-a2a` プラグインをインストールします：
+いま起動したインスタンスに対して `confer-a2a` プラグインをインストールします：
 
 ```
 /plugin marketplace add hyhmrright/Confer
 /plugin install confer-a2a@confer
 ```
 
-Claude Code を起動する前に、シェルで認証情報を設定します（署名鍵は常に gateway に留まり、
-プラグインは bearer token のみを持ちます）：
+Claude Code を起動する**前に**、シェルで認証情報を設定します。署名鍵は gateway から出ず、
+プラグインは bearer token のみを持ちます：
 
 ```bash
-export CONFER_USERNAME=ユーザー名
+export CONFER_USERNAME=あなたのユーザー名
 export CONFER_PASSWORD=パスワード
-# 上記のワンコマンド構成は nginx がポート 80 で配信するため、プラグインはここを指す：
-export CONFER_GATEWAY_URL=http://localhost
-# （下記 3 の dev モードでは gateway が直接 :3000 で動作し、それがデフォルト値）
+export CONFER_GATEWAY_URL=http://localhost   # 上記のスタックは nginx が 80 番で配信
 ```
 
-あとは Claude Code で話すだけ — Confer アカウントの連絡先に問い合わせ、検証済みの事実を
-プロジェクトメモリに書き込みます：
+あとは普段どおり作業するだけ。Claude Code が Confer アカウント内の連絡先に問い合わせ、
+学んだ内容をプロジェクトメモリに書き込みます：
 
 ```
-> X100のModbus温度読み取りコードを書いて
+> X100 の Modbus 温度読み取りを書いて
 ```
 
-プラグインの詳細と公開される 9 つのツールは [`plugins/confer-a2a/README.md`](../../plugins/confer-a2a/README.md) を参照。
+プラグインと提供ツールは [`plugins/confer-a2a/README.md`](../../plugins/confer-a2a/README.md) を参照。
 
-### 3. Confer 自体をローカル開発する
+### 3 · Confer 自体を開発する
 
-infra を Docker で動かし、gateway + クライアントをホットリロードで：
+インフラは Docker、gateway とクライアントはホットリロードで：
 
 ```bash
 bun install
-docker compose up -d            # infra のみ：Postgres、Redis、NATS、Qdrant、MinIO
+docker compose up -d    # インフラのみ：Postgres、Redis、NATS、Qdrant、MinIO
 bun run db:migrate
 bun run dev
 ```
 
-- **Webプレビュー**：ブラウザで http://localhost:1420 を開く
+- **Web プレビュー**：http://localhost:1420
 - **ネイティブデスクトップアプリ**：`cd packages/client && bunx tauri dev`
 
-コントリビューション、monorepo 構成、テストスタックは **[`CONTRIBUTING.md`](../../CONTRIBUTING.md)** を参照。
+monorepo 構成、テストスタック、コーディング規約は **[`CONTRIBUTING.md`](../../CONTRIBUTING.md)** を参照。
 
-## アーキテクチャ概要
+## アーキテクチャ
 
 ```
 [Clients] (Tauri 2.0: iOS/Android/Win/Mac/Linux)
@@ -106,36 +129,59 @@ bun run dev
    External: LLM providers · MCP tool servers · Other instances' Agents
 ```
 
-詳細は`docs/02-architecture.md`を参照。
+詳細は [`docs/02-architecture.md`](../02-architecture.md)。
+
+## 技術スタック
+
+- **バックエンド**：Bun + TypeScript + Hono
+- **クライアント**：Tauri 2.0 + React 18 + TypeScript + Tailwind
+- **データ**：PostgreSQL 16 + Redis + NATS + Qdrant + MinIO
+- **プロトコル**：W3C DID、HTTP メッセージ署名（RFC 9421）、MCP、A2A、NANDA AgentFacts
+- **LLM**：BYOK（Claude · GPT · DeepSeek · Qwen · GLM · Ollama）
 
 ## ドキュメント
 
 | ドキュメント | 内容 |
 |---|---|
-| [`CLAUDE.md`](../../CLAUDE.md) | Claude Code向け：プロジェクト規約とエントリポイント |
-| [`docs/01-product.md`](../01-product.md) | 製品定義、ターゲットユーザー、主要シナリオ |
+| [`docs/01-product.md`](../01-product.md) | プロダクト定義、対象ユーザー、Hero scenarios |
 | [`docs/02-architecture.md`](../02-architecture.md) | システムアーキテクチャ |
 | [`docs/03-protocol.md`](../03-protocol.md) | A2A、DID:web、AgentFacts、権限プロトコル |
-| [`docs/04-data-model.md`](../04-data-model.md) | データベーススキーマ、TypeScript型定義 |
-| [`docs/05-api.md`](../05-api.md) | REST + WS + A2Aインターフェース |
-| [`docs/06-claude-code-plugin.md`](../06-claude-code-plugin.md) | MCPプラグイン設計 |
-| [`docs/07-project-memory.md`](../07-project-memory.md) | `.claude/peers/`フォーマット |
-| [`docs/08-mvp-backlog.md`](../08-mvp-backlog.md) | ロードマップ、タスクチェックリスト |
-| [`docs/09-deployment.md`](../09-deployment.md) | セルフホスト、設定、トラブルシューティング |
+| [`docs/04-data-model.md`](../04-data-model.md) | DB スキーマ、TypeScript 型 |
+| [`docs/05-api.md`](../05-api.md) | REST + WebSocket + A2A インターフェース |
+| [`docs/06-claude-code-plugin.md`](../06-claude-code-plugin.md) | MCP プラグイン設計 |
+| [`docs/07-project-memory.md`](../07-project-memory.md) | `.claude/peers/` フォーマット |
+| [`docs/08-mvp-backlog.md`](../08-mvp-backlog.md) | ロードマップとタスク一覧 |
+| [`docs/09-deployment.md`](../09-deployment.md) | セルフホスト、設定、トラブルシュート |
 | [`CONTRIBUTING.md`](../../CONTRIBUTING.md) | 開発環境、monorepo 構成、テストスタック |
-
-## 技術スタック
-
-- **バックエンド**: Bun + TypeScript + Hono
-- **クライアント**: Tauri 2.0 + React 18 + TypeScript + Tailwind
-- **データ**: PostgreSQL 16 + Redis + NATS + Qdrant + MinIO
-- **プロトコル**: W3C DID, HTTP Message Signatures (RFC 9421), MCP, A2A (Google), AgentFacts (NANDA)
-- **LLM**: BYOキー対応 (Claude / GPT / DeepSeek / Qwen / Ollama)
+| [`SECURITY.md`](../../SECURITY.md) | セキュリティポリシーと運用時の推奨設定 |
+| [`CLAUDE.md`](../../CLAUDE.md) | Claude Code 向け：プロジェクト規約とエントリポイント |
 
 ## ステータス
 
-🚧 **v0.1.0リリース済み** — A2A 問い合わせフロー、RFC 9421 HTTP 署名、DID:web ID、RAG ナレッジベース、`confer-a2a` Claude Code プラグインが稼働中。残りの MVP 作業は `docs/08-mvp-backlog.md` を参照。
+**v0.3.1 —— 動作します。1.0 前、セルフホストのみ。**
+
+実装済み：A2A 相談フロー、RFC 9421 HTTP 署名、DID:web アイデンティティ、RAG ナレッジベース
+（MinIO + Qdrant + マルチプロバイダ embedding）、Agent の長期記憶、3 層権限、管理コンソール、
+3 言語 UI（EN/中文/日本語）、そして `confer-a2a` Claude Code プラグイン。すべての PR で、
+実際の Postgres + Qdrant + MinIO スタックに対して全テストを実行しています。
+
+まだないもの：公式ホスティングの公開インスタンスはありません——セルフホストが前提です。
+デスクトップ／モバイルのビルドは各リリースで配布していますが、Web クライアントほど
+検証されていません。残りのスコープは [`docs/08-mvp-backlog.md`](../08-mvp-backlog.md) を参照。
+
+<img src="../assets/screenshot-login.png" alt="Confer Web クライアント" width="100%">
+
+## コントリビューション
+
+issue と PR を歓迎します——開発環境は [`CONTRIBUTING.md`](../../CONTRIBUTING.md)、
+着手しやすいタスクは
+[`good first issue`](https://github.com/hyhmrright/Confer/labels/good%20first%20issue)
+にあります。質問やアイデアは
+[Discussions](https://github.com/hyhmrright/Confer/discussions) へどうぞ。
+
+セキュリティ上の問題：公開 issue ではなく [`SECURITY.md`](../../SECURITY.md) の手順に
+従って非公開でご報告ください。
 
 ## ライセンス
 
-未定（Apache 2.0またはAGPL-3.0を検討中。ビジネス戦略に応じて決定予定）。
+[Apache License 2.0](../../LICENSE)。
