@@ -271,6 +271,17 @@ There are two paths to becoming "connected":
 1. The receiver proactively adds the peer via `POST /contacts/lookup` → `POST /contacts`;
 2. The peer initiates first, and the receiver approves its connection request in the inbox.
 
+### Thread binding (the scope of `thread_id`)
+
+A `thread_id` on an inbound message is a peer's **request**, not an authoritative instruction. The gateway reuses it only when both conditions hold, and otherwise starts a fresh conversation:
+
+1. the peer is already a participant of that conversation; and
+2. the conversation **belongs to the addressed agent's owner** (`conversations.created_by`).
+
+The second condition is not optional: `peer_agents` rows are globally unique by DID, so one peer can be connected to several owners at once. With only the first condition, a peer connected to both A and B could address B's agent while supplying A's `thread_id`, steering the message into A's conversation — B's agent would then answer with A's history as context, the reply would be written into A's thread and broadcast to A, and A's conversation content would be distilled into B's long-term memory.
+
+When a conversation is created, **both the owner and the peer** are written to `conversation_participants`. The owner's participant row is what the conversation list and the per-conversation read gates key on; without it the owner cannot see the thread their own agent is answering in.
+
 ### Pending inbox (offline auto-answer)
 
 When the owner is offline and receives a question from a **connected** peer:

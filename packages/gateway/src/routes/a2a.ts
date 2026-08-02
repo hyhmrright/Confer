@@ -215,9 +215,15 @@ async function checkConsentGate(userId: string, peerId: string): Promise<boolean
 }
 
 // Resolve the conversation for this inbound message: reuse the supplied
-// thread_id only if the peer is already a participant of it (otherwise a
-// connected peer could inject into another peer's thread), else create a fresh
-// agent-to-agent conversation seeded with the peer participant.
+// thread_id only if the peer is already a participant of it AND the thread
+// belongs to the addressed agent's owner, else create a fresh agent-to-agent
+// conversation seeded with both the owner and the peer as participants.
+//
+// Both halves of that check matter. Peer rows are global (keyed by DID), so a
+// peer connected to two owners passes a peer-only participant check on either
+// owner's thread — it could then steer a message addressed to one owner's agent
+// into the other owner's conversation, where the reply would be broadcast to
+// the wrong owner and that owner's history would feed the wrong agent's context.
 async function resolveOrCreateThread(
   threadId: string | undefined,
   peerId: string,
@@ -230,10 +236,12 @@ async function resolveOrCreateThread(
     const [member] = await db
       .select({ id: conversationParticipants.id })
       .from(conversationParticipants)
+      .innerJoin(conversations, eq(conversations.id, conversationParticipants.conversation_id))
       .where(
         and(
           eq(conversationParticipants.conversation_id, convId),
           eq(conversationParticipants.peer_id, peerId),
+          eq(conversations.created_by, userId),
         ),
       )
       .limit(1);
@@ -248,13 +256,26 @@ async function resolveOrCreateThread(
       created_by: userId,
     });
 
-    await db.insert(conversationParticipants).values({
-      id: newId(),
-      conversation_id: convId,
-      participant_type: 'peer_agent',
-      peer_id: peerId,
-      role: 'member',
-    });
+    // The owner is seeded as a participant alongside the peer: the conversation
+    // list and the per-conversation read gates are both keyed on a participant
+    // row, so without it the owner cannot see the thread their own agent is
+    // answering in.
+    await db.insert(conversationParticipants).values([
+      {
+        id: newId(),
+        conversation_id: convId,
+        participant_type: 'user',
+        user_id: userId,
+        role: 'owner',
+      },
+      {
+        id: newId(),
+        conversation_id: convId,
+        participant_type: 'peer_agent',
+        peer_id: peerId,
+        role: 'member',
+      },
+    ]);
   }
 
   return convId;
