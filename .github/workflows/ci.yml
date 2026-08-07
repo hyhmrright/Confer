@@ -87,11 +87,12 @@ jobs:
     if: always()
     steps:
       - name: Verify every gate passed
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
         run: |
-          results='${{ join(needs.*.result, " ") }}'
-          for result in $results; do
+          for result in $RESULTS; do
             if [ "$result" != "success" ]; then
-              echo "::error::a quality gate did not succeed ($results)"
+              echo "::error::a quality gate did not succeed ($RESULTS)"
               exit 1
             fi
           done
