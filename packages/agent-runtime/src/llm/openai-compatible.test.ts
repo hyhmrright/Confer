@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import {
-  OpenAICompatibleProvider,
   createDeepSeekProvider,
   createGlmProvider,
   createOllamaProvider,
   createOpenAICompatibleProvider,
   createOpenAIProvider,
   createQwenProvider,
+  OpenAICompatibleProvider,
 } from './openai-compatible.js';
 import type { LLMMessage, LLMStreamEvent } from './provider.js';
 
@@ -30,10 +30,7 @@ function lastBody(): Record<string, unknown> {
   return JSON.parse(call.init.body as string) as Record<string, unknown>;
 }
 
-function chatResponse(opts: {
-  content?: string;
-  finish_reason?: string;
-}): Response {
+function chatResponse(opts: { content?: string; finish_reason?: string }): Response {
   return new Response(
     JSON.stringify({
       choices: [

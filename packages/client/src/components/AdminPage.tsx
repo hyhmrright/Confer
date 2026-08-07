@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router';
-import { type TranslationKey, dateLocale } from '../i18n/index.js';
+import { dateLocale, type TranslationKey } from '../i18n/index.js';
 import {
   type AdminAgent,
   type AdminConversation,
@@ -153,7 +153,7 @@ function UserManagement() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder={t('admin.searchPlaceholder')}
-          className="w-64 px-3 py-2 bg-dark-input border border-dark-border rounded-lg text-sm text-ink-primary placeholder:text-ink-muted focus:outline-none focus:border-primary-600/40"
+          className="w-64 px-3 py-2 bg-dark-input border border-dark-border rounded-lg text-sm text-ink-primary placeholder:text-ink-muted focus:outline-hidden focus:border-primary-600/40"
         />
       </form>
 
@@ -473,7 +473,7 @@ function GlobalConfig() {
               setInstanceName(e.target.value);
               setSaved(false);
             }}
-            className="flex-1 px-3 py-2 bg-dark-input border border-dark-border rounded-lg text-sm text-ink-primary focus:outline-none focus:border-primary-600/40"
+            className="flex-1 px-3 py-2 bg-dark-input border border-dark-border rounded-lg text-sm text-ink-primary focus:outline-hidden focus:border-primary-600/40"
           />
           <button
             type="button"

@@ -35,7 +35,7 @@ export function AddContactDialog() {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden animate-fade-in">
         {/* Header */}
         <div className="flex justify-between items-center px-6 py-4 border-b border-gray-100">
@@ -60,7 +60,7 @@ export function AddContactDialog() {
                 value={domain}
                 onChange={(e) => setDomain(e.target.value)}
                 placeholder={t('contacts.domainPlaceholder')}
-                className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-hidden focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               />
             </div>
             <button

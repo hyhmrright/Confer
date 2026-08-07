@@ -24,7 +24,8 @@ describe('GatewayClient', () => {
         if (url.endsWith('/api/v1/auth/login')) {
           return new Response(JSON.stringify({ access_token: 'tok-1' }), { status: 200 });
         }
-        expect((init?.headers as Record<string, string>).authorization).toBe('Bearer tok-1');
+        const headers = init?.headers as Record<string, string> | undefined;
+        expect(headers?.authorization).toBe('Bearer tok-1');
         return new Response(JSON.stringify({ contacts: [] }), { status: 200 });
       }),
     );

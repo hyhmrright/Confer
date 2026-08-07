@@ -132,7 +132,7 @@ export function MessageView() {
                 <div className="markdown-content text-sm leading-relaxed text-ink-primary">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>{streamContent}</ReactMarkdown>
                 </div>
-                <span className="inline-block w-[3px] h-4 bg-primary-400 animate-cursor-blink rounded-sm ml-0.5 align-text-bottom" />
+                <span className="inline-block w-[3px] h-4 bg-primary-400 animate-cursor-blink rounded-xs ml-0.5 align-text-bottom" />
               </div>
               {streamCitations.length > 0 && <CitationCapsule citations={streamCitations} />}
             </div>
@@ -201,7 +201,7 @@ export function MessageView() {
               placeholder={t('message.composerPlaceholder')}
               rows={1}
               className="flex-1 bg-transparent text-ink-primary text-sm leading-relaxed resize-none
-                focus:outline-none placeholder:text-ink-muted py-1.5 px-1 max-h-40 scrollbar-thin"
+                focus:outline-hidden placeholder:text-ink-muted py-1.5 px-1 max-h-40 scrollbar-thin"
               disabled={sending || streaming}
             />
 

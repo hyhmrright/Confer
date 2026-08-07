@@ -1,5 +1,5 @@
 import { importPrivateKey, signRequest } from '@confer/identity';
-import { type Result, err, ok } from '@confer/shared';
+import { err, ok, type Result } from '@confer/shared';
 
 export interface OutboundA2AMessage {
   from: string;

@@ -31,7 +31,11 @@ function DocRow({
   doc,
   onDelete,
   onRetry,
-}: { doc: KnowledgeDocument; onDelete: () => void; onRetry?: () => void }) {
+}: {
+  doc: KnowledgeDocument;
+  onDelete: () => void;
+  onRetry?: () => void;
+}) {
   const { t } = useTranslation();
   return (
     <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-dark-input border border-dark-border text-xs group">
@@ -49,7 +53,7 @@ function DocRow({
           <button
             type="button"
             onClick={onRetry}
-            className="text-[10px] px-1.5 py-0.5 rounded text-amber-400 hover:bg-amber-900/20 border border-amber-800/30 transition-colors"
+            className="text-[10px] px-1.5 py-0.5 rounded-sm text-amber-400 hover:bg-amber-900/20 border border-amber-800/30 transition-colors"
           >
             {t('common.retry')}
           </button>
@@ -57,7 +61,7 @@ function DocRow({
         <button
           type="button"
           onClick={onDelete}
-          className="text-ink-muted hover:text-red-400 hover:bg-red-900/20 p-0.5 rounded transition-colors"
+          className="text-ink-muted hover:text-red-400 hover:bg-red-900/20 p-0.5 rounded-sm transition-colors"
         >
           <Trash width={12} height={12} />
         </button>
@@ -134,7 +138,7 @@ function KbCard({ kbId }: { kbId: string }) {
             onClick={() => {
               if (confirm(t('knowledge.deleteConfirm', { name: kb.name }))) deleteKb(kbId);
             }}
-            className="p-1 text-ink-muted hover:text-red-400 hover:bg-red-900/20 rounded transition-colors"
+            className="p-1 text-ink-muted hover:text-red-400 hover:bg-red-900/20 rounded-sm transition-colors"
           >
             <Trash width={12} height={12} />
           </button>

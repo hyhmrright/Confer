@@ -11,7 +11,7 @@ export const permissionSchema = z.object({
   user_id: z.string().length(26),
   peer_id: z.string().length(26).optional(),
   action: z.string().max(64),
-  scope_json: z.record(z.unknown()),
+  scope_json: z.record(z.string(), z.unknown()),
   level: permissionLevelSchema,
   decision: permissionDecisionSchema.optional(),
   decision_scope: permissionDecisionScopeSchema.optional(),

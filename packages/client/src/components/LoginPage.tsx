@@ -29,7 +29,7 @@ export function LoginPage() {
 
   const inputCls = `w-full px-3.5 py-2.5 bg-dark-input border border-dark-border rounded-xl text-sm
     text-ink-primary placeholder:text-ink-muted
-    focus:outline-none focus:border-primary-600/60 focus:bg-dark-card
+    focus:outline-hidden focus:border-primary-600/60 focus:bg-dark-card
     transition-all duration-150 font-sans`;
 
   return (

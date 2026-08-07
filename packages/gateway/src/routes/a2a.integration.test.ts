@@ -26,12 +26,12 @@ import { ensureMemoryCollection } from '../lib/memory-store.js';
 import { clearNonceCache } from '../lib/nonce-cache.js';
 import { ensureCollection, upsertChunks } from '../lib/qdrant.js';
 import {
-  type SeededUser,
   get,
   headers,
   mockFetch,
   post,
   resetDb,
+  type SeededUser,
   seedUser,
 } from '../test/helpers.js';
 

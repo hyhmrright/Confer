@@ -4,7 +4,6 @@ import { getDb } from '../db/connection.js';
 import { knowledgeDocuments } from '../db/schema.js';
 import { VECTOR_SIZE } from '../lib/embedding.js';
 import {
-  type SeededUser,
   apiRequest,
   del,
   get,
@@ -12,6 +11,7 @@ import {
   post,
   put,
   resetDb,
+  type SeededUser,
   seedUser,
 } from '../test/helpers.js';
 

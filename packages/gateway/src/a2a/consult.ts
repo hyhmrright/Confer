@@ -1,4 +1,4 @@
-import { type Result, err, ok } from '@confer/shared';
+import { err, ok, type Result } from '@confer/shared';
 import { eq } from 'drizzle-orm';
 import { getDb } from '../db/connection.js';
 import { agents, peerAgents } from '../db/schema.js';

@@ -8,7 +8,7 @@ export const permissionRequestSchema = z.object({
   id: z.string(),
   level: z.string(),
   action: z.string(),
-  scope: z.record(z.unknown()),
+  scope: z.record(z.string(), z.unknown()),
   description: z.string(),
   requested_at: z.string(),
 });

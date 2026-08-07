@@ -1,4 +1,4 @@
-import { type Result, err, ok } from '@confer/shared';
+import { err, ok, type Result } from '@confer/shared';
 
 export interface KeyPair {
   publicKey: CryptoKey;

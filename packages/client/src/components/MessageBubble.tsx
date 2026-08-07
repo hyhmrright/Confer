@@ -73,7 +73,7 @@ export function MessageBubble({ message }: { message: Message }) {
         <div
           className={`rounded-2xl px-4 py-3 ${
             isUser
-              ? 'user-bubble bg-gradient-to-br from-primary-600 to-primary-700 text-white rounded-tr-sm shadow-lg shadow-primary-900/30'
+              ? 'user-bubble bg-linear-to-br from-primary-600 to-primary-700 text-white rounded-tr-sm shadow-lg shadow-primary-900/30'
               : 'agent-bubble bg-dark-card border border-dark-border text-ink-primary rounded-tl-sm'
           }`}
         >

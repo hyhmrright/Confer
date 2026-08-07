@@ -1,4 +1,4 @@
-import { SsrfBlockedError, assertPublicHostname, resolveDID } from '@confer/identity';
+import { assertPublicHostname, resolveDID, SsrfBlockedError } from '@confer/identity';
 import { AppError, contactLookupSchema, newId, policyOverridesSchema } from '@confer/shared';
 import { and, eq, like } from 'drizzle-orm';
 import { Hono } from 'hono';

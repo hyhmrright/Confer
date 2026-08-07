@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { EMBEDDING_PROVIDER_PRIORITY, VECTOR_SIZE, embedTexts } from './embedding.js';
+import { EMBEDDING_PROVIDER_PRIORITY, embedTexts, VECTOR_SIZE } from './embedding.js';
 
 describe('embedding contracts', () => {
   test('auto-select priority is openai -> glm -> qwen', () => {

@@ -11,7 +11,7 @@ import {
   sessions,
   users,
 } from '../db/schema.js';
-import { type SeededUser, get, patch, post, resetDb, seedUser } from '../test/helpers.js';
+import { get, patch, post, resetDb, type SeededUser, seedUser } from '../test/helpers.js';
 
 let admin: SeededUser;
 let member: SeededUser;

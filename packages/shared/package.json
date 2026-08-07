@@ -11,7 +11,7 @@
     "test": "bun test"
   },
   "dependencies": {
-    "ulid": "^2.3.0",
-    "zod": "^3.24.0"
+    "ulid": "^3.0.2",
+    "zod": "^4.4.3"
   }
 }

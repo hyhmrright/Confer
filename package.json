@@ -2,7 +2,9 @@
   "name": "confer",
   "private": true,
   "version": "0.3.1",
-  "workspaces": ["packages/*"],
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "dev": "bun run --filter '*' dev",
     "build": "bun run --filter '*' build",
@@ -17,13 +19,14 @@
     "db:migrate": "bun run --filter @confer/gateway db:migrate"
   },
   "devDependencies": {
-    "@biomejs/biome": "^1.9.0",
+    "@biomejs/biome": "^2.5.7",
     "@types/bun": "latest",
-    "typescript": "^5.7.0",
-    "zod": "^3.24.0"
+    "typescript": "^7.0.2",
+    "zod": "^4.4.3"
   },
   "overrides": {
     "fast-uri": "^3.1.5",
+    "zod": "^4.4.3",
     "ip-address": "^10.4.0",
     "postcss": "^8.5.26",
     "shell-quote": "^1.10.0"

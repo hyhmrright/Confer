@@ -55,7 +55,7 @@ export function ConversationsPanel() {
             placeholder={t('conversations.searchPlaceholder')}
             className="w-full pl-8 pr-3 py-1.5 bg-dark-input text-ink-secondary text-xs rounded-md
               border border-dark-border placeholder:text-ink-muted
-              focus:outline-none focus:border-primary-600/40 transition-colors"
+              focus:outline-hidden focus:border-primary-600/40 transition-colors"
           />
         </div>
       </div>
@@ -70,6 +70,7 @@ export function ConversationsPanel() {
           filtered.map((conv) => {
             const active = conv.id === activeConversationId;
             return (
+              // biome-ignore lint/a11y/noStaticElementInteractions: hover-only affordance; the real control is the nested <button>, which already carries keyboard focus
               <div
                 key={conv.id}
                 className={`relative group transition-colors duration-100

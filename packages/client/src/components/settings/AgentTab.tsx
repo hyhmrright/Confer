@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useProviderModelFetch } from '../../hooks/useProviderModelFetch.js';
-import { LLM_PROVIDERS, STATIC_MODELS, llmProviderName, modelLabel } from '../../lib/providers.js';
+import { LLM_PROVIDERS, llmProviderName, modelLabel, STATIC_MODELS } from '../../lib/providers.js';
 import { INPUT_FIELD_CLS, SELECT_FIELD_CLS } from '../../lib/styles.js';
 import { useSettingsStore } from '../../stores/settings.js';
 import { LoadingDots } from '../LoadingDots.js';

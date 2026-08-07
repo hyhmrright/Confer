@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { LLM_PROVIDERS, TOOL_PROVIDERS, llmProviderName } from '../../lib/providers.js';
+import { LLM_PROVIDERS, llmProviderName, TOOL_PROVIDERS } from '../../lib/providers.js';
 import { useSettingsStore } from '../../stores/settings.js';
 import { ProviderKeyEditor } from './ProviderKeyEditor.js';
 import { StatusMsg } from './SettingsShared.js';

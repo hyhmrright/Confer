@@ -12,7 +12,7 @@ import { app } from '../app.js';
 import { getDb } from '../db/connection.js';
 import { agents, keypairs, messages, peerAgents, peerContacts } from '../db/schema.js';
 import { getEnv } from '../env.js';
-import { type SeededUser, get, post, resetDb, seedUser } from '../test/helpers.js';
+import { get, post, resetDb, type SeededUser, seedUser } from '../test/helpers.js';
 
 const CONSULT = '/api/v1/consult';
 const PEER_DID = 'did:web:localhost';

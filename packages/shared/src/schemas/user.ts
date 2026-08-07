@@ -8,12 +8,12 @@ export const userPreferencesSchema = z.object({
       push: z.boolean().default(true),
       email: z.boolean().default(false),
     })
-    .default({}),
+    .prefault({}),
   privacy: z
     .object({
       allow_offline_response: z.boolean().default(true),
     })
-    .default({}),
+    .prefault({}),
 });
 
 export const encryptedKeySchema = z.object({
@@ -37,7 +37,7 @@ export const userSchema = z.object({
   display_name: z.string().max(128).optional(),
   avatar_url: z.string().url().optional(),
   did: z.string(),
-  preferences: userPreferencesSchema.default({}),
+  preferences: userPreferencesSchema.prefault({}),
   llm_keys: llmKeysSchema.default({}),
   created_at: z.coerce.date(),
   updated_at: z.coerce.date(),

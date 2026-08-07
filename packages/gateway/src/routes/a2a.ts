@@ -1,3 +1,4 @@
+import type { LLMMessage } from '@confer/agent-runtime';
 import {
   classifyPermissionLevel,
   createProvider,
@@ -5,7 +6,6 @@ import {
   mergePolicyConfig,
   parsePolicyConfig,
 } from '@confer/agent-runtime';
-import type { LLMMessage } from '@confer/agent-runtime';
 import {
   MAX_CLOCK_SKEW_MS,
   multibaseToPublicKey,
@@ -15,8 +15,8 @@ import {
 } from '@confer/identity';
 import { AppError, newId } from '@confer/shared';
 import { and, asc, eq, lt } from 'drizzle-orm';
-import { Hono } from 'hono';
 import type { MiddlewareHandler } from 'hono';
+import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import { z } from 'zod';
 import { sendA2AMessage } from '../a2a/outbound.js';
@@ -49,7 +49,7 @@ const a2aMessageSchema = z.object({
     type: z.enum(['question', 'answer', 'notification']),
     content: z.string(),
     language: z.string().optional(),
-    context: z.record(z.unknown()).optional(),
+    context: z.record(z.string(), z.unknown()).optional(),
   }),
 });
 

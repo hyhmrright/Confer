@@ -4,13 +4,13 @@ import { eq } from 'drizzle-orm';
 import { getDb } from '../db/connection.js';
 import { agents, peerAgents } from '../db/schema.js';
 import {
-  type SeededUser,
   del,
   get,
   mockFetch,
   patch,
   post,
   resetDb,
+  type SeededUser,
   seedUser,
 } from '../test/helpers.js';
 

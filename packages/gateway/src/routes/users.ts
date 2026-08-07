@@ -1,5 +1,5 @@
-import { AppError, decrypt, encrypt } from '@confer/shared';
 import type { EncryptedValue } from '@confer/shared';
+import { AppError, decrypt, encrypt } from '@confer/shared';
 import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { z } from 'zod';
@@ -20,7 +20,7 @@ const llmKeyBodySchema = z.object({
   api_key: z.string().min(1),
 });
 
-const policyBodySchema = z.record(z.unknown());
+const policyBodySchema = z.record(z.string(), z.unknown());
 
 export const userRoutes = new Hono<AppEnv>();
 

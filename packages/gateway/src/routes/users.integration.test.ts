@@ -3,7 +3,7 @@ import { newId } from '@confer/shared';
 import { eq } from 'drizzle-orm';
 import { getDb } from '../db/connection.js';
 import { agents, users } from '../db/schema.js';
-import { type SeededUser, del, get, patch, put, resetDb, seedUser } from '../test/helpers.js';
+import { del, get, patch, put, resetDb, type SeededUser, seedUser } from '../test/helpers.js';
 
 let user: SeededUser;
 

@@ -55,7 +55,7 @@ export function ContactDetail() {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50">
       <div className="bg-dark-panel border border-dark-border rounded-2xl shadow-2xl w-full max-w-md mx-4 max-h-[85vh] flex flex-col overflow-hidden animate-fade-in">
         <div className="flex justify-between items-center px-6 py-4 border-b border-dark-border shrink-0">
           <h2 className="text-base font-semibold text-ink-primary">{t('contacts.detailTitle')}</h2>

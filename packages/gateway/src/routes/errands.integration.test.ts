@@ -3,7 +3,7 @@ import { newId } from '@confer/shared';
 import { eq } from 'drizzle-orm';
 import { getDb } from '../db/connection.js';
 import { errandCards, errands } from '../db/schema.js';
-import { type SeededUser, get, post, resetDb, seedUser } from '../test/helpers.js';
+import { get, post, resetDb, type SeededUser, seedUser } from '../test/helpers.js';
 
 const ERRANDS = '/api/v1/errands';
 

@@ -4,7 +4,7 @@ import { eq } from 'drizzle-orm';
 import { getDb } from '../db/connection.js';
 import { agentMemories } from '../db/schema.js';
 import { deleteMemory, ensureMemoryCollection } from '../lib/memory-store.js';
-import { type SeededUser, mockFetch, resetDb, seedUser } from '../test/helpers.js';
+import { mockFetch, resetDb, type SeededUser, seedUser } from '../test/helpers.js';
 import { extractAndStore, recallMemories } from './memory.js';
 
 // Fake provider returning a fixed fact list for extraction.

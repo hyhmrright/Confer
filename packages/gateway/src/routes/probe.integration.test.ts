@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, test } from 'bun:test';
 import { eq } from 'drizzle-orm';
 import { getDb } from '../db/connection.js';
 import { probeAsks } from '../db/schema.js';
-import { type SeededUser, get, post, resetDb, seedUser } from '../test/helpers.js';
+import { get, post, resetDb, type SeededUser, seedUser } from '../test/helpers.js';
 
 const PROBE = '/api/v1/probe/ask-person';
 

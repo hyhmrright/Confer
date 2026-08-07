@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, test } from 'bun:test';
 import { newId } from '@confer/shared';
 import { getDb } from '../db/connection.js';
 import { peerAgents, peerContacts } from '../db/schema.js';
-import { type SeededUser, get, put, resetDb, seedUser } from '../test/helpers.js';
+import { get, put, resetDb, type SeededUser, seedUser } from '../test/helpers.js';
 
 const PROJECTS = '/api/v1/projects';
 const PROJECT = 'confer';
