@@ -82,7 +82,9 @@ TypeScript everywhere. Bun + Hono (server), Tauri 2.0 + React 18 + Zustand (clie
 
 `dev` is the daily working branch (unprotected — push directly). `main` is the release branch, protected by a GitHub **ruleset** (not classic protection — the `/protection` API returns 404). Feature branches and PRs target `dev`; releases go `dev` → `main`, then tag from `main`. CI `check` is the only required status.
 
-CI runs `lint`, `typecheck`, `test` (spins up `docker-compose.test.yml` via `bun run test:setup`), and `build` in parallel; `check` is an aggregator job over those four, so it stays the single required context. **Never add a new gate to the ruleset** — add it to `check`'s `needs` instead, or PRs deadlock. `audit` (`bun audit`) is deliberately advisory and outside `check`: it reports red until the out-of-range dependency bumps land, and does not block merge.
+CI runs `lint`, `typecheck`, `test` (spins up `docker-compose.test.yml` via `bun run test:setup`), `build`, and `audit` (`bun audit --audit-level=high`) in parallel; `check` is an aggregator job over those five, so it stays the single required context. **Never add a new gate to the ruleset** — add it to `check`'s `needs` instead, or PRs deadlock.
+
+`audit` blocks, so a new high advisory turns the branch red. Fix it by upgrading. Only when a fix is genuinely unreachable may you add `--ignore=<GHSA-id>`, and the workflow comment must record why the vulnerable code path can't be hit — one such exemption exists today (`GHSA-qwww-vcr4-c8h2`, react-router RSC mode, needs React 19). Bun's version is pinned in `.github/actions/setup/action.yml`, and every third-party action is SHA-pinned with the tag in a trailing comment.
 
 ## Release rules
 

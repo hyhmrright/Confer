@@ -18,7 +18,7 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: ./.github/actions/setup
       - name: Lint
         run: bun run lint
@@ -26,7 +26,7 @@ jobs:
   typecheck:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: ./.github/actions/setup
 
       - name: Type check (backend)
@@ -42,7 +42,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: ./.github/actions/setup
 
       # Gateway route tests drive the real Hono app against real Postgres +
@@ -57,33 +57,33 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: ./.github/actions/setup
       - name: Build all packages
         run: bun run build
 
-  # Advisory only, deliberately outside the `check` gate: the tree currently
-  # carries high advisories whose fixes need out-of-range bumps (vite 6 -> 7,
-  # drizzle-orm 0.38 -> 0.45, react-router -> 7.18). Fold this into `check`'s
-  # `needs` once those land, so it becomes blocking.
   audit:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-      # Resolves against bun.lock alone — no install needed.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: ./.github/actions/setup
+      #
+      # GHSA-qwww-vcr4-c8h2 (react-router RSC-mode CSRF) is ignored, not
+      # unfixed: it needs react-router 8, which peers on React >=19.2.7 while
+      # the client is on React 18 — a whole-client framework migration. The
+      # vulnerable path is RSC mode with router actions, and the client is a
+      # Tauri SPA using only BrowserRouter/Routes/Route/Navigate/useNavigate,
+      # so it cannot reach that code. Drop the flag when the client moves to
+      # React 19; do not add IDs here without recording why they're unreachable.
       - name: Security audit
-        run: bun audit --audit-level=high
+        run: bun audit --audit-level=high --ignore=GHSA-qwww-vcr4-c8h2
 
   # Single required status check (branch ruleset on main requires `check`).
   # Adding gates above must not add required checks here, or PRs deadlock —
   # this job aggregates them into the one name the ruleset knows about.
   check:
     runs-on: ubuntu-latest
-    needs: [lint, typecheck, test, build]
+    needs: [lint, typecheck, test, build, audit]
     if: always()
     steps:
       - name: Verify every gate passed
