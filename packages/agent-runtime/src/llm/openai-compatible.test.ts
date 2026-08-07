@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { lastBody, mockFetch, resetFetchCalls, restoreFetch } from '../test/fetch-mock.js';
 import {
   createDeepSeekProvider,
   createGlmProvider,
@@ -9,26 +10,6 @@ import {
   OpenAICompatibleProvider,
 } from './openai-compatible.js';
 import type { LLMMessage, LLMStreamEvent } from './provider.js';
-
-const realFetch = globalThis.fetch;
-
-type FetchCall = { url: string; init: RequestInit };
-let calls: FetchCall[] = [];
-
-function mockFetch(impl: (url: string, init: RequestInit) => Response): void {
-  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = typeof input === 'string' ? input : input.toString();
-    const finalInit = init ?? {};
-    calls.push({ url, init: finalInit });
-    return impl(url, finalInit);
-  }) as typeof fetch;
-}
-
-function lastBody(): Record<string, unknown> {
-  const call = calls[calls.length - 1];
-  if (!call) throw new Error('no fetch call recorded');
-  return JSON.parse(call.init.body as string) as Record<string, unknown>;
-}
 
 function chatResponse(opts: { content?: string; finish_reason?: string }): Response {
   return new Response(
@@ -60,13 +41,8 @@ function dataLine(obj: unknown): string {
   return `data: ${JSON.stringify(obj)}`;
 }
 
-beforeEach(() => {
-  calls = [];
-});
-
-afterEach(() => {
-  globalThis.fetch = realFetch;
-});
+beforeEach(resetFetchCalls);
+afterEach(restoreFetch);
 
 describe('toOpenAIMessage (via request body)', () => {
   const provider = () => new OpenAICompatibleProvider('test', 'k', 'https://api.test', 'm');

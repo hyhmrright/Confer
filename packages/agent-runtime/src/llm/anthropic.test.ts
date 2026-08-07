@@ -1,26 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import {
+  fetchCalls,
+  lastBody,
+  mockFetch,
+  resetFetchCalls,
+  restoreFetch,
+} from '../test/fetch-mock.js';
 import { AnthropicProvider } from './anthropic.js';
 import type { LLMMessage, LLMStreamEvent } from './provider.js';
-
-const realFetch = globalThis.fetch;
-
-type FetchCall = { url: string; init: RequestInit };
-let calls: FetchCall[] = [];
-
-function mockFetch(impl: (url: string, init: RequestInit) => Response): void {
-  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = typeof input === 'string' ? input : input.toString();
-    const finalInit = init ?? {};
-    calls.push({ url, init: finalInit });
-    return impl(url, finalInit);
-  }) as typeof fetch;
-}
-
-function lastBody(): Record<string, unknown> {
-  const call = calls[calls.length - 1];
-  if (!call) throw new Error('no fetch call recorded');
-  return JSON.parse(call.init.body as string) as Record<string, unknown>;
-}
 
 /** Build a ReadableStream of SSE `data: ` lines from JSON events. */
 function sseStream(events: unknown[]): ReadableStream<Uint8Array> {
@@ -35,13 +22,8 @@ function sseStream(events: unknown[]): ReadableStream<Uint8Array> {
   });
 }
 
-beforeEach(() => {
-  calls = [];
-});
-
-afterEach(() => {
-  globalThis.fetch = realFetch;
-});
+beforeEach(resetFetchCalls);
+afterEach(restoreFetch);
 
 describe('toAnthropicMessages (via request body)', () => {
   test('filters out system messages from the messages array', async () => {
@@ -146,7 +128,7 @@ describe('chat', () => {
       temperature: 0.5,
     });
 
-    const call = calls[0];
+    const call = fetchCalls()[0];
     expect(call?.url).toBe('https://example.test/v1/messages');
     const headers = call?.init.headers as Record<string, string>;
     expect(headers['x-api-key']).toBe('secret-key');

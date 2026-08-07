@@ -57,6 +57,45 @@ async function resolvePeerEndpoint(did: string): Promise<string> {
   return result.value.service?.find((s) => s.serviceEndpoint)?.serviceEndpoint ?? '';
 }
 
+// Store a pending permission raised by an inbound peer and push it to the
+// owner's inbox. Both A2A gates (connect, ask) land here, so the row shape and
+// the notification can never drift apart: `requested_by` is always the peer,
+// and the pushed event always carries the same `created_at` that was written.
+async function requestPeerPermission(request: {
+  userId: string;
+  peer: typeof peerAgents.$inferSelect;
+  action: 'connect' | 'ask';
+  level: string;
+  // Stored verbatim as JSONB and interpreted per-action by the inbox card, so
+  // any object shape is valid here.
+  scope: object;
+}): Promise<void> {
+  const id = newId();
+  const [inserted] = await getDb()
+    .insert(permissions)
+    .values({
+      id,
+      user_id: request.userId,
+      peer_id: request.peer.id,
+      action: request.action,
+      scope_json: request.scope,
+      level: request.level,
+      decision: 'pending',
+      requested_by: request.peer.id,
+    })
+    .returning({ created_at: permissions.created_at });
+
+  notifyPermissionRequest(request.userId, {
+    id,
+    level: request.level,
+    action: request.action,
+    scope_json: request.scope,
+    peer_name: request.peer.name,
+    peer_did: request.peer.did,
+    created_at: inserted?.created_at ?? new Date(),
+  });
+}
+
 // Record a pending connection request from an unconnected peer, deduplicated
 // so repeated messages from the same peer don't flood the owner's inbox.
 async function upsertConnectionRequest(
@@ -64,8 +103,7 @@ async function upsertConnectionRequest(
   peer: typeof peerAgents.$inferSelect,
   firstMessage: string,
 ): Promise<void> {
-  const db = getDb();
-  const [existing] = await db
+  const [existing] = await getDb()
     .select()
     .from(permissions)
     .where(
@@ -78,38 +116,20 @@ async function upsertConnectionRequest(
     )
     .limit(1);
 
+  // Only a genuinely new request gets past here, so the owner is never
+  // double-notified for a peer that keeps retrying.
   if (existing) return;
 
-  const id = newId();
-  const scope = {
-    peer_did: peer.did,
-    peer_name: peer.name,
-    first_message: firstMessage.slice(0, 500),
-  };
-  const [inserted] = await db
-    .insert(permissions)
-    .values({
-      id,
-      user_id: userId,
-      peer_id: peer.id,
-      action: 'connect',
-      scope_json: scope,
-      level: 'L2',
-      decision: 'pending',
-      requested_by: peer.id,
-    })
-    .returning({ created_at: permissions.created_at });
-
-  // Only a genuinely new insert reaches here (the dedup early-return above
-  // short-circuits repeats), so this never double-notifies the owner.
-  notifyPermissionRequest(userId, {
-    id,
-    level: 'L2',
+  await requestPeerPermission({
+    userId,
+    peer,
     action: 'connect',
-    scope_json: scope,
-    peer_name: peer.name,
-    peer_did: peer.did,
-    created_at: inserted?.created_at ?? new Date(),
+    level: 'L2',
+    scope: {
+      peer_did: peer.did,
+      peer_name: peer.name,
+      first_message: firstMessage.slice(0, 500),
+    },
   });
 }
 
@@ -142,8 +162,7 @@ interface HoldA2AQuestionParams {
 // permission for the owner to approve before the agent answers. The inbound
 // message is already stored and broadcast by the caller; this only adds the
 // approval gate.
-async function holdA2AQuestion(params: HoldA2AQuestionParams): Promise<void> {
-  const db = getDb();
+function holdA2AQuestion(params: HoldA2AQuestionParams): Promise<void> {
   const scope: A2AQuestionScope = {
     kind: 'a2a_question',
     conversation_id: params.conversationId,
@@ -153,30 +172,12 @@ async function holdA2AQuestion(params: HoldA2AQuestionParams): Promise<void> {
     content: params.content.slice(0, 500),
   };
 
-  const id = newId();
-  const level = classifyPermissionLevel('ask');
-  const [inserted] = await db
-    .insert(permissions)
-    .values({
-      id,
-      user_id: params.userId,
-      peer_id: params.peer.id,
-      action: 'ask',
-      scope_json: scope,
-      level,
-      decision: 'pending',
-      requested_by: params.peer.id,
-    })
-    .returning({ created_at: permissions.created_at });
-
-  notifyPermissionRequest(params.userId, {
-    id,
-    level,
+  return requestPeerPermission({
+    userId: params.userId,
+    peer: params.peer,
     action: 'ask',
-    scope_json: scope,
-    peer_name: params.peer.name,
-    peer_did: params.peer.did,
-    created_at: inserted?.created_at ?? new Date(),
+    level: classifyPermissionLevel('ask'),
+    scope,
   });
 }
 

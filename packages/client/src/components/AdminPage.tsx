@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router';
 import { dateLocale, type TranslationKey } from '../i18n/index.js';
 import {
   type AdminAgent,
@@ -9,9 +8,62 @@ import {
   useAdminStore,
 } from '../stores/admin.js';
 import { useAuthStore } from '../stores/auth.js';
-import { ArrowLeft, MessageCircle, Settings, Shield, Users } from './Icons.js';
+import { MessageCircle, Settings, Shield, Users } from './Icons.js';
+import { type PageTab, TabbedPage } from './TabbedPage.js';
 
 type Tab = 'overview' | 'users' | 'content' | 'config';
+
+// Every moderation action in this page is the same interaction: confirm, then
+// run while the row's buttons are disabled. Sharing it keeps a row from
+// double-submitting because someone forgot the `finally`.
+function useConfirmedAction() {
+  const { t } = useTranslation();
+  const [busy, setBusy] = useState(false);
+
+  const run = async (confirmKey: TranslationKey, action: () => Promise<void>) => {
+    if (!window.confirm(t(confirmKey))) return;
+    setBusy(true);
+    try {
+      await action();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return { busy, run };
+}
+
+// A table-row action link. `tone` is the only thing that varies between them;
+// everything else (size, hover, disabled treatment) is shared by all six.
+function RowAction({
+  tone,
+  disabled,
+  onClick,
+  children,
+}: {
+  tone: 'neutral' | 'primary' | 'positive' | 'destructive';
+  disabled: boolean;
+  onClick: () => void;
+  children: string;
+}) {
+  const toneClass = {
+    neutral: 'text-ink-secondary',
+    primary: 'text-primary-400',
+    positive: 'text-green-400',
+    destructive: 'text-red-400',
+  }[tone];
+
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={`text-xs px-2 py-1 rounded-md ${toneClass} hover:bg-dark-hover disabled:opacity-40`}
+    >
+      {children}
+    </button>
+  );
+}
 
 function OperationsOverview() {
   const { t } = useTranslation();
@@ -45,18 +97,8 @@ function OperationsOverview() {
 function UserRow({ u, selfId }: { u: AdminUser; selfId: string | undefined }) {
   const { t } = useTranslation();
   const { updateUser } = useAdminStore();
-  const [busy, setBusy] = useState(false);
+  const { busy, run } = useConfirmedAction();
   const isSelf = u.id === selfId;
-
-  const run = async (patch: { role?: string; status?: string }, confirmKey: TranslationKey) => {
-    if (!window.confirm(t(confirmKey))) return;
-    setBusy(true);
-    try {
-      await updateUser(u.id, patch);
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const roleLabel = u.role === 'admin' ? t('admin.roleAdmin') : t('admin.roleMember');
   const statusLabel = u.status === 'disabled' ? t('admin.statusDisabled') : t('admin.statusActive');
@@ -84,42 +126,46 @@ function UserRow({ u, selfId }: { u: AdminUser; selfId: string | undefined }) {
         ) : (
           <div className="flex gap-2 justify-end">
             {u.role === 'admin' ? (
-              <button
-                type="button"
+              <RowAction
+                tone="neutral"
                 disabled={busy}
-                onClick={() => run({ role: 'member' }, 'admin.confirmDemote')}
-                className="text-xs px-2 py-1 rounded-md text-ink-secondary hover:bg-dark-hover disabled:opacity-40"
+                onClick={() =>
+                  run('admin.confirmDemote', () => updateUser(u.id, { role: 'member' }))
+                }
               >
                 {t('admin.actionDemote')}
-              </button>
+              </RowAction>
             ) : (
-              <button
-                type="button"
+              <RowAction
+                tone="primary"
                 disabled={busy}
-                onClick={() => run({ role: 'admin' }, 'admin.confirmPromote')}
-                className="text-xs px-2 py-1 rounded-md text-primary-400 hover:bg-dark-hover disabled:opacity-40"
+                onClick={() =>
+                  run('admin.confirmPromote', () => updateUser(u.id, { role: 'admin' }))
+                }
               >
                 {t('admin.actionPromote')}
-              </button>
+              </RowAction>
             )}
             {u.status === 'disabled' ? (
-              <button
-                type="button"
+              <RowAction
+                tone="positive"
                 disabled={busy}
-                onClick={() => run({ status: 'active' }, 'admin.confirmEnable')}
-                className="text-xs px-2 py-1 rounded-md text-green-400 hover:bg-dark-hover disabled:opacity-40"
+                onClick={() =>
+                  run('admin.confirmEnable', () => updateUser(u.id, { status: 'active' }))
+                }
               >
                 {t('admin.actionEnable')}
-              </button>
+              </RowAction>
             ) : (
-              <button
-                type="button"
+              <RowAction
+                tone="destructive"
                 disabled={busy}
-                onClick={() => run({ status: 'disabled' }, 'admin.confirmDisable')}
-                className="text-xs px-2 py-1 rounded-md text-red-400 hover:bg-dark-hover disabled:opacity-40"
+                onClick={() =>
+                  run('admin.confirmDisable', () => updateUser(u.id, { status: 'disabled' }))
+                }
               >
                 {t('admin.actionDisable')}
-              </button>
+              </RowAction>
             )}
           </div>
         )}
@@ -218,18 +264,8 @@ function UserManagement() {
 function AgentRow({ a }: { a: AdminAgent }) {
   const { t } = useTranslation();
   const { updateAgent } = useAdminStore();
-  const [busy, setBusy] = useState(false);
+  const { busy, run } = useConfirmedAction();
   const suspended = a.status === 'suspended';
-
-  const run = async (status: string, confirmKey: TranslationKey) => {
-    if (!window.confirm(t(confirmKey))) return;
-    setBusy(true);
-    try {
-      await updateAgent(a.id, status);
-    } finally {
-      setBusy(false);
-    }
-  };
 
   return (
     <tr className="border-t border-dark-border">
@@ -244,23 +280,21 @@ function AgentRow({ a }: { a: AdminAgent }) {
       </td>
       <td className="py-2.5 px-3 text-right">
         {suspended ? (
-          <button
-            type="button"
+          <RowAction
+            tone="positive"
             disabled={busy}
-            onClick={() => run('active', 'admin.confirmRestoreAgent')}
-            className="text-xs px-2 py-1 rounded-md text-green-400 hover:bg-dark-hover disabled:opacity-40"
+            onClick={() => run('admin.confirmRestoreAgent', () => updateAgent(a.id, 'active'))}
           >
             {t('admin.actionRestore')}
-          </button>
+          </RowAction>
         ) : (
-          <button
-            type="button"
+          <RowAction
+            tone="destructive"
             disabled={busy}
-            onClick={() => run('suspended', 'admin.confirmSuspend')}
-            className="text-xs px-2 py-1 rounded-md text-red-400 hover:bg-dark-hover disabled:opacity-40"
+            onClick={() => run('admin.confirmSuspend', () => updateAgent(a.id, 'suspended'))}
           >
             {t('admin.actionSuspend')}
-          </button>
+          </RowAction>
         )}
       </td>
     </tr>
@@ -270,18 +304,8 @@ function AgentRow({ a }: { a: AdminAgent }) {
 function ConversationRow({ conv }: { conv: AdminConversation }) {
   const { t } = useTranslation();
   const { updateConversation } = useAdminStore();
-  const [busy, setBusy] = useState(false);
+  const { busy, run } = useConfirmedAction();
   const hidden = conv.moderation_status === 'hidden';
-
-  const run = async (status: string, confirmKey: TranslationKey) => {
-    if (!window.confirm(t(confirmKey))) return;
-    setBusy(true);
-    try {
-      await updateConversation(conv.id, status);
-    } finally {
-      setBusy(false);
-    }
-  };
 
   return (
     <tr className="border-t border-dark-border">
@@ -299,23 +323,21 @@ function ConversationRow({ conv }: { conv: AdminConversation }) {
       </td>
       <td className="py-2.5 px-3 text-right">
         {hidden ? (
-          <button
-            type="button"
+          <RowAction
+            tone="positive"
             disabled={busy}
-            onClick={() => run('visible', 'admin.confirmUnhide')}
-            className="text-xs px-2 py-1 rounded-md text-green-400 hover:bg-dark-hover disabled:opacity-40"
+            onClick={() => run('admin.confirmUnhide', () => updateConversation(conv.id, 'visible'))}
           >
             {t('admin.actionUnhide')}
-          </button>
+          </RowAction>
         ) : (
-          <button
-            type="button"
+          <RowAction
+            tone="destructive"
             disabled={busy}
-            onClick={() => run('hidden', 'admin.confirmHide')}
-            className="text-xs px-2 py-1 rounded-md text-red-400 hover:bg-dark-hover disabled:opacity-40"
+            onClick={() => run('admin.confirmHide', () => updateConversation(conv.id, 'hidden'))}
           >
             {t('admin.actionHide')}
-          </button>
+          </RowAction>
         )}
       </td>
     </tr>
@@ -494,9 +516,8 @@ function GlobalConfig() {
 export function AdminPage() {
   const { t } = useTranslation();
   const [tab, setTab] = useState<Tab>('overview');
-  const navigate = useNavigate();
 
-  const tabs: { id: Tab; label: string; icon: typeof Shield }[] = [
+  const tabs: PageTab<Tab>[] = [
     { id: 'overview', label: t('admin.tabOverview'), icon: Shield },
     { id: 'users', label: t('admin.tabUsers'), icon: Users },
     { id: 'content', label: t('admin.tabContent'), icon: MessageCircle },
@@ -504,47 +525,11 @@ export function AdminPage() {
   ];
 
   return (
-    <div className="h-screen flex flex-col bg-dark-base">
-      <header className="h-13 bg-dark-nav border-b border-dark-border flex items-center px-4 shrink-0">
-        <button
-          type="button"
-          onClick={() => navigate('/')}
-          className="p-1.5 -ml-1 text-ink-muted hover:text-ink-secondary hover:bg-dark-hover rounded-lg transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4" />
-        </button>
-        <h1 className="font-semibold text-sm text-ink-primary ml-2">{t('admin.title')}</h1>
-      </header>
-
-      <div className="flex-1 flex overflow-hidden">
-        <nav className="w-52 bg-dark-panel border-r border-dark-border p-2 space-y-0.5 shrink-0">
-          {tabs.map(({ id, label, icon: Icon }) => (
-            <button
-              type="button"
-              key={id}
-              onClick={() => setTab(id)}
-              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
-                tab === id
-                  ? 'bg-primary-600/15 text-primary-400 font-medium'
-                  : 'text-ink-secondary hover:bg-dark-hover hover:text-ink-primary'
-              }`}
-            >
-              <Icon className="w-4 h-4" />
-              {label}
-            </button>
-          ))}
-        </nav>
-
-        <div className="flex-1 overflow-y-auto scrollbar-thin p-8 bg-dark-base">
-          <h2 className="text-base font-semibold text-ink-primary mb-6">
-            {tabs.find((item) => item.id === tab)?.label}
-          </h2>
-          {tab === 'overview' && <OperationsOverview />}
-          {tab === 'users' && <UserManagement />}
-          {tab === 'content' && <ContentModeration />}
-          {tab === 'config' && <GlobalConfig />}
-        </div>
-      </div>
-    </div>
+    <TabbedPage title={t('admin.title')} tabs={tabs} activeTab={tab} onTabChange={setTab}>
+      {tab === 'overview' && <OperationsOverview />}
+      {tab === 'users' && <UserManagement />}
+      {tab === 'content' && <ContentModeration />}
+      {tab === 'config' && <GlobalConfig />}
+    </TabbedPage>
   );
 }
