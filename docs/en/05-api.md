@@ -260,11 +260,22 @@ conversation.updated
       "paths": ["src/modbus/"],
       "exclude": [".env", "secrets/"]
     },
-    "description": "Agent 想分享 src/modbus/ 给 ABC Agent（12 个文件）",
+    "peer_name": "ABC Agent",
+    "peer_did": "did:web:acme.com:agents:support",
     "requested_at": "2024-11-15T14:30:00Z"
   }
 }
 ```
+
+**There is no `description` field, and that is deliberate.** The server does not know
+what language the reader speaks, so it sends structured facts only (`action` + the peer's
+identity + the already-stored `scope`); the sentence shown on the approval card is composed
+client-side through i18n (`packages/client/src/lib/permission-text.ts`). The contract is
+owned by `permissionRequestEventSchema` in `@confer/shared`, which both sides parse against.
+
+Every row of `GET /api/v1/permissions/pending` has the same shape (plus a `decision` field)
+and comes from the same builder, so a row that arrives by poll is byte-identical to one
+pushed over the socket.
 
 ## SSE (LLM streaming)
 

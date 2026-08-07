@@ -260,11 +260,21 @@ conversation.updated
       "paths": ["src/modbus/"],
       "exclude": [".env", "secrets/"]
     },
-    "description": "Agent 想分享 src/modbus/ 给 ABC Agent（12 个文件）",
+    "peer_name": "ABC Agent",
+    "peer_did": "did:web:acme.com:agents:support",
     "requested_at": "2024-11-15T14:30:00Z"
   }
 }
 ```
+
+**ペイロードに `description` は含まれません。これは意図的です。** サーバーは読み手の言語を
+知らないため、構造化された事実（`action` + peer の識別情報 + 保存済みの `scope`）のみを送り、
+承認カードに表示される文章はクライアント側が i18n で組み立てます
+（`packages/client/src/lib/permission-text.ts`）。この契約は `@confer/shared` の
+`permissionRequestEventSchema` が単独で所有し、送信側・受信側の双方がこれで parse します。
+
+`GET /api/v1/permissions/pending` の各行も同じ形状（加えて `decision` フィールド）で、
+同一のビルダーが生成するため、ポーリングで取得した行と socket で push された行は完全に一致します。
 
 ## SSE（LLM streaming）
 

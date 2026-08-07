@@ -45,10 +45,6 @@
         "vite": "^8.2.1",
       },
     },
-    "packages/conversation": {
-      "name": "@confer/conversation",
-      "version": "0.1.0",
-    },
     "packages/gateway": {
       "name": "@confer/gateway",
       "version": "0.1.0",
@@ -135,8 +131,6 @@
     "@confer/agent-runtime": ["@confer/agent-runtime@workspace:packages/agent-runtime"],
 
     "@confer/client": ["@confer/client@workspace:packages/client"],
-
-    "@confer/conversation": ["@confer/conversation@workspace:packages/conversation"],
 
     "@confer/gateway": ["@confer/gateway@workspace:packages/gateway"],
 

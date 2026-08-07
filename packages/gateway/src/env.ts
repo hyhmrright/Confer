@@ -2,8 +2,6 @@ import { z } from 'zod';
 
 const envSchema = z.object({
   DATABASE_URL: z.string().url(),
-  REDIS_URL: z.string().url().default('redis://localhost:6379'),
-  NATS_URL: z.string().default('nats://localhost:4222'),
   JWT_SECRET: z.string().min(16),
   JWT_ISSUER: z.string().default('confer'),
   // Comma-separated usernames promoted to the 'admin' role on gateway startup

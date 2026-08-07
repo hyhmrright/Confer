@@ -15,13 +15,17 @@ One command builds and starts the whole platform:
 | Service | Image / build | Role |
 |---------|---------------|------|
 | `client` | built from `infra/client.Dockerfile` | Web UI + nginx reverse proxy (the only port exposed) |
-| `gateway` | built from `infra/gateway.Dockerfile` | Hono API, A2A endpoints, WebSocket |
+| `gateway` | built from `infra/gateway.Dockerfile` | Hono API, A2A endpoints, WebSocket — **single replica, see below** |
 | `migrate` | one-shot | runs Drizzle migrations, then exits |
 | `postgres` | `postgres:16-alpine` | primary datastore |
-| `redis` | `redis:7-alpine` | sessions, rate limits, cache |
-| `nats` | `nats:2-alpine` | message bus / fan-out |
 | `qdrant` | `qdrant/qdrant:v1.12.0` | vector search for the RAG knowledge base |
 | `minio` | `minio/minio` | S3-compatible file storage |
+
+> **Do not scale `gateway` past one replica.** WebSocket connections, A2A replay
+> nonces and rate-limit counters live in that process's memory. A second replica
+> would accept replayed A2A requests (its nonce table is empty), miss WS pushes
+> for users connected to the other replica, and multiply rate limits by the
+> replica count. See `docs/02-architecture.md` for what has to move first.
 
 nginx (inside `client`) serves the SPA on port **80** and reverse-proxies
 `/api`, `/ws`, `/a2a`, and `/.well-known` to the gateway. The gateway's own port
@@ -108,7 +112,7 @@ Run only the infra in Docker and the app code with Bun:
 
 ```bash
 bun install
-docker compose up -d            # infra only — Postgres, Redis, NATS, Qdrant, MinIO (ports published on localhost)
+docker compose up -d            # infra only — Postgres, Qdrant, MinIO (ports published on localhost)
 bun run db:migrate
 bun run dev                      # gateway on :3000, client (Vite) on :1420
 ```

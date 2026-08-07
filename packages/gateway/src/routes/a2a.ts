@@ -1,11 +1,5 @@
 import type { LLMMessage } from '@confer/agent-runtime';
-import {
-  classifyPermissionLevel,
-  createProvider,
-  evaluatePolicy,
-  mergePolicyConfig,
-  parsePolicyConfig,
-} from '@confer/agent-runtime';
+import { classifyPermissionLevel, createProvider, parsePolicyConfig } from '@confer/agent-runtime';
 import {
   MAX_CLOCK_SKEW_MS,
   multibaseToPublicKey,
@@ -32,11 +26,13 @@ import {
   permissions,
 } from '../db/schema.js';
 import { getEnv } from '../env.js';
-import { runAgentTurn } from '../lib/agent-orchestrator.js';
+import { decideAdmission, isSenderAuthorized } from '../lib/a2a-admission.js';
 import { decryptUserKey, getUserLlmKeys, resolveAgentCapabilities } from '../lib/llm-keys.js';
 import { addNonce, hasNonce } from '../lib/nonce-cache.js';
 import { upsertPeerAgent } from '../lib/peer-agent.js';
+import { isContact } from '../lib/tenant.js';
 import { rateLimit } from '../middleware/rate-limit.js';
+import { runAgentTurn } from '../orchestration/agent-orchestrator.js';
 import { extractAndStore } from '../tools/memory.js';
 import { broadcastToConversation } from '../ws/handler.js';
 import { notifyPermissionRequest } from './permission-notify.js';
@@ -198,20 +194,6 @@ async function ensurePeerAgent(fromDid: string): Promise<typeof peerAgents.$infe
     endpoint: await resolvePeerEndpoint(fromDid),
   });
   return created ?? null;
-}
-
-// Consent gate: an agent only spends its owner's LLM budget for peers the owner
-// has connected to. Returns true when a connection exists; false means the
-// message must be held as a pending connection request (no conversation, no
-// stored message, no LLM) until the owner approves it.
-async function checkConsentGate(userId: string, peerId: string): Promise<boolean> {
-  const db = getDb();
-  const [connection] = await db
-    .select()
-    .from(peerContacts)
-    .where(and(eq(peerContacts.user_id, userId), eq(peerContacts.peer_id, peerId)))
-    .limit(1);
-  return Boolean(connection);
 }
 
 // Resolve the conversation for this inbound message: reuse the supplied
@@ -377,7 +359,7 @@ a2aRoutes.post('/messages', verifyA2ASignature, async (c) => {
   // did:web:vendor.com signing for did:web:vendor.com:users:li). Otherwise a
   // peer with one valid key could forge connection requests under any identity.
   const signerDid = c.get('a2aSenderDid' as never) as string | undefined;
-  if (signerDid && body.from !== signerDid && !body.from.startsWith(`${signerDid}:`)) {
+  if (!isSenderAuthorized(signerDid, body.from)) {
     throw new AppError(
       'sender_mismatch',
       'Message `from` is not authorized by the signing key',
@@ -401,7 +383,7 @@ a2aRoutes.post('/messages', verifyA2ASignature, async (c) => {
 
   // A message from an unconnected peer is held as a pending connection request
   // until the owner approves it in the permission inbox.
-  const connected = await checkConsentGate(targetAgent.user_id, peer.id);
+  const connected = await isContact(targetAgent.user_id, peer.id);
 
   if (!connected) {
     await upsertConnectionRequest(targetAgent.user_id, peer, body.message.content);
@@ -414,26 +396,18 @@ a2aRoutes.post('/messages', verifyA2ASignature, async (c) => {
     );
   }
 
-  // The connection itself is the consent for ordinary questions; an explicit
-  // policy rule can still deny a specific connected peer. The owner can also set
-  // a per-contact standing policy (e.g. "always ask me first for this peer"),
-  // which layers over the agent-level config: the contact default overrides the
-  // agent default when set, and contact rules match before agent rules. With no
-  // contact row or an empty `{}` override, the merge is the identity — the
-  // decision is byte-identical to the agent-only path.
-  const agentConfig = parsePolicyConfig(targetAgent.policies_json);
   const [contact] = await db
     .select({ overrides: peerContacts.policy_overrides_json })
     .from(peerContacts)
     .where(and(eq(peerContacts.user_id, targetAgent.user_id), eq(peerContacts.peer_id, peer.id)))
     .limit(1);
-  const policyConfig = mergePolicyConfig(agentConfig, contact?.overrides);
-  const decision = evaluatePolicy(
-    { action: 'ask', peer_did: body.from, level: classifyPermissionLevel('ask') },
-    policyConfig,
-  );
+  const admission = decideAdmission({
+    peerDid: body.from,
+    agentPolicies: parsePolicyConfig(targetAgent.policies_json),
+    contactOverrides: contact?.overrides,
+  });
 
-  if (decision === 'deny') {
+  if (admission === 'deny') {
     throw new AppError('policy_denied', 'Agent policy denied this request', 403);
   }
 
@@ -470,12 +444,12 @@ a2aRoutes.post('/messages', verifyA2ASignature, async (c) => {
     },
   });
 
-  // `ask_user`: hold an inbound question for owner review instead of answering
+  // `hold`: keep an inbound question for owner review instead of answering
   // automatically. The message is already stored + broadcast above; we record a
   // pending `ask` permission and return without spawning the agent loop. Only a
   // question can be held — an answer/notification never auto-replies anyway, so
   // there is nothing to gate.
-  if (decision === 'ask_user') {
+  if (admission === 'hold') {
     if (body.message.type === 'question') {
       await holdA2AQuestion({
         userId: targetAgent.user_id,
@@ -756,7 +730,7 @@ export async function resumeHeldA2AQuestion(row: typeof permissions.$inferSelect
   // The owner may have removed the contact between holding the question and
   // approving it; the consent gate is the authority on who may spend their
   // budget, so don't answer a peer that is no longer connected.
-  const connected = await checkConsentGate(row.user_id, row.peer_id);
+  const connected = await isContact(row.user_id, row.peer_id);
   if (!connected) return;
 
   const db = getDb();

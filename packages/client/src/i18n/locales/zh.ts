@@ -248,6 +248,12 @@ export const zh = {
     allowed: '已允许',
     denied: '已拒绝',
     decideError: '操作失败，请重试',
+    unknownPeer: '某个 Agent',
+    descConnect: '{{who}} 请求与你的 Agent 建立连接',
+    descConnectWith: '{{who}} 请求与你的 Agent 建立连接：“{{message}}”',
+    descAsk: '{{who}} 向你的 Agent 提问',
+    descAskWith: '{{who}} 向你的 Agent 提问：“{{question}}”',
+    descGeneric: '{{who}} 请求执行：{{action}}',
   },
   policy: {
     default: '默认处理方式',

@@ -252,6 +252,12 @@ export const ja: Resources = {
     allowed: '許可済み',
     denied: '拒否済み',
     decideError: '操作に失敗しました。もう一度お試しください',
+    unknownPeer: 'あるエージェント',
+    descConnect: '{{who}} があなたのエージェントへの接続を求めています',
+    descConnectWith: '{{who}} があなたのエージェントへの接続を求めています：「{{message}}」',
+    descAsk: '{{who}} があなたのエージェントに質問しています',
+    descAskWith: '{{who}} があなたのエージェントに質問しています：「{{question}}」',
+    descGeneric: '{{who}} が次の実行を求めています：{{action}}',
   },
   policy: {
     default: '既定の処理',

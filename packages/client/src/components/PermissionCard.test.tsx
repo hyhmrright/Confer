@@ -10,7 +10,7 @@ mock.module('../lib/api.js', () => ({
   getToken: mock(() => null),
 }));
 
-await import('../i18n/index.js');
+const i18n = (await import('../i18n/index.js')).default;
 const { PermissionCard } = await import('./PermissionCard.js');
 const { fireEvent } = await import('@testing-library/react');
 
@@ -19,7 +19,8 @@ const request = {
   level: 'L3',
   action: 'send_message',
   scope: {},
-  description: '向 peer 发送消息',
+  peer_name: 'Alice',
+  peer_did: 'did:web:example.com',
   requested_at: '2026-08-07T00:00:00Z',
 };
 
@@ -29,10 +30,41 @@ afterEach(cleanup);
 describe('PermissionCard', () => {
   test('renders the request and all three decision controls', () => {
     render(<PermissionCard request={request} />);
-    expect(screen.getByText('向 peer 发送消息')).toBeDefined();
+    expect(screen.getByText(/Alice/)).toBeDefined();
     expect(screen.getByText('L3')).toBeDefined();
     // allow-once / allow-always / deny — the L3 path must never auto-accept.
     expect(screen.getAllByRole('button')).toHaveLength(3);
+  });
+
+  // The description used to be rendered server-side in Chinese and shipped as a
+  // string, so an en/ja owner was asked to approve a peer in a language they may
+  // not read — on the one screen where that matters most. It is now composed from
+  // structured fields through i18n; this is the regression guard.
+  test('describes the request in the reader’s language, not the server’s', async () => {
+    const connect = { ...request, action: 'connect', scope: { first_message: 'hi there' } };
+
+    await i18n.changeLanguage('en');
+    const { unmount } = render(<PermissionCard request={connect} />);
+    expect(screen.getByText('Alice wants to connect to your agent: “hi there”')).toBeDefined();
+    unmount();
+
+    await i18n.changeLanguage('ja');
+    render(<PermissionCard request={connect} />);
+    expect(
+      screen.getByText('Alice があなたのエージェントへの接続を求めています：「hi there」'),
+    ).toBeDefined();
+
+    await i18n.changeLanguage('en');
+  });
+
+  test('falls back to the peer DID, then to a generic label, when no name is known', async () => {
+    await i18n.changeLanguage('en');
+    const { unmount } = render(<PermissionCard request={{ ...request, peer_name: null }} />);
+    expect(screen.getByText(/did:web:example\.com/)).toBeDefined();
+    unmount();
+
+    render(<PermissionCard request={{ ...request, peer_name: null, peer_did: null }} />);
+    expect(screen.getByText('An agent is requesting: send_message')).toBeDefined();
   });
 
   test('deciding posts the decision and swaps the card into its decided state', async () => {

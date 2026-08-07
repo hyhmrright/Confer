@@ -87,7 +87,8 @@ describe('authenticated screens mount', () => {
           level: 'L2',
           action: 'connect',
           scope: {},
-          description: '陌生 peer 请求连接',
+          peer_name: 'Stranger',
+          peer_did: 'did:web:stranger.example',
           requested_at: '2026-08-07T10:00:00Z',
         },
         {
@@ -95,14 +96,15 @@ describe('authenticated screens mount', () => {
           level: 'L3',
           action: 'send_message',
           scope: {},
-          description: '请求代发消息',
+          peer_name: 'Courier',
+          peer_did: 'did:web:courier.example',
           requested_at: '2026-08-07T10:01:00Z',
         },
       ] as never,
     });
     wrap(<PermissionInbox />);
-    expect(screen.getByText('陌生 peer 请求连接')).toBeDefined();
-    expect(screen.getByText('请求代发消息')).toBeDefined();
+    expect(screen.getByText(/Stranger/)).toBeDefined();
+    expect(screen.getByText(/Courier/)).toBeDefined();
     // three controls per card, and never an auto-accept
     expect(screen.getAllByRole('button')).toHaveLength(6);
     usePermissionsStore.setState({ pending: [] });

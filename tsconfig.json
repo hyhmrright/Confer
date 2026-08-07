@@ -21,9 +21,7 @@
       "@confer/identity": ["./packages/identity/src/index.ts"],
       "@confer/identity/*": ["./packages/identity/src/*"],
       "@confer/agent-runtime": ["./packages/agent-runtime/src/index.ts"],
-      "@confer/agent-runtime/*": ["./packages/agent-runtime/src/*"],
-      "@confer/conversation": ["./packages/conversation/src/index.ts"],
-      "@confer/conversation/*": ["./packages/conversation/src/*"]
+      "@confer/agent-runtime/*": ["./packages/agent-runtime/src/*"]
     }
   },
   "include": ["packages/*/src"],

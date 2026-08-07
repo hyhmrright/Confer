@@ -34,10 +34,10 @@ Bun workspaces monorepo (`packages/*`):
 | `client` | Tauri 2.0 + React 19 desktop app — UI components, stores, Vite dev on :1420 |
 | `identity` | DID:web, HTTP signatures (RFC 9421), crypto, AgentFacts |
 | `agent-runtime` | LLM orchestration engine, policy enforcement |
-| `conversation` | Message bus (NATS), conversation threading |
 | `shared` | Zod schemas, shared types, utility functions |
 | `mcp-a2a` | stdio MCP server — lets an AI coding agent consult peer Agents; ships as the `confer-a2a` plugin (`plugins/confer-a2a/`) |
-| `gateway/lib/` | RAG pipeline — MinIO file storage, Qdrant vector search, multi-provider embedding (OpenAI / GLM / Qwen) |
+| `gateway/lib/` | Infrastructure adapters + cross-cutting gates — MinIO storage, Qdrant vector search, embedding (OpenAI / GLM / Qwen), `tenant.ts`, `a2a-admission.ts` |
+| `gateway/orchestration/` | The LLM agent loop (`agent-orchestrator.ts`). Sits ABOVE `tools/`, which sits above `lib/` — keep that direction; `lib/` must never import `tools/` or `orchestration/` |
 
 ## Docs
 
@@ -45,7 +45,7 @@ Design context in `docs/` — files 01 (product) through 09 (deployment). Defaul
 
 ## Tech stack
 
-TypeScript everywhere. Bun + Hono (server), Tauri 2.0 + React 19 + Zustand (client). PostgreSQL 16, Redis, NATS, Qdrant, MinIO. Bun workspaces monorepo. DID:web + RFC 9421. MCP: `@modelcontextprotocol/sdk`.
+TypeScript everywhere. Bun + Hono (server), Tauri 2.0 + React 19 + Zustand (client). PostgreSQL 16, Qdrant, MinIO. Bun workspaces monorepo. DID:web + RFC 9421. MCP: `@modelcontextprotocol/sdk`.
 
 ## Conventions
 
@@ -114,7 +114,7 @@ Verify by querying the actual tables/columns (and the drizzle journal count), no
 
 ## Environment
 
-Local infra via Docker: `docker compose up -d` starts PostgreSQL (5432), Redis (6379), NATS (4222), MinIO (9000/9001), Qdrant (6333). Copy `.env.example` to `.env` before first run. Gateway dev server on :3000, client Vite on :1420 (proxies `/api` to gateway).
+Local infra via Docker: `docker compose up -d` starts PostgreSQL (5432), MinIO (9000/9001), Qdrant (6333). Copy `.env.example` to `.env` before first run. Gateway dev server on :3000, client Vite on :1420 (proxies `/api` to gateway).
 
 ## Pitfalls
 
@@ -125,7 +125,9 @@ Local infra via Docker: `docker compose up -d` starts PostgreSQL (5432), Redis (
 - Drizzle migrations: ALWAYS use `bun run db:generate`, never write SQL manually — the journal won't track it and schema gets out of sync requiring manual `ALTER TABLE` in prod (this bit us once: migrations 0002-0004 were hand-written and untracked; the journal was repaired by regenerating a tracked, idempotent `0002` from `schema.ts`)
 - Qdrant point IDs must be UUID or uint64 — ULIDs are rejected with 400; convert via SHA-256 hash (`toUUID` in `lib/qdrant.ts`)
 - Docker inter-container networking: use service names (`qdrant:6333`, `minio:9000`), not `localhost` — localhost resolves to the container itself
-- `peer_agents` rows are globally unique by DID — one peer connected to several users shares a single row and a single `peer_id`. Any query scoped only by `peer_id` is **not** tenant-isolated; always add the owner constraint (`conversations.created_by` / `*.user_id`). This produced a real cross-tenant A2A thread injection, fixed in `1a4308b`
+- `peer_agents` rows are globally unique by DID — one peer connected to several users shares a single row and a single `peer_id`. Any query scoped only by `peer_id` is **not** tenant-isolated; always add the owner constraint (`conversations.created_by` / `*.user_id`). This produced a real cross-tenant A2A thread injection, fixed in `1a4308b`. **The gates now live in `gateway/lib/tenant.ts`** (`isContact` / `assertIsContact` / `assertIsConversationParticipant` / `assertOwnsConversation`) — use them instead of re-writing the query inline, which is how the bug happened four separate times. Each takes an optional `db` handle: that is the injection seam, and it exists precisely because `mock.module`-ing `getDb` poisons the whole process (see below)
+- The gateway is **single-instance by design**. WS connections (`ws/handler.ts`), A2A replay nonces (`lib/nonce-cache.ts`) and rate-limit counters (`middleware/rate-limit.ts`) are all process-local `Map`s. A second replica silently breaks A2A replay protection — the replay hits the other replica's empty nonce table and is accepted. Redis/NATS were removed from compose and `env.ts` on 2026-08-07 because nothing ever dialed them; don't re-add them as decoration. Scaling out means moving those three first, nonce foremost
+- User-facing text belongs on the **client**, behind i18n. The gateway has no locale context, so anything it words itself reaches en/ja users in Chinese. `permission.request` therefore ships structured facts only (`@confer/shared`'s `permissionRequestEventSchema`) and `client/src/lib/permission-text.ts` renders the sentence. Strings sent to an **LLM** (tool descriptions, system prompts in `orchestration/` and `tools/`) are a different thing and stay where they are
 - LLM / embedding / Tavily keys live encrypted in `users.llm_keys_json` (AES-256-GCM via `ENCRYPTION_KEY`), set per-user via the settings UI — **not** in `.env`. The `TAVILY_API_KEY` env var is only a fallback; `web_search` is offered only when a key resolves
 - Run tests as `bun run test`, never `bun test` — the bare form bypasses the `bunfig.toml` preload (test env + per-test truncation) and points at the shared **dev** DB
 - Any client file importing `@confer/shared` needs the alias in `packages/client/tsconfig.json` `paths` — the root tsconfig `exclude`s `packages/client`, and CI type-checks it separately (`npx tsc --noEmit` + `vite build` inside that dir). Local `node_modules` symlinks hide the breakage; only CI catches it

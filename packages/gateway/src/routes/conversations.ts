@@ -3,10 +3,7 @@ import { and, desc, eq, inArray, lt } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { getDb } from '../db/connection.js';
 import { conversationParticipants, conversations, messages } from '../db/schema.js';
-import {
-  assertIsConversationParticipant,
-  assertOwnsConversation,
-} from '../lib/conversation-auth.js';
+import { assertIsConversationParticipant, assertOwnsConversation } from '../lib/tenant.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rate-limit.js';
 import type { AppEnv } from '../types.js';

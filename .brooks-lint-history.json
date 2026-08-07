@@ -5,5 +5,12 @@
     "score": 28,
     "findings": { "critical": 1, "warning": 9, "suggestion": 12 },
     "scope": "monorepo packages/* (~119 TS/TSX source files)"
+  },
+  {
+    "date": "2026-08-07",
+    "mode": "Architecture Audit",
+    "score": 48,
+    "findings": { "critical": 2, "warning": 4, "suggestion": 2 },
+    "scope": "monorepo packages/* (7 packages, 160 source files, ~17.7k LOC)"
   }
 ]

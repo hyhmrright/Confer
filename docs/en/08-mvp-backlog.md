@@ -143,7 +143,7 @@ For example, some sample tasks for v0.1:
 - [ ] `packages/shared`: shared type definitions (using zod or valibot)
 - [ ] `packages/gateway`: Bun + Hono application skeleton
 - [ ] `packages/agent-runtime`: Agent state machine skeleton
-- [ ] `packages/conversation`: message storage / push service
+- [x] ~~`packages/conversation`: message storage / push service~~ — folded into the gateway (`ws/handler.ts` + `routes/conversations.ts`); the standalone package had zero consumers and was removed 2026-08-07
 - [ ] `packages/identity`: DID + AgentFacts + A2A verification
 - [ ] PostgreSQL migration tool (drizzle-kit or prisma)
 - [ ] Create the migration files for all data tables

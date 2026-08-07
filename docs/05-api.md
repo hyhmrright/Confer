@@ -275,11 +275,20 @@ conversation.updated
       "paths": ["src/modbus/"],
       "exclude": [".env", "secrets/"]
     },
-    "description": "Agent 想分享 src/modbus/ 给 ABC Agent（12 个文件）",
+    "peer_name": "ABC Agent",
+    "peer_did": "did:web:acme.com:agents:support",
     "requested_at": "2024-11-15T14:30:00Z"
   }
 }
 ```
+
+**载荷里没有 `description`，这是有意的。** 服务端不知道读者用什么语言，所以只发结构化事实
+（`action` + peer 身份 + 已存储的 `scope`），供审批阅读的句子由客户端按 i18n 拼装
+（`packages/client/src/lib/permission-text.ts`）。这条契约由 `@confer/shared` 的
+`permissionRequestEventSchema` 单独拥有：gateway 出站前用它 parse，客户端入站后用它 parse。
+
+`GET /api/v1/permissions/pending` 的每一行是同一个形状（额外带一个 `decision` 字段），
+由同一个构造器生成，所以轮询到的行和 socket 推来的行逐字节一致。
 
 ## SSE（LLM streaming）
 

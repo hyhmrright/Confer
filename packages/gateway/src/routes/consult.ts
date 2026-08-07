@@ -4,8 +4,8 @@ import { and, asc, eq, gt, or } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { deliverConsult } from '../a2a/consult.js';
 import { getDb } from '../db/connection.js';
-import { conversationParticipants, conversations, messages, peerContacts } from '../db/schema.js';
-import { assertOwnsConversation } from '../lib/conversation-auth.js';
+import { conversationParticipants, conversations, messages } from '../db/schema.js';
+import { assertIsContact, assertOwnsConversation } from '../lib/tenant.js';
 import { authMiddleware } from '../middleware/auth.js';
 import type { AppEnv } from '../types.js';
 
@@ -77,12 +77,7 @@ consultRoutes.post('/:peerId', async (c) => {
   const parsed = consultRequestSchema.parse(await c.req.json());
 
   // Only peers the user has connected to may be consulted.
-  const [contact] = await db
-    .select()
-    .from(peerContacts)
-    .where(and(eq(peerContacts.user_id, user.sub), eq(peerContacts.peer_id, peerId)))
-    .limit(1);
-  if (!contact) throw new AppError('not_a_contact', 'Peer is not a contact', 403);
+  await assertIsContact(user.sub, peerId, db);
 
   const convId = await getOrCreateConsultConversation(user.sub, peerId);
 

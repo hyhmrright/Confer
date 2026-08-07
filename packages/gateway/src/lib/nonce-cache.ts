@@ -1,8 +1,9 @@
 // In-process replay-nonce cache for A2A signature verification.
 //
 // Mirrors the module-level `Map` pattern already used by `middleware/rate-limit.ts`:
-// single-instance, no external store. Redis is dead infra in this deployment and
-// a Postgres nonce table (unique constraint + a write on every inbound request +
+// single-instance, no external store. The gateway is deliberately a single
+// instance (see docs/02-architecture.md) and a Postgres nonce table
+// (unique constraint + a write on every inbound request +
 // an expiry sweep + a migration) is over-built for MVP A2A volume. A verified
 // signature only needs to be remembered for the clock-skew window — anything
 // older is already rejected by the verifier's skew check — so entries are

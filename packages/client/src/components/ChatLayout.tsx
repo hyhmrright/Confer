@@ -1,10 +1,10 @@
+import { permissionRequestEventSchema } from '@confer/shared';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router';
 import { z } from 'zod';
 import type { TranslationKey } from '../i18n/index.js';
 import { setOnTokenRefreshed } from '../lib/api.js';
-import { permissionRequestSchema } from '../lib/schemas.js';
 import {
   connectWs,
   disconnectWs,
@@ -179,7 +179,7 @@ export function ChatLayout() {
       }),
 
       onWsMessage('permission.request', (data) => {
-        const parsed = permissionRequestSchema.safeParse(data);
+        const parsed = permissionRequestEventSchema.safeParse(data);
         if (!parsed.success) {
           console.warn('[ws] permission.request validation failed:', parsed.error.issues);
           return;

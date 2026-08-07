@@ -6,7 +6,7 @@ import { peerAgents, peerContacts, permissions } from '../db/schema.js';
 import { authMiddleware } from '../middleware/auth.js';
 import type { AppEnv } from '../types.js';
 import { resumeHeldA2AQuestion } from './a2a.js';
-import { describePermission } from './permission-notify.js';
+import { toPermissionRequestEvent } from './permission-notify.js';
 
 export const permissionRoutes = new Hono<AppEnv>();
 
@@ -24,7 +24,6 @@ permissionRoutes.get('/pending', async (c) => {
       scope_json: permissions.scope_json,
       decision: permissions.decision,
       created_at: permissions.created_at,
-      peer_id: permissions.peer_id,
       peer_name: peerAgents.name,
       peer_did: peerAgents.did,
     })
@@ -40,17 +39,9 @@ permissionRoutes.get('/pending', async (c) => {
     .orderBy(desc(permissions.created_at))
     .limit(50);
 
-  return c.json({
-    permissions: rows.map((r) => ({
-      id: r.id,
-      level: r.level,
-      action: r.action,
-      scope: r.scope_json,
-      decision: r.decision,
-      requested_at: r.created_at,
-      description: describePermission(r),
-    })),
-  });
+  // Same builder as the live `permission.request` push, so a row that arrives
+  // by poll and one that arrives by socket are byte-identical to the client.
+  return c.json({ permissions: rows.map(toPermissionRequestEvent) });
 });
 
 permissionRoutes.post('/:id/decide', async (c) => {

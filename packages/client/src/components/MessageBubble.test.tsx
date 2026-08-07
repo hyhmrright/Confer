@@ -71,13 +71,14 @@ describe('MessageBubble markdown rendering', () => {
             level: 'L2',
             action: 'send_message',
             scope: {},
-            description: '请求发送消息',
+            peer_name: 'Bob',
+            peer_did: 'did:web:example.com',
             requested_at: '2026-08-07T10:29:00Z',
           },
         }}
       />,
     );
-    expect(screen.getByText('请求发送消息')).toBeDefined();
+    expect(screen.getByText(/Bob/)).toBeDefined();
     expect(screen.getAllByRole('button')).toHaveLength(3);
   });
 

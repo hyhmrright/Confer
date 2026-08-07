@@ -116,6 +116,26 @@ describe('consult', () => {
     expect(res.status).toBe(403);
   });
 
+  // Peer rows are global by DID, so a peer someone else connected to is a real,
+  // resolvable peer_id. Consulting it must still be refused — otherwise one user
+  // could spend a peer relationship they never established.
+  test('rejects consulting a peer that belongs to another user (403)', async () => {
+    await seedOwnAgent();
+    const peerId = await seedPeerContact();
+    // Hand the contact row to a different owner; the peer_agents row stays.
+    const other = await seedUser();
+    await getDb()
+      .update(peerContacts)
+      .set({ user_id: other.id })
+      .where(eq(peerContacts.peer_id, peerId));
+
+    const res = await post(`${CONSULT}/${peerId}`, {
+      token: user.token,
+      body: { question: 'hi' },
+    });
+    expect(res.status).toBe(403);
+  });
+
   test('initiates a consult, signs+delivers, stores message as sent', async () => {
     await seedOwnAgent();
     const peerId = await seedPeerContact();

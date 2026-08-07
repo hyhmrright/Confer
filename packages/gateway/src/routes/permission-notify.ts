@@ -1,66 +1,66 @@
-import type { WsServerMessage } from '@confer/shared';
+import type { PermissionRequestEvent, WsServerMessage } from '@confer/shared';
 import { sendToUser } from '../ws/handler.js';
 
-// Leaf module (imports only ws/handler + shared types) so the shared
-// `describePermission` helper and the real-time `permission.request` push can be
-// reused by both `permissions.ts` (the `/pending` list) and `a2a.ts` (the
-// insert sites) without risking an `a2a ↔ permissions` import cycle.
+// Leaf module (imports only ws/handler + shared types) so the `permission.request`
+// payload builder and its real-time push can be reused by both `permissions.ts`
+// (the `/pending` list) and `a2a.ts` (the insert sites) without risking an
+// `a2a ↔ permissions` import cycle.
 
-// The row fields needed to render a pending permission's inbox description.
-// Shared source of truth so the `/pending` list and the live push produce an
-// identical description string.
+// The permission row fields the inbox needs, as read from the DB (with the
+// `peerAgents` join). `scope_json` is `unknown` because it is a JSONB column;
+// its per-action shape is the client's business to interpret.
 export interface PendingRow {
+  id: string;
+  level: string;
   action: string;
   scope_json: unknown;
   peer_name: string | null;
   peer_did: string | null;
-}
-
-// Build a human-readable description for the permission inbox. Connection
-// requests surface who is asking and their opening message; a held A2A question
-// surfaces the question text so the owner can decide whether to let the agent
-// answer it.
-export function describePermission(row: PendingRow): string {
-  const who = row.peer_name ?? row.peer_did ?? '某个 Agent';
-  if (row.action === 'connect') {
-    const first = (row.scope_json as { first_message?: string } | null)?.first_message;
-    return first
-      ? `${who} 请求与你的 Agent 建立连接：“${first}”`
-      : `${who} 请求与你的 Agent 建立连接`;
-  }
-  if (row.action === 'ask') {
-    const content = (row.scope_json as { content?: string } | null)?.content;
-    return content ? `${who} 向你的 Agent 提问：“${content}”` : `${who} 向你的 Agent 提问`;
-  }
-  return `${who} 请求执行：${row.action}`;
-}
-
-// A freshly-inserted pending permission, carrying the identity/level/timestamp
-// fields the inbox card renders on top of the description inputs.
-export interface NotifyPermissionRow extends PendingRow {
-  id: string;
-  level: string;
   created_at: Date;
+  decision?: string | null;
+}
+
+// Build the wire payload for a pending permission. Structured facts only — no
+// rendered sentence. The description the owner reads is composed client-side
+// through i18n (`lib/permission-text.ts`), because the gateway has no locale
+// context and this text sits on the security-critical approval path: an en/ja
+// user must not be asked to approve a peer connection described in Chinese.
+//
+// The return type is `PermissionRequestEvent`, so the compiler already holds
+// this to the shared contract. It deliberately does NOT re-validate at runtime:
+// this payload is outbound, and a `.parse()` here would turn a formatting
+// problem into a thrown request — one odd row would 400 the whole `/pending`
+// list, blanking the owner's entire approval inbox, and on the inbound A2A path
+// it would fail the request after the permission row had already been committed.
+//
+// `scope_json` is the one field the compiler cannot vouch for: it is a JSONB
+// column typed `unknown`. Anything that is not a plain object becomes `{}`, so a
+// malformed row degrades to a card with less detail rather than taking the list down.
+export function toPermissionRequestEvent(row: PendingRow): PermissionRequestEvent {
+  const scope = row.scope_json;
+  return {
+    id: row.id,
+    level: row.level,
+    action: row.action,
+    scope:
+      typeof scope === 'object' && scope !== null && !Array.isArray(scope)
+        ? (scope as Record<string, unknown>)
+        : {},
+    peer_name: row.peer_name,
+    peer_did: row.peer_did,
+    requested_at: row.created_at.toISOString(),
+    decision: row.decision ?? null,
+  };
 }
 
 // Push a newly-created pending permission to the owner's live sockets so the
 // permission inbox updates in real time without a poll or refetch. Rides
 // `sendToUser` (user-scoped, no conversation-subscription gate) — a per-user
-// event does not belong behind a per-conversation subscription. The payload
-// matches the documented `permission.request` shape (docs/05-api.md) and the
-// client's `permissionRequestSchema`: no A2A request body, only the inbox
-// description + already-stored scope.
-export function notifyPermissionRequest(userId: string, row: NotifyPermissionRow): void {
-  const message: WsServerMessage = {
+// event does not belong behind a per-conversation subscription.
+export function notifyPermissionRequest(userId: string, row: PendingRow): void {
+  const message: WsServerMessage<PermissionRequestEvent> = {
     type: 'permission.request',
-    data: {
-      id: row.id,
-      level: row.level,
-      action: row.action,
-      scope: row.scope_json,
-      description: describePermission(row),
-      requested_at: row.created_at.toISOString(),
-    },
+    data: toPermissionRequestEvent(row),
   };
   sendToUser(userId, message);
 }

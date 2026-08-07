@@ -1,7 +1,7 @@
+import { permissionRequestEventSchema } from '@confer/shared';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { dateLocale } from '../i18n/index.js';
-import { permissionRequestSchema } from '../lib/schemas.js';
 import { CitationCapsule } from './CitationCapsule.js';
 import { Bot, User } from './Icons.js';
 import { PermissionCard } from './PermissionCard.js';
@@ -50,7 +50,7 @@ export function MessageBubble({ message }: { message: Message }) {
   const isUser = message.sender_type === 'user';
 
   if (message.content_type === 'permission_request') {
-    const parsed = permissionRequestSchema.safeParse(message.content_json);
+    const parsed = permissionRequestEventSchema.safeParse(message.content_json);
     if (parsed.success) {
       return (
         <div className="flex justify-start gap-3 animate-fade-in">

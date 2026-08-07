@@ -252,6 +252,12 @@ export const en: Resources = {
     allowed: 'Allowed',
     denied: 'Denied',
     decideError: 'Action failed, please try again',
+    unknownPeer: 'An agent',
+    descConnect: '{{who}} wants to connect to your agent',
+    descConnectWith: '{{who}} wants to connect to your agent: “{{message}}”',
+    descAsk: '{{who}} is asking your agent a question',
+    descAskWith: '{{who}} is asking your agent: “{{question}}”',
+    descGeneric: '{{who}} is requesting: {{action}}',
   },
   policy: {
     default: 'Default handling',

@@ -14,24 +14,6 @@ services:
       timeout: 5s
       retries: 5
 
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    volumes:
-      - redisdata:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  nats:
-    image: nats:2-alpine
-    restart: unless-stopped
-    command: ["--jetstream", "--store_dir", "/data", "--http_port", "8222"]
-    volumes:
-      - natsdata:/data
-
   qdrant:
     image: qdrant/qdrant:v1.12.0
     restart: unless-stopped
@@ -61,6 +43,11 @@ services:
     command: ["bun", "run", "src/db/migrate.ts"]
     restart: "no"
 
+  # Single instance by design — WebSocket connections, A2A replay nonces and
+  # rate-limit counters all live in this process's memory. Adding a replica
+  # would silently break A2A replay protection (a replay routed to the other
+  # replica finds an empty nonce table). Scaling out requires moving that state
+  # to a shared store first; see docs/02-architecture.md.
   gateway:
     build:
       context: .
@@ -69,16 +56,12 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_healthy
       migrate:
         condition: service_completed_successfully
       minio:
         condition: service_started
     environment:
       DATABASE_URL: postgres://confer:${POSTGRES_PASSWORD:-confer}@postgres:5432/confer
-      REDIS_URL: redis://redis:6379
-      NATS_URL: nats://nats:4222
       JWT_SECRET: ${JWT_SECRET}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
       NODE_ENV: production
@@ -105,7 +88,5 @@ services:
 
 volumes:
   pgdata:
-  redisdata:
-  natsdata:
   qdrantdata:
   miniodata:

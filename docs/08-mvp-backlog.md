@@ -143,7 +143,7 @@
 - [ ] `packages/shared`：共享类型定义（用 zod 或 valibot）
 - [ ] `packages/gateway`：Bun + Hono 应用骨架
 - [ ] `packages/agent-runtime`：Agent 状态机骨架
-- [ ] `packages/conversation`：消息存储 / 推送服务
+- [x] ~~`packages/conversation`：消息存储 / 推送服务~~ —— 已并入 gateway（`ws/handler.ts` + `routes/conversations.ts`）；独立包零消费者，2026-08-07 删除
 - [ ] `packages/identity`：DID + AgentFacts + A2A 验证
 - [ ] PostgreSQL migration 工具（drizzle-kit 或 prisma）
 - [ ] 创建所有数据表的 migration 文件

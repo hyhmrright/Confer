@@ -1,4 +1,6 @@
 import type { LLMMessage, LLMProvider, LLMToolDefinition } from '@confer/agent-runtime';
+import type { EmbeddingProvider } from '../lib/embedding.js';
+import { ensureMemoryCollection } from '../lib/memory-store.js';
 import {
   type KbCitation,
   knowledgeBaseToolDefinition,
@@ -6,8 +8,6 @@ import {
 } from '../tools/knowledge-base.js';
 import { recallMemories } from '../tools/memory.js';
 import { tavilySearch, tavilyToolDefinition } from '../tools/tavily.js';
-import type { EmbeddingProvider } from './embedding.js';
-import { ensureMemoryCollection } from './memory-store.js';
 
 // Shared agent orchestration core for both the web chat (streaming) and inbound
 // A2A (non-streaming) reply paths. Both consume `provider.stream` and drive the
