@@ -31,7 +31,7 @@ Bun workspaces monorepo (`packages/*`):
 | Package | Purpose |
 |---------|---------|
 | `gateway` | Hono HTTP server — A2A endpoints, REST API, WebSocket, DB/middleware |
-| `client` | Tauri 2.0 + React 18 desktop app — UI components, stores, Vite dev on :1420 |
+| `client` | Tauri 2.0 + React 19 desktop app — UI components, stores, Vite dev on :1420 |
 | `identity` | DID:web, HTTP signatures (RFC 9421), crypto, AgentFacts |
 | `agent-runtime` | LLM orchestration engine, policy enforcement |
 | `conversation` | Message bus (NATS), conversation threading |
@@ -45,7 +45,7 @@ Design context in `docs/` — files 01 (product) through 09 (deployment). Defaul
 
 ## Tech stack
 
-TypeScript everywhere. Bun + Hono (server), Tauri 2.0 + React 18 + Zustand (client). PostgreSQL 16, Redis, NATS, Qdrant, MinIO. Bun workspaces monorepo. DID:web + RFC 9421. MCP: `@modelcontextprotocol/sdk`.
+TypeScript everywhere. Bun + Hono (server), Tauri 2.0 + React 19 + Zustand (client). PostgreSQL 16, Redis, NATS, Qdrant, MinIO. Bun workspaces monorepo. DID:web + RFC 9421. MCP: `@modelcontextprotocol/sdk`.
 
 ## Conventions
 
@@ -84,7 +84,9 @@ TypeScript everywhere. Bun + Hono (server), Tauri 2.0 + React 18 + Zustand (clie
 
 CI runs `lint`, `typecheck`, `test` (spins up `docker-compose.test.yml` via `bun run test:setup`), `build`, and `audit` (`bun audit --audit-level=high`) in parallel; `check` is an aggregator job over those five, so it stays the single required context. **Never add a new gate to the ruleset** — add it to `check`'s `needs` instead, or PRs deadlock.
 
-`audit` blocks, so a new high advisory turns the branch red. Fix it by upgrading. Only when a fix is genuinely unreachable may you add `--ignore=<GHSA-id>`, and the workflow comment must record why the vulnerable code path can't be hit — one such exemption exists today (`GHSA-qwww-vcr4-c8h2`, react-router RSC mode, needs React 19). Bun's version is pinned in `.github/actions/setup/action.yml`, and every third-party action is SHA-pinned with the tag in a trailing comment.
+`audit` blocks, so a new high advisory turns the branch red. Fix it by upgrading — no advisory is exempted today. Only when no reachable fix exists may you add `--ignore=<GHSA-id>`, and the workflow comment must record why the vulnerable code path can't be hit. Bun's version is pinned in `.github/actions/setup/action.yml`, and every third-party action is SHA-pinned with the tag in a trailing comment.
+
+Transitive advisories are usually a lockfile pinned below what the parent's own range already permits. Any re-resolve often lifts them on its own, so re-run `bun install` and re-audit before reaching for a root `package.json` `overrides` entry — and never hand-edit the lockfile. One moderate is genuinely upstream-blocked and stays: `drizzle-kit` still ships the deprecated `@esbuild-kit/esm-loader`, which hard-pins `esbuild ~0.18.20` (GHSA-67mh-4wv8-2f99, a dev-server issue drizzle-kit never triggers). It sits below the `high` gate, so it needs no `--ignore`.
 
 ## Release rules
 

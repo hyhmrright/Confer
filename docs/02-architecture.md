@@ -106,7 +106,7 @@
 ## 客户端架构
 
 - **基座**：Tauri 2.0（Rust 内核 + WebView 渲染）
-- **前端**：React 18 + TypeScript + Tailwind CSS
+- **前端**：React 19 + TypeScript + Tailwind CSS
 - **状态管理**：Zustand 或 Jotai（轻量）
 - **路由**：TanStack Router
 - **网络**：原生 fetch + native WebSocket + EventSource (SSE)

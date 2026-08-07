@@ -31,7 +31,7 @@ Bun workspaces under `packages/*`. Each package has one clear responsibility.
 | Package | Purpose |
 |---------|---------|
 | `gateway` | Hono HTTP server — A2A endpoints, REST API, WebSocket, DB & middleware. `gateway/lib/` holds the RAG pipeline (MinIO storage, Qdrant search, multi-provider embedding). |
-| `client` | Tauri 2.0 + React 18 desktop app — UI components, Zustand stores, Vite dev server. |
+| `client` | Tauri 2.0 + React 19 desktop app — UI components, Zustand stores, Vite dev server. |
 | `identity` | DID:web, HTTP Message Signatures (RFC 9421), crypto primitives, AgentFacts. |
 | `agent-runtime` | LLM orchestration engine and policy enforcement. |
 | `conversation` | Message bus (NATS) and conversation threading. |

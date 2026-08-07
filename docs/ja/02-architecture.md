@@ -106,7 +106,7 @@
 ## クライアントアーキテクチャ
 
 - **ベース**：Tauri 2.0（Rust カーネル + WebView レンダリング）
-- **フロントエンド**：React 18 + TypeScript + Tailwind CSS
+- **フロントエンド**：React 19 + TypeScript + Tailwind CSS
 - **状態管理**：Zustand または Jotai（軽量）
 - **ルーティング**：TanStack Router
 - **ネットワーク**：ネイティブ fetch + native WebSocket + EventSource (SSE)

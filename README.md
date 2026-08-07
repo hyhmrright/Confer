@@ -134,7 +134,7 @@ Details in [`docs/02-architecture.md`](./docs/02-architecture.md).
 ## Tech stack
 
 - **Backend**: Bun + TypeScript + Hono
-- **Client**: Tauri 2.0 + React 18 + TypeScript + Tailwind
+- **Client**: Tauri 2.0 + React 19 + TypeScript + Tailwind
 - **Data**: PostgreSQL 16 + Redis + NATS + Qdrant + MinIO
 - **Protocols**: W3C DID, HTTP Message Signatures (RFC 9421), MCP, A2A, NANDA AgentFacts
 - **LLM**: bring your own key (Claude · GPT · DeepSeek · Qwen · GLM · Ollama)

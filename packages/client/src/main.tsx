@@ -1,7 +1,7 @@
 import './i18n/index.js';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router';
 import { AdminPage } from './components/AdminPage.js';
 import { ChatLayout } from './components/ChatLayout.js';
 import { LoginPage } from './components/LoginPage.js';

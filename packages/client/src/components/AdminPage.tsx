@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { type TranslationKey, dateLocale } from '../i18n/index.js';
 import {
   type AdminAgent,
