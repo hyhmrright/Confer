@@ -23,6 +23,7 @@ bun run test:stack:down      # tear down the isolated test stack
 - Unit tests (`shared`, `identity`, `agent-runtime`, `conversation`, gateway `lib/`) are pure and need no infra.
 - Gateway **route** tests (`*.integration.test.ts`) drive the real Hono app (`app.ts`) via `app.request()` against a real Postgres + Qdrant + MinIO **test stack** (`docker-compose.test.yml`, project `confer-test`, ports 5433/6335/9002 — isolated from the dev/prod stack and its data). External third parties (embedding API, LLM API, DID resolution) are mocked; our own infra is real.
 - First run: `bun run test:setup` (brings the stack up and builds the schema), then `bun run test`. The harness preloads test env (`src/test/setup.ts` via `bunfig.toml`) and truncates all tables between tests (`src/test/helpers.ts`).
+- Client tests are of two kinds. Store/lib tests are pure logic. **Component tests (`src/components/*.test.tsx`) render for real**: `packages/client/bunfig.toml` preloads `src/test/setup-dom.ts`, which registers happy-dom globals, and they drive components through `@testing-library/react`. Mock `../lib/api.js` (and `../lib/ws.js` for `ChatLayout`) so nothing dials out — match the endpoint arms to the *exact* paths the stores call, longest prefix first, or a store lands `undefined` in state and the component throws with no error boundary to catch it.
 
 ## Architecture
 

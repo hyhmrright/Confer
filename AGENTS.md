@@ -22,6 +22,8 @@ bun run test:stack:down      # tear down the isolated test stack
 
 Unit tests are pure (no infra). Gateway route tests (`*.integration.test.ts`) drive the real Hono app against a real Postgres + Qdrant + MinIO test stack (`docker-compose.test.yml`, isolated on ports 5433/6335/9002); embedding/LLM/DID calls are mocked. Run `bun run test:setup` once, then `bun run test`.
 
+Client component tests (`packages/client/src/components/*.test.tsx`) render for real — `packages/client/bunfig.toml` preloads `src/test/setup-dom.ts` (happy-dom globals) and they drive components through `@testing-library/react`. Mock `../lib/api.js` (and `../lib/ws.js` for `ChatLayout`), matching the exact paths the stores call, longest prefix first — otherwise a store lands `undefined` in state and the component throws with no error boundary to catch it.
+
 ## Architecture
 
 Bun workspaces monorepo (`packages/*`):

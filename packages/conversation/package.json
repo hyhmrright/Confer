@@ -10,8 +10,5 @@
     "dev": "echo 'conversation runs as library, no standalone dev server'",
     "build": "bun build ./src/index.ts --outdir ./dist --target bun",
     "test": "bun test"
-  },
-  "dependencies": {
-    "zod": "^4.4.3"
   }
 }
