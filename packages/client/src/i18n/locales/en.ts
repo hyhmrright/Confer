@@ -132,6 +132,7 @@ export const en: Resources = {
     selfHint: 'You cannot change your own role or status',
     empty: 'No users',
     loadError: 'Failed to load, please retry',
+    actionError: 'Action failed, nothing changed',
     total: '{{count}} users',
     prev: 'Previous',
     next: 'Next',

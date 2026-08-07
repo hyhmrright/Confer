@@ -1,4 +1,4 @@
-import type { LLMMessage } from '@confer/agent-runtime';
+import type { LLMMessage, PermissionLevel } from '@confer/agent-runtime';
 import { classifyPermissionLevel, createProvider, parsePolicyConfig } from '@confer/agent-runtime';
 import {
   MAX_CLOCK_SKEW_MS,
@@ -65,7 +65,7 @@ async function requestPeerPermission(request: {
   userId: string;
   peer: typeof peerAgents.$inferSelect;
   action: 'connect' | 'ask';
-  level: string;
+  level: PermissionLevel;
   // Stored verbatim as JSONB and interpreted per-action by the inbox card, so
   // any object shape is valid here.
   scope: object;

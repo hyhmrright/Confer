@@ -128,6 +128,7 @@ export const zh = {
     selfHint: '不能修改自己的角色或状态',
     empty: '暂无用户',
     loadError: '加载失败，请重试',
+    actionError: '操作失败，未生效',
     total: '共 {{count}} 个用户',
     prev: '上一页',
     next: '下一页',

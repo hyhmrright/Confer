@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, mock, test } from 'bun:test';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 
 // The screens behind the login wall. They could not be smoke-tested in a browser
@@ -11,7 +11,21 @@ const get = mock(async (path: string) => {
     return { stats: { users: 3, agents: 3, conversations: 7, messages: 42 } };
   }
   if (path.startsWith('/admin/config')) return { config: {} };
-  if (path.startsWith('/admin/users')) return { users: [] };
+  if (path.startsWith('/admin/users')) {
+    return {
+      users: [
+        {
+          id: 'u1',
+          username: 'target',
+          role: 'member',
+          status: 'active',
+          created_at: '2026-08-07T10:00:00Z',
+        },
+      ],
+      total: 1,
+      page: 1,
+    };
+  }
   if (path.startsWith('/knowledge-bases')) return { knowledge_bases: [], documents: [] };
   if (path.startsWith('/memories')) return { memories: [] };
   if (path.startsWith('/conversations')) return { conversations: [], messages: [] };
@@ -23,9 +37,17 @@ const get = mock(async (path: string) => {
   return {};
 });
 
+// Admin moderation writes go through PATCH. This one always fails, which is the
+// case the UI used to swallow: the store deliberately doesn't catch, so without
+// a handler in the row the rejection escapes an un-awaited onClick.
+const patch = mock(async () => {
+  throw new Error('server said no');
+});
+
 mock.module('../lib/api.js', () => ({
   api: {
     get,
+    patch,
     post: mock(async () => ({})),
     put: mock(async () => ({})),
     del: mock(async () => ({})),
@@ -43,7 +65,7 @@ mock.module('../lib/ws.js', () => ({
   sendWebSocket: mock(() => {}),
 }));
 
-await import('../i18n/index.js');
+const i18n = (await import('../i18n/index.js')).default;
 const { AdminPage } = await import('./AdminPage.js');
 const { KnowledgePage } = await import('./KnowledgePage.js');
 const { MemoryPage } = await import('./MemoryPage.js');
@@ -59,6 +81,37 @@ describe('authenticated screens mount', () => {
     wrap(<AdminPage />);
     await waitFor(() => expect(get).toHaveBeenCalled());
     expect(document.body.textContent?.length ?? 0).toBeGreaterThan(0);
+  });
+
+  // A moderation action that the server rejects must say so. It used to fail
+  // silently: the row re-enabled, the user list was unchanged, and the only
+  // trace was an unhandled rejection in the console — an admin could believe
+  // they had disabled an account that was still active.
+  test('a rejected moderation action reports the failure and re-enables the row', async () => {
+    const confirmed = window.confirm;
+    window.confirm = () => true;
+    try {
+      wrap(<AdminPage />);
+      // Rail order is back, overview, users, content, config.
+      fireEvent.click(screen.getAllByRole('button')[2] as HTMLElement);
+
+      const rowButtons = () =>
+        Array.from(document.querySelectorAll<HTMLButtonElement>('tbody tr td:last-child button'));
+      await waitFor(() => expect(rowButtons().length).toBeGreaterThan(0));
+
+      fireEvent.click(rowButtons()[0] as HTMLButtonElement);
+
+      await waitFor(() => expect(patch).toHaveBeenCalled());
+      await waitFor(() =>
+        expect(document.querySelector('tbody tr')?.textContent).toContain(
+          i18n.t('admin.actionError'),
+        ),
+      );
+      // Re-enabled, so the admin can retry rather than being stuck on a dead row.
+      expect(rowButtons().every((b) => !b.disabled)).toBe(true);
+    } finally {
+      window.confirm = confirmed;
+    }
   });
 
   test('KnowledgePage renders its empty state without throwing', async () => {

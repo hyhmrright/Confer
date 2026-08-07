@@ -19,18 +19,41 @@ type Tab = 'overview' | 'users' | 'content' | 'config';
 function useConfirmedAction() {
   const { t } = useTranslation();
   const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
 
   const run = async (confirmKey: TranslationKey, action: () => Promise<void>) => {
     if (!window.confirm(t(confirmKey))) return;
     setBusy(true);
+    setFailed(false);
     try {
       await action();
+    } catch {
+      // The store's write actions intentionally don't swallow errors, and the
+      // page-level banner is wired only to the *load* path. Without catching
+      // here the rejection escapes an un-awaited onClick: the row simply
+      // re-enables and the admin is left believing a moderation action applied
+      // when it never did. The reason isn't shown — a gateway message would
+      // reach en/ja admins in the wrong language — so this reports the failure
+      // and leaves the retry to them.
+      setFailed(true);
     } finally {
       setBusy(false);
     }
   };
 
-  return { busy, run };
+  return { busy, failed, run };
+}
+
+// Inline "that didn't apply" marker for a row whose last action failed. It sits
+// in a flex button row (users) and in a plain right-aligned cell (agents,
+// conversations), hence both the flex and the inline alignment class.
+function ActionFailed() {
+  const { t } = useTranslation();
+  return (
+    <span className="text-[11px] text-red-400 self-center align-middle mr-2">
+      {t('admin.actionError')}
+    </span>
+  );
 }
 
 // A table-row action link. `tone` is the only thing that varies between them;
@@ -97,7 +120,7 @@ function OperationsOverview() {
 function UserRow({ u, selfId }: { u: AdminUser; selfId: string | undefined }) {
   const { t } = useTranslation();
   const { updateUser } = useAdminStore();
-  const { busy, run } = useConfirmedAction();
+  const { busy, failed, run } = useConfirmedAction();
   const isSelf = u.id === selfId;
 
   const roleLabel = u.role === 'admin' ? t('admin.roleAdmin') : t('admin.roleMember');
@@ -125,6 +148,7 @@ function UserRow({ u, selfId }: { u: AdminUser; selfId: string | undefined }) {
           <span className="text-[11px] text-ink-muted">{t('admin.selfHint')}</span>
         ) : (
           <div className="flex gap-2 justify-end">
+            {failed && <ActionFailed />}
             {u.role === 'admin' ? (
               <RowAction
                 tone="neutral"
@@ -264,7 +288,7 @@ function UserManagement() {
 function AgentRow({ a }: { a: AdminAgent }) {
   const { t } = useTranslation();
   const { updateAgent } = useAdminStore();
-  const { busy, run } = useConfirmedAction();
+  const { busy, failed, run } = useConfirmedAction();
   const suspended = a.status === 'suspended';
 
   return (
@@ -279,6 +303,7 @@ function AgentRow({ a }: { a: AdminAgent }) {
         </span>
       </td>
       <td className="py-2.5 px-3 text-right">
+        {failed && <ActionFailed />}
         {suspended ? (
           <RowAction
             tone="positive"
@@ -304,7 +329,7 @@ function AgentRow({ a }: { a: AdminAgent }) {
 function ConversationRow({ conv }: { conv: AdminConversation }) {
   const { t } = useTranslation();
   const { updateConversation } = useAdminStore();
-  const { busy, run } = useConfirmedAction();
+  const { busy, failed, run } = useConfirmedAction();
   const hidden = conv.moderation_status === 'hidden';
 
   return (
@@ -322,6 +347,7 @@ function ConversationRow({ conv }: { conv: AdminConversation }) {
         {new Date(conv.created_at).toLocaleDateString(dateLocale())}
       </td>
       <td className="py-2.5 px-3 text-right">
+        {failed && <ActionFailed />}
         {hidden ? (
           <RowAction
             tone="positive"

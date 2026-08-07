@@ -132,6 +132,7 @@ export const ja: Resources = {
     selfHint: '自分の役割や状態は変更できません',
     empty: 'ユーザーがいません',
     loadError: '読み込みに失敗しました。再試行してください',
+    actionError: '操作に失敗しました。変更されていません',
     total: '合計 {{count}} 人',
     prev: '前へ',
     next: '次へ',
