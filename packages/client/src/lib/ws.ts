@@ -58,6 +58,12 @@ export function disconnectWs(): void {
     reconnectTimer = null;
   }
   if (socket) {
+    // Detach onclose first. close() is asynchronous, so leaving the handler
+    // attached lets it fire *after* this function returns and schedule the
+    // 3s retry we just cancelled — which reopens a socket with a live token
+    // and no registered handlers. reconnectWs has always done this; this one
+    // did not, so leaving ChatLayout for /settings left a zombie behind.
+    socket.onclose = null;
     socket.close();
     socket = null;
   }

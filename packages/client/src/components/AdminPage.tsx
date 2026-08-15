@@ -199,6 +199,52 @@ function UserRow({ u, selfId }: { u: AdminUser; selfId: string | undefined }) {
   );
 }
 
+// Shared by all three admin lists. Extracted when Content moderation turned out
+// to load `{page: 1}` and then render no controls at all, leaving every agent
+// and conversation past the twentieth unreachable — the store had been tracking
+// the totals for it the whole time.
+function Pager({
+  total,
+  page,
+  pageSize,
+  busy,
+  onPage,
+}: {
+  total: number;
+  page: number;
+  pageSize: number;
+  busy: boolean;
+  onPage: (page: number) => void;
+}) {
+  const { t } = useTranslation();
+  const lastPage = Math.max(1, Math.ceil(total / pageSize));
+  const btn = `text-xs px-3 py-1.5 rounded-md text-ink-secondary hover:bg-dark-hover disabled:opacity-40 ${FOCUS_RING}`;
+
+  return (
+    <div className="flex items-center justify-between pt-2">
+      <span className="text-xs text-ink-muted">{t('admin.total', { count: total })}</span>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          disabled={page <= 1 || busy}
+          onClick={() => onPage(page - 1)}
+          className={btn}
+        >
+          {t('admin.prev')}
+        </button>
+        <button
+          type="button"
+          disabled={page >= lastPage || busy}
+          onClick={() => onPage(page + 1)}
+          className={btn}
+        >
+          {t('admin.next')}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function UserManagement() {
   const { t } = useTranslation();
   const { users, total, page, pageSize, loadingUsers, error, loadUsers } = useAdminStore();
@@ -208,8 +254,6 @@ function UserManagement() {
   useEffect(() => {
     loadUsers({ page: 1 });
   }, [loadUsers]);
-
-  const lastPage = Math.max(1, Math.ceil(total / pageSize));
 
   return (
     <div className="max-w-3xl space-y-4">
@@ -263,27 +307,13 @@ function UserManagement() {
         <p className="text-sm text-ink-muted py-4">{t('admin.empty')}</p>
       )}
 
-      <div className="flex items-center justify-between pt-2">
-        <span className="text-xs text-ink-muted">{t('admin.total', { count: total })}</span>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            disabled={page <= 1 || loadingUsers}
-            onClick={() => loadUsers({ page: page - 1 })}
-            className="text-xs px-3 py-1.5 rounded-md text-ink-secondary hover:bg-dark-hover disabled:opacity-40"
-          >
-            {t('admin.prev')}
-          </button>
-          <button
-            type="button"
-            disabled={page >= lastPage || loadingUsers}
-            onClick={() => loadUsers({ page: page + 1 })}
-            className="text-xs px-3 py-1.5 rounded-md text-ink-secondary hover:bg-dark-hover disabled:opacity-40"
-          >
-            {t('admin.next')}
-          </button>
-        </div>
-      </div>
+      <Pager
+        total={total}
+        page={page}
+        pageSize={pageSize}
+        busy={loadingUsers}
+        onPage={(next) => loadUsers({ page: next })}
+      />
     </div>
   );
 }
@@ -375,7 +405,20 @@ function ConversationRow({ conv }: { conv: AdminConversation }) {
 
 function ContentModeration() {
   const { t } = useTranslation();
-  const { agents, conversations, error, loadAgents, loadConversations } = useAdminStore();
+  const {
+    agents,
+    agentsTotal,
+    agentsPage,
+    loadingAgents,
+    conversations,
+    conversationsTotal,
+    conversationsPage,
+    loadingConversations,
+    pageSize,
+    error,
+    loadAgents,
+    loadConversations,
+  } = useAdminStore();
 
   useEffect(() => {
     loadAgents({ page: 1 });
@@ -411,6 +454,13 @@ function ContentModeration() {
           </table>
         </div>
         {agents.length === 0 && <p className="text-sm text-ink-muted py-4">{t('admin.empty')}</p>}
+        <Pager
+          total={agentsTotal}
+          page={agentsPage}
+          pageSize={pageSize}
+          busy={loadingAgents}
+          onPage={(next) => loadAgents({ page: next })}
+        />
       </section>
 
       <section>
@@ -445,6 +495,13 @@ function ContentModeration() {
         {conversations.length === 0 && (
           <p className="text-sm text-ink-muted py-4">{t('admin.empty')}</p>
         )}
+        <Pager
+          total={conversationsTotal}
+          page={conversationsPage}
+          pageSize={pageSize}
+          busy={loadingConversations}
+          onPage={(next) => loadConversations({ page: next })}
+        />
       </section>
     </div>
   );

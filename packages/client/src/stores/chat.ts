@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import i18n, { dateLocale } from '../i18n/index.js';
 import { api, getToken } from '../lib/api.js';
+import { prependNew } from '../lib/list.js';
 import { useAuthStore } from './auth.js';
 
 interface Citation {
@@ -32,6 +33,13 @@ interface Conversation {
   updated_at: string;
 }
 
+// Matches the gateway's cap for this endpoint's default; one "load older" step.
+const MESSAGE_PAGE_SIZE = 50;
+
+interface MessagePage {
+  messages: Array<Message & { citations_json?: unknown }>;
+}
+
 interface ChatState {
   conversations: Conversation[];
   activeConversationId: string | null;
@@ -42,9 +50,14 @@ interface ChatState {
   agentStatus: string | null;
 
   messagesLoading: boolean;
+  loadingOlder: boolean;
+  // Keyset paging has no total to compare against, so "there is more" is
+  // inferred from the last page coming back full.
+  hasOlderMessages: boolean;
 
   loadConversations: () => Promise<void>;
   selectConversation: (id: string) => Promise<void>;
+  loadOlderMessages: () => Promise<void>;
   createConversation: (peerId?: string, name?: string) => Promise<string>;
   deleteConversation: (id: string) => Promise<void>;
   sendMessage: (content: string) => Promise<void>;
@@ -75,6 +88,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   activeConversationId: null,
   messages: [],
   messagesLoading: false,
+  loadingOlder: false,
+  hasOlderMessages: false,
   streaming: false,
   streamContent: '',
   streamCitations: [],
@@ -90,18 +105,55 @@ export const useChatStore = create<ChatState>((set, get) => ({
       activeConversationId: id,
       messages: [],
       messagesLoading: true,
+      // Thread-scoped, so they reset with the thread. This also releases the
+      // flag if an older-history fetch is still in flight — it will find the
+      // conversation changed and bail without touching state.
+      loadingOlder: false,
+      hasOlderMessages: false,
       streaming: false,
       streamContent: '',
       streamCitations: [],
       agentStatus: null,
     });
     try {
-      const data = await api.get<{ messages: Array<Message & { citations_json?: unknown }> }>(
-        `/conversations/${id}/messages`,
+      const data = await api.get<MessagePage>(
+        `/conversations/${id}/messages?limit=${MESSAGE_PAGE_SIZE}`,
       );
-      set({ messages: data.messages.map(normalizeMessage), messagesLoading: false });
+      set({
+        messages: data.messages.map(normalizeMessage),
+        messagesLoading: false,
+        hasOlderMessages: data.messages.length === MESSAGE_PAGE_SIZE,
+      });
     } catch {
       set({ messagesLoading: false });
+    }
+  },
+
+  // Walk backwards through the thread. The endpoint has always supported this
+  // (`before` + `limit`, keyset), but nothing ever called it with them, so a
+  // conversation's fifty-first-oldest message and everything behind it were
+  // unreachable from the UI.
+  loadOlderMessages: async () => {
+    const { activeConversationId, messages, loadingOlder, hasOlderMessages } = get();
+    const oldest = messages[0];
+    if (!activeConversationId || !oldest || loadingOlder || !hasOlderMessages) return;
+
+    set({ loadingOlder: true });
+    try {
+      const data = await api.get<MessagePage>(
+        `/conversations/${activeConversationId}/messages?limit=${MESSAGE_PAGE_SIZE}&before=${oldest.id}`,
+      );
+      // The user can switch conversations while this is in flight; without this
+      // check the older page would be prepended to a different thread.
+      if (get().activeConversationId !== activeConversationId) return;
+      const older = data.messages.map(normalizeMessage);
+      set((s) => ({
+        messages: prependNew(s.messages, older),
+        hasOlderMessages: older.length === MESSAGE_PAGE_SIZE,
+        loadingOlder: false,
+      }));
+    } catch {
+      set({ loadingOlder: false });
     }
   },
 

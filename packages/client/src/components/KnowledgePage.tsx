@@ -5,6 +5,7 @@ import { INPUT_CLS } from '../lib/styles.js';
 import { type KnowledgeDocument, useKbStore } from '../stores/knowledge-base.js';
 import { ChevronDown, Plus, Trash } from './Icons.js';
 import { LoadingDots } from './LoadingDots.js';
+import { LoadMore } from './LoadMore.js';
 
 function statusBadge(status: string | null) {
   const s = status ?? 'processing';
@@ -75,7 +76,10 @@ function KbCard({ kbId }: { kbId: string }) {
   const {
     kbs,
     documents,
+    documentsTotal,
+    loadingMoreDocs,
     fetchDocuments,
+    loadMoreDocuments,
     uploadDocument,
     deleteDocument,
     deleteKb,
@@ -161,14 +165,22 @@ function KbCard({ kbId }: { kbId: string }) {
               {t('knowledge.docsEmpty')}
             </p>
           ) : (
-            docs.map((doc) => (
-              <DocRow
-                key={doc.id}
-                doc={doc}
-                onDelete={() => deleteDocument(kbId, doc.id)}
-                onRetry={() => retryDocument(kbId, doc.id)}
+            <>
+              {docs.map((doc) => (
+                <DocRow
+                  key={doc.id}
+                  doc={doc}
+                  onDelete={() => deleteDocument(kbId, doc.id)}
+                  onRetry={() => retryDocument(kbId, doc.id)}
+                />
+              ))}
+              <LoadMore
+                shown={docs.length}
+                total={documentsTotal[kbId] ?? docs.length}
+                busy={loadingMoreDocs === kbId}
+                onMore={() => loadMoreDocuments(kbId)}
               />
-            ))
+            </>
           )}
         </div>
       )}

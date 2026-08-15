@@ -148,18 +148,38 @@ function NavRail({
 export function ChatLayout() {
   const { t } = useTranslation();
   const [tab, setTab] = useState<Tab>('conversations');
-  const { user, logout } = useAuthStore();
-  const { loadConversations, activeConversationId, addMessage, setAgentStatus } = useChatStore();
-  const { addRequest: addPermissionRequest, loadPending } = usePermissionsStore();
+  // Per-field selectors, not `useXStore()`. Zustand's setState replaces the
+  // state object wholesale, so subscribing to the whole store re-renders this
+  // component — and with it NavRail, Sidebar, both inboxes and the entire
+  // message list — on every single streamed LLM token.
+  const user = useAuthStore((s) => s.user);
+  const logout = useAuthStore((s) => s.logout);
+  const loadConversations = useChatStore((s) => s.loadConversations);
+  const activeConversationId = useChatStore((s) => s.activeConversationId);
+  const addMessage = useChatStore((s) => s.addMessage);
+  const setAgentStatus = useChatStore((s) => s.setAgentStatus);
+  const addPermissionRequest = usePermissionsStore((s) => s.addRequest);
+  const loadPending = usePermissionsStore((s) => s.loadPending);
   const loadPendingCards = useErrandsStore((s) => s.loadPendingCards);
   const navigate = useNavigate();
 
   // Errand decision cards arrive by polling (not WebSocket): pull the pending
   // inbox on mount and on a fixed interval while the layout is open.
   useEffect(() => {
-    loadPendingCards();
-    const timer = setInterval(loadPendingCards, 15_000);
-    return () => clearInterval(timer);
+    // Skip the poll while the tab is hidden — this is a desktop app people
+    // leave open, and an unguarded 15s timer is 5,760 requests a day per user
+    // for a two-table join nobody is looking at. visibilitychange also fires
+    // the fetch on return, so coming back is immediate rather than up to 15s stale.
+    const tick = () => {
+      if (!document.hidden) void loadPendingCards();
+    };
+    tick();
+    const timer = setInterval(tick, 15_000);
+    document.addEventListener('visibilitychange', tick);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', tick);
+    };
   }, [loadPendingCards]);
 
   useEffect(() => {

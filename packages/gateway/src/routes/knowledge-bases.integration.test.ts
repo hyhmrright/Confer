@@ -54,6 +54,38 @@ describe('knowledge base CRUD', () => {
     ).toBe(404);
   });
 
+  test('pages documents and reports the full count', async () => {
+    const kbId = await createKb('Big KB');
+    // A knowledge base is an upload target, so this is the list that actually
+    // grows. Seeded directly — ingestion is irrelevant to the paging contract.
+    for (let i = 0; i < 3; i++) {
+      await getDb()
+        .insert(knowledgeDocuments)
+        .values({
+          id: newId(),
+          kb_id: kbId,
+          user_id: user.id,
+          filename: `doc-${i}.txt`,
+          content_type: 'text/plain',
+          status: 'ready',
+        });
+    }
+
+    const first = await (
+      await get(`${BASE}/${kbId}/documents?limit=2`, { token: user.token })
+    ).json();
+    expect(first.documents).toHaveLength(2);
+    expect(first.total).toBe(3);
+
+    const second = await (
+      await get(`${BASE}/${kbId}/documents?limit=2&offset=2`, { token: user.token })
+    ).json();
+    expect(second.documents).toHaveLength(1);
+
+    const ids = [...first.documents, ...second.documents].map((d: { id: string }) => d.id);
+    expect(new Set(ids).size).toBe(3);
+  });
+
   test('only the owner may delete a document (outsider gets 404)', async () => {
     const kbId = await createKb('Owner KB');
 

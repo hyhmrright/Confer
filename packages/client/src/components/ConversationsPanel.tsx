@@ -12,13 +12,14 @@ export function ConversationsPanel({ onNavigate }: { onNavigate?: () => void }) 
   const { t } = useTranslation();
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
-  const {
-    conversations,
-    activeConversationId,
-    selectConversation,
-    createConversation,
-    deleteConversation,
-  } = useChatStore();
+  // Per-field selectors: this panel is always mounted alongside the message
+  // view, so subscribing to the whole chat store would re-render the entire
+  // conversation list on every streamed token.
+  const conversations = useChatStore((s) => s.conversations);
+  const activeConversationId = useChatStore((s) => s.activeConversationId);
+  const selectConversation = useChatStore((s) => s.selectConversation);
+  const createConversation = useChatStore((s) => s.createConversation);
+  const deleteConversation = useChatStore((s) => s.deleteConversation);
 
   const filtered = conversations.filter((c) =>
     (c.name ?? '').toLowerCase().includes(query.toLowerCase()),

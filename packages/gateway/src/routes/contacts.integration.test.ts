@@ -63,6 +63,36 @@ describe('contacts', () => {
     expect((await del(`${BASE}/${contactId}`, { token: user.token })).status).toBe(404);
   });
 
+  test('pages the list and reports the full count', async () => {
+    for (let i = 0; i < 3; i++) {
+      const peerId = await seedPeer();
+      expect((await post(BASE, { token: user.token, body: { peer_id: peerId } })).status).toBe(201);
+    }
+
+    const first = await (await get(`${BASE}?limit=2`, { token: user.token })).json();
+    expect(first.contacts).toHaveLength(2);
+    // The count is the whole list, not the page — without it the UI cannot tell
+    // a capped list from a complete one.
+    expect(first.total).toBe(3);
+
+    const second = await (await get(`${BASE}?limit=2&offset=2`, { token: user.token })).json();
+    expect(second.contacts).toHaveLength(1);
+    expect(second.total).toBe(3);
+
+    // The two pages must not overlap, which is what the id ordering guarantees.
+    const ids = [...first.contacts, ...second.contacts].map((c: { id: string }) => c.id);
+    expect(new Set(ids).size).toBe(3);
+  });
+
+  test('ignores a junk limit instead of failing the query', async () => {
+    const peerId = await seedPeer();
+    await post(BASE, { token: user.token, body: { peer_id: peerId } });
+
+    const res = await get(`${BASE}?limit=abc&offset=-5`, { token: user.token });
+    expect(res.status).toBe(200);
+    expect((await res.json()).contacts).toHaveLength(1);
+  });
+
   test('returns 404 when adding an unknown peer', async () => {
     const res = await post(BASE, {
       token: user.token,
