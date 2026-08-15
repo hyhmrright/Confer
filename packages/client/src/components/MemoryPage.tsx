@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { dateLocale } from '../i18n/index.js';
-import { INPUT_CLS } from '../lib/styles.js';
+import { FOCUS_RING, INPUT_CLS } from '../lib/styles.js';
 import { useMemoriesStore } from '../stores/memories.js';
 import { Plus, Search, Trash } from './Icons.js';
 import { LoadingDots } from './LoadingDots.js';
@@ -67,8 +67,8 @@ export function MemoryPage() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={t('memory.searchPlaceholder')}
-            className="w-full pl-8 pr-3 py-1.5 bg-dark-input border border-dark-border text-ink-secondary
-              text-xs rounded-md placeholder:text-ink-muted focus:outline-hidden focus:border-primary-600/40 transition-colors"
+            className={`w-full pl-8 pr-3 py-1.5 bg-dark-input border border-dark-border text-ink-secondary
+              text-xs rounded-md placeholder:text-ink-muted ${FOCUS_RING} transition-colors`}
           />
         </div>
       </div>

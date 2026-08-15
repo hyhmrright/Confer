@@ -14,11 +14,13 @@ type PolicyRule = NonNullable<PolicyOverrides['rules']>[number];
 // TODO: rules are rendered read-only in this MVP. A full visual rules editor
 // (add/remove per-action/per-peer decisions) is deferred — see plan §4.
 export function PolicyEditor({
+  id,
   decision,
   onChange,
   inheritLabel,
   rules,
 }: {
+  id?: string;
   decision: string;
   onChange: (value: string) => void;
   inheritLabel: string | null;
@@ -29,6 +31,7 @@ export function PolicyEditor({
   return (
     <div className="space-y-4">
       <select
+        id={id}
         value={decision}
         onChange={(e) => onChange(e.target.value)}
         className={SELECT_FIELD_CLS}

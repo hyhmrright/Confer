@@ -156,7 +156,10 @@ export function MessageView() {
 
       {/* Input */}
       <div className="px-4 pb-4 pt-2 shrink-0">
-        <div className="rounded-xl border border-dark-border bg-dark-input transition-colors focus-within:border-primary-600/50">
+        {/* The composer's focus indicator lives here rather than on the textarea:
+            the bordered wrapper is what reads as the control, and the textarea
+            inside it keeps `outline-hidden` so the two don't both draw. */}
+        <div className="rounded-xl border border-dark-border bg-dark-input transition-colors focus-within:ring-2 focus-within:ring-primary-500 focus-within:border-transparent">
           {/* Attached file preview */}
           {attachedFile && (
             <div className="flex items-center gap-2 px-3 pt-3 pb-0">

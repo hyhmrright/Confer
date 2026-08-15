@@ -17,6 +17,7 @@ export const ja: Resources = {
     configure: '設定',
     remove: '削除',
     optional: '（任意）',
+    close: '閉じる',
   },
   language: {
     label: '言語',
@@ -200,7 +201,6 @@ export const ja: Resources = {
     savePolicy: 'ポリシーを保存',
     policySaved: 'ポリシーを保存しました',
     policySaveFailed: 'ポリシーの保存に失敗しました',
-    close: '閉じる',
   },
   memory: {
     title: 'メモリ',

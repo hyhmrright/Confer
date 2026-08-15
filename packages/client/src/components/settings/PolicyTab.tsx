@@ -44,9 +44,10 @@ export function PolicyTab() {
   return (
     <div className="space-y-4">
       <div>
-        <FieldLabel>{t('settings.agentDefaultPolicy')}</FieldLabel>
+        <FieldLabel htmlFor="agent-default-policy">{t('settings.agentDefaultPolicy')}</FieldLabel>
         <p className="text-xs text-ink-muted mb-2">{t('settings.agentDefaultPolicyHint')}</p>
         <PolicyEditor
+          id="agent-default-policy"
           decision={decision}
           onChange={setDecision}
           inheritLabel={null}

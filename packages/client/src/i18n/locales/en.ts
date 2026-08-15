@@ -17,6 +17,7 @@ export const en: Resources = {
     configure: 'Configure',
     remove: 'Remove',
     optional: '(optional)',
+    close: 'Close',
   },
   language: {
     label: 'Language',
@@ -200,7 +201,6 @@ export const en: Resources = {
     savePolicy: 'Save policy',
     policySaved: 'Policy saved',
     policySaveFailed: 'Failed to save policy',
-    close: 'Close',
   },
   memory: {
     title: 'Memory',

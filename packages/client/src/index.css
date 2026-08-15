@@ -13,7 +13,11 @@
   --color-primary-300: #e8be95;
   --color-primary-400: #d4a27f;
   --color-primary-500: #c4875f;
-  --color-primary-600: #b06844;
+  /* White text sits on primary-600 in every primary button. At the previous
+     #b06844 that measured 4.28:1 — just under the 4.5:1 WCAG AA needs for
+     normal-size text. Darkened just enough to clear it (~4.6:1) while keeping
+     the hue; anything lighter fails, so don't nudge this back up. */
+  --color-primary-600: #a86341;
   --color-primary-700: #8c4e2c;
   --color-primary-800: #6b3819;
   --color-primary-900: #4d270d;
@@ -29,7 +33,12 @@
 
   --color-ink-primary: #dedede;
   --color-ink-secondary: #9e9e9e;
-  --color-ink-muted: #505050;
+  /* Carries real text — empty-state hints, placeholders, captions — not just
+     decoration. At the previous #505050 that measured 2.36:1 against the panel
+     background, well under the 4.5:1 WCAG AA floor. Measured at 4.62:1 on
+     dark-panel, the lightest surface it appears on; #7b7b7b lands at 4.49 and
+     fails, so this has very little room below it. */
+  --color-ink-muted: #7d7d7d;
 
   --animate-dot-bounce: dot-bounce 1.4s infinite ease-in-out both;
   --animate-fade-in: fade-in 0.25s ease-out;

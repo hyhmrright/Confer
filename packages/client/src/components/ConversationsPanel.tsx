@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { dateLocale } from '../i18n/index.js';
+import { FOCUS_RING } from '../lib/styles.js';
 import { useChatStore } from '../stores/chat.js';
 import { Bot, Plus, Search, Trash } from './Icons.js';
 
@@ -53,9 +54,8 @@ export function ConversationsPanel() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={t('conversations.searchPlaceholder')}
-            className="w-full pl-8 pr-3 py-1.5 bg-dark-input text-ink-secondary text-xs rounded-md
-              border border-dark-border placeholder:text-ink-muted
-              focus:outline-hidden focus:border-primary-600/40 transition-colors"
+            className={`w-full pl-8 pr-3 py-1.5 bg-dark-input text-ink-secondary text-xs rounded-md
+              border border-dark-border placeholder:text-ink-muted ${FOCUS_RING} transition-colors`}
           />
         </div>
       </div>

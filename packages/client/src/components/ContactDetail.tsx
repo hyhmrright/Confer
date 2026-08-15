@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { mergePolicyDefault } from '../lib/policy.js';
 import { useContactsStore } from '../stores/contacts.js';
-import { Bot, X } from './Icons.js';
+import { Bot } from './Icons.js';
+import { Modal } from './Modal.js';
 import { SaveButton } from './SaveButton.js';
 import { PolicyEditor } from './settings/PolicyEditor.js';
 import { FieldLabel, StatusMsg } from './settings/SettingsShared.js';
@@ -55,68 +56,59 @@ export function ContactDetail() {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50">
-      <div className="bg-dark-panel border border-dark-border rounded-2xl shadow-2xl w-full max-w-md mx-4 max-h-[85vh] flex flex-col overflow-hidden animate-fade-in">
-        <div className="flex justify-between items-center px-6 py-4 border-b border-dark-border shrink-0">
-          <h2 className="text-base font-semibold text-ink-primary">{t('contacts.detailTitle')}</h2>
-          <button
-            type="button"
-            onClick={closeDetail}
-            aria-label={t('contacts.close')}
-            className="p-1.5 text-ink-muted hover:text-ink-secondary hover:bg-dark-hover rounded-lg transition-colors"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto scrollbar-thin px-6 py-5 space-y-5">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-full bg-dark-border flex items-center justify-center shrink-0">
-              <Bot className="w-5 h-5 text-ink-muted" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-sm font-medium text-ink-primary truncate">
-                {alias ?? peer.name ?? t('contacts.unnamed')}
-              </div>
-              <div className="text-xs text-ink-muted truncate">{peer.did}</div>
-              {peer.organization && (
-                <div className="text-xs text-ink-muted truncate">{peer.organization}</div>
-              )}
-            </div>
+    <Modal
+      title={t('contacts.detailTitle')}
+      onClose={closeDetail}
+      panelClassName="max-h-[85vh] flex flex-col"
+    >
+      <div className="flex-1 overflow-y-auto scrollbar-thin px-6 py-5 space-y-5">
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 rounded-full bg-dark-border flex items-center justify-center shrink-0">
+            <Bot className="w-5 h-5 text-ink-muted" />
           </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <MetaRow label={t('contacts.alias')} value={alias ?? '—'} />
-            <MetaRow
-              label={t('contacts.tags')}
-              value={tags && tags.length > 0 ? tags.join(', ') : t('contacts.noTags')}
-            />
-            <MetaRow label={t('contacts.pinned')} value={yesNo(pinned)} />
-            <MetaRow label={t('contacts.muted')} value={yesNo(muted)} />
-          </div>
-
-          <div>
-            <FieldLabel>{t('policy.default')}</FieldLabel>
-            <p className="text-xs text-ink-muted mb-2">{t('policy.defaultHint')}</p>
-            {loading ? (
-              <p className="text-xs text-ink-muted">{t('common.loading')}</p>
-            ) : (
-              <PolicyEditor
-                decision={decision}
-                onChange={setDecision}
-                inheritLabel={t('policy.inherit')}
-                rules={overrides?.rules}
-              />
+          <div className="min-w-0">
+            <div className="text-sm font-medium text-ink-primary truncate">
+              {alias ?? peer.name ?? t('contacts.unnamed')}
+            </div>
+            <div className="text-xs text-ink-muted truncate">{peer.did}</div>
+            {peer.organization && (
+              <div className="text-xs text-ink-muted truncate">{peer.organization}</div>
             )}
           </div>
-
-          <StatusMsg error={error} success={success} />
         </div>
 
-        <div className="px-6 py-4 border-t border-dark-border shrink-0">
-          <SaveButton onClick={handleSave} saving={saving} label={t('contacts.savePolicy')} />
+        <div className="grid grid-cols-2 gap-4">
+          <MetaRow label={t('contacts.alias')} value={alias ?? '—'} />
+          <MetaRow
+            label={t('contacts.tags')}
+            value={tags && tags.length > 0 ? tags.join(', ') : t('contacts.noTags')}
+          />
+          <MetaRow label={t('contacts.pinned')} value={yesNo(pinned)} />
+          <MetaRow label={t('contacts.muted')} value={yesNo(muted)} />
         </div>
+
+        <div>
+          <FieldLabel htmlFor="contact-policy-default">{t('policy.default')}</FieldLabel>
+          <p className="text-xs text-ink-muted mb-2">{t('policy.defaultHint')}</p>
+          {loading ? (
+            <p className="text-xs text-ink-muted">{t('common.loading')}</p>
+          ) : (
+            <PolicyEditor
+              id="contact-policy-default"
+              decision={decision}
+              onChange={setDecision}
+              inheritLabel={t('policy.inherit')}
+              rules={overrides?.rules}
+            />
+          )}
+        </div>
+
+        <StatusMsg error={error} success={success} />
       </div>
-    </div>
+
+      <div className="px-6 py-4 border-t border-dark-border shrink-0">
+        <SaveButton onClick={handleSave} saving={saving} label={t('contacts.savePolicy')} />
+      </div>
+    </Modal>
   );
 }

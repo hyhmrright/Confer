@@ -15,6 +15,7 @@ export const zh = {
     configure: '配置',
     remove: '移除',
     optional: '（可选）',
+    close: '关闭',
   },
   language: {
     label: '语言',
@@ -196,7 +197,6 @@ export const zh = {
     savePolicy: '保存策略',
     policySaved: '策略已保存',
     policySaveFailed: '策略保存失败',
-    close: '关闭',
   },
   memory: {
     title: '记忆',
