@@ -230,32 +230,34 @@ function UserManagement() {
 
       {error && <p className="text-xs text-red-400">{t('admin.loadError')}</p>}
 
-      <table className="w-full">
-        <thead>
-          <tr className="text-left">
-            <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
-              {t('admin.usersColUser')}
-            </th>
-            <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
-              {t('admin.usersColRole')}
-            </th>
-            <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
-              {t('admin.usersColStatus')}
-            </th>
-            <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
-              {t('admin.usersColCreated')}
-            </th>
-            <th className="py-2 px-3 text-[11px] font-medium text-ink-muted text-right">
-              {t('admin.usersColActions')}
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {users.map((u) => (
-            <UserRow key={u.id} u={u} selfId={selfId} />
-          ))}
-        </tbody>
-      </table>
+      <div className="overflow-x-auto scrollbar-thin">
+        <table className="w-full min-w-[520px]">
+          <thead>
+            <tr className="text-left">
+              <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
+                {t('admin.usersColUser')}
+              </th>
+              <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
+                {t('admin.usersColRole')}
+              </th>
+              <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
+                {t('admin.usersColStatus')}
+              </th>
+              <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
+                {t('admin.usersColCreated')}
+              </th>
+              <th className="py-2 px-3 text-[11px] font-medium text-ink-muted text-right">
+                {t('admin.usersColActions')}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {users.map((u) => (
+              <UserRow key={u.id} u={u} selfId={selfId} />
+            ))}
+          </tbody>
+        </table>
+      </div>
 
       {!loadingUsers && users.length === 0 && (
         <p className="text-sm text-ink-muted py-4">{t('admin.empty')}</p>
@@ -386,26 +388,28 @@ function ContentModeration() {
 
       <section>
         <h3 className="text-sm font-medium text-ink-secondary mb-3">{t('admin.contentAgents')}</h3>
-        <table className="w-full">
-          <thead>
-            <tr className="text-left">
-              <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
-                {t('admin.agentColName')}
-              </th>
-              <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
-                {t('admin.agentColStatus')}
-              </th>
-              <th className="py-2 px-3 text-[11px] font-medium text-ink-muted text-right">
-                {t('admin.agentColActions')}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {agents.map((a) => (
-              <AgentRow key={a.id} a={a} />
-            ))}
-          </tbody>
-        </table>
+        <div className="overflow-x-auto scrollbar-thin">
+          <table className="w-full min-w-[520px]">
+            <thead>
+              <tr className="text-left">
+                <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
+                  {t('admin.agentColName')}
+                </th>
+                <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
+                  {t('admin.agentColStatus')}
+                </th>
+                <th className="py-2 px-3 text-[11px] font-medium text-ink-muted text-right">
+                  {t('admin.agentColActions')}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {agents.map((a) => (
+                <AgentRow key={a.id} a={a} />
+              ))}
+            </tbody>
+          </table>
+        </div>
         {agents.length === 0 && <p className="text-sm text-ink-muted py-4">{t('admin.empty')}</p>}
       </section>
 
@@ -413,29 +417,31 @@ function ContentModeration() {
         <h3 className="text-sm font-medium text-ink-secondary mb-3">
           {t('admin.contentConversations')}
         </h3>
-        <table className="w-full">
-          <thead>
-            <tr className="text-left">
-              <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
-                {t('admin.convColName')}
-              </th>
-              <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
-                {t('admin.convColStatus')}
-              </th>
-              <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
-                {t('admin.convColCreated')}
-              </th>
-              <th className="py-2 px-3 text-[11px] font-medium text-ink-muted text-right">
-                {t('admin.convColActions')}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {conversations.map((conv) => (
-              <ConversationRow key={conv.id} conv={conv} />
-            ))}
-          </tbody>
-        </table>
+        <div className="overflow-x-auto scrollbar-thin">
+          <table className="w-full min-w-[520px]">
+            <thead>
+              <tr className="text-left">
+                <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
+                  {t('admin.convColName')}
+                </th>
+                <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
+                  {t('admin.convColStatus')}
+                </th>
+                <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
+                  {t('admin.convColCreated')}
+                </th>
+                <th className="py-2 px-3 text-[11px] font-medium text-ink-muted text-right">
+                  {t('admin.convColActions')}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {conversations.map((conv) => (
+                <ConversationRow key={conv.id} conv={conv} />
+              ))}
+            </tbody>
+          </table>
+        </div>
         {conversations.length === 0 && (
           <p className="text-sm text-ink-muted py-4">{t('admin.empty')}</p>
         )}

@@ -88,6 +88,8 @@ export const zh = {
     agentDefaultPolicyHint: '当某个联系人没有单独设置策略时，对其请求采用的默认处理方式。',
   },
   nav: {
+    openMenu: '打开导航',
+    closeMenu: '关闭导航',
     conversations: '对话',
     contacts: '联系人',
     memory: '记忆',

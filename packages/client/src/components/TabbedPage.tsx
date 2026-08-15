@@ -1,5 +1,6 @@
 import type { ReactNode, SVGProps } from 'react';
 import { useNavigate } from 'react-router';
+import { FOCUS_RING } from '../lib/styles.js';
 import { ArrowLeft } from './Icons.js';
 
 export interface PageTab<Id extends string> {
@@ -45,26 +46,32 @@ export function TabbedPage<Id extends string>({
         <h1 className="font-semibold text-sm text-ink-primary ml-2">{title}</h1>
       </header>
 
-      <div className="flex-1 flex overflow-hidden">
-        <nav className="w-52 bg-dark-panel border-r border-dark-border p-2 space-y-0.5 shrink-0">
+      {/* The rail is a column beside the content on a wide screen and a
+          horizontally scrolling strip above it on a narrow one, where 208px of
+          fixed rail would leave the forms about 100px to live in. */}
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
+        <nav
+          className="flex md:flex-col gap-0.5 shrink-0 bg-dark-panel border-b md:border-b-0 md:border-r border-dark-border
+            p-2 md:w-52 overflow-x-auto md:overflow-x-visible scrollbar-thin"
+        >
           {tabs.map(({ id, label, icon: Icon }) => (
             <button
               type="button"
               key={id}
               onClick={() => onTabChange(id)}
-              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
+              className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors shrink-0 md:w-full ${
                 activeTab === id
                   ? 'bg-primary-600/15 text-primary-400 font-medium'
                   : 'text-ink-secondary hover:bg-dark-hover hover:text-ink-primary'
-              }`}
+              } ${FOCUS_RING}`}
             >
-              <Icon className="w-4 h-4" />
+              <Icon className="w-4 h-4 shrink-0" />
               {label}
             </button>
           ))}
         </nav>
 
-        <div className="flex-1 overflow-y-auto scrollbar-thin p-8 bg-dark-base">
+        <div className="flex-1 min-w-0 overflow-y-auto scrollbar-thin p-4 md:p-8 bg-dark-base">
           <div className={contentClassName}>
             <h2 className="text-base font-semibold text-ink-primary mb-6">
               {tabs.find((item) => item.id === activeTab)?.label}

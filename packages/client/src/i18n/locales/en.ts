@@ -92,6 +92,8 @@ export const en: Resources = {
       'How requests are handled by default when a contact has no policy of its own.',
   },
   nav: {
+    openMenu: 'Open navigation',
+    closeMenu: 'Close navigation',
     conversations: 'Conversations',
     contacts: 'Contacts',
     memory: 'Memory',

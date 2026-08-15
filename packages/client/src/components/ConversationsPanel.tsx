@@ -5,7 +5,10 @@ import { FOCUS_RING } from '../lib/styles.js';
 import { useChatStore } from '../stores/chat.js';
 import { Bot, Plus, Search, Trash } from './Icons.js';
 
-export function ConversationsPanel() {
+// `onNavigate` fires once a conversation becomes the active one. On a narrow
+// viewport the panel is inside the drawer covering the messages, so picking a
+// conversation has to dismiss it or the user never sees what they picked.
+export function ConversationsPanel({ onNavigate }: { onNavigate?: () => void }) {
   const { t } = useTranslation();
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
@@ -24,6 +27,12 @@ export function ConversationsPanel() {
   const handleNew = async () => {
     const id = await createConversation();
     await selectConversation(id);
+    onNavigate?.();
+  };
+
+  const handleSelect = async (id: string) => {
+    await selectConversation(id);
+    onNavigate?.();
   };
 
   return (
@@ -83,7 +92,7 @@ export function ConversationsPanel() {
                 )}
                 <button
                   type="button"
-                  onClick={() => selectConversation(conv.id)}
+                  onClick={() => handleSelect(conv.id)}
                   className="w-full flex items-center gap-3 px-4 py-3 text-left cursor-pointer"
                 >
                   <div

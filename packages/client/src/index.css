@@ -43,6 +43,7 @@
   --animate-dot-bounce: dot-bounce 1.4s infinite ease-in-out both;
   --animate-fade-in: fade-in 0.25s ease-out;
   --animate-cursor-blink: cursor-blink 1s step-end infinite;
+  --animate-slide-in-left: slide-in-left 0.2s ease-out;
 
   @keyframes dot-bounce {
     0%,
@@ -64,6 +65,17 @@
     to {
       opacity: 1;
       transform: translateY(0);
+    }
+  }
+  /* The narrow-viewport navigation drawer. It is toggled with `hidden`, which
+     keeps it out of the tab order while closed, so it can't be transitioned in
+     — the animation has to run on appearance instead. */
+  @keyframes slide-in-left {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(0);
     }
   }
   @keyframes cursor-blink {

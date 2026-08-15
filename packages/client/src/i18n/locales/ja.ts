@@ -92,6 +92,8 @@ export const ja: Resources = {
       '連絡先に個別のポリシーがない場合に、リクエストを既定でどう処理するかを設定します。',
   },
   nav: {
+    openMenu: 'ナビゲーションを開く',
+    closeMenu: 'ナビゲーションを閉じる',
     conversations: '会話',
     contacts: '連絡先',
     memory: 'メモリ',
