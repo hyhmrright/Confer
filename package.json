@@ -28,6 +28,7 @@
     "zod": "^4.4.3",
     "ip-address": "^10.4.0",
     "postcss": "^8.5.26",
-    "shell-quote": "^1.10.0"
+    "shell-quote": "^1.10.0",
+    "nanoid": "^3.3.18"
   }
 }
