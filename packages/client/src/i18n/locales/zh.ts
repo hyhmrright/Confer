@@ -16,6 +16,8 @@ export const zh = {
     remove: '移除',
     optional: '（可选）',
     close: '关闭',
+    loadMore: '加载更多（已显示 {{shown}} / 共 {{total}}）',
+    loadFailed: '这部分界面没能加载出来，刷新一下通常就好了。',
   },
   language: {
     label: '语言',
@@ -230,6 +232,7 @@ export const zh = {
     statusFailed: '失败',
   },
   message: {
+    loadOlder: '加载更早的消息',
     title: '对话',
     start: '开始对话',
     thinking: '思考中',

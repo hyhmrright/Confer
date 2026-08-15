@@ -1,7 +1,52 @@
-@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap")
-  layer(base);
-
 @import "tailwindcss";
+
+/*
+  Self-hosted, replacing an `@import url(fonts.googleapis.com/...)` that used to
+  sit above this line. That import was the worst shape a font request can take:
+  because it lived inside the stylesheet, the preload scanner could not see it
+  while parsing the HTML, so the browser had to download and parse this file
+  first and only then begin a DNS + TLS + fetch to a third party — measured at
+  ~1.08s of purely serial delay — which then referenced yet another host for the
+  font itself. It also meant the Tauri desktop build, which otherwise touches no
+  network at all, phoned Google on every launch and blocked first paint on
+  having an internet connection.
+
+  One file per subset rather than one per weight: this is the variable font, so
+  each subset covers the whole 100-800 axis on its own. The old import asked for
+  400;500;600 — 500 was never used, and `font-bold` (700) *was* used, by the
+  logo, and had to be synthesized. Both are now correct.
+
+  JetBrains Mono is licensed under SIL OFL 1.1 — see the LICENSE beside the files.
+*/
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/jetbrains-mono-latin.woff2") format("woff2");
+  font-weight: 100 800;
+  font-style: normal;
+  font-display: swap;
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
+    U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/*
+  Accented Latin, for the peer names, organisations and DIDs that render in
+  `font-mono`. Declaring it costs nothing: `unicode-range` means the browser
+  fetches this file only if a character inside the range is actually on the
+  page, so a session that never shows one downloads 0 bytes. Without it those
+  letters fall back to the system mono mid-word — "Łukasz" drawn in two faces.
+*/
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/jetbrains-mono-latin-ext.woff2") format("woff2");
+  font-weight: 100 800;
+  font-style: normal;
+  font-display: swap;
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308,
+    U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113,
+    U+2C60-2C7F, U+A720-A7FF;
+}
 
 @theme {
   --font-sans: "Anthropic Sans", -apple-system, BlinkMacSystemFont, sans-serif;

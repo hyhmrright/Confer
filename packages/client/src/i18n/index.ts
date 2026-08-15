@@ -44,4 +44,14 @@ export function dateLocale(): string {
   return DATE_LOCALES[i18n.language as SupportedLanguage] ?? 'en-US';
 }
 
+// The served index.html can only carry one static `lang`, so it is wrong for
+// two of the three UI languages — and that attribute is what tells a screen
+// reader which voice to use. Keep it on the real language instead, reusing the
+// same BCP-47 tags the date formatter maps to.
+function syncDocumentLang() {
+  document.documentElement.lang = dateLocale();
+}
+i18n.on('languageChanged', syncDocumentLang);
+syncDocumentLang();
+
 export default i18n;

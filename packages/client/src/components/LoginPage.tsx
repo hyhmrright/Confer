@@ -74,6 +74,7 @@ export function LoginPage() {
               <input
                 id="login-username"
                 type="text"
+                autoComplete="username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder={t('login.usernamePlaceholder')}
@@ -113,6 +114,10 @@ export function LoginPage() {
               <input
                 id="login-password"
                 type="password"
+                // One field serving both modes: telling the password manager
+                // which it is, is the difference between offering the saved
+                // credential and offering to generate a new one.
+                autoComplete={isRegister ? 'new-password' : 'current-password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder={t('login.passwordPlaceholder')}

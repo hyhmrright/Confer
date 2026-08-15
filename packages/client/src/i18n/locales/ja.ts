@@ -18,6 +18,8 @@ export const ja: Resources = {
     remove: '削除',
     optional: '（任意）',
     close: '閉じる',
+    loadMore: 'さらに読み込む（{{total}} 件中 {{shown}} 件）',
+    loadFailed: 'この画面を読み込めませんでした。再読み込みで解決することがほとんどです。',
   },
   language: {
     label: '言語',
@@ -234,6 +236,7 @@ export const ja: Resources = {
     statusFailed: '失敗',
   },
   message: {
+    loadOlder: '以前のメッセージを読み込む',
     title: '会話',
     start: '会話を始める',
     thinking: '考え中',

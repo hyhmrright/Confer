@@ -1,0 +1,9 @@
+# Confer serves an authenticated application on this origin — every route
+# behind `/` requires a session, so there is nothing here for a crawler to
+# index. Public product content lives on the docs site, not here.
+#
+# This file also exists so the SPA fallback stops answering /robots.txt with
+# the HTML shell, which crawlers and audits read as a malformed robots.txt
+# rather than as an absent one.
+User-agent: *
+Disallow: /

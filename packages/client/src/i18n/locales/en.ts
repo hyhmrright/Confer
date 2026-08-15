@@ -18,6 +18,8 @@ export const en: Resources = {
     remove: 'Remove',
     optional: '(optional)',
     close: 'Close',
+    loadMore: 'Load more ({{shown}} of {{total}})',
+    loadFailed: "This part of the app couldn't be loaded. Reloading usually fixes it.",
   },
   language: {
     label: 'Language',
@@ -234,6 +236,7 @@ export const en: Resources = {
     statusFailed: 'Failed',
   },
   message: {
+    loadOlder: 'Load earlier messages',
     title: 'Conversation',
     start: 'Start a conversation',
     thinking: 'Thinking',
