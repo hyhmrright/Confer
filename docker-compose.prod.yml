@@ -30,7 +30,12 @@ services:
     volumes:
       - miniodata:/data
 
+  # The three built services name their images explicitly rather than letting
+  # compose derive `<project>-<service>`. infra/deploy.sh and infra/rollback.sh
+  # read these names straight out of this file, so the tag is a contract now,
+  # not an implementation detail of compose's naming rules.
   migrate:
+    image: confer-migrate:latest
     build:
       context: .
       dockerfile: infra/gateway.Dockerfile
@@ -49,6 +54,7 @@ services:
   # replica finds an empty nonce table). Scaling out requires moving that state
   # to a shared store first; see docs/02-architecture.md.
   gateway:
+    image: confer-gateway:latest
     build:
       context: .
       dockerfile: infra/gateway.Dockerfile
@@ -83,6 +89,7 @@ services:
       MINIO_BUCKET: knowledge-docs
 
   client:
+    image: confer-client:latest
     build:
       context: .
       dockerfile: infra/client.Dockerfile

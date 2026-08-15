@@ -84,7 +84,7 @@ TypeScript everywhere. Bun + Hono (server), Tauri 2.0 + React 19 + Zustand (clie
 
 CI runs `lint`, `typecheck`, `test` (spins up `docker-compose.test.yml` via `bun run test:setup`), `build`, and `audit` (`bun audit --audit-level=high`) in parallel; `check` is an aggregator job over those five, so it stays the single required context. **Never add a new gate to the ruleset** — add it to `check`'s `needs` instead, or PRs deadlock. For the same reason, prefer a step in an existing job over a new job.
 
-`lint` runs Biome over the repo and then **actionlint** over `.github/workflows/` (digest-pinned docker image). Nothing else validates workflow syntax: a malformed `${{ }}` makes GitHub reject the file outright — zero jobs, an error naming no line — and a YAML parser can't see it because the file is still valid YAML.
+`lint` runs Biome over the repo, then **actionlint** over `.github/workflows/`, then **shellcheck** over `infra/*.sh` and `.github/scripts/*.sh` (both digest-pinned docker images). Neither is decoration: nothing else validates workflow syntax — a malformed `${{ }}` makes GitHub reject the file outright, zero jobs and an error naming no line, and a YAML parser can't see it because the file is still valid YAML — and nothing else reads shell, which is what deploy, rollback and release-note generation are written in. Both ride in this job rather than jobs of their own, per the rule above.
 
 `audit` blocks, so a new high advisory turns the branch red. Fix it by upgrading — no advisory is exempted today. Only when no reachable fix exists may you add `--ignore=<GHSA-id>`, and the workflow comment must record why the vulnerable code path can't be hit. A separate `audit.yml` re-runs the same command on a daily schedule, so an advisory published during a quiet week surfaces on its own instead of reddening the next unrelated commit; scheduled runs come from the default branch, so it watches `main` while `dev` stays covered by CI on every push.
 
@@ -104,11 +104,13 @@ Determine which packages changed and run only the necessary steps:
 
 | Changed package | Deploy command |
 |----------------|----------------|
-| `packages/client` only | `bun run build && docker compose -f docker-compose.prod.yml build client && docker compose -f docker-compose.prod.yml up -d client` |
-| `packages/gateway` only | `bun run build && docker compose -f docker-compose.prod.yml build gateway && docker compose -f docker-compose.prod.yml up -d gateway` |
-| both / unsure | `bun run build && docker compose -f docker-compose.prod.yml build gateway client && docker compose -f docker-compose.prod.yml up -d gateway client` |
+| `packages/client` only | `./infra/deploy.sh client` |
+| `packages/gateway` only | `./infra/deploy.sh gateway` |
+| both / unsure | `./infra/deploy.sh` |
 
 Run from the repo root. Deployment happens **before** commit & push (not after).
+
+`deploy.sh` runs `bun run build`, rebuilds those images and restarts them, but first re-tags the image each service is about to replace as `:previous` — `docker compose build` overwrites `:latest` in place, so the outgoing image otherwise loses its name and the next prune reclaims it, which is how this stack spent its whole life with no way back from a bad deploy. `./infra/rollback.sh [service...]` undoes one by pointing `:latest` back at `:previous` and recreating the containers. It reverts **code only**: migrations are forward-only, so rolling an image back does not undo a migration that deploy applied. Both scripts read image names out of `docker-compose.prod.yml`, where they are declared explicitly rather than derived from compose's `<project>-<service>` rule.
 
 **If the change includes a new migration**, also rebuild and re-run the `migrate` service — it is a *separate image* from `gateway` (same `infra/gateway.Dockerfile`), so `build gateway client` does **not** pick up new migration files. The stale `migrate` then runs the old set and still prints `Migrations complete`, leaving the new tables uncreated:
 ```

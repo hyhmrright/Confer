@@ -35,6 +35,16 @@ jobs:
             rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 \
             -color
 
+      # Deploy, rollback and release-notes generation are shell, and Biome does
+      # not read shell. Same reasoning and same placement as actionlint above.
+      # LC_ALL is set because shellcheck's own output encoder dies on the em
+      # dashes in these files' comments.
+      - name: Lint shell scripts
+        run: |
+          docker run --rm -e LC_ALL=C.UTF-8 -v "$PWD":/mnt --workdir /mnt \
+            koalaman/shellcheck@sha256:bb596a0d169b85ddd81d8b6d3a2ff6d5baf5fca10b97f575ebc647c3dff62b3d \
+            -x infra/*.sh .github/scripts/*.sh
+
   typecheck:
     runs-on: ubuntu-latest
     steps:
