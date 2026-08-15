@@ -60,6 +60,12 @@ services:
         condition: service_completed_successfully
       minio:
         condition: service_started
+      # QDRANT_URL below points at this service, so it belongs here — without
+      # it, `up -d gateway client` leaves a stopped qdrant stopped and RAG
+      # fails silently. It has no healthcheck, so service_started is as strong
+      # a condition as we can state; the gateway retries the connection.
+      qdrant:
+        condition: service_started
     environment:
       DATABASE_URL: postgres://confer:${POSTGRES_PASSWORD:-confer}@postgres:5432/confer
       JWT_SECRET: ${JWT_SECRET}
