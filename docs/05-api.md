@@ -74,7 +74,7 @@ PUT    /api/v1/agents/me/llm-keys      # 加密存储 LLM API keys
 ### 联系人 / Peer Agents
 
 ```
-GET    /api/v1/contacts                     # 列出联系人
+GET    /api/v1/contacts                     # 列出联系人。分页：?limit=&offset=
 POST   /api/v1/contacts                     # 添加联系人
 GET    /api/v1/contacts/{contact_id}        # 单个联系人详情（带 peer）
 DELETE /api/v1/contacts/{contact_id}
@@ -91,6 +91,8 @@ POST   /api/v1/contacts/lookup              # 按 DID / 域名 / username 查找
   "value": "abc-industries.com"
 }
 ```
+
+`GET /api/v1/contacts` 返回 `{ contacts, total }`。`limit` 默认 50、上限 100，`offset` 默认 0；按 `id`（ULID）倒序，即最新在前——排序是唯一且确定的，offset 窗口才不会漏行或重行。`total` 是全量计数而非本页条数，客户端据此判断"已到底"。无法解析的 `limit`/`offset` 取默认值而非报错。
 
 响应：返回找到的候选 Agent 列表。lookup 会把发现到的 peer **落库到 `peer_agents`** 并在每个候选里带上本地 `id`（`peer_id`）——`POST /api/v1/contacts` 正是用这个 `id` 添加联系人。`POST /contacts` 幂等：重复添加同一 peer 返回已存在的联系人（`200`）而非报错。
 

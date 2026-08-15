@@ -74,7 +74,7 @@ PUT    /api/v1/agents/me/llm-keys      # 加密存储 LLM API keys
 ### 連絡先 / Peer Agents
 
 ```
-GET    /api/v1/contacts                     # 列出联系人
+GET    /api/v1/contacts                     # 連絡先一覧。ページング: ?limit=&offset=
 POST   /api/v1/contacts                     # 添加联系人
 GET    /api/v1/contacts/{contact_id}
 DELETE /api/v1/contacts/{contact_id}
@@ -91,6 +91,8 @@ POST   /api/v1/contacts/lookup              # 按 DID / 域名 / username 查找
   "value": "abc-industries.com"
 }
 ```
+
+`GET /api/v1/contacts` は `{ contacts, total }` を返す。`limit` は既定 50・上限 100、`offset` は既定 0。`id`（ULID）の降順、つまり新しい順で並ぶ——順序が一意かつ決定的であることが、offset ウィンドウで行を取りこぼしたり重複させたりしないための条件である。`total` はページ内ではなく全体の件数なので、クライアントは「打ち切られた一覧」と「完全な一覧」を区別できる。解釈できない `limit`/`offset` はエラーにせず既定値を用いる。
 
 レスポンス: 見つかった候補 Agent のリストを返す。lookup は発見した peer を **`peer_agents` にDB保存**し、各候補にローカルの `id`（`peer_id`）を付与する——`POST /api/v1/contacts` はまさにこの `id` を使って連絡先を追加する。`POST /contacts` は冪等で、同じ peer を重複追加すると既存の連絡先を返す（`200`）。エラーにはならない。
 

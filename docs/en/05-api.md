@@ -74,7 +74,7 @@ PUT    /api/v1/agents/me/llm-keys      # 加密存储 LLM API keys
 ### Contacts / Peer Agents
 
 ```
-GET    /api/v1/contacts                     # 列出联系人
+GET    /api/v1/contacts                     # List contacts. Paging: ?limit=&offset=
 POST   /api/v1/contacts                     # 添加联系人
 GET    /api/v1/contacts/{contact_id}
 DELETE /api/v1/contacts/{contact_id}
@@ -91,6 +91,8 @@ POST   /api/v1/contacts/lookup              # 按 DID / 域名 / username 查找
   "value": "abc-industries.com"
 }
 ```
+
+`GET /api/v1/contacts` returns `{ contacts, total }`. `limit` defaults to 50 and is capped at 100; `offset` defaults to 0. Rows are ordered by `id` (a ULID), so newest first — the ordering is unique and deterministic, which is what stops an offset window from dropping or repeating a row. `total` counts the whole list rather than the page, so a client can tell a capped list from a complete one. An unparseable `limit`/`offset` falls back to the default instead of erroring.
 
 Response: returns the list of candidate Agents found. lookup persists the discovered peers **into `peer_agents`** and includes the local `id` (`peer_id`) on each candidate — `POST /api/v1/contacts` uses exactly this `id` to add a contact. `POST /contacts` is idempotent: adding the same peer again returns the existing contact (`200`) rather than an error.
 
