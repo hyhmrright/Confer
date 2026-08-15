@@ -23,6 +23,18 @@ jobs:
       - name: Lint
         run: bun run lint
 
+      # Nothing else validates workflow syntax: a bad ${{ }} expression makes
+      # GitHub reject the file outright, producing zero jobs and an error that
+      # names no line — and a YAML parser can't see it, since the file is still
+      # valid YAML. Rides in this job rather than a new one so `check`'s needs
+      # list (and the ruleset that requires only `check`) stays untouched.
+      # Digest-pinned like every other third-party dependency here.
+      - name: Lint workflows
+        run: |
+          docker run --rm -v "$PWD":/repo --workdir /repo \
+            rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 \
+            -color
+
   typecheck:
     runs-on: ubuntu-latest
     steps:

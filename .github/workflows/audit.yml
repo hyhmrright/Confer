@@ -1,0 +1,30 @@
+name: Scheduled audit
+
+# ci.yml already gates every PR and push on `bun audit`, which covers advisories
+# that exist when someone pushes. This covers the gap between pushes: an advisory
+# published during a quiet week stays invisible until the next commit, and then
+# turns that unrelated commit red as though it introduced the problem. GHSA-2v37-
+# 7h3g-55p8 (nanoid, via client › postcss) did exactly that over eight days.
+#
+# GitHub runs scheduled workflows only from the default branch, so this audits
+# main — the release branch — and mails the repo owner when it fails. Work on dev
+# is still covered by ci.yml's own audit job on every push.
+on:
+  schedule:
+    - cron: '17 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: ./.github/actions/setup
+
+      # Same command and threshold as ci.yml's audit job — they must not drift,
+      # or a nightly pass would mean nothing about what CI will do to a PR.
+      - name: Security audit
+        run: bun audit --audit-level=high

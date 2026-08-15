@@ -44,11 +44,13 @@ jobs:
           echo "value=$VALUE" >> "$GITHUB_OUTPUT"
 
       - name: Verify tag is on main
+        env:
+          TAG: ${{ steps.tag.outputs.value }}
         run: |
           git fetch origin main --depth=1
-          TAG_COMMIT=$(git rev-parse "${{ steps.tag.outputs.value }}")
+          TAG_COMMIT=$(git rev-parse "$TAG")
           if ! git merge-base --is-ancestor "$TAG_COMMIT" origin/main; then
-            echo "::error::Tag ${{ steps.tag.outputs.value }} is not reachable from origin/main. Only release from main."
+            echo "::error::Tag $TAG is not reachable from origin/main. Only release from main."
             exit 1
           fi
 
