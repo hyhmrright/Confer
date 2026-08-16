@@ -6,7 +6,8 @@ import { PermissionCard } from './PermissionCard.js';
 // Without this the requests are fetched but never rendered, leaving the consent
 // gate unreachable from the UI. Decisions remove the card via the store.
 export function PermissionInbox() {
-  const { pending, removeRequest } = usePermissionsStore();
+  const pending = usePermissionsStore((s) => s.pending);
+  const removeRequest = usePermissionsStore((s) => s.removeRequest);
 
   if (pending.length === 0) return null;
 

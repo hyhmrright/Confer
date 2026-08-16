@@ -20,16 +20,14 @@ function MetaRow({ label, value }: { label: string; value: string }) {
 
 export function ContactDetail() {
   const { t } = useTranslation();
-  const {
-    selectedContact,
-    loading,
-    saving,
-    error,
-    success,
-    closeDetail,
-    setContactPolicy,
-    clearDetailMessages,
-  } = useContactsStore();
+  const selectedContact = useContactsStore((s) => s.selectedContact);
+  const loading = useContactsStore((s) => s.loading);
+  const saving = useContactsStore((s) => s.saving);
+  const error = useContactsStore((s) => s.error);
+  const success = useContactsStore((s) => s.success);
+  const closeDetail = useContactsStore((s) => s.closeDetail);
+  const setContactPolicy = useContactsStore((s) => s.setContactPolicy);
+  const clearDetailMessages = useContactsStore((s) => s.clearDetailMessages);
   const [decision, setDecision] = useState<string>('');
 
   const overrides = selectedContact?.policy_overrides_json;

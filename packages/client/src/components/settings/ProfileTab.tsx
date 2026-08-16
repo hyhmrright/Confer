@@ -10,7 +10,8 @@ import { FieldLabel, StatusMsg } from './SettingsShared.js';
 
 export function ProfileTab() {
   const { t } = useTranslation();
-  const { user, refreshUser } = useAuthStore();
+  const user = useAuthStore((s) => s.user);
+  const refreshUser = useAuthStore((s) => s.refreshUser);
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');

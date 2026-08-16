@@ -10,7 +10,10 @@ import { Plus } from './Icons.js';
 // PermissionInbox.
 export function ErrandInbox() {
   const { t } = useTranslation();
-  const { pendingCards, creating, error, createErrand } = useErrandsStore();
+  const pendingCards = useErrandsStore((s) => s.pendingCards);
+  const creating = useErrandsStore((s) => s.creating);
+  const error = useErrandsStore((s) => s.error);
+  const createErrand = useErrandsStore((s) => s.createErrand);
   const [title, setTitle] = useState('');
   const [open, setOpen] = useState(false);
 

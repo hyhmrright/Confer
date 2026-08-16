@@ -91,7 +91,9 @@ function RowAction({
 
 function OperationsOverview() {
   const { t } = useTranslation();
-  const { stats, loadingStats, loadStats } = useAdminStore();
+  const stats = useAdminStore((s) => s.stats);
+  const loadingStats = useAdminStore((s) => s.loadingStats);
+  const loadStats = useAdminStore((s) => s.loadStats);
 
   useEffect(() => {
     loadStats();
@@ -120,7 +122,7 @@ function OperationsOverview() {
 
 function UserRow({ u, selfId }: { u: AdminUser; selfId: string | undefined }) {
   const { t } = useTranslation();
-  const { updateUser } = useAdminStore();
+  const updateUser = useAdminStore((s) => s.updateUser);
   const { busy, failed, run } = useConfirmedAction();
   const isSelf = u.id === selfId;
 
@@ -247,7 +249,13 @@ function Pager({
 
 function UserManagement() {
   const { t } = useTranslation();
-  const { users, total, page, pageSize, loadingUsers, error, loadUsers } = useAdminStore();
+  const users = useAdminStore((s) => s.users);
+  const total = useAdminStore((s) => s.total);
+  const page = useAdminStore((s) => s.page);
+  const pageSize = useAdminStore((s) => s.pageSize);
+  const loadingUsers = useAdminStore((s) => s.loadingUsers);
+  const error = useAdminStore((s) => s.error);
+  const loadUsers = useAdminStore((s) => s.loadUsers);
   const selfId = useAuthStore((s) => s.user?.id);
   const [search, setSearch] = useState('');
 
@@ -320,7 +328,7 @@ function UserManagement() {
 
 function AgentRow({ a }: { a: AdminAgent }) {
   const { t } = useTranslation();
-  const { updateAgent } = useAdminStore();
+  const updateAgent = useAdminStore((s) => s.updateAgent);
   const { busy, failed, run } = useConfirmedAction();
   const suspended = a.status === 'suspended';
 
@@ -361,7 +369,7 @@ function AgentRow({ a }: { a: AdminAgent }) {
 
 function ConversationRow({ conv }: { conv: AdminConversation }) {
   const { t } = useTranslation();
-  const { updateConversation } = useAdminStore();
+  const updateConversation = useAdminStore((s) => s.updateConversation);
   const { busy, failed, run } = useConfirmedAction();
   const hidden = conv.moderation_status === 'hidden';
 
@@ -405,20 +413,18 @@ function ConversationRow({ conv }: { conv: AdminConversation }) {
 
 function ContentModeration() {
   const { t } = useTranslation();
-  const {
-    agents,
-    agentsTotal,
-    agentsPage,
-    loadingAgents,
-    conversations,
-    conversationsTotal,
-    conversationsPage,
-    loadingConversations,
-    pageSize,
-    error,
-    loadAgents,
-    loadConversations,
-  } = useAdminStore();
+  const agents = useAdminStore((s) => s.agents);
+  const agentsTotal = useAdminStore((s) => s.agentsTotal);
+  const agentsPage = useAdminStore((s) => s.agentsPage);
+  const loadingAgents = useAdminStore((s) => s.loadingAgents);
+  const conversations = useAdminStore((s) => s.conversations);
+  const conversationsTotal = useAdminStore((s) => s.conversationsTotal);
+  const conversationsPage = useAdminStore((s) => s.conversationsPage);
+  const loadingConversations = useAdminStore((s) => s.loadingConversations);
+  const pageSize = useAdminStore((s) => s.pageSize);
+  const error = useAdminStore((s) => s.error);
+  const loadAgents = useAdminStore((s) => s.loadAgents);
+  const loadConversations = useAdminStore((s) => s.loadConversations);
 
   useEffect(() => {
     loadAgents({ page: 1 });
@@ -509,7 +515,9 @@ function ContentModeration() {
 
 function GlobalConfig() {
   const { t } = useTranslation();
-  const { config, loadConfig, updateConfig } = useAdminStore();
+  const config = useAdminStore((s) => s.config);
+  const loadConfig = useAdminStore((s) => s.loadConfig);
+  const updateConfig = useAdminStore((s) => s.updateConfig);
   const [instanceName, setInstanceName] = useState('');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);

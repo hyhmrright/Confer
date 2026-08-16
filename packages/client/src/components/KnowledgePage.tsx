@@ -73,19 +73,17 @@ function DocRow({
 
 function KbCard({ kbId }: { kbId: string }) {
   const { t } = useTranslation();
-  const {
-    kbs,
-    documents,
-    documentsTotal,
-    loadingMoreDocs,
-    fetchDocuments,
-    loadMoreDocuments,
-    uploadDocument,
-    deleteDocument,
-    deleteKb,
-    retryDocument,
-    uploading,
-  } = useKbStore();
+  const kbs = useKbStore((s) => s.kbs);
+  const documents = useKbStore((s) => s.documents);
+  const documentsTotal = useKbStore((s) => s.documentsTotal);
+  const loadingMoreDocs = useKbStore((s) => s.loadingMoreDocs);
+  const fetchDocuments = useKbStore((s) => s.fetchDocuments);
+  const loadMoreDocuments = useKbStore((s) => s.loadMoreDocuments);
+  const uploadDocument = useKbStore((s) => s.uploadDocument);
+  const deleteDocument = useKbStore((s) => s.deleteDocument);
+  const deleteKb = useKbStore((s) => s.deleteKb);
+  const retryDocument = useKbStore((s) => s.retryDocument);
+  const uploading = useKbStore((s) => s.uploading);
   const kb = kbs.find((k) => k.id === kbId);
   const [expanded, setExpanded] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -190,7 +188,10 @@ function KbCard({ kbId }: { kbId: string }) {
 
 export function KnowledgePage() {
   const { t } = useTranslation();
-  const { kbs, loading, fetchKbs, createKb } = useKbStore();
+  const kbs = useKbStore((s) => s.kbs);
+  const loading = useKbStore((s) => s.loading);
+  const fetchKbs = useKbStore((s) => s.fetchKbs);
+  const createKb = useKbStore((s) => s.createKb);
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');

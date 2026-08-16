@@ -8,8 +8,12 @@ import { LoadingDots } from './LoadingDots.js';
 
 export function MemoryPage() {
   const { t } = useTranslation();
-  const { memories, loading, loadMemories, createMemory, updateMemory, deleteMemory } =
-    useMemoriesStore();
+  const memories = useMemoriesStore((s) => s.memories);
+  const loading = useMemoriesStore((s) => s.loading);
+  const loadMemories = useMemoriesStore((s) => s.loadMemories);
+  const createMemory = useMemoriesStore((s) => s.createMemory);
+  const updateMemory = useMemoriesStore((s) => s.updateMemory);
+  const deleteMemory = useMemoriesStore((s) => s.deleteMemory);
   const [query, setQuery] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [newTitle, setNewTitle] = useState('');

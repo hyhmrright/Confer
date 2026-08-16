@@ -7,8 +7,12 @@ import { Modal } from './Modal.js';
 
 export function AddContactDialog() {
   const { t } = useTranslation();
-  const { dialogOpen, closeDialog, lookupByDomain, addContact, loading, error } =
-    useContactsStore();
+  const dialogOpen = useContactsStore((s) => s.dialogOpen);
+  const closeDialog = useContactsStore((s) => s.closeDialog);
+  const lookupByDomain = useContactsStore((s) => s.lookupByDomain);
+  const addContact = useContactsStore((s) => s.addContact);
+  const loading = useContactsStore((s) => s.loading);
+  const error = useContactsStore((s) => s.error);
   const [domain, setDomain] = useState('');
   const [results, setResults] = useState<
     Array<{ id: string; did: string; name?: string; description?: string }>

@@ -10,7 +10,7 @@ import { MemoryPage } from './MemoryPage.js';
 /* ── Contacts panel ── */
 function ContactsPanel() {
   const { t } = useTranslation();
-  const { openDialog } = useContactsStore();
+  const openDialog = useContactsStore((s) => s.openDialog);
   return (
     <div className="flex flex-col h-full min-h-0">
       <div className="px-4 py-3 flex items-center justify-between border-b border-dark-border shrink-0">

@@ -8,15 +8,13 @@ import { LoadMore } from './LoadMore.js';
 
 export function ContactList() {
   const { t } = useTranslation();
-  const {
-    contacts,
-    contactsTotal,
-    loadingMore,
-    loadContacts,
-    loadMoreContacts,
-    removeContact,
-    openDetail,
-  } = useContactsStore();
+  const contacts = useContactsStore((s) => s.contacts);
+  const contactsTotal = useContactsStore((s) => s.contactsTotal);
+  const loadingMore = useContactsStore((s) => s.loadingMore);
+  const loadContacts = useContactsStore((s) => s.loadContacts);
+  const loadMoreContacts = useContactsStore((s) => s.loadMoreContacts);
+  const removeContact = useContactsStore((s) => s.removeContact);
+  const openDetail = useContactsStore((s) => s.openDetail);
   // Selectors here, unlike the contacts store above: this list stays mounted
   // next to the message view, and the chat store updates once per streamed token.
   const createConversation = useChatStore((s) => s.createConversation);
