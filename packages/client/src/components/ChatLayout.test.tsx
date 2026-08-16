@@ -68,9 +68,9 @@ const setNarrow = (value: boolean) => {
 };
 
 const { ChatLayout } = await import('./ChatLayout.js');
-const i18n = (await import('../i18n/index.js')).default;
+const { changeLanguage } = await import('../i18n/index.js');
 
-await i18n.changeLanguage('en');
+await changeLanguage('en');
 
 const draw = () =>
   render(

@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, mock, test } from 'bun:test';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 
-const i18n = (await import('../i18n/index.js')).default;
+const { changeLanguage } = await import('../i18n/index.js');
 const { Modal } = await import('./Modal.js');
 
-await i18n.changeLanguage('en');
+await changeLanguage('en');
 afterEach(cleanup);
 
 // A trigger outside the dialog, so focus has somewhere to come from and return

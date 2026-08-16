@@ -1,8 +1,9 @@
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
+import { localePreload } from './vite-plugin-locale-preload.js';
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), localePreload()],
   clearScreen: false,
   server: {
     port: 1420,

@@ -11,7 +11,7 @@ mock.module('../lib/api.js', () => ({
   getToken: mock(() => null),
 }));
 
-const i18n = (await import('../i18n/index.js')).default;
+const { changeLanguage } = await import('../i18n/index.js');
 const { PermissionCard } = await import('./PermissionCard.js');
 const { fireEvent } = await import('@testing-library/react');
 
@@ -44,22 +44,22 @@ describe('PermissionCard', () => {
   test('describes the request in the reader’s language, not the server’s', async () => {
     const connect = { ...request, action: 'connect', scope: { first_message: 'hi there' } };
 
-    await i18n.changeLanguage('en');
+    await changeLanguage('en');
     const { unmount } = render(<PermissionCard request={connect} />);
     expect(screen.getByText('Alice wants to connect to your agent: “hi there”')).toBeDefined();
     unmount();
 
-    await i18n.changeLanguage('ja');
+    await changeLanguage('ja');
     render(<PermissionCard request={connect} />);
     expect(
       screen.getByText('Alice があなたのエージェントへの接続を求めています：「hi there」'),
     ).toBeDefined();
 
-    await i18n.changeLanguage('en');
+    await changeLanguage('en');
   });
 
   test('falls back to the peer DID, then to a generic label, when no name is known', async () => {
-    await i18n.changeLanguage('en');
+    await changeLanguage('en');
     const { unmount } = render(<PermissionCard request={{ ...request, peer_name: null }} />);
     expect(screen.getByText(/did:web:example\.com/)).toBeDefined();
     unmount();

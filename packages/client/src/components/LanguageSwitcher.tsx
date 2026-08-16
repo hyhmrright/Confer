@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { SUPPORTED_LANGUAGES, type SupportedLanguage } from '../i18n/index.js';
+import { changeLanguage, SUPPORTED_LANGUAGES, type SupportedLanguage } from '../i18n/index.js';
 import { SELECT_FIELD_CLS } from '../lib/styles.js';
 
 function isSupported(lng: string): lng is SupportedLanguage {
@@ -19,7 +19,7 @@ export function LanguageSwitcher({ id }: { id?: string }) {
     <select
       id={id}
       value={current(i18n.language)}
-      onChange={(e) => i18n.changeLanguage(e.target.value)}
+      onChange={(e) => void changeLanguage(e.target.value)}
       className={SELECT_FIELD_CLS}
     >
       {SUPPORTED_LANGUAGES.map((lng) => (
@@ -46,7 +46,7 @@ export function LanguageSwitcherCompact() {
   const cycle = () => {
     const idx = SUPPORTED_LANGUAGES.indexOf(active);
     const next = SUPPORTED_LANGUAGES[(idx + 1) % SUPPORTED_LANGUAGES.length];
-    i18n.changeLanguage(next);
+    void changeLanguage(next);
   };
 
   return (
