@@ -172,6 +172,41 @@ GET    /api/v1/projects/{project_id}/peers/{peer_id}/decisions
 PUT    /api/v1/projects/{project_id}/peers/{peer_id}/decisions
 ```
 
+### ナレッジベース（RAG）
+
+```
+GET    /api/v1/knowledge-bases                                  # 自分のナレッジベース一覧
+POST   /api/v1/knowledge-bases                                  # 新規作成
+DELETE /api/v1/knowledge-bases/{kb_id}                          # 配下の全ドキュメントとベクトルも削除
+
+GET    /api/v1/knowledge-bases/{kb_id}/documents                # ページング：?limit=&offset=
+POST   /api/v1/knowledge-bases/{kb_id}/documents                # multipart upload、フィールド名は file
+DELETE /api/v1/knowledge-bases/{kb_id}/documents/{doc_id}
+POST   /api/v1/knowledge-bases/{kb_id}/documents/{doc_id}/retry # 再取り込み
+```
+
+`POST /knowledge-bases` のボディは `{ name, description? }`（`name` は 1〜255 文字）、`201` + `{ knowledge_base }` を返します。`GET /knowledge-bases` は `{ knowledge_bases }` を返し、**ページングしません**：ナレッジベースは手動で作るものなので件数に上限があります。
+
+`GET /{kb_id}/documents` は `{ documents, total }` を返します。`limit` は既定 50・上限 100、`offset` は既定 0。`id`（ULID）の降順、つまり新しい順です——並び順が決定的かつ一意であることが、offset ウィンドウで行が飛んだり重複したりしない条件です。`total` はこのページの件数ではなく全件数です。解釈できない `limit`/`offset` はエラーにせず既定値を使います。ナレッジベースはまさにアップロード先なので、ここで唯一無制限に増えるリストです。
+
+アップロードは `multipart/form-data`、ファイルのフィールド名は `file` 固定、1 ファイル **10 MB** まで（超過は `400 bad_request`）。`Content-Type` はフォームに含まれていればそれを、なければ拡張子から推測します。レスポンスは `201` + `{ document }` で、この時点で `status` は既に `processing` です：**チャンク分割・ベクトル化・Qdrant への書き込みはレスポンス後に非同期で走り**、アップロード API はその完了を待ちません。クライアントは `status` が変わるまでドキュメント一覧をポーリングします。
+
+`status` の値：
+
+| 値 | 意味 |
+|---|---|
+| `processing` | 保存済みで、分割・ベクトル化の実行中。アップロードと retry 直後の初期状態 |
+| `ready` | 検索可能。`chunk_count` はそのドキュメントのチャンク数 |
+| `failed` | 取り込み失敗（パース、embedding キー欠如、ベクトルストアへの書き込み） |
+
+`POST /{doc_id}/retry` はオブジェクトストレージから原本を取り直して再取り込みします。既存のベクトルを先に削除してから実行するため、チャンクが重複することはありません。原本が失われている（`storage_key` が空）場合や、まだ `processing` の場合は `400` を返します。レスポンスは `{ document }` で、`status` は `processing` に、`chunk_count` は 0 に戻ります。
+
+ナレッジベースの削除は配下のドキュメント行と Qdrant のベクトルまで連鎖します。単一ドキュメントの削除では、ベクトルとオブジェクトストレージ上の原本も併せて片付けます。ベクトルやオブジェクトの後始末に失敗しても DB の削除は止めません——孤児オブジェクトが残るほうが、削除済みデータを指す行が残るよりましだからです。
+
+すべてのエンドポイントは `user.sub` にスコープされます：他人の kb やドキュメントに触れると、存在を漏らす `403` ではなく `404` を返します。
+
+> リバースプロキシ側で 10 MB のボディを通す必要があります。`infra/nginx.conf` は `/api/` に `client_max_body_size 10m` を設定しています。nginx 既定の 1 MB のままだと 1〜10 MB のファイルは gateway に届かず、ブラウザには nginx 自身の 413 ページが返ります。
+
 ### ファイル添付
 
 ```
