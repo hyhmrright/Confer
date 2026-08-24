@@ -8,6 +8,10 @@ on:
       tag:
         description: 'Tag to release (e.g. v0.1.0)'
         required: true
+      dry_run:
+        description: 'Rehearsal — build every platform, publish nothing'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -44,6 +48,10 @@ jobs:
           echo "value=$VALUE" >> "$GITHUB_OUTPUT"
 
       - name: Verify tag is on main
+        # A rehearsal is dispatched against a branch, where this can never pass
+        # by construction. On a tag push the `inputs` context is empty, so the
+        # guard evaluates true and the check runs exactly as it always has.
+        if: ${{ !inputs.dry_run }}
         env:
           TAG: ${{ steps.tag.outputs.value }}
         run: |
@@ -138,8 +146,14 @@ jobs:
         with:
           projectPath: packages/client
           tauriScript: bunx tauri
-          tagName: ${{ needs.prepare.outputs.tag }}
-          releaseName: "Confer ${{ needs.prepare.outputs.tag }}"
+          # Omitting tagName, releaseName and releaseId is tauri-action's own
+          # documented way to build without uploading anything, which is what a
+          # rehearsal wants. Note the guard is `!dry_run && value || ''` and NOT
+          # `dry_run && '' || value`: GitHub's `a && b || c` yields c whenever b
+          # is falsy, and '' is falsy, so the obvious spelling would hand back
+          # the real tag on a dry run and publish a release.
+          tagName: ${{ !inputs.dry_run && needs.prepare.outputs.tag || '' }}
+          releaseName: ${{ !inputs.dry_run && format('Confer {0}', needs.prepare.outputs.tag) || '' }}
           releaseBody: ${{ needs.prepare.outputs.body }}
           # Fresh tag pushes land as a draft for manual review; a manual
           # workflow_dispatch re-release keeps the existing release published.
@@ -227,7 +241,9 @@ jobs:
       - name: Attach APK to release
         # Fires for both tag pushes and manual workflow_dispatch re-runs (on
         # dispatch github.ref is the branch, not the tag, so gate on the resolved tag).
-        if: startsWith(needs.prepare.outputs.tag, 'v')
+        # The APK is still built and still uploaded as a workflow artifact on a
+        # rehearsal; only the release attachment is skipped.
+        if: ${{ !inputs.dry_run && startsWith(needs.prepare.outputs.tag, 'v') }}
         uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3
         with:
           # Match the desktop job: draft on tag push, published on re-release.
