@@ -28,6 +28,15 @@
     }
   },
   "files": {
-    "includes": ["**", "!**/node_modules", "!**/dist", "!**/*.gen.ts", "!**/drizzle", "!docs"]
+    "includes": [
+      "**",
+      "!**/node_modules",
+      "!**/dist",
+      "!**/*.gen.ts",
+      "!**/drizzle",
+      "!docs",
+      "!**/src-tauri/target",
+      "!**/src-tauri/gen"
+    ]
   }
 }
