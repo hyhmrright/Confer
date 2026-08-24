@@ -1,6 +1,6 @@
 import type { PolicyOverrides } from '@confer/shared';
 import { useTranslation } from 'react-i18next';
-import { POLICY_DECISIONS, POLICY_DECISION_LABEL_KEY, POLICY_INHERIT } from '../../lib/policy.js';
+import { POLICY_DECISION_LABEL_KEY, POLICY_DECISIONS, POLICY_INHERIT } from '../../lib/policy.js';
 import { SELECT_FIELD_CLS } from '../../lib/styles.js';
 
 type PolicyRule = NonNullable<PolicyOverrides['rules']>[number];
@@ -14,11 +14,13 @@ type PolicyRule = NonNullable<PolicyOverrides['rules']>[number];
 // TODO: rules are rendered read-only in this MVP. A full visual rules editor
 // (add/remove per-action/per-peer decisions) is deferred — see plan §4.
 export function PolicyEditor({
+  id,
   decision,
   onChange,
   inheritLabel,
   rules,
 }: {
+  id?: string;
   decision: string;
   onChange: (value: string) => void;
   inheritLabel: string | null;
@@ -29,6 +31,7 @@ export function PolicyEditor({
   return (
     <div className="space-y-4">
       <select
+        id={id}
         value={decision}
         onChange={(e) => onChange(e.target.value)}
         className={SELECT_FIELD_CLS}
@@ -50,6 +53,7 @@ export function PolicyEditor({
           <ul className="space-y-1.5">
             {rules.map((rule, i) => (
               <li
+                // biome-ignore lint/suspicious/noArrayIndexKey: rules carry no id and action+peer_did can repeat; the list is read-only and never reordered, so the index is a safe tiebreaker
                 key={`${rule.action}-${rule.peer_did ?? ''}-${i}`}
                 className="flex items-center gap-2 text-xs px-3 py-2 bg-dark-input border border-dark-border rounded-lg"
               >

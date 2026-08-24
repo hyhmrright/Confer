@@ -17,6 +17,9 @@ export const en: Resources = {
     configure: 'Configure',
     remove: 'Remove',
     optional: '(optional)',
+    close: 'Close',
+    loadMore: 'Load more ({{shown}} of {{total}})',
+    loadFailed: "This part of the app couldn't be loaded. Reloading usually fixes it.",
   },
   language: {
     label: 'Language',
@@ -91,6 +94,8 @@ export const en: Resources = {
       'How requests are handled by default when a contact has no policy of its own.',
   },
   nav: {
+    openMenu: 'Open navigation',
+    closeMenu: 'Close navigation',
     conversations: 'Conversations',
     contacts: 'Contacts',
     memory: 'Memory',
@@ -132,6 +137,7 @@ export const en: Resources = {
     selfHint: 'You cannot change your own role or status',
     empty: 'No users',
     loadError: 'Failed to load, please retry',
+    actionError: 'Action failed, nothing changed',
     total: '{{count}} users',
     prev: 'Previous',
     next: 'Next',
@@ -199,7 +205,6 @@ export const en: Resources = {
     savePolicy: 'Save policy',
     policySaved: 'Policy saved',
     policySaveFailed: 'Failed to save policy',
-    close: 'Close',
   },
   memory: {
     title: 'Memory',
@@ -231,6 +236,7 @@ export const en: Resources = {
     statusFailed: 'Failed',
   },
   message: {
+    loadOlder: 'Load earlier messages',
     title: 'Conversation',
     start: 'Start a conversation',
     thinking: 'Thinking',
@@ -252,6 +258,12 @@ export const en: Resources = {
     allowed: 'Allowed',
     denied: 'Denied',
     decideError: 'Action failed, please try again',
+    unknownPeer: 'An agent',
+    descConnect: '{{who}} wants to connect to your agent',
+    descConnectWith: '{{who}} wants to connect to your agent: “{{message}}”',
+    descAsk: '{{who}} is asking your agent a question',
+    descAskWith: '{{who}} is asking your agent: “{{question}}”',
+    descGeneric: '{{who}} is requesting: {{action}}',
   },
   policy: {
     default: 'Default handling',

@@ -2,8 +2,6 @@ import { z } from 'zod';
 
 const envSchema = z.object({
   DATABASE_URL: z.string().url(),
-  REDIS_URL: z.string().url().default('redis://localhost:6379'),
-  NATS_URL: z.string().default('nats://localhost:4222'),
   JWT_SECRET: z.string().min(16),
   JWT_ISSUER: z.string().default('confer'),
   // Comma-separated usernames promoted to the 'admin' role on gateway startup
@@ -20,10 +18,12 @@ const envSchema = z.object({
   QDRANT_URL: z.string().default('http://localhost:6333'),
   MINIO_ENDPOINT: z.string().default('localhost'),
   MINIO_PORT: z.coerce.number().default(9000),
+  // prefault, not default: the fallback is the raw env-var string and must run
+  // through the transform. Zod 4's .default() takes the *output* type (boolean).
   MINIO_USE_SSL: z
     .string()
     .transform((v) => v === 'true')
-    .default('false'),
+    .prefault('false'),
   MINIO_ACCESS_KEY: z.string().default('confer'),
   MINIO_SECRET_KEY: z.string().default('confer-secret'),
   MINIO_BUCKET: z.string().default('knowledge-docs'),

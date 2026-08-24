@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import {
-  type PolicyConfig,
-  type PolicyRequest,
   classifyPermissionLevel,
   evaluatePolicy,
   mergePolicyConfig,
+  type PolicyConfig,
+  type PolicyRequest,
   parsePolicyConfig,
 } from './engine.js';
 

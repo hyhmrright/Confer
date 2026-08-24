@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, test } from 'bun:test';
 import { newId } from '@confer/shared';
 import { getDb } from '../db/connection.js';
 import { conversationParticipants } from '../db/schema.js';
-import { type SeededUser, del, get, post, resetDb, seedUser } from '../test/helpers.js';
+import { del, get, post, resetDb, type SeededUser, seedUser } from '../test/helpers.js';
 
 const BASE = '/api/v1/conversations';
 let user: SeededUser;

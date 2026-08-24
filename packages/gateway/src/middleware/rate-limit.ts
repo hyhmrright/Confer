@@ -2,6 +2,9 @@ import { AppError } from '@confer/shared';
 import type { Context, Env } from 'hono';
 import { createMiddleware } from 'hono/factory';
 
+// Process-local, so the effective limit is per-replica: N replicas allow N times
+// the configured rate. One of the three things that pin the gateway to a single
+// replica (with `lib/nonce-cache.ts` and `ws/handler.ts`) — docs/02-architecture.md.
 const counters = new Map<string, { count: number; resetAt: number }>();
 
 // A counter is dead the moment its window closes, but nothing reads it again

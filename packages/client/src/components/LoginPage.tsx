@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
+import { FOCUS_RING } from '../lib/styles.js';
 import { useAuthStore } from '../stores/auth.js';
 import { Loader } from './Icons.js';
 
@@ -10,7 +11,10 @@ export function LoginPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
-  const { login, register, loading, error } = useAuthStore();
+  const login = useAuthStore((s) => s.login);
+  const register = useAuthStore((s) => s.register);
+  const loading = useAuthStore((s) => s.loading);
+  const error = useAuthStore((s) => s.error);
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -28,8 +32,7 @@ export function LoginPage() {
   };
 
   const inputCls = `w-full px-3.5 py-2.5 bg-dark-input border border-dark-border rounded-xl text-sm
-    text-ink-primary placeholder:text-ink-muted
-    focus:outline-none focus:border-primary-600/60 focus:bg-dark-card
+    text-ink-primary placeholder:text-ink-muted focus:bg-dark-card ${FOCUS_RING}
     transition-all duration-150 font-sans`;
 
   return (
@@ -74,6 +77,7 @@ export function LoginPage() {
               <input
                 id="login-username"
                 type="text"
+                autoComplete="username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder={t('login.usernamePlaceholder')}
@@ -113,6 +117,10 @@ export function LoginPage() {
               <input
                 id="login-password"
                 type="password"
+                // One field serving both modes: telling the password manager
+                // which it is, is the difference between offering the saved
+                // credential and offering to generate a new one.
+                autoComplete={isRegister ? 'new-password' : 'current-password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder={t('login.passwordPlaceholder')}
@@ -123,7 +131,10 @@ export function LoginPage() {
             </div>
 
             {error && (
-              <div className="px-3 py-2 bg-red-900/20 border border-red-800/40 rounded-lg">
+              <div
+                role="alert"
+                className="px-3 py-2 bg-red-900/20 border border-red-800/40 rounded-lg"
+              >
                 <p className="text-red-400 text-xs">{error}</p>
               </div>
             )}
@@ -131,8 +142,8 @@ export function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-2.5 bg-primary-600 text-white rounded-xl text-sm font-medium
-                hover:bg-primary-500 disabled:opacity-40 transition-colors flex items-center justify-center gap-2 mt-1"
+              className={`w-full py-2.5 bg-primary-600 text-white rounded-xl text-sm font-medium
+                hover:bg-primary-500 disabled:opacity-40 transition-colors flex items-center justify-center gap-2 mt-1 ${FOCUS_RING}`}
             >
               {loading && <Loader className="w-4 h-4 animate-spin" />}
               {loading

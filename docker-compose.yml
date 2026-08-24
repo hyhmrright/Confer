@@ -15,27 +15,6 @@ services:
       timeout: 5s
       retries: 5
 
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    volumes:
-      - redisdata:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  nats:
-    image: nats:2-alpine
-    ports:
-      - "4222:4222"
-      - "8222:8222"
-    command: ["--jetstream", "--store_dir", "/data", "--http_port", "8222"]
-    volumes:
-      - natsdata:/data
-
   qdrant:
     image: qdrant/qdrant:v1.12.0
     ports:
@@ -58,7 +37,5 @@ services:
 
 volumes:
   pgdata:
-  redisdata:
-  natsdata:
   qdrantdata:
   miniodata:

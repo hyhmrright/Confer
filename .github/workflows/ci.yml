@@ -10,26 +10,131 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Nothing here writes to the repo; don't inherit whatever the org default is.
+permissions:
+  contents: read
+
 jobs:
-  check:
+  lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: ./.github/actions/setup
+      - name: Lint
+        run: bun run lint
 
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
+      # Nothing else validates workflow syntax: a bad ${{ }} expression makes
+      # GitHub reject the file outright, producing zero jobs and an error that
+      # names no line — and a YAML parser can't see it, since the file is still
+      # valid YAML. Rides in this job rather than a new one so `check`'s needs
+      # list (and the ruleset that requires only `check`) stays untouched.
+      # Digest-pinned like every other third-party dependency here.
+      - name: Lint workflows
+        run: |
+          docker run --rm -v "$PWD":/repo --workdir /repo \
+            rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 \
+            -color
 
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
+      # Deploy, rollback and release-notes generation are shell, and Biome does
+      # not read shell. Same reasoning and same placement as actionlint above.
+      # LC_ALL is set because shellcheck's own output encoder dies on the em
+      # dashes in these files' comments.
+      - name: Lint shell scripts
+        run: |
+          docker run --rm -e LC_ALL=C.UTF-8 -v "$PWD":/mnt --workdir /mnt \
+            koalaman/shellcheck@sha256:bb596a0d169b85ddd81d8b6d3a2ff6d5baf5fca10b97f575ebc647c3dff62b3d \
+            -x infra/*.sh .github/scripts/*.sh
+
+      # The Tauri crate resolves its own dependency graph, and no other CI job
+      # touches Rust — so a Cargo.toml edit merged without a regenerated
+      # Cargo.lock stays invisible until a release build, which only runs on a
+      # tag. `cargo metadata --locked` re-resolves without compiling anything,
+      # so the check costs seconds. Same placement reasoning as the two above.
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+      - name: Verify Cargo.lock is in sync
+        working-directory: packages/client/src-tauri
+        run: cargo metadata --locked --format-version 1 > /dev/null
+
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: ./.github/actions/setup
 
       - name: Type check (backend)
         run: npx tsc --noEmit
 
+      # The root tsconfig excludes packages/client, so it needs its own flat
+      # pass — local node_modules symlinks hide breakage that only shows here.
       - name: Type check (client)
         working-directory: packages/client
         run: npx tsc --noEmit
 
-      - name: Build client
-        working-directory: packages/client
-        run: npx vite build
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: ./.github/actions/setup
+
+      # Gateway route tests drive the real Hono app against real Postgres +
+      # Qdrant + MinIO. Same command as the documented local flow, so the two
+      # can't drift.
+      - name: Start test stack and build test schema
+        run: bun run test:setup
+
+      - name: Test
+        run: bun run test
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: ./.github/actions/setup
+      - name: Build all packages
+        run: bun run build
+
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: ./.github/actions/setup
+      # No advisories are exempted. Fix a new high by upgrading; only add
+      # --ignore=<GHSA-id> when no reachable fix exists, and say here why the
+      # vulnerable code path can't be hit.
+      - name: Security audit
+        run: bun audit --audit-level=high
+
+      # The crate's 470 dependencies went unaudited until 2026-08-24 — cargo
+      # audit reads Cargo.lock, and there wasn't one to read. Today it reports
+      # 0 vulnerabilities and 17 warnings (unmaintained gtk3/unic bindings that
+      # tauri pulls in, none actionable here); `cargo audit` exits non-zero on
+      # vulnerabilities only, so warnings don't gate — the same shape as
+      # --audit-level=high on the bun side. install-action fetches a prebuilt
+      # binary that runs standalone, so this needs no Rust toolchain and
+      # `cargo install` never has to compile for a minute.
+      - uses: taiki-e/install-action@b6ff580856c41316412a0b9b60540fbc6f8c82cc # v2.86.7
+        with:
+          tool: cargo-audit
+      - name: Security audit (Rust)
+        working-directory: packages/client/src-tauri
+        run: cargo-audit audit
+
+  # Single required status check (branch ruleset on main requires `check`).
+  # Adding gates above must not add required checks here, or PRs deadlock —
+  # this job aggregates them into the one name the ruleset knows about.
+  check:
+    runs-on: ubuntu-latest
+    needs: [lint, typecheck, test, build, audit]
+    if: always()
+    steps:
+      - name: Verify every gate passed
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          for result in $RESULTS; do
+            if [ "$result" != "success" ]; then
+              echo "::error::a quality gate did not succeed ($RESULTS)"
+              exit 1
+            fi
+          done

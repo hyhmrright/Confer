@@ -74,7 +74,7 @@ PUT    /api/v1/agents/me/llm-keys      # 加密存储 LLM API keys
 ### 連絡先 / Peer Agents
 
 ```
-GET    /api/v1/contacts                     # 列出联系人
+GET    /api/v1/contacts                     # 連絡先一覧。ページング: ?limit=&offset=
 POST   /api/v1/contacts                     # 添加联系人
 GET    /api/v1/contacts/{contact_id}
 DELETE /api/v1/contacts/{contact_id}
@@ -91,6 +91,8 @@ POST   /api/v1/contacts/lookup              # 按 DID / 域名 / username 查找
   "value": "abc-industries.com"
 }
 ```
+
+`GET /api/v1/contacts` は `{ contacts, total }` を返す。`limit` は既定 50・上限 100、`offset` は既定 0。`id`（ULID）の降順、つまり新しい順で並ぶ——順序が一意かつ決定的であることが、offset ウィンドウで行を取りこぼしたり重複させたりしないための条件である。`total` はページ内ではなく全体の件数なので、クライアントは「打ち切られた一覧」と「完全な一覧」を区別できる。解釈できない `limit`/`offset` はエラーにせず既定値を用いる。
 
 レスポンス: 見つかった候補 Agent のリストを返す。lookup は発見した peer を **`peer_agents` にDB保存**し、各候補にローカルの `id`（`peer_id`）を付与する——`POST /api/v1/contacts` はまさにこの `id` を使って連絡先を追加する。`POST /contacts` は冪等で、同じ peer を重複追加すると既存の連絡先を返す（`200`）。エラーにはならない。
 
@@ -169,6 +171,41 @@ PUT    /api/v1/projects/{project_id}/peers/{peer_id}/facts
 GET    /api/v1/projects/{project_id}/peers/{peer_id}/decisions
 PUT    /api/v1/projects/{project_id}/peers/{peer_id}/decisions
 ```
+
+### ナレッジベース（RAG）
+
+```
+GET    /api/v1/knowledge-bases                                  # 自分のナレッジベース一覧
+POST   /api/v1/knowledge-bases                                  # 新規作成
+DELETE /api/v1/knowledge-bases/{kb_id}                          # 配下の全ドキュメントとベクトルも削除
+
+GET    /api/v1/knowledge-bases/{kb_id}/documents                # ページング：?limit=&offset=
+POST   /api/v1/knowledge-bases/{kb_id}/documents                # multipart upload、フィールド名は file
+DELETE /api/v1/knowledge-bases/{kb_id}/documents/{doc_id}
+POST   /api/v1/knowledge-bases/{kb_id}/documents/{doc_id}/retry # 再取り込み
+```
+
+`POST /knowledge-bases` のボディは `{ name, description? }`（`name` は 1〜255 文字）、`201` + `{ knowledge_base }` を返します。`GET /knowledge-bases` は `{ knowledge_bases }` を返し、**ページングしません**：ナレッジベースは手動で作るものなので件数に上限があります。
+
+`GET /{kb_id}/documents` は `{ documents, total }` を返します。`limit` は既定 50・上限 100、`offset` は既定 0。`id`（ULID）の降順、つまり新しい順です——並び順が決定的かつ一意であることが、offset ウィンドウで行が飛んだり重複したりしない条件です。`total` はこのページの件数ではなく全件数です。解釈できない `limit`/`offset` はエラーにせず既定値を使います。ナレッジベースはまさにアップロード先なので、ここで唯一無制限に増えるリストです。
+
+アップロードは `multipart/form-data`、ファイルのフィールド名は `file` 固定、1 ファイル **10 MB** まで（超過は `400 bad_request`）。`Content-Type` はフォームに含まれていればそれを、なければ拡張子から推測します。レスポンスは `201` + `{ document }` で、この時点で `status` は既に `processing` です：**チャンク分割・ベクトル化・Qdrant への書き込みはレスポンス後に非同期で走り**、アップロード API はその完了を待ちません。クライアントは `status` が変わるまでドキュメント一覧をポーリングします。
+
+`status` の値：
+
+| 値 | 意味 |
+|---|---|
+| `processing` | 保存済みで、分割・ベクトル化の実行中。アップロードと retry 直後の初期状態 |
+| `ready` | 検索可能。`chunk_count` はそのドキュメントのチャンク数 |
+| `failed` | 取り込み失敗（パース、embedding キー欠如、ベクトルストアへの書き込み） |
+
+`POST /{doc_id}/retry` はオブジェクトストレージから原本を取り直して再取り込みします。既存のベクトルを先に削除してから実行するため、チャンクが重複することはありません。原本が失われている（`storage_key` が空）場合や、まだ `processing` の場合は `400` を返します。レスポンスは `{ document }` で、`status` は `processing` に、`chunk_count` は 0 に戻ります。
+
+ナレッジベースの削除は配下のドキュメント行と Qdrant のベクトルまで連鎖します。単一ドキュメントの削除では、ベクトルとオブジェクトストレージ上の原本も併せて片付けます。ベクトルやオブジェクトの後始末に失敗しても DB の削除は止めません——孤児オブジェクトが残るほうが、削除済みデータを指す行が残るよりましだからです。
+
+すべてのエンドポイントは `user.sub` にスコープされます：他人の kb やドキュメントに触れると、存在を漏らす `403` ではなく `404` を返します。
+
+> リバースプロキシ側で 10 MB のボディを通す必要があります。`infra/nginx.conf` は `/api/` に `client_max_body_size 10m` を設定しています。nginx 既定の 1 MB のままだと 1〜10 MB のファイルは gateway に届かず、ブラウザには nginx 自身の 413 ページが返ります。
 
 ### ファイル添付
 
@@ -260,11 +297,21 @@ conversation.updated
       "paths": ["src/modbus/"],
       "exclude": [".env", "secrets/"]
     },
-    "description": "Agent 想分享 src/modbus/ 给 ABC Agent（12 个文件）",
+    "peer_name": "ABC Agent",
+    "peer_did": "did:web:acme.com:agents:support",
     "requested_at": "2024-11-15T14:30:00Z"
   }
 }
 ```
+
+**ペイロードに `description` は含まれません。これは意図的です。** サーバーは読み手の言語を
+知らないため、構造化された事実（`action` + peer の識別情報 + 保存済みの `scope`）のみを送り、
+承認カードに表示される文章はクライアント側が i18n で組み立てます
+（`packages/client/src/lib/permission-text.ts`）。この契約は `@confer/shared` の
+`permissionRequestEventSchema` が単独で所有し、送信側・受信側の双方がこれで parse します。
+
+`GET /api/v1/permissions/pending` の各行も同じ形状（加えて `decision` フィールド）で、
+同一のビルダーが生成するため、ポーリングで取得した行と socket で push された行は完全に一致します。
 
 ## SSE（LLM streaming）
 

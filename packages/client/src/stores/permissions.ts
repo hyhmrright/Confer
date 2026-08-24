@@ -1,17 +1,8 @@
+import type { PermissionRequestEvent } from '@confer/shared';
 import { create } from 'zustand';
 import i18n from '../i18n/index.js';
 import { api } from '../lib/api.js';
 import { captureError } from '../lib/error.js';
-
-interface PermissionRequest {
-  id: string;
-  level: string;
-  action: string;
-  scope: Record<string, unknown>;
-  description: string;
-  requested_at: string;
-  decision?: string;
-}
 
 // A decided permission row from `GET /permissions/history`. These are RAW
 // `permissions` rows (no join) — unlike `/pending` there is NO `peer_name` and
@@ -27,12 +18,12 @@ interface PermissionHistoryEntry {
 }
 
 interface PermissionsState {
-  pending: PermissionRequest[];
+  pending: PermissionRequestEvent[];
   history: PermissionHistoryEntry[];
   historyError: string | null;
   loadPending: () => Promise<void>;
   loadHistory: () => Promise<void>;
-  addRequest: (req: PermissionRequest) => void;
+  addRequest: (req: PermissionRequestEvent) => void;
   removeRequest: (id: string) => void;
 }
 
@@ -43,7 +34,7 @@ export const usePermissionsStore = create<PermissionsState>((set) => ({
 
   loadPending: async () => {
     try {
-      const data = await api.get<{ permissions: PermissionRequest[] }>('/permissions/pending');
+      const data = await api.get<{ permissions: PermissionRequestEvent[] }>('/permissions/pending');
       set({ pending: data.permissions });
     } catch {
       // Background poll — a transient failure is retried on the next tick.

@@ -2,22 +2,15 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { encrypt, newId } from '@confer/shared';
 import { eq } from 'drizzle-orm';
 import { getDb } from '../db/connection.js';
-import {
-  agentMemories,
-  agents,
-  conversationParticipants,
-  conversations,
-  messages,
-  users,
-} from '../db/schema.js';
+import { agents, conversationParticipants, conversations, messages, users } from '../db/schema.js';
 import { getEnv } from '../env.js';
-import { deleteMemory, ensureMemoryCollection } from '../lib/memory-store.js';
+import { deleteMemory, ensureMemoryCollection, searchMemories } from '../lib/memory-store.js';
 import {
-  type SeededUser,
   apiRequest,
   headers,
   mockFetch,
   resetDb,
+  type SeededUser,
   seedUser,
 } from '../test/helpers.js';
 
@@ -171,25 +164,24 @@ describe('stream long-term memory', () => {
     });
     await res1.text(); // drain SSE so the fire-and-forget extraction kicks off
 
-    // Poll until the fire-and-forget extraction has persisted the fact (no fixed
-    // sleep). The mock MUST stay active here: extraction runs after the SSE
-    // drain, so restoring fetch too early would make its embedding/LLM calls hit
-    // the real network and fail.
+    // Poll until the fact is *recall-searchable* (no fixed sleep). Gating on the
+    // `agent_memories` row instead would be the wrong signal: extraction writes the
+    // PG row before the Qdrant upsert (see tools/memory.ts), so the row can appear
+    // while the vector is still missing — turn 2 then recalls nothing and the test
+    // fails for a reason that has nothing to do with recall. The mock MUST stay
+    // active here: extraction runs after the SSE drain, so restoring fetch too
+    // early would make its embedding/LLM calls hit the real network and fail.
     const deadline = Date.now() + 5000;
-    let persisted = 0;
+    let recallable = 0;
     while (Date.now() < deadline) {
-      const rows = await getDb()
-        .select()
-        .from(agentMemories)
-        .where(eq(agentMemories.user_id, u.id));
-      persisted = rows.length;
-      if (persisted > 0) break;
+      recallable = (await searchMemories(embedVector('TypeScript'), u.id, 1)).length;
+      if (recallable > 0) break;
       await new Promise((r) => setTimeout(r, 50));
     }
     restore();
     restore = undefined;
-    // Guard: extraction must actually have stored the fact, else the recall test below is vacuous.
-    expect(persisted).toBeGreaterThan(0);
+    // Guard: the fact must be recall-searchable, else the recall test below is vacuous.
+    expect(recallable).toBeGreaterThan(0);
 
     // Turn 2: a related query. The streamed reply ('明白') does NOT contain FACT,
     // so the only path for FACT into the system prompt is recall injection.

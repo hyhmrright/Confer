@@ -15,6 +15,10 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
+    // TypeScript 7 no longer auto-collects @types from parent node_modules, and it
+    // errors on side-effect imports of non-TS files. Declare both explicitly:
+    // "bun" for the bun:test imports in src/**/*.test.ts, "vite/client" for `import './index.css'`.
+    "types": ["bun", "vite/client"],
     "paths": {
       "@confer/shared": ["../shared/src/index.ts"],
       "@confer/shared/*": ["../shared/src/*"]

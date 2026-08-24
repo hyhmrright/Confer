@@ -15,6 +15,9 @@ export const zh = {
     configure: '配置',
     remove: '移除',
     optional: '（可选）',
+    close: '关闭',
+    loadMore: '加载更多（已显示 {{shown}} / 共 {{total}}）',
+    loadFailed: '这部分界面没能加载出来，刷新一下通常就好了。',
   },
   language: {
     label: '语言',
@@ -87,6 +90,8 @@ export const zh = {
     agentDefaultPolicyHint: '当某个联系人没有单独设置策略时，对其请求采用的默认处理方式。',
   },
   nav: {
+    openMenu: '打开导航',
+    closeMenu: '关闭导航',
     conversations: '对话',
     contacts: '联系人',
     memory: '记忆',
@@ -128,6 +133,7 @@ export const zh = {
     selfHint: '不能修改自己的角色或状态',
     empty: '暂无用户',
     loadError: '加载失败，请重试',
+    actionError: '操作失败，未生效',
     total: '共 {{count}} 个用户',
     prev: '上一页',
     next: '下一页',
@@ -195,7 +201,6 @@ export const zh = {
     savePolicy: '保存策略',
     policySaved: '策略已保存',
     policySaveFailed: '策略保存失败',
-    close: '关闭',
   },
   memory: {
     title: '记忆',
@@ -227,6 +232,7 @@ export const zh = {
     statusFailed: '失败',
   },
   message: {
+    loadOlder: '加载更早的消息',
     title: '对话',
     start: '开始对话',
     thinking: '思考中',
@@ -248,6 +254,12 @@ export const zh = {
     allowed: '已允许',
     denied: '已拒绝',
     decideError: '操作失败，请重试',
+    unknownPeer: '某个 Agent',
+    descConnect: '{{who}} 请求与你的 Agent 建立连接',
+    descConnectWith: '{{who}} 请求与你的 Agent 建立连接：“{{message}}”',
+    descAsk: '{{who}} 向你的 Agent 提问',
+    descAskWith: '{{who}} 向你的 Agent 提问：“{{question}}”',
+    descGeneric: '{{who}} 请求执行：{{action}}',
   },
   policy: {
     default: '默认处理方式',

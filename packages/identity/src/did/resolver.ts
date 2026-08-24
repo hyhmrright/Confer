@@ -1,5 +1,5 @@
-import { type Result, err, ok } from '@confer/shared';
-import { SsrfBlockedError, assertPublicHostname } from '../net/ssrf-guard.js';
+import { err, ok, type Result } from '@confer/shared';
+import { assertPublicHostname, SsrfBlockedError } from '../net/ssrf-guard.js';
 import type { DIDDocument } from './document.js';
 import { didDocumentSchema, parseDidWeb } from './document.js';
 

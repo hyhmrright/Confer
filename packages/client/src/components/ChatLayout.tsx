@@ -1,10 +1,12 @@
+import { permissionRequestEventSchema } from '@confer/shared';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { z } from 'zod';
+import { useIsNarrow } from '../hooks/use-is-narrow.js';
 import type { TranslationKey } from '../i18n/index.js';
 import { setOnTokenRefreshed } from '../lib/api.js';
-import { permissionRequestSchema } from '../lib/schemas.js';
+import { FOCUS_RING } from '../lib/styles.js';
 import {
   connectWs,
   disconnectWs,
@@ -20,7 +22,7 @@ import { usePermissionsStore } from '../stores/permissions.js';
 import { AccountMenu, type AccountUser } from './AccountMenu.js';
 import { AddContactDialog } from './AddContactDialog.js';
 import { ErrandInbox } from './ErrandInbox.js';
-import { BookOpen, Database, MessageCircle, Settings, Shield, Users } from './Icons.js';
+import { BookOpen, Database, Menu, MessageCircle, Settings, Shield, Users } from './Icons.js';
 import { LanguageSwitcherCompact } from './LanguageSwitcher.js';
 import { MessageView } from './MessageView.js';
 import { PermissionInbox } from './PermissionInbox.js';
@@ -146,18 +148,38 @@ function NavRail({
 export function ChatLayout() {
   const { t } = useTranslation();
   const [tab, setTab] = useState<Tab>('conversations');
-  const { user, logout } = useAuthStore();
-  const { loadConversations, activeConversationId, addMessage, setAgentStatus } = useChatStore();
-  const { addRequest: addPermissionRequest, loadPending } = usePermissionsStore();
+  // Per-field selectors, not `useXStore()`. Zustand's setState replaces the
+  // state object wholesale, so subscribing to the whole store re-renders this
+  // component — and with it NavRail, Sidebar, both inboxes and the entire
+  // message list — on every single streamed LLM token.
+  const user = useAuthStore((s) => s.user);
+  const logout = useAuthStore((s) => s.logout);
+  const loadConversations = useChatStore((s) => s.loadConversations);
+  const activeConversationId = useChatStore((s) => s.activeConversationId);
+  const addMessage = useChatStore((s) => s.addMessage);
+  const setAgentStatus = useChatStore((s) => s.setAgentStatus);
+  const addPermissionRequest = usePermissionsStore((s) => s.addRequest);
+  const loadPending = usePermissionsStore((s) => s.loadPending);
   const loadPendingCards = useErrandsStore((s) => s.loadPendingCards);
   const navigate = useNavigate();
 
   // Errand decision cards arrive by polling (not WebSocket): pull the pending
   // inbox on mount and on a fixed interval while the layout is open.
   useEffect(() => {
-    loadPendingCards();
-    const timer = setInterval(loadPendingCards, 15_000);
-    return () => clearInterval(timer);
+    // Skip the poll while the tab is hidden — this is a desktop app people
+    // leave open, and an unguarded 15s timer is 5,760 requests a day per user
+    // for a two-table join nobody is looking at. visibilitychange also fires
+    // the fetch on return, so coming back is immediate rather than up to 15s stale.
+    const tick = () => {
+      if (!document.hidden) void loadPendingCards();
+    };
+    tick();
+    const timer = setInterval(tick, 15_000);
+    document.addEventListener('visibilitychange', tick);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', tick);
+    };
   }, [loadPendingCards]);
 
   useEffect(() => {
@@ -179,7 +201,7 @@ export function ChatLayout() {
       }),
 
       onWsMessage('permission.request', (data) => {
-        const parsed = permissionRequestSchema.safeParse(data);
+        const parsed = permissionRequestEventSchema.safeParse(data);
         if (!parsed.success) {
           console.warn('[ws] permission.request validation failed:', parsed.error.issues);
           return;
@@ -222,34 +244,109 @@ export function ChatLayout() {
     logout();
   };
 
+  // The 52px rail plus the 260px sidebar are 312px of fixed chrome, which leaves
+  // nothing for content on a phone. Below `md` they become one overlay drawer.
+  const narrow = useIsNarrow();
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const drawerShown = narrow && drawerOpen;
+
+  // Growing past the breakpoint turns the drawer back into ordinary layout, so
+  // the "open" flag has to stop meaning anything or main would stay inert.
+  useEffect(() => {
+    if (!narrow) setDrawerOpen(false);
+  }, [narrow]);
+
+  useEffect(() => {
+    if (!drawerShown) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setDrawerOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [drawerShown]);
+
+  const activeNavLabel = NAV_ITEMS.find((item) => item.id === tab)?.labelKey ?? 'nav.conversations';
+
   return (
-    <div className="h-screen flex bg-dark-base text-ink-primary overflow-hidden">
-      <NavRail
-        tab={tab}
-        setTab={setTab}
-        initials={initials}
-        isAdmin={user?.role === 'admin'}
-        onAdmin={() => navigate('/admin')}
-        onSettings={() => navigate('/settings')}
-        user={user}
-        onLogout={handleLogout}
-      />
+    <div className="h-screen flex flex-col md:flex-row bg-dark-base text-ink-primary overflow-hidden">
+      {/* Below md this bar is the only way to reach navigation at all. It goes
+          inert alongside the content once the drawer is open, so the hamburger
+          can't be focused while claiming to be expanded and doing nothing. */}
+      <header
+        className="md:hidden shrink-0 h-12 flex items-center gap-2 px-3 bg-dark-nav border-b border-dark-border"
+        inert={drawerShown}
+      >
+        <button
+          type="button"
+          onClick={() => setDrawerOpen(true)}
+          aria-label={t('nav.openMenu')}
+          aria-expanded={drawerShown}
+          aria-controls="app-drawer"
+          className={`p-1.5 -ml-1 rounded-lg text-ink-secondary hover:text-ink-primary hover:bg-dark-hover transition-colors ${FOCUS_RING}`}
+        >
+          <Menu className="w-5 h-5" />
+        </button>
+        <span className="text-sm font-medium text-ink-primary">{t(activeNavLabel)}</span>
+      </header>
 
-      <Sidebar tab={tab} onLogout={handleLogout} />
-
-      {activeConversationId ? (
-        <MessageView />
-      ) : (
-        <div className="flex-1 flex flex-col items-center justify-center gap-3 text-ink-muted">
-          <div className="w-14 h-14 rounded-2xl bg-dark-card border border-dark-border flex items-center justify-center">
-            <MessageCircle className="w-6 h-6 text-ink-muted opacity-50" />
-          </div>
-          <div className="text-center">
-            <p className="text-sm font-medium text-ink-secondary">{t('nav.emptyTitle')}</p>
-            <p className="text-xs text-ink-muted mt-0.5">{t('nav.emptyHint')}</p>
-          </div>
-        </div>
+      {drawerShown && (
+        <button
+          type="button"
+          onClick={() => setDrawerOpen(false)}
+          aria-label={t('nav.closeMenu')}
+          className="md:hidden fixed inset-0 z-30 bg-black/50 backdrop-blur-xs"
+        />
       )}
+
+      {/*
+        `md:contents` dissolves this wrapper at desktop widths, so the rail and
+        sidebar stay direct flex children of the row and the wide layout is
+        byte-for-byte what it was. Below md the wrapper becomes the drawer, and
+        `hidden` — rather than a transform parked off-screen — is what keeps its
+        controls out of the tab order while it is closed.
+      */}
+      <div
+        id="app-drawer"
+        className={`md:contents ${
+          drawerShown
+            ? 'fixed inset-y-0 left-0 z-40 flex animate-slide-in-left shadow-2xl shadow-black/50'
+            : 'hidden'
+        }`}
+      >
+        <NavRail
+          tab={tab}
+          setTab={(next) => {
+            setTab(next);
+            setDrawerOpen(false);
+          }}
+          initials={initials}
+          isAdmin={user?.role === 'admin'}
+          onAdmin={() => navigate('/admin')}
+          onSettings={() => navigate('/settings')}
+          user={user}
+          onLogout={handleLogout}
+        />
+
+        <Sidebar tab={tab} onLogout={handleLogout} onNavigate={() => setDrawerOpen(false)} />
+      </div>
+
+      {/* Inert while the drawer covers it, so Tab stays in the drawer without a
+          hand-rolled focus trap. */}
+      <div className="flex-1 flex min-h-0 min-w-0" inert={drawerShown}>
+        {activeConversationId ? (
+          <MessageView />
+        ) : (
+          <div className="flex-1 flex flex-col items-center justify-center gap-3 text-ink-muted">
+            <div className="w-14 h-14 rounded-2xl bg-dark-card border border-dark-border flex items-center justify-center">
+              <MessageCircle className="w-6 h-6 text-ink-muted opacity-50" />
+            </div>
+            <div className="text-center">
+              <p className="text-sm font-medium text-ink-secondary">{t('nav.emptyTitle')}</p>
+              <p className="text-xs text-ink-muted mt-0.5">{t('nav.emptyHint')}</p>
+            </div>
+          </div>
+        )}
+      </div>
 
       <PermissionInbox />
       <ErrandInbox />

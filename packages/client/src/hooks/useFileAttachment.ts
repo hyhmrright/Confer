@@ -19,7 +19,8 @@ function readFileAsText(file: File): Promise<string> {
 
 export interface FileAttachment {
   attachedFile: AttachedFile | null;
-  fileInputRef: RefObject<HTMLInputElement>;
+  // Nullable until the input mounts — React 19's types stopped hiding that.
+  fileInputRef: RefObject<HTMLInputElement | null>;
   handleFileChange: (e: ChangeEvent<HTMLInputElement>) => Promise<void>;
   openFilePicker: () => void;
   clearAttachment: () => void;

@@ -1,35 +1,183 @@
-@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap");
+@import "tailwindcss";
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/*
+  Self-hosted, replacing an `@import url(fonts.googleapis.com/...)` that used to
+  sit above this line. That import was the worst shape a font request can take:
+  because it lived inside the stylesheet, the preload scanner could not see it
+  while parsing the HTML, so the browser had to download and parse this file
+  first and only then begin a DNS + TLS + fetch to a third party — measured at
+  ~1.08s of purely serial delay — which then referenced yet another host for the
+  font itself. It also meant the Tauri desktop build, which otherwise touches no
+  network at all, phoned Google on every launch and blocked first paint on
+  having an internet connection.
 
-body {
-  margin: 0;
-  background: #09090b;
-  color: #dedede;
-  font-family: "Anthropic Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  One file per subset rather than one per weight: this is the variable font, so
+  each subset covers the whole 100-800 axis on its own. The old import asked for
+  400;500;600 — 500 was never used, and `font-bold` (700) *was* used, by the
+  logo, and had to be synthesized. Both are now correct.
+
+  JetBrains Mono is licensed under SIL OFL 1.1 — see the LICENSE beside the files.
+*/
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/jetbrains-mono-latin.woff2") format("woff2");
+  font-weight: 100 800;
+  font-style: normal;
+  font-display: swap;
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
+    U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
-@layer components {
-  .scrollbar-thin {
-    scrollbar-width: thin;
-    scrollbar-color: #222226 transparent;
+/*
+  Accented Latin, for the peer names, organisations and DIDs that render in
+  `font-mono`. Declaring it costs nothing: `unicode-range` means the browser
+  fetches this file only if a character inside the range is actually on the
+  page, so a session that never shows one downloads 0 bytes. Without it those
+  letters fall back to the system mono mid-word — "Łukasz" drawn in two faces.
+*/
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/jetbrains-mono-latin-ext.woff2") format("woff2");
+  font-weight: 100 800;
+  font-style: normal;
+  font-display: swap;
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308,
+    U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113,
+    U+2C60-2C7F, U+A720-A7FF;
+}
+
+@theme {
+  --font-sans: "Anthropic Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", Menlo, monospace;
+
+  --color-primary-50: #fdf8f3;
+  --color-primary-100: #f9edd9;
+  --color-primary-200: #f3d9b9;
+  --color-primary-300: #e8be95;
+  --color-primary-400: #d4a27f;
+  --color-primary-500: #c4875f;
+  /* White text sits on primary-600 in every primary button. At the previous
+     #b06844 that measured 4.28:1 — just under the 4.5:1 WCAG AA needs for
+     normal-size text. Darkened just enough to clear it (~4.6:1) while keeping
+     the hue; anything lighter fails, so don't nudge this back up. */
+  --color-primary-600: #a86341;
+  --color-primary-700: #8c4e2c;
+  --color-primary-800: #6b3819;
+  --color-primary-900: #4d270d;
+
+  --color-dark-base: #09090b;
+  --color-dark-nav: #0b0c0e;
+  --color-dark-panel: #0f1013;
+  --color-dark-card: #141417;
+  --color-dark-input: #111215;
+  --color-dark-border: #222226;
+  --color-dark-hover: #1a1a1e;
+  --color-dark-active: #252527;
+
+  --color-ink-primary: #dedede;
+  --color-ink-secondary: #9e9e9e;
+  /* Carries real text — empty-state hints, placeholders, captions — not just
+     decoration. At the previous #505050 that measured 2.36:1 against the panel
+     background, well under the 4.5:1 WCAG AA floor. Measured at 4.62:1 on
+     dark-panel, the lightest surface it appears on; #7b7b7b lands at 4.49 and
+     fails, so this has very little room below it. */
+  --color-ink-muted: #7d7d7d;
+
+  --animate-dot-bounce: dot-bounce 1.4s infinite ease-in-out both;
+  --animate-fade-in: fade-in 0.25s ease-out;
+  --animate-cursor-blink: cursor-blink 1s step-end infinite;
+  --animate-slide-in-left: slide-in-left 0.2s ease-out;
+
+  @keyframes dot-bounce {
+    0%,
+    80%,
+    100% {
+      transform: scale(0.6);
+      opacity: 0.4;
+    }
+    40% {
+      transform: scale(1);
+      opacity: 1;
+    }
   }
-  .scrollbar-thin::-webkit-scrollbar {
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  /* The narrow-viewport navigation drawer. It is toggled with `hidden`, which
+     keeps it out of the tab order while closed, so it can't be transitioned in
+     — the animation has to run on appearance instead. */
+  @keyframes slide-in-left {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(0);
+    }
+  }
+  @keyframes cursor-blink {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0;
+    }
+  }
+}
+
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+}
+
+@utility scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: #222226 transparent;
+  &::-webkit-scrollbar {
     width: 4px;
   }
-  .scrollbar-thin::-webkit-scrollbar-track {
+  &::-webkit-scrollbar-track {
     background: transparent;
   }
-  .scrollbar-thin::-webkit-scrollbar-thumb {
+  &::-webkit-scrollbar-thumb {
     background-color: #222226;
     border-radius: 2px;
   }
-  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  &::-webkit-scrollbar-thumb:hover {
     background-color: #333337;
+  }
+}
+
+@layer utilities {
+  body {
+    margin: 0;
+    background: #09090b;
+    color: #dedede;
+    font-family: "Anthropic Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 }
 

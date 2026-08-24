@@ -1,4 +1,5 @@
 import { type EmbeddingProvider, providerModel } from './embedding.js';
+import { toUUID } from './qdrant.js';
 import {
   deleteQdrantPoints,
   ensureQdrantCollection,
@@ -6,7 +7,6 @@ import {
   searchQdrantCollection,
   upsertQdrantPoints,
 } from './qdrant-client.js';
-import { toUUID } from './qdrant.js';
 import { VECTOR_SIZE } from './rag-config.js';
 
 const COLLECTION = 'agent_memories_vec';

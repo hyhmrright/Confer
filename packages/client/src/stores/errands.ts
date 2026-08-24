@@ -58,7 +58,16 @@ export const useErrandsStore = create<ErrandsState>((set, get) => ({
   loadPendingCards: async () => {
     try {
       const data = await api.get<{ cards: ErrandCard[] }>('/errands/cards/pending');
-      set({ pendingCards: data.cards });
+      // This runs on a 15s timer forever. Assigning unconditionally would hand
+      // every subscriber a new array identity four times a minute — and the
+      // usual response is the identical (usually empty) set. Returning the
+      // existing state is a no-op in zustand, so an unchanged poll costs nothing.
+      set((s) => {
+        const unchanged =
+          s.pendingCards.length === data.cards.length &&
+          s.pendingCards.every((card, i) => card.id === data.cards[i]?.id);
+        return unchanged ? s : { pendingCards: data.cards };
+      });
     } catch {
       // endpoint might not exist yet
     }

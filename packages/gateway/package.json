@@ -14,17 +14,17 @@
     "@confer/agent-runtime": "workspace:*",
     "@confer/identity": "workspace:*",
     "@confer/shared": "workspace:*",
-    "argon2": "^0.41.0",
-    "drizzle-orm": "^0.38.0",
-    "hono": "^4.6.0",
-    "jose": "^6.0.0",
+    "argon2": "^0.45.1",
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.13.4",
+    "jose": "^6.2.10",
     "minio": "^8.0.7",
     "pdf-parse": "^2.4.5",
-    "postgres": "^3.4.0"
+    "postgres": "^3.4.9",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@types/bun": "latest",
-    "@types/pdf-parse": "^1.1.5",
-    "drizzle-kit": "^0.30.0"
+    "@types/bun": "^1.4.0",
+    "drizzle-kit": "^0.31.10"
   }
 }

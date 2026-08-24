@@ -17,6 +17,9 @@ export const ja: Resources = {
     configure: '設定',
     remove: '削除',
     optional: '（任意）',
+    close: '閉じる',
+    loadMore: 'さらに読み込む（{{total}} 件中 {{shown}} 件）',
+    loadFailed: 'この画面を読み込めませんでした。再読み込みで解決することがほとんどです。',
   },
   language: {
     label: '言語',
@@ -91,6 +94,8 @@ export const ja: Resources = {
       '連絡先に個別のポリシーがない場合に、リクエストを既定でどう処理するかを設定します。',
   },
   nav: {
+    openMenu: 'ナビゲーションを開く',
+    closeMenu: 'ナビゲーションを閉じる',
     conversations: '会話',
     contacts: '連絡先',
     memory: 'メモリ',
@@ -132,6 +137,7 @@ export const ja: Resources = {
     selfHint: '自分の役割や状態は変更できません',
     empty: 'ユーザーがいません',
     loadError: '読み込みに失敗しました。再試行してください',
+    actionError: '操作に失敗しました。変更されていません',
     total: '合計 {{count}} 人',
     prev: '前へ',
     next: '次へ',
@@ -199,7 +205,6 @@ export const ja: Resources = {
     savePolicy: 'ポリシーを保存',
     policySaved: 'ポリシーを保存しました',
     policySaveFailed: 'ポリシーの保存に失敗しました',
-    close: '閉じる',
   },
   memory: {
     title: 'メモリ',
@@ -231,6 +236,7 @@ export const ja: Resources = {
     statusFailed: '失敗',
   },
   message: {
+    loadOlder: '以前のメッセージを読み込む',
     title: '会話',
     start: '会話を始める',
     thinking: '考え中',
@@ -252,6 +258,12 @@ export const ja: Resources = {
     allowed: '許可済み',
     denied: '拒否済み',
     decideError: '操作に失敗しました。もう一度お試しください',
+    unknownPeer: 'あるエージェント',
+    descConnect: '{{who}} があなたのエージェントへの接続を求めています',
+    descConnectWith: '{{who}} があなたのエージェントへの接続を求めています：「{{message}}」',
+    descAsk: '{{who}} があなたのエージェントに質問しています',
+    descAskWith: '{{who}} があなたのエージェントに質問しています：「{{question}}」',
+    descGeneric: '{{who}} が次の実行を求めています：{{action}}',
   },
   policy: {
     default: '既定の処理',

@@ -1,14 +1,20 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { LLM_PROVIDERS, TOOL_PROVIDERS, llmProviderName } from '../../lib/providers.js';
+import { LLM_PROVIDERS, llmProviderName, TOOL_PROVIDERS } from '../../lib/providers.js';
 import { useSettingsStore } from '../../stores/settings.js';
 import { ProviderKeyEditor } from './ProviderKeyEditor.js';
 import { StatusMsg } from './SettingsShared.js';
 
 export function KeysTab() {
   const { t } = useTranslation();
-  const { llmKeys, saving, error, success, loadLlmKeys, saveLlmKey, removeLlmKey, clearMessages } =
-    useSettingsStore();
+  const llmKeys = useSettingsStore((s) => s.llmKeys);
+  const saving = useSettingsStore((s) => s.saving);
+  const error = useSettingsStore((s) => s.error);
+  const success = useSettingsStore((s) => s.success);
+  const loadLlmKeys = useSettingsStore((s) => s.loadLlmKeys);
+  const saveLlmKey = useSettingsStore((s) => s.saveLlmKey);
+  const removeLlmKey = useSettingsStore((s) => s.removeLlmKey);
+  const clearMessages = useSettingsStore((s) => s.clearMessages);
   const [editing, setEditing] = useState<string | null>(null);
   const [keyValue, setKeyValue] = useState('');
 

@@ -12,7 +12,7 @@ import { app } from '../app.js';
 import { getDb } from '../db/connection.js';
 import { agents, keypairs, messages, peerAgents, peerContacts } from '../db/schema.js';
 import { getEnv } from '../env.js';
-import { type SeededUser, get, post, resetDb, seedUser } from '../test/helpers.js';
+import { get, post, resetDb, type SeededUser, seedUser } from '../test/helpers.js';
 
 const CONSULT = '/api/v1/consult';
 const PEER_DID = 'did:web:localhost';
@@ -110,6 +110,26 @@ describe('consult', () => {
   test('rejects consulting a non-contact peer (403)', async () => {
     await seedOwnAgent();
     const res = await post(`${CONSULT}/${newId()}`, {
+      token: user.token,
+      body: { question: 'hi' },
+    });
+    expect(res.status).toBe(403);
+  });
+
+  // Peer rows are global by DID, so a peer someone else connected to is a real,
+  // resolvable peer_id. Consulting it must still be refused — otherwise one user
+  // could spend a peer relationship they never established.
+  test('rejects consulting a peer that belongs to another user (403)', async () => {
+    await seedOwnAgent();
+    const peerId = await seedPeerContact();
+    // Hand the contact row to a different owner; the peer_agents row stays.
+    const other = await seedUser();
+    await getDb()
+      .update(peerContacts)
+      .set({ user_id: other.id })
+      .where(eq(peerContacts.peer_id, peerId));
+
+    const res = await post(`${CONSULT}/${peerId}`, {
       token: user.token,
       body: { question: 'hi' },
     });

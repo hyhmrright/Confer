@@ -1,17 +1,10 @@
+import type { PermissionRequestEvent } from '@confer/shared';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TranslationKey } from '../i18n/index.js';
 import { api } from '../lib/api.js';
+import { describePermission } from '../lib/permission-text.js';
 import { Shield } from './Icons.js';
-
-interface PermissionRequest {
-  id: string;
-  level: string;
-  action: string;
-  scope: Record<string, unknown>;
-  description: string;
-  requested_at: string;
-}
 
 const levelColor: Record<string, string> = {
   L1: 'border-green-800/40 bg-green-900/20',
@@ -29,10 +22,11 @@ export function PermissionCard({
   request,
   onDecided,
 }: {
-  request: PermissionRequest;
+  request: PermissionRequestEvent;
   onDecided?: () => void;
 }) {
   const { t } = useTranslation();
+  const description = describePermission(request, t);
   const [deciding, setDeciding] = useState(false);
   const [decided, setDecided] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -62,7 +56,7 @@ export function PermissionCard({
       <div className={`rounded-lg border-2 px-4 py-3 ${borderClass} opacity-60`}>
         <div className="flex items-center gap-2">
           <Shield className="w-4 h-4 text-ink-muted" />
-          <span className="text-sm text-ink-secondary">{request.description}</span>
+          <span className="text-sm text-ink-secondary">{description}</span>
           <span className={`text-sm font-medium ml-auto ${color}`}>{label}</span>
         </div>
       </div>
@@ -80,7 +74,7 @@ export function PermissionCard({
               {levelLabelKey[request.level] ? t(levelLabelKey[request.level]) : request.level}
             </span>
           </div>
-          <p className="text-sm text-ink-primary">{request.description}</p>
+          <p className="text-sm text-ink-primary">{description}</p>
         </div>
       </div>
       {error && <p className="text-xs text-red-400 ml-6 mb-1">{error}</p>}

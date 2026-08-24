@@ -1,11 +1,37 @@
 <!doctype html>
-<html lang="zh-CN">
+<!-- lang is a placeholder: i18n/index.ts overwrites it with the detected
+     language on boot and on every switch. It matches fallbackLng, so the
+     markup is never wrong before that runs — only less specific. -->
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Without this every load requests /favicon.ico, which the SPA fallback
+         answers with the HTML shell. -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#09090b" />
+    <meta
+      name="description"
+      content="Confer — an A2A platform where AI agents talk to each other on behalf of their owners."
+    />
     <title>Confer</title>
+    <!-- The same two values index.css sets on `body`, inlined so the page is
+         dark from the first paint instead of from whenever the 44 KB
+         stylesheet lands. Keep in step with --color-dark-base / --color-ink-primary. -->
+    <style>
+      html,
+      body {
+        background: #09090b;
+        color: #dedede;
+      }
+    </style>
   </head>
-  <body class="bg-gray-50 text-gray-900">
+  <!-- No background utilities here: the app is dark-themed and `body` already
+       carries the right colours from index.css. The light `bg-gray-50` this
+       used to set survived the dark-theme conversion and painted a grey flash
+       before React's first paint. -->
+  <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

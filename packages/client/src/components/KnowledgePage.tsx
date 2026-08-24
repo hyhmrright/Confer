@@ -5,6 +5,7 @@ import { INPUT_CLS } from '../lib/styles.js';
 import { type KnowledgeDocument, useKbStore } from '../stores/knowledge-base.js';
 import { ChevronDown, Plus, Trash } from './Icons.js';
 import { LoadingDots } from './LoadingDots.js';
+import { LoadMore } from './LoadMore.js';
 
 function statusBadge(status: string | null) {
   const s = status ?? 'processing';
@@ -31,7 +32,11 @@ function DocRow({
   doc,
   onDelete,
   onRetry,
-}: { doc: KnowledgeDocument; onDelete: () => void; onRetry?: () => void }) {
+}: {
+  doc: KnowledgeDocument;
+  onDelete: () => void;
+  onRetry?: () => void;
+}) {
   const { t } = useTranslation();
   return (
     <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-dark-input border border-dark-border text-xs group">
@@ -49,7 +54,7 @@ function DocRow({
           <button
             type="button"
             onClick={onRetry}
-            className="text-[10px] px-1.5 py-0.5 rounded text-amber-400 hover:bg-amber-900/20 border border-amber-800/30 transition-colors"
+            className="text-[10px] px-1.5 py-0.5 rounded-sm text-amber-400 hover:bg-amber-900/20 border border-amber-800/30 transition-colors"
           >
             {t('common.retry')}
           </button>
@@ -57,7 +62,7 @@ function DocRow({
         <button
           type="button"
           onClick={onDelete}
-          className="text-ink-muted hover:text-red-400 hover:bg-red-900/20 p-0.5 rounded transition-colors"
+          className="text-ink-muted hover:text-red-400 hover:bg-red-900/20 p-0.5 rounded-sm transition-colors"
         >
           <Trash width={12} height={12} />
         </button>
@@ -68,16 +73,17 @@ function DocRow({
 
 function KbCard({ kbId }: { kbId: string }) {
   const { t } = useTranslation();
-  const {
-    kbs,
-    documents,
-    fetchDocuments,
-    uploadDocument,
-    deleteDocument,
-    deleteKb,
-    retryDocument,
-    uploading,
-  } = useKbStore();
+  const kbs = useKbStore((s) => s.kbs);
+  const documents = useKbStore((s) => s.documents);
+  const documentsTotal = useKbStore((s) => s.documentsTotal);
+  const loadingMoreDocs = useKbStore((s) => s.loadingMoreDocs);
+  const fetchDocuments = useKbStore((s) => s.fetchDocuments);
+  const loadMoreDocuments = useKbStore((s) => s.loadMoreDocuments);
+  const uploadDocument = useKbStore((s) => s.uploadDocument);
+  const deleteDocument = useKbStore((s) => s.deleteDocument);
+  const deleteKb = useKbStore((s) => s.deleteKb);
+  const retryDocument = useKbStore((s) => s.retryDocument);
+  const uploading = useKbStore((s) => s.uploading);
   const kb = kbs.find((k) => k.id === kbId);
   const [expanded, setExpanded] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -134,7 +140,7 @@ function KbCard({ kbId }: { kbId: string }) {
             onClick={() => {
               if (confirm(t('knowledge.deleteConfirm', { name: kb.name }))) deleteKb(kbId);
             }}
-            className="p-1 text-ink-muted hover:text-red-400 hover:bg-red-900/20 rounded transition-colors"
+            className="p-1 text-ink-muted hover:text-red-400 hover:bg-red-900/20 rounded-sm transition-colors"
           >
             <Trash width={12} height={12} />
           </button>
@@ -157,14 +163,22 @@ function KbCard({ kbId }: { kbId: string }) {
               {t('knowledge.docsEmpty')}
             </p>
           ) : (
-            docs.map((doc) => (
-              <DocRow
-                key={doc.id}
-                doc={doc}
-                onDelete={() => deleteDocument(kbId, doc.id)}
-                onRetry={() => retryDocument(kbId, doc.id)}
+            <>
+              {docs.map((doc) => (
+                <DocRow
+                  key={doc.id}
+                  doc={doc}
+                  onDelete={() => deleteDocument(kbId, doc.id)}
+                  onRetry={() => retryDocument(kbId, doc.id)}
+                />
+              ))}
+              <LoadMore
+                shown={docs.length}
+                total={documentsTotal[kbId] ?? docs.length}
+                busy={loadingMoreDocs === kbId}
+                onMore={() => loadMoreDocuments(kbId)}
               />
-            ))
+            </>
           )}
         </div>
       )}
@@ -174,7 +188,10 @@ function KbCard({ kbId }: { kbId: string }) {
 
 export function KnowledgePage() {
   const { t } = useTranslation();
-  const { kbs, loading, fetchKbs, createKb } = useKbStore();
+  const kbs = useKbStore((s) => s.kbs);
+  const loading = useKbStore((s) => s.loading);
+  const fetchKbs = useKbStore((s) => s.fetchKbs);
+  const createKb = useKbStore((s) => s.createKb);
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');

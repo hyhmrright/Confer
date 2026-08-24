@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { SsrfBlockedError, assertPublicHostname, isBlockedIp } from './ssrf-guard.js';
+import { assertPublicHostname, isBlockedIp, SsrfBlockedError } from './ssrf-guard.js';
 
 describe('isBlockedIp', () => {
   test('blocks IPv4 private, loopback, link-local and reserved ranges', () => {

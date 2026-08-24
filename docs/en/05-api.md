@@ -74,7 +74,7 @@ PUT    /api/v1/agents/me/llm-keys      # 加密存储 LLM API keys
 ### Contacts / Peer Agents
 
 ```
-GET    /api/v1/contacts                     # 列出联系人
+GET    /api/v1/contacts                     # List contacts. Paging: ?limit=&offset=
 POST   /api/v1/contacts                     # 添加联系人
 GET    /api/v1/contacts/{contact_id}
 DELETE /api/v1/contacts/{contact_id}
@@ -91,6 +91,8 @@ POST   /api/v1/contacts/lookup              # 按 DID / 域名 / username 查找
   "value": "abc-industries.com"
 }
 ```
+
+`GET /api/v1/contacts` returns `{ contacts, total }`. `limit` defaults to 50 and is capped at 100; `offset` defaults to 0. Rows are ordered by `id` (a ULID), so newest first — the ordering is unique and deterministic, which is what stops an offset window from dropping or repeating a row. `total` counts the whole list rather than the page, so a client can tell a capped list from a complete one. An unparseable `limit`/`offset` falls back to the default instead of erroring.
 
 Response: returns the list of candidate Agents found. lookup persists the discovered peers **into `peer_agents`** and includes the local `id` (`peer_id`) on each candidate — `POST /api/v1/contacts` uses exactly this `id` to add a contact. `POST /contacts` is idempotent: adding the same peer again returns the existing contact (`200`) rather than an error.
 
@@ -169,6 +171,41 @@ PUT    /api/v1/projects/{project_id}/peers/{peer_id}/facts
 GET    /api/v1/projects/{project_id}/peers/{peer_id}/decisions
 PUT    /api/v1/projects/{project_id}/peers/{peer_id}/decisions
 ```
+
+### Knowledge bases (RAG)
+
+```
+GET    /api/v1/knowledge-bases                                  # list my knowledge bases
+POST   /api/v1/knowledge-bases                                  # create
+DELETE /api/v1/knowledge-bases/{kb_id}                          # deletes its documents and vectors too
+
+GET    /api/v1/knowledge-bases/{kb_id}/documents                # paged: ?limit=&offset=
+POST   /api/v1/knowledge-bases/{kb_id}/documents                # multipart upload, field name `file`
+DELETE /api/v1/knowledge-bases/{kb_id}/documents/{doc_id}
+POST   /api/v1/knowledge-bases/{kb_id}/documents/{doc_id}/retry # re-ingest
+```
+
+`POST /knowledge-bases` takes `{ name, description? }` (`name` 1–255 chars) and returns `201` + `{ knowledge_base }`. `GET /knowledge-bases` returns `{ knowledge_bases }` and is **not paged**: a user's knowledge bases are created by hand and bounded in number.
+
+`GET /{kb_id}/documents` returns `{ documents, total }`. `limit` defaults to 50 and caps at 100, `offset` defaults to 0; ordered by `id` (ULID) descending, newest first — the ordering is unique as well as deterministic, which is what stops an offset window from skipping or repeating a row. `total` is the full count, not the size of this page. An unparseable `limit`/`offset` falls back to the default rather than erroring. This is the only list here that grows without bound, because a knowledge base is precisely an upload target.
+
+Uploads are `multipart/form-data` with the file under the fixed field name `file`, capped at **10 MB** per file (`400 bad_request` beyond that). The `Content-Type` comes from the form part when present and is guessed from the extension otherwise. The response is `201` + `{ document }` with `status` already `processing`: **chunking, embedding and the write to Qdrant all happen after the response** — the upload endpoint does not wait for them. Clients poll the document list until `status` changes.
+
+`status` values:
+
+| Value | Meaning |
+|---|---|
+| `processing` | Stored, being chunked and embedded. The initial state after both upload and retry |
+| `ready` | Retrievable. `chunk_count` is the document's chunk count |
+| `failed` | Ingestion failed (parsing, a missing embedding key, or a vector-store write) |
+
+`POST /{doc_id}/retry` fetches the original back from object storage and re-ingests it, clearing the document's existing vectors first, so it cannot produce duplicate chunks. Returns `400` when the original is gone (`storage_key` empty) or the document is still `processing`. The response is `{ document }` with `status` reset to `processing` and `chunk_count` back to zero.
+
+Deleting a knowledge base cascades to its document rows and its vectors in Qdrant; deleting a single document also clears its vectors and the original file in object storage. A failure to clean up vectors or objects does not block the database delete — an orphaned object is better than a row pointing at deleted data.
+
+Every endpoint is scoped to `user.sub`: reaching for someone else's kb or document returns `404` rather than `403`, which would leak its existence.
+
+> The reverse proxy has to allow a 10 MB body. `infra/nginx.conf` sets `client_max_body_size 10m` on `/api/`; at nginx's 1 MB default, a file between 1 and 10 MB never reaches the gateway at all and the browser gets nginx's own 413 page.
 
 ### File attachments
 
@@ -260,11 +297,22 @@ conversation.updated
       "paths": ["src/modbus/"],
       "exclude": [".env", "secrets/"]
     },
-    "description": "Agent 想分享 src/modbus/ 给 ABC Agent（12 个文件）",
+    "peer_name": "ABC Agent",
+    "peer_did": "did:web:acme.com:agents:support",
     "requested_at": "2024-11-15T14:30:00Z"
   }
 }
 ```
+
+**There is no `description` field, and that is deliberate.** The server does not know
+what language the reader speaks, so it sends structured facts only (`action` + the peer's
+identity + the already-stored `scope`); the sentence shown on the approval card is composed
+client-side through i18n (`packages/client/src/lib/permission-text.ts`). The contract is
+owned by `permissionRequestEventSchema` in `@confer/shared`, which both sides parse against.
+
+Every row of `GET /api/v1/permissions/pending` has the same shape (plus a `decision` field)
+and comes from the same builder, so a row that arrives by poll is byte-identical to one
+pushed over the socket.
 
 ## SSE (LLM streaming)
 

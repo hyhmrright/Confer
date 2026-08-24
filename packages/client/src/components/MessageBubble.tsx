@@ -1,9 +1,11 @@
+import { permissionRequestEventSchema } from '@confer/shared';
+import { memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { dateLocale } from '../i18n/index.js';
-import { permissionRequestSchema } from '../lib/schemas.js';
+import { Avatar } from './Avatar.js';
 import { CitationCapsule } from './CitationCapsule.js';
-import { Bot, User } from './Icons.js';
 import { PermissionCard } from './PermissionCard.js';
 
 interface Citation {
@@ -27,30 +29,24 @@ interface Message {
   content_json?: unknown;
 }
 
-function Avatar({ type }: { type: string }) {
-  if (type === 'user') {
-    return (
-      <div className="w-8 h-8 rounded-full bg-primary-600/20 border border-primary-600/30 flex items-center justify-center shrink-0">
-        <User className="w-4 h-4 text-primary-400" />
-      </div>
-    );
-  }
-  return (
-    <div className="w-8 h-8 rounded-full bg-dark-card border border-dark-border flex items-center justify-center shrink-0">
-      <Bot className="w-4 h-4 text-ink-secondary" />
-    </div>
-  );
-}
-
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString(dateLocale(), { hour: '2-digit', minute: '2-digit' });
 }
 
-export function MessageBubble({ message }: { message: Message }) {
+// Memoized because a long thread re-renders whenever anything in the chat store
+// changes, and this component re-parses its whole markdown body on every render
+// (react-markdown does the parse inline, with no cache). Messages are only ever
+// appended to, never mutated in place, so prop identity is genuinely stable and
+// this skips real work rather than trading one comparison for another.
+export const MessageBubble = memo(function MessageBubble({ message }: { message: Message }) {
+  // No strings of its own, but formatTime() below reads the active locale.
+  // Without this subscription memo would freeze every visible timestamp in the
+  // previous language after a switch.
+  useTranslation();
   const isUser = message.sender_type === 'user';
 
   if (message.content_type === 'permission_request') {
-    const parsed = permissionRequestSchema.safeParse(message.content_json);
+    const parsed = permissionRequestEventSchema.safeParse(message.content_json);
     if (parsed.success) {
       return (
         <div className="flex justify-start gap-3 animate-fade-in">
@@ -73,7 +69,7 @@ export function MessageBubble({ message }: { message: Message }) {
         <div
           className={`rounded-2xl px-4 py-3 ${
             isUser
-              ? 'user-bubble bg-gradient-to-br from-primary-600 to-primary-700 text-white rounded-tr-sm shadow-lg shadow-primary-900/30'
+              ? 'user-bubble bg-linear-to-br from-primary-600 to-primary-700 text-white rounded-tr-sm shadow-lg shadow-primary-900/30'
               : 'agent-bubble bg-dark-card border border-dark-border text-ink-primary rounded-tl-sm'
           }`}
         >
@@ -92,4 +88,4 @@ export function MessageBubble({ message }: { message: Message }) {
       </div>
     </div>
   );
-}
+});

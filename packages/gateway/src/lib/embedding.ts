@@ -1,8 +1,8 @@
 import { boundedMap } from './concurrency.js';
 import {
   BATCH_SIZE,
-  EMBEDDING_API_TIMEOUT_MS,
   EMBED_BATCH_CONCURRENCY,
+  EMBEDDING_API_TIMEOUT_MS,
   VECTOR_SIZE,
 } from './rag-config.js';
 import { HttpError, retryWithBackoff } from './retry.js';

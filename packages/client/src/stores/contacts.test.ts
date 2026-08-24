@@ -9,6 +9,7 @@ mock.module('../lib/api.js', () => ({
   setToken: mock(() => {}),
   setRefreshToken: mock(() => {}),
   setOnAuthExpired: mock(() => {}),
+  setOnTokenRefreshed: mock(() => {}),
   getToken: mock(() => null),
 }));
 
@@ -39,10 +40,44 @@ afterEach(() => {
 describe('contacts store', () => {
   test('loadContacts stores the fetched list', async () => {
     const contacts = [{ id: 'c1', user_id: 'u1', peer_id: 'p1', peer: { id: 'p1' } }];
-    get.mockResolvedValueOnce({ contacts });
+    get.mockResolvedValueOnce({ contacts, total: 1 });
     await useContactsStore.getState().loadContacts();
-    expect(get).toHaveBeenCalledWith('/contacts');
+    expect(get).toHaveBeenCalledWith('/contacts?limit=50&offset=0');
     expect(useContactsStore.getState().contacts).toEqual(contacts as never);
+    expect(useContactsStore.getState().contactsTotal).toBe(1);
+  });
+
+  test('loadMoreContacts appends the next page and skips rows already shown', async () => {
+    useContactsStore.setState({
+      contacts: [{ id: 'c1', user_id: 'u1', peer_id: 'p1', peer: { id: 'p1' } }] as never,
+      contactsTotal: 3,
+    });
+    // c1 comes back again — the window shifted under us — and must not be
+    // duplicated into the list.
+    get.mockResolvedValueOnce({
+      contacts: [
+        { id: 'c1', user_id: 'u1', peer_id: 'p1', peer: { id: 'p1' } },
+        { id: 'c2', user_id: 'u1', peer_id: 'p2', peer: { id: 'p2' } },
+      ],
+      total: 3,
+    });
+
+    await useContactsStore.getState().loadMoreContacts();
+
+    expect(get).toHaveBeenCalledWith('/contacts?limit=50&offset=1');
+    expect(useContactsStore.getState().contacts.map((c) => c.id)).toEqual(['c1', 'c2']);
+    expect(useContactsStore.getState().loadingMore).toBe(false);
+  });
+
+  test('loadMoreContacts is a no-op once every contact is on screen', async () => {
+    useContactsStore.setState({
+      contacts: [{ id: 'c1', user_id: 'u1', peer_id: 'p1', peer: { id: 'p1' } }] as never,
+      contactsTotal: 1,
+    });
+
+    await useContactsStore.getState().loadMoreContacts();
+
+    expect(get).not.toHaveBeenCalled();
   });
 
   test('addContact posts, reloads, and closes the dialog on success', async () => {

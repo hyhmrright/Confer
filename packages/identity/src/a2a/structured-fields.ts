@@ -1,4 +1,4 @@
-import { type Result, err, ok } from '@confer/shared';
+import { err, ok, type Result } from '@confer/shared';
 
 // Minimal RFC 8941 structured-fields helpers, scoped to exactly the subset the
 // A2A RFC 9421 wire format needs: a single-member dictionary labelled `sig1`

@@ -2,8 +2,12 @@
   "name": "@confer/mcp-a2a",
   "version": "0.1.0",
   "type": "module",
-  "bin": { "confer-mcp-a2a": "./src/server.ts" },
-  "exports": { ".": "./src/server.ts" },
+  "bin": {
+    "confer-mcp-a2a": "./src/server.ts"
+  },
+  "exports": {
+    ".": "./src/server.ts"
+  },
   "scripts": {
     "dev": "bun run ./src/server.ts",
     "build": "bun build ./src/server.ts --outdir ./dist --target bun",
@@ -11,7 +15,7 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0",
-    "zod": "^3.24.0"
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "zod": "^4.4.3"
   }
 }

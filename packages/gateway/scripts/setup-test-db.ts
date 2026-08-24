@@ -2,7 +2,7 @@
 // tests by applying every Drizzle migration SQL file in order against a clean
 // `public` schema. Re-runnable: it drops and rebuilds the schema each time, so
 // it doesn't depend on the migration tracking table.
-import { readFile, readdir } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import postgres from 'postgres';

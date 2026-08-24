@@ -10,7 +10,7 @@ import { MemoryPage } from './MemoryPage.js';
 /* ── Contacts panel ── */
 function ContactsPanel() {
   const { t } = useTranslation();
-  const { openDialog } = useContactsStore();
+  const openDialog = useContactsStore((s) => s.openDialog);
   return (
     <div className="flex flex-col h-full min-h-0">
       <div className="px-4 py-3 flex items-center justify-between border-b border-dark-border shrink-0">
@@ -36,16 +36,26 @@ function ContactsPanel() {
 }
 
 /* ── Root sidebar ── */
-export function Sidebar({ tab, onLogout }: { tab: Tab; onLogout: () => void }) {
+export function Sidebar({
+  tab,
+  onLogout,
+  onNavigate,
+}: {
+  tab: Tab;
+  onLogout: () => void;
+  /** Called when a panel selection should dismiss the narrow-viewport drawer. */
+  onNavigate?: () => void;
+}) {
   const { t } = useTranslation();
   return (
-    <aside className="w-[260px] shrink-0 flex flex-col bg-dark-panel border-r border-dark-border overflow-hidden">
+    // Full width inside the drawer below md, back to its fixed column above it.
+    <aside className="w-[calc(100vw-52px)] max-w-[320px] md:w-[260px] shrink-0 flex flex-col bg-dark-panel border-r border-dark-border overflow-hidden">
       {/* Page-as-Panel: MemoryPage / KnowledgePage are full-height list views
           authored to fit this 260px sidebar column (they own their own header +
           scroll area), so they render here as sidebar panels rather than routed
           pages. The "Page" suffix is historical — treat them as panels here. */}
       {tab === 'conversations' ? (
-        <ConversationsPanel />
+        <ConversationsPanel onNavigate={onNavigate} />
       ) : tab === 'contacts' ? (
         <ContactsPanel />
       ) : tab === 'memory' ? (

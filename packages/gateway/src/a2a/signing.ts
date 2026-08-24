@@ -1,4 +1,4 @@
-import { type EncryptedValue, type Result, decrypt, err, ok } from '@confer/shared';
+import { decrypt, type EncryptedValue, err, ok, type Result } from '@confer/shared';
 import { and, eq } from 'drizzle-orm';
 import { getDb } from '../db/connection.js';
 import { keypairs } from '../db/schema.js';

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, test } from 'bun:test';
 import { newId } from '@confer/shared';
 import { getDb } from '../db/connection.js';
 import { peerAgents, peerContacts } from '../db/schema.js';
-import { type SeededUser, get, put, resetDb, seedUser } from '../test/helpers.js';
+import { get, put, resetDb, type SeededUser, seedUser } from '../test/helpers.js';
 
 const PROJECTS = '/api/v1/projects';
 const PROJECT = 'confer';
@@ -136,6 +136,22 @@ describe('projects memory', () => {
     const res = await put(`${PROJECTS}/${PROJECT}/peers/${peerId}/facts`, {
       token: user.token,
       body: { facts_md: 'x' },
+    });
+    expect(res.status).toBe(403);
+    expect((await res.json()).error.code).toBe('not_a_contact');
+  });
+
+  // The cross-tenant shape of the same gate, and the one that actually bit us:
+  // `peer_agents` rows are global, so a peer connected to SOMEONE ELSE has a
+  // real, existing peer_id. A check that only asks "is this peer connected?"
+  // passes here; only the owner-scoped check in `lib/tenant.ts` rejects it.
+  test('a peer connected to another user is still not this user’s contact (403)', async () => {
+    const other = await seedUser();
+    const peerId = await seedPeer({ contactOf: other.id });
+
+    const res = await put(`${PROJECTS}/${PROJECT}/peers/${peerId}/facts`, {
+      token: user.token,
+      body: { facts_md: 'leaked' },
     });
     expect(res.status).toBe(403);
     expect((await res.json()).error.code).toBe('not_a_contact');

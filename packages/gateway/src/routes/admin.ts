@@ -8,8 +8,9 @@ import {
   adminUserListQuerySchema,
   newId,
 } from '@confer/shared';
-import { count, desc, eq, like } from 'drizzle-orm';
-import { Hono } from 'hono';
+import { count, desc, eq, like, type SQL } from 'drizzle-orm';
+import type { PgTable } from 'drizzle-orm/pg-core';
+import { type Context, Hono } from 'hono';
 import { getDb } from '../db/connection.js';
 import {
   agents,
@@ -43,23 +44,54 @@ function toInet(value: string | undefined): string | null {
   return isIPv4 || isIPv6 ? first : null;
 }
 
-// Record an admin write action. Stores only ids/flags in details_json — never
-// PII (per the forbidden list).
+// Record an admin write action. Actor and client IP both come off the request
+// context, so no call site has to remember to thread them through. Stores only
+// ids/flags in details_json — never PII (per the forbidden list).
 async function writeAudit(
-  actorId: string,
+  c: Context<AppEnv>,
   action: string,
-  ip: string | undefined,
   details: Record<string, unknown>,
 ): Promise<void> {
   await getDb()
     .insert(auditLog)
     .values({
       id: newId(),
-      user_id: actorId,
+      user_id: c.get('user').sub,
       action,
       details_json: details,
-      ip_address: toInet(ip),
+      ip_address: toInet(c.req.header('x-forwarded-for') ?? undefined),
     });
+}
+
+// Every admin write is the same event: some field of some row went from
+// `before` to `after`. Audit it only when it actually moved — a PATCH that
+// re-applies the current value, or omits the field entirely, is a no-op rather
+// than an auditable event. Named fields rather than positional because all five
+// are strings — a swapped pair would silently write a wrong audit row.
+async function auditChange(
+  c: Context<AppEnv>,
+  change: {
+    action: string;
+    targetId: string;
+    before: string;
+    after: string | undefined;
+    reason: string | undefined;
+  },
+): Promise<void> {
+  if (change.after === undefined || change.after === change.before) return;
+  await writeAudit(c, change.action, {
+    target_id: change.targetId,
+    before: change.before,
+    after: change.after,
+    reason: change.reason,
+  });
+}
+
+// Count every row of a table (optionally filtered). Drizzle returns a one-row
+// result set; this unwraps it so list handlers read as `total: await countOf(x)`.
+async function countOf(table: PgTable, where?: SQL): Promise<number> {
+  const [row] = await getDb().select({ value: count() }).from(table).where(where);
+  return row?.value ?? 0;
 }
 
 adminRoutes.get('/users', async (c) => {
@@ -85,13 +117,11 @@ adminRoutes.get('/users', async (c) => {
     .limit(query.page_size)
     .offset(offset);
 
-  const [totalRow] = await db.select({ value: count() }).from(users).where(where);
-
   return c.json({
     users: rows,
     page: query.page,
     page_size: query.page_size,
-    total: totalRow?.value ?? 0,
+    total: await countOf(users, where),
   });
 });
 
@@ -131,47 +161,37 @@ adminRoutes.patch('/users/:id', async (c) => {
     await db.delete(sessions).where(eq(sessions.user_id, targetId));
   }
 
-  const ip = c.req.header('x-forwarded-for') ?? undefined;
-  if (body.role !== undefined && body.role !== target.role) {
-    await writeAudit(actor.sub, 'admin.user.role', ip, {
-      target_id: targetId,
-      before: target.role,
-      after: body.role,
-      reason: body.reason,
-    });
-  }
-  if (body.status !== undefined && body.status !== target.status) {
-    await writeAudit(
-      actor.sub,
-      `admin.user.${body.status === 'disabled' ? 'disable' : 'enable'}`,
-      ip,
-      {
-        target_id: targetId,
-        before: target.status,
-        after: body.status,
-        reason: body.reason,
-      },
-    );
-  }
+  await auditChange(c, {
+    action: 'admin.user.role',
+    targetId,
+    before: target.role,
+    after: body.role,
+    reason: body.reason,
+  });
+  await auditChange(c, {
+    action: `admin.user.${body.status === 'disabled' ? 'disable' : 'enable'}`,
+    targetId,
+    before: target.status,
+    after: body.status,
+    reason: body.reason,
+  });
 
   return c.json({ ok: true });
 });
 
 adminRoutes.get('/stats', async (c) => {
-  const db = getDb();
-
-  const [u, conv, contact, msg] = await Promise.all([
-    db.select({ value: count() }).from(users),
-    db.select({ value: count() }).from(conversations),
-    db.select({ value: count() }).from(peerContacts),
-    db.select({ value: count() }).from(messages),
+  const [userCount, conversationCount, contactCount, messageCount] = await Promise.all([
+    countOf(users),
+    countOf(conversations),
+    countOf(peerContacts),
+    countOf(messages),
   ]);
 
   return c.json({
-    users: u[0]?.value ?? 0,
-    conversations: conv[0]?.value ?? 0,
-    contacts: contact[0]?.value ?? 0,
-    messages: msg[0]?.value ?? 0,
+    users: userCount,
+    conversations: conversationCount,
+    contacts: contactCount,
+    messages: messageCount,
   });
 });
 
@@ -198,13 +218,11 @@ adminRoutes.get('/agents', async (c) => {
     .limit(query.page_size)
     .offset(offset);
 
-  const [totalRow] = await db.select({ value: count() }).from(agents);
-
   return c.json({
     agents: rows,
     page: query.page,
     page_size: query.page_size,
-    total: totalRow?.value ?? 0,
+    total: await countOf(agents),
   });
 });
 
@@ -212,7 +230,6 @@ adminRoutes.get('/agents', async (c) => {
 // document is intentionally untouched (Contract 3 stays clear). Read-path
 // filtering hides suspended agents from public discovery.
 adminRoutes.patch('/agents/:id', async (c) => {
-  const actor = c.get('user');
   const targetId = c.req.param('id');
   const body = adminUpdateAgentSchema.parse(await c.req.json());
   const db = getDb();
@@ -231,14 +248,13 @@ adminRoutes.patch('/agents/:id', async (c) => {
     .set({ status: body.status, updated_at: new Date() })
     .where(eq(agents.id, targetId));
 
-  if (body.status !== target.status) {
-    await writeAudit(
-      actor.sub,
-      `admin.agent.${body.status === 'suspended' ? 'suspend' : 'restore'}`,
-      c.req.header('x-forwarded-for') ?? undefined,
-      { target_id: targetId, before: target.status, after: body.status, reason: body.reason },
-    );
-  }
+  await auditChange(c, {
+    action: `admin.agent.${body.status === 'suspended' ? 'suspend' : 'restore'}`,
+    targetId,
+    before: target.status,
+    after: body.status,
+    reason: body.reason,
+  });
 
   return c.json({ ok: true });
 });
@@ -264,25 +280,22 @@ adminRoutes.get('/conversations', async (c) => {
     .limit(query.page_size)
     .offset(offset);
 
-  const [totalRow] = await db.select({ value: count() }).from(conversations);
-
   return c.json({
     conversations: rows,
     page: query.page,
     page_size: query.page_size,
-    total: totalRow?.value ?? 0,
+    total: await countOf(conversations),
   });
 });
 
 // Hide or restore a conversation. Soft — never deletes data.
 adminRoutes.patch('/conversations/:id', async (c) => {
-  const actor = c.get('user');
   const targetId = c.req.param('id');
   const body = adminModerateSchema.parse(await c.req.json());
   const db = getDb();
 
   const [target] = await db
-    .select({ id: conversations.id, moderation_status: conversations.moderation_status })
+    .select({ moderation_status: conversations.moderation_status })
     .from(conversations)
     .where(eq(conversations.id, targetId))
     .limit(1);
@@ -295,32 +308,25 @@ adminRoutes.patch('/conversations/:id', async (c) => {
     .set({ moderation_status: body.moderation_status, updated_at: new Date() })
     .where(eq(conversations.id, targetId));
 
-  if (body.moderation_status !== target.moderation_status) {
-    await writeAudit(
-      actor.sub,
-      `admin.conversation.${body.moderation_status === 'hidden' ? 'hide' : 'restore'}`,
-      c.req.header('x-forwarded-for') ?? undefined,
-      {
-        target_id: targetId,
-        before: target.moderation_status,
-        after: body.moderation_status,
-        reason: body.reason,
-      },
-    );
-  }
+  await auditChange(c, {
+    action: `admin.conversation.${body.moderation_status === 'hidden' ? 'hide' : 'restore'}`,
+    targetId,
+    before: target.moderation_status,
+    after: body.moderation_status,
+    reason: body.reason,
+  });
 
   return c.json({ ok: true });
 });
 
 // Hide or restore a single message. Soft — never deletes data.
 adminRoutes.patch('/messages/:id', async (c) => {
-  const actor = c.get('user');
   const targetId = c.req.param('id');
   const body = adminModerateSchema.parse(await c.req.json());
   const db = getDb();
 
   const [target] = await db
-    .select({ id: messages.id, moderation_status: messages.moderation_status })
+    .select({ moderation_status: messages.moderation_status })
     .from(messages)
     .where(eq(messages.id, targetId))
     .limit(1);
@@ -333,19 +339,13 @@ adminRoutes.patch('/messages/:id', async (c) => {
     .set({ moderation_status: body.moderation_status, updated_at: new Date() })
     .where(eq(messages.id, targetId));
 
-  if (body.moderation_status !== target.moderation_status) {
-    await writeAudit(
-      actor.sub,
-      `admin.message.${body.moderation_status === 'hidden' ? 'hide' : 'restore'}`,
-      c.req.header('x-forwarded-for') ?? undefined,
-      {
-        target_id: targetId,
-        before: target.moderation_status,
-        after: body.moderation_status,
-        reason: body.reason,
-      },
-    );
-  }
+  await auditChange(c, {
+    action: `admin.message.${body.moderation_status === 'hidden' ? 'hide' : 'restore'}`,
+    targetId,
+    before: target.moderation_status,
+    after: body.moderation_status,
+    reason: body.reason,
+  });
 
   return c.json({ ok: true });
 });
@@ -358,7 +358,6 @@ adminRoutes.get('/config', async (c) => {
 });
 
 adminRoutes.patch('/config', async (c) => {
-  const actor = c.get('user');
   const body = adminUpdateConfigSchema.parse(await c.req.json());
 
   const before = await getAppConfig();
@@ -372,10 +371,7 @@ adminRoutes.patch('/config', async (c) => {
 
   const after = await getAppConfig();
 
-  await writeAudit(actor.sub, 'admin.config.update', c.req.header('x-forwarded-for') ?? undefined, {
-    before,
-    after,
-  });
+  await writeAudit(c, 'admin.config.update', { before, after });
 
   return c.json({ config: after });
 });

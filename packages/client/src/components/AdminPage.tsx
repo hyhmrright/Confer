@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
-import { type TranslationKey, dateLocale } from '../i18n/index.js';
+import { dateLocale, type TranslationKey } from '../i18n/index.js';
+import { FOCUS_RING } from '../lib/styles.js';
 import {
   type AdminAgent,
   type AdminConversation,
@@ -9,13 +9,91 @@ import {
   useAdminStore,
 } from '../stores/admin.js';
 import { useAuthStore } from '../stores/auth.js';
-import { ArrowLeft, MessageCircle, Settings, Shield, Users } from './Icons.js';
+import { MessageCircle, Settings, Shield, Users } from './Icons.js';
+import { type PageTab, TabbedPage } from './TabbedPage.js';
 
 type Tab = 'overview' | 'users' | 'content' | 'config';
 
+// Every moderation action in this page is the same interaction: confirm, then
+// run while the row's buttons are disabled. Sharing it keeps a row from
+// double-submitting because someone forgot the `finally`.
+function useConfirmedAction() {
+  const { t } = useTranslation();
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  const run = async (confirmKey: TranslationKey, action: () => Promise<void>) => {
+    if (!window.confirm(t(confirmKey))) return;
+    setBusy(true);
+    setFailed(false);
+    try {
+      await action();
+    } catch {
+      // The store's write actions intentionally don't swallow errors, and the
+      // page-level banner is wired only to the *load* path. Without catching
+      // here the rejection escapes an un-awaited onClick: the row simply
+      // re-enables and the admin is left believing a moderation action applied
+      // when it never did. The reason isn't shown — a gateway message would
+      // reach en/ja admins in the wrong language — so this reports the failure
+      // and leaves the retry to them.
+      setFailed(true);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return { busy, failed, run };
+}
+
+// Inline "that didn't apply" marker for a row whose last action failed. It sits
+// in a flex button row (users) and in a plain right-aligned cell (agents,
+// conversations), hence both the flex and the inline alignment class.
+function ActionFailed() {
+  const { t } = useTranslation();
+  return (
+    <span className="text-[11px] text-red-400 self-center align-middle mr-2">
+      {t('admin.actionError')}
+    </span>
+  );
+}
+
+// A table-row action link. `tone` is the only thing that varies between them;
+// everything else (size, hover, disabled treatment) is shared by all six.
+function RowAction({
+  tone,
+  disabled,
+  onClick,
+  children,
+}: {
+  tone: 'neutral' | 'primary' | 'positive' | 'destructive';
+  disabled: boolean;
+  onClick: () => void;
+  children: string;
+}) {
+  const toneClass = {
+    neutral: 'text-ink-secondary',
+    primary: 'text-primary-400',
+    positive: 'text-green-400',
+    destructive: 'text-red-400',
+  }[tone];
+
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={`text-xs px-2 py-1 rounded-md ${toneClass} hover:bg-dark-hover disabled:opacity-40`}
+    >
+      {children}
+    </button>
+  );
+}
+
 function OperationsOverview() {
   const { t } = useTranslation();
-  const { stats, loadingStats, loadStats } = useAdminStore();
+  const stats = useAdminStore((s) => s.stats);
+  const loadingStats = useAdminStore((s) => s.loadingStats);
+  const loadStats = useAdminStore((s) => s.loadStats);
 
   useEffect(() => {
     loadStats();
@@ -44,19 +122,9 @@ function OperationsOverview() {
 
 function UserRow({ u, selfId }: { u: AdminUser; selfId: string | undefined }) {
   const { t } = useTranslation();
-  const { updateUser } = useAdminStore();
-  const [busy, setBusy] = useState(false);
+  const updateUser = useAdminStore((s) => s.updateUser);
+  const { busy, failed, run } = useConfirmedAction();
   const isSelf = u.id === selfId;
-
-  const run = async (patch: { role?: string; status?: string }, confirmKey: TranslationKey) => {
-    if (!window.confirm(t(confirmKey))) return;
-    setBusy(true);
-    try {
-      await updateUser(u.id, patch);
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const roleLabel = u.role === 'admin' ? t('admin.roleAdmin') : t('admin.roleMember');
   const statusLabel = u.status === 'disabled' ? t('admin.statusDisabled') : t('admin.statusActive');
@@ -83,43 +151,48 @@ function UserRow({ u, selfId }: { u: AdminUser; selfId: string | undefined }) {
           <span className="text-[11px] text-ink-muted">{t('admin.selfHint')}</span>
         ) : (
           <div className="flex gap-2 justify-end">
+            {failed && <ActionFailed />}
             {u.role === 'admin' ? (
-              <button
-                type="button"
+              <RowAction
+                tone="neutral"
                 disabled={busy}
-                onClick={() => run({ role: 'member' }, 'admin.confirmDemote')}
-                className="text-xs px-2 py-1 rounded-md text-ink-secondary hover:bg-dark-hover disabled:opacity-40"
+                onClick={() =>
+                  run('admin.confirmDemote', () => updateUser(u.id, { role: 'member' }))
+                }
               >
                 {t('admin.actionDemote')}
-              </button>
+              </RowAction>
             ) : (
-              <button
-                type="button"
+              <RowAction
+                tone="primary"
                 disabled={busy}
-                onClick={() => run({ role: 'admin' }, 'admin.confirmPromote')}
-                className="text-xs px-2 py-1 rounded-md text-primary-400 hover:bg-dark-hover disabled:opacity-40"
+                onClick={() =>
+                  run('admin.confirmPromote', () => updateUser(u.id, { role: 'admin' }))
+                }
               >
                 {t('admin.actionPromote')}
-              </button>
+              </RowAction>
             )}
             {u.status === 'disabled' ? (
-              <button
-                type="button"
+              <RowAction
+                tone="positive"
                 disabled={busy}
-                onClick={() => run({ status: 'active' }, 'admin.confirmEnable')}
-                className="text-xs px-2 py-1 rounded-md text-green-400 hover:bg-dark-hover disabled:opacity-40"
+                onClick={() =>
+                  run('admin.confirmEnable', () => updateUser(u.id, { status: 'active' }))
+                }
               >
                 {t('admin.actionEnable')}
-              </button>
+              </RowAction>
             ) : (
-              <button
-                type="button"
+              <RowAction
+                tone="destructive"
                 disabled={busy}
-                onClick={() => run({ status: 'disabled' }, 'admin.confirmDisable')}
-                className="text-xs px-2 py-1 rounded-md text-red-400 hover:bg-dark-hover disabled:opacity-40"
+                onClick={() =>
+                  run('admin.confirmDisable', () => updateUser(u.id, { status: 'disabled' }))
+                }
               >
                 {t('admin.actionDisable')}
-              </button>
+              </RowAction>
             )}
           </div>
         )}
@@ -128,17 +201,67 @@ function UserRow({ u, selfId }: { u: AdminUser; selfId: string | undefined }) {
   );
 }
 
+// Shared by all three admin lists. Extracted when Content moderation turned out
+// to load `{page: 1}` and then render no controls at all, leaving every agent
+// and conversation past the twentieth unreachable — the store had been tracking
+// the totals for it the whole time.
+function Pager({
+  total,
+  page,
+  pageSize,
+  busy,
+  onPage,
+}: {
+  total: number;
+  page: number;
+  pageSize: number;
+  busy: boolean;
+  onPage: (page: number) => void;
+}) {
+  const { t } = useTranslation();
+  const lastPage = Math.max(1, Math.ceil(total / pageSize));
+  const btn = `text-xs px-3 py-1.5 rounded-md text-ink-secondary hover:bg-dark-hover disabled:opacity-40 ${FOCUS_RING}`;
+
+  return (
+    <div className="flex items-center justify-between pt-2">
+      <span className="text-xs text-ink-muted">{t('admin.total', { count: total })}</span>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          disabled={page <= 1 || busy}
+          onClick={() => onPage(page - 1)}
+          className={btn}
+        >
+          {t('admin.prev')}
+        </button>
+        <button
+          type="button"
+          disabled={page >= lastPage || busy}
+          onClick={() => onPage(page + 1)}
+          className={btn}
+        >
+          {t('admin.next')}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function UserManagement() {
   const { t } = useTranslation();
-  const { users, total, page, pageSize, loadingUsers, error, loadUsers } = useAdminStore();
+  const users = useAdminStore((s) => s.users);
+  const total = useAdminStore((s) => s.total);
+  const page = useAdminStore((s) => s.page);
+  const pageSize = useAdminStore((s) => s.pageSize);
+  const loadingUsers = useAdminStore((s) => s.loadingUsers);
+  const error = useAdminStore((s) => s.error);
+  const loadUsers = useAdminStore((s) => s.loadUsers);
   const selfId = useAuthStore((s) => s.user?.id);
   const [search, setSearch] = useState('');
 
   useEffect(() => {
     loadUsers({ page: 1 });
   }, [loadUsers]);
-
-  const lastPage = Math.max(1, Math.ceil(total / pageSize));
 
   return (
     <div className="max-w-3xl space-y-4">
@@ -153,83 +276,61 @@ function UserManagement() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder={t('admin.searchPlaceholder')}
-          className="w-64 px-3 py-2 bg-dark-input border border-dark-border rounded-lg text-sm text-ink-primary placeholder:text-ink-muted focus:outline-none focus:border-primary-600/40"
+          className={`w-64 px-3 py-2 bg-dark-input border border-dark-border rounded-lg text-sm text-ink-primary placeholder:text-ink-muted ${FOCUS_RING}`}
         />
       </form>
 
       {error && <p className="text-xs text-red-400">{t('admin.loadError')}</p>}
 
-      <table className="w-full">
-        <thead>
-          <tr className="text-left">
-            <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
-              {t('admin.usersColUser')}
-            </th>
-            <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
-              {t('admin.usersColRole')}
-            </th>
-            <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
-              {t('admin.usersColStatus')}
-            </th>
-            <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
-              {t('admin.usersColCreated')}
-            </th>
-            <th className="py-2 px-3 text-[11px] font-medium text-ink-muted text-right">
-              {t('admin.usersColActions')}
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {users.map((u) => (
-            <UserRow key={u.id} u={u} selfId={selfId} />
-          ))}
-        </tbody>
-      </table>
+      <div className="overflow-x-auto scrollbar-thin">
+        <table className="w-full min-w-[520px]">
+          <thead>
+            <tr className="text-left">
+              <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
+                {t('admin.usersColUser')}
+              </th>
+              <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
+                {t('admin.usersColRole')}
+              </th>
+              <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
+                {t('admin.usersColStatus')}
+              </th>
+              <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
+                {t('admin.usersColCreated')}
+              </th>
+              <th className="py-2 px-3 text-[11px] font-medium text-ink-muted text-right">
+                {t('admin.usersColActions')}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {users.map((u) => (
+              <UserRow key={u.id} u={u} selfId={selfId} />
+            ))}
+          </tbody>
+        </table>
+      </div>
 
       {!loadingUsers && users.length === 0 && (
         <p className="text-sm text-ink-muted py-4">{t('admin.empty')}</p>
       )}
 
-      <div className="flex items-center justify-between pt-2">
-        <span className="text-xs text-ink-muted">{t('admin.total', { count: total })}</span>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            disabled={page <= 1 || loadingUsers}
-            onClick={() => loadUsers({ page: page - 1 })}
-            className="text-xs px-3 py-1.5 rounded-md text-ink-secondary hover:bg-dark-hover disabled:opacity-40"
-          >
-            {t('admin.prev')}
-          </button>
-          <button
-            type="button"
-            disabled={page >= lastPage || loadingUsers}
-            onClick={() => loadUsers({ page: page + 1 })}
-            className="text-xs px-3 py-1.5 rounded-md text-ink-secondary hover:bg-dark-hover disabled:opacity-40"
-          >
-            {t('admin.next')}
-          </button>
-        </div>
-      </div>
+      <Pager
+        total={total}
+        page={page}
+        pageSize={pageSize}
+        busy={loadingUsers}
+        onPage={(next) => loadUsers({ page: next })}
+      />
     </div>
   );
 }
 
 function AgentRow({ a }: { a: AdminAgent }) {
   const { t } = useTranslation();
-  const { updateAgent } = useAdminStore();
-  const [busy, setBusy] = useState(false);
+  const updateAgent = useAdminStore((s) => s.updateAgent);
+  const { busy, failed, run } = useConfirmedAction();
   const suspended = a.status === 'suspended';
-
-  const run = async (status: string, confirmKey: TranslationKey) => {
-    if (!window.confirm(t(confirmKey))) return;
-    setBusy(true);
-    try {
-      await updateAgent(a.id, status);
-    } finally {
-      setBusy(false);
-    }
-  };
 
   return (
     <tr className="border-t border-dark-border">
@@ -243,24 +344,23 @@ function AgentRow({ a }: { a: AdminAgent }) {
         </span>
       </td>
       <td className="py-2.5 px-3 text-right">
+        {failed && <ActionFailed />}
         {suspended ? (
-          <button
-            type="button"
+          <RowAction
+            tone="positive"
             disabled={busy}
-            onClick={() => run('active', 'admin.confirmRestoreAgent')}
-            className="text-xs px-2 py-1 rounded-md text-green-400 hover:bg-dark-hover disabled:opacity-40"
+            onClick={() => run('admin.confirmRestoreAgent', () => updateAgent(a.id, 'active'))}
           >
             {t('admin.actionRestore')}
-          </button>
+          </RowAction>
         ) : (
-          <button
-            type="button"
+          <RowAction
+            tone="destructive"
             disabled={busy}
-            onClick={() => run('suspended', 'admin.confirmSuspend')}
-            className="text-xs px-2 py-1 rounded-md text-red-400 hover:bg-dark-hover disabled:opacity-40"
+            onClick={() => run('admin.confirmSuspend', () => updateAgent(a.id, 'suspended'))}
           >
             {t('admin.actionSuspend')}
-          </button>
+          </RowAction>
         )}
       </td>
     </tr>
@@ -269,19 +369,9 @@ function AgentRow({ a }: { a: AdminAgent }) {
 
 function ConversationRow({ conv }: { conv: AdminConversation }) {
   const { t } = useTranslation();
-  const { updateConversation } = useAdminStore();
-  const [busy, setBusy] = useState(false);
+  const updateConversation = useAdminStore((s) => s.updateConversation);
+  const { busy, failed, run } = useConfirmedAction();
   const hidden = conv.moderation_status === 'hidden';
-
-  const run = async (status: string, confirmKey: TranslationKey) => {
-    if (!window.confirm(t(confirmKey))) return;
-    setBusy(true);
-    try {
-      await updateConversation(conv.id, status);
-    } finally {
-      setBusy(false);
-    }
-  };
 
   return (
     <tr className="border-t border-dark-border">
@@ -298,24 +388,23 @@ function ConversationRow({ conv }: { conv: AdminConversation }) {
         {new Date(conv.created_at).toLocaleDateString(dateLocale())}
       </td>
       <td className="py-2.5 px-3 text-right">
+        {failed && <ActionFailed />}
         {hidden ? (
-          <button
-            type="button"
+          <RowAction
+            tone="positive"
             disabled={busy}
-            onClick={() => run('visible', 'admin.confirmUnhide')}
-            className="text-xs px-2 py-1 rounded-md text-green-400 hover:bg-dark-hover disabled:opacity-40"
+            onClick={() => run('admin.confirmUnhide', () => updateConversation(conv.id, 'visible'))}
           >
             {t('admin.actionUnhide')}
-          </button>
+          </RowAction>
         ) : (
-          <button
-            type="button"
+          <RowAction
+            tone="destructive"
             disabled={busy}
-            onClick={() => run('hidden', 'admin.confirmHide')}
-            className="text-xs px-2 py-1 rounded-md text-red-400 hover:bg-dark-hover disabled:opacity-40"
+            onClick={() => run('admin.confirmHide', () => updateConversation(conv.id, 'hidden'))}
           >
             {t('admin.actionHide')}
-          </button>
+          </RowAction>
         )}
       </td>
     </tr>
@@ -324,7 +413,18 @@ function ConversationRow({ conv }: { conv: AdminConversation }) {
 
 function ContentModeration() {
   const { t } = useTranslation();
-  const { agents, conversations, error, loadAgents, loadConversations } = useAdminStore();
+  const agents = useAdminStore((s) => s.agents);
+  const agentsTotal = useAdminStore((s) => s.agentsTotal);
+  const agentsPage = useAdminStore((s) => s.agentsPage);
+  const loadingAgents = useAdminStore((s) => s.loadingAgents);
+  const conversations = useAdminStore((s) => s.conversations);
+  const conversationsTotal = useAdminStore((s) => s.conversationsTotal);
+  const conversationsPage = useAdminStore((s) => s.conversationsPage);
+  const loadingConversations = useAdminStore((s) => s.loadingConversations);
+  const pageSize = useAdminStore((s) => s.pageSize);
+  const error = useAdminStore((s) => s.error);
+  const loadAgents = useAdminStore((s) => s.loadAgents);
+  const loadConversations = useAdminStore((s) => s.loadConversations);
 
   useEffect(() => {
     loadAgents({ page: 1 });
@@ -337,59 +437,77 @@ function ContentModeration() {
 
       <section>
         <h3 className="text-sm font-medium text-ink-secondary mb-3">{t('admin.contentAgents')}</h3>
-        <table className="w-full">
-          <thead>
-            <tr className="text-left">
-              <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
-                {t('admin.agentColName')}
-              </th>
-              <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
-                {t('admin.agentColStatus')}
-              </th>
-              <th className="py-2 px-3 text-[11px] font-medium text-ink-muted text-right">
-                {t('admin.agentColActions')}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {agents.map((a) => (
-              <AgentRow key={a.id} a={a} />
-            ))}
-          </tbody>
-        </table>
+        <div className="overflow-x-auto scrollbar-thin">
+          <table className="w-full min-w-[520px]">
+            <thead>
+              <tr className="text-left">
+                <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
+                  {t('admin.agentColName')}
+                </th>
+                <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
+                  {t('admin.agentColStatus')}
+                </th>
+                <th className="py-2 px-3 text-[11px] font-medium text-ink-muted text-right">
+                  {t('admin.agentColActions')}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {agents.map((a) => (
+                <AgentRow key={a.id} a={a} />
+              ))}
+            </tbody>
+          </table>
+        </div>
         {agents.length === 0 && <p className="text-sm text-ink-muted py-4">{t('admin.empty')}</p>}
+        <Pager
+          total={agentsTotal}
+          page={agentsPage}
+          pageSize={pageSize}
+          busy={loadingAgents}
+          onPage={(next) => loadAgents({ page: next })}
+        />
       </section>
 
       <section>
         <h3 className="text-sm font-medium text-ink-secondary mb-3">
           {t('admin.contentConversations')}
         </h3>
-        <table className="w-full">
-          <thead>
-            <tr className="text-left">
-              <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
-                {t('admin.convColName')}
-              </th>
-              <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
-                {t('admin.convColStatus')}
-              </th>
-              <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
-                {t('admin.convColCreated')}
-              </th>
-              <th className="py-2 px-3 text-[11px] font-medium text-ink-muted text-right">
-                {t('admin.convColActions')}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {conversations.map((conv) => (
-              <ConversationRow key={conv.id} conv={conv} />
-            ))}
-          </tbody>
-        </table>
+        <div className="overflow-x-auto scrollbar-thin">
+          <table className="w-full min-w-[520px]">
+            <thead>
+              <tr className="text-left">
+                <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
+                  {t('admin.convColName')}
+                </th>
+                <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
+                  {t('admin.convColStatus')}
+                </th>
+                <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
+                  {t('admin.convColCreated')}
+                </th>
+                <th className="py-2 px-3 text-[11px] font-medium text-ink-muted text-right">
+                  {t('admin.convColActions')}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {conversations.map((conv) => (
+                <ConversationRow key={conv.id} conv={conv} />
+              ))}
+            </tbody>
+          </table>
+        </div>
         {conversations.length === 0 && (
           <p className="text-sm text-ink-muted py-4">{t('admin.empty')}</p>
         )}
+        <Pager
+          total={conversationsTotal}
+          page={conversationsPage}
+          pageSize={pageSize}
+          busy={loadingConversations}
+          onPage={(next) => loadConversations({ page: next })}
+        />
       </section>
     </div>
   );
@@ -397,7 +515,9 @@ function ContentModeration() {
 
 function GlobalConfig() {
   const { t } = useTranslation();
-  const { config, loadConfig, updateConfig } = useAdminStore();
+  const config = useAdminStore((s) => s.config);
+  const loadConfig = useAdminStore((s) => s.loadConfig);
+  const updateConfig = useAdminStore((s) => s.updateConfig);
   const [instanceName, setInstanceName] = useState('');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -473,7 +593,7 @@ function GlobalConfig() {
               setInstanceName(e.target.value);
               setSaved(false);
             }}
-            className="flex-1 px-3 py-2 bg-dark-input border border-dark-border rounded-lg text-sm text-ink-primary focus:outline-none focus:border-primary-600/40"
+            className={`flex-1 px-3 py-2 bg-dark-input border border-dark-border rounded-lg text-sm text-ink-primary ${FOCUS_RING}`}
           />
           <button
             type="button"
@@ -494,9 +614,8 @@ function GlobalConfig() {
 export function AdminPage() {
   const { t } = useTranslation();
   const [tab, setTab] = useState<Tab>('overview');
-  const navigate = useNavigate();
 
-  const tabs: { id: Tab; label: string; icon: typeof Shield }[] = [
+  const tabs: PageTab<Tab>[] = [
     { id: 'overview', label: t('admin.tabOverview'), icon: Shield },
     { id: 'users', label: t('admin.tabUsers'), icon: Users },
     { id: 'content', label: t('admin.tabContent'), icon: MessageCircle },
@@ -504,47 +623,11 @@ export function AdminPage() {
   ];
 
   return (
-    <div className="h-screen flex flex-col bg-dark-base">
-      <header className="h-13 bg-dark-nav border-b border-dark-border flex items-center px-4 shrink-0">
-        <button
-          type="button"
-          onClick={() => navigate('/')}
-          className="p-1.5 -ml-1 text-ink-muted hover:text-ink-secondary hover:bg-dark-hover rounded-lg transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4" />
-        </button>
-        <h1 className="font-semibold text-sm text-ink-primary ml-2">{t('admin.title')}</h1>
-      </header>
-
-      <div className="flex-1 flex overflow-hidden">
-        <nav className="w-52 bg-dark-panel border-r border-dark-border p-2 space-y-0.5 shrink-0">
-          {tabs.map(({ id, label, icon: Icon }) => (
-            <button
-              type="button"
-              key={id}
-              onClick={() => setTab(id)}
-              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
-                tab === id
-                  ? 'bg-primary-600/15 text-primary-400 font-medium'
-                  : 'text-ink-secondary hover:bg-dark-hover hover:text-ink-primary'
-              }`}
-            >
-              <Icon className="w-4 h-4" />
-              {label}
-            </button>
-          ))}
-        </nav>
-
-        <div className="flex-1 overflow-y-auto scrollbar-thin p-8 bg-dark-base">
-          <h2 className="text-base font-semibold text-ink-primary mb-6">
-            {tabs.find((item) => item.id === tab)?.label}
-          </h2>
-          {tab === 'overview' && <OperationsOverview />}
-          {tab === 'users' && <UserManagement />}
-          {tab === 'content' && <ContentModeration />}
-          {tab === 'config' && <GlobalConfig />}
-        </div>
-      </div>
-    </div>
+    <TabbedPage title={t('admin.title')} tabs={tabs} activeTab={tab} onTabChange={setTab}>
+      {tab === 'overview' && <OperationsOverview />}
+      {tab === 'users' && <UserManagement />}
+      {tab === 'content' && <ContentModeration />}
+      {tab === 'config' && <GlobalConfig />}
+    </TabbedPage>
   );
 }

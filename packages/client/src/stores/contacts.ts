@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import i18n from '../i18n/index.js';
 import { api } from '../lib/api.js';
 import { captureError } from '../lib/error.js';
+import { appendNew } from '../lib/list.js';
 
 interface PeerAgent {
   id: string;
@@ -32,17 +33,29 @@ interface Contact {
 // the `peer` join, so the row they return is peer-less.
 type PeerlessContact = Omit<Contact, 'peer'>;
 
+// One request's worth of contacts. The gateway caps `limit` at 100; this is the
+// size of a "load more" step, not a hard ceiling on how many can be shown.
+const PAGE_SIZE = 50;
+
+interface ContactList {
+  contacts: Contact[];
+  total: number;
+}
+
 interface ContactsState {
   contacts: Contact[];
+  contactsTotal: number;
   selectedContactId: string | null;
   selectedContact: Contact | null;
   dialogOpen: boolean;
   loading: boolean;
+  loadingMore: boolean;
   saving: boolean;
   error: string | null;
   success: string | null;
 
   loadContacts: () => Promise<void>;
+  loadMoreContacts: () => Promise<void>;
   addContact: (peerId: string, alias?: string) => Promise<void>;
   removeContact: (contactId: string) => Promise<void>;
   lookupByDomain: (domain: string) => Promise<PeerAgent[]>;
@@ -75,17 +88,37 @@ function mergePeerlessUpdate(
 
 export const useContactsStore = create<ContactsState>((set, get) => ({
   contacts: [],
+  contactsTotal: 0,
   selectedContactId: null,
   selectedContact: null,
   dialogOpen: false,
   loading: false,
+  loadingMore: false,
   saving: false,
   error: null,
   success: null,
 
   loadContacts: async () => {
-    const data = await api.get<{ contacts: Contact[] }>('/contacts');
-    set({ contacts: data.contacts });
+    const data = await api.get<ContactList>(`/contacts?limit=${PAGE_SIZE}&offset=0`);
+    set({ contacts: data.contacts, contactsTotal: data.total });
+  },
+
+  loadMoreContacts: async () => {
+    const { contacts, contactsTotal, loadingMore } = get();
+    if (loadingMore || contacts.length >= contactsTotal) return;
+    set({ loadingMore: true });
+    try {
+      const data = await api.get<ContactList>(
+        `/contacts?limit=${PAGE_SIZE}&offset=${contacts.length}`,
+      );
+      set((s) => ({
+        contacts: appendNew(s.contacts, data.contacts),
+        contactsTotal: data.total,
+        loadingMore: false,
+      }));
+    } catch (e) {
+      set({ loadingMore: false, error: captureError(e, 'Failed to load contacts') });
+    }
   },
 
   addContact: async (peerId, alias) => {
@@ -103,6 +136,7 @@ export const useContactsStore = create<ContactsState>((set, get) => ({
     await api.delete(`/contacts/${contactId}`);
     set((s) => ({
       contacts: s.contacts.filter((c) => c.id !== contactId),
+      contactsTotal: Math.max(0, s.contactsTotal - 1),
       selectedContactId: s.selectedContactId === contactId ? null : s.selectedContactId,
       selectedContact: s.selectedContact?.id === contactId ? null : s.selectedContact,
     }));

@@ -101,7 +101,7 @@ Infra in Docker, gateway and client with hot reload:
 
 ```bash
 bun install
-docker compose up -d    # infra only: Postgres, Redis, NATS, Qdrant, MinIO
+docker compose up -d    # infra only: Postgres, Qdrant, MinIO
 bun run db:migrate
 bun run dev
 ```
@@ -123,7 +123,7 @@ Monorepo layout, test stack, and conventions: **[`CONTRIBUTING.md`](./CONTRIBUTI
        ├── [Conversation]     messages, fan-out
        └── [Identity & A2A]   DID:web, federation
                  │
-       [PostgreSQL · Redis · NATS · Qdrant · S3]
+       [PostgreSQL · Qdrant · MinIO]
                  │
                  ▼
    External: LLM providers · MCP tool servers · Other instances' Agents
@@ -134,8 +134,8 @@ Details in [`docs/02-architecture.md`](./docs/02-architecture.md).
 ## Tech stack
 
 - **Backend**: Bun + TypeScript + Hono
-- **Client**: Tauri 2.0 + React 18 + TypeScript + Tailwind
-- **Data**: PostgreSQL 16 + Redis + NATS + Qdrant + MinIO
+- **Client**: Tauri 2.0 + React 19 + TypeScript + Tailwind
+- **Data**: PostgreSQL 16 + Qdrant + MinIO
 - **Protocols**: W3C DID, HTTP Message Signatures (RFC 9421), MCP, A2A, NANDA AgentFacts
 - **LLM**: bring your own key (Claude · GPT · DeepSeek · Qwen · GLM · Ollama)
 

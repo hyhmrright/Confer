@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { newId } from '@confer/shared';
 import { getDb } from '../db/connection.js';
 import { agents, conversationParticipants, conversations, messages } from '../db/schema.js';
-import { type SeededUser, get, mockFetch, put, resetDb, seedUser } from '../test/helpers.js';
+import { get, mockFetch, put, resetDb, type SeededUser, seedUser } from '../test/helpers.js';
 
 let user: SeededUser;
 

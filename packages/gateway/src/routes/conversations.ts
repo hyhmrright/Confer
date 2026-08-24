@@ -3,10 +3,8 @@ import { and, desc, eq, inArray, lt } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { getDb } from '../db/connection.js';
 import { conversationParticipants, conversations, messages } from '../db/schema.js';
-import {
-  assertIsConversationParticipant,
-  assertOwnsConversation,
-} from '../lib/conversation-auth.js';
+import { parseLimit } from '../lib/pagination.js';
+import { assertIsConversationParticipant, assertOwnsConversation } from '../lib/tenant.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rate-limit.js';
 import type { AppEnv } from '../types.js';
@@ -102,7 +100,7 @@ conversationRoutes.get('/:id/messages', async (c) => {
   const db = getDb();
   const convId = c.req.param('id');
   const before = c.req.query('before');
-  const limit = Math.min(Number(c.req.query('limit') ?? 50), 100);
+  const limit = parseLimit(c.req.query('limit'), 50, 100);
 
   await assertIsConversationParticipant(user.sub, convId);
 

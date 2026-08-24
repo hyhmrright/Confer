@@ -1,5 +1,18 @@
 # Confer — 系统架构
 
+> **本文是目标架构，不是实现现状。** 当前实现是**单进程、单实例**的 gateway：
+> WebSocket 连接表、A2A 重放防护 nonce、限流计数全部保存在 gateway 进程内存里
+> （`ws/handler.ts`、`lib/nonce-cache.ts`、`middleware/rate-limit.ts`）。
+>
+> **因此 gateway 不能跑第二个副本。** 加副本会静默破坏 A2A 重放防护——重放请求
+> 落到另一个副本时 nonce 表是空的，直接放行；同时 WS 推送会漏掉连在另一副本上的
+> 用户，限流阈值按副本数倍增。
+>
+> 下文提到的 NATS / Redis 是横向扩展时的目标方案，**目前既未部署也未接线**
+> （2026-08-07 已从 `docker-compose*.yml` 和 `env.ts` 中移除，此前它们只是空转的
+> 容器和一个从未被读取的环境变量）。真要横向扩展，先把上述三处进程内状态迁到共享
+> 存储，nonce 优先——它是安全关键。
+
 ## 高层架构
 
 ```
@@ -33,7 +46,7 @@
 
 ## 设计原则
 
-- **Stateless edge, stateful core**：网关无状态，可水平扩展；Agent runtime 按用户分片，状态在 PG/Redis
+- **Stateless edge, stateful core**（目标，未实现）：网关无状态、可水平扩展是目标形态；**当前 gateway 有进程内状态，只能单实例**，见文首说明
 - **Federation-ready from day 1**：用 DID:web 身份 + AgentFacts，单实例也按联邦协议跑，未来联邦化零迁移成本
 - **BYO LLM key**：平台不承担 LLM 成本，用户用自己的 API key
 - **协议优先**：核心交互用开放协议（A2A、MCP、DID:web、NANDA AgentFacts），不绑死自家私有协议
@@ -95,18 +108,18 @@
 
 ## 数据层
 
-| 组件 | 用途 |
-|---|---|
-| PostgreSQL | 用户、Agent、对话、消息、权限、peer 关系（主存储） |
-| Redis | session、presence、限流计数、热数据缓存 |
-| NATS Streams | 消息扇出（user.{uid}.events）+ Agent runtime 任务队列 |
-| Qdrant 或 pgvector | Agent 长期记忆 RAG、用户资料库索引 |
-| S3-compatible (MinIO) | 文件附件、DID document 备份、对话归档 |
+| 组件 | 用途 | 状态 |
+|---|---|---|
+| PostgreSQL | 用户、Agent、对话、消息、权限、peer 关系（主存储） | ✅ 已用 |
+| Qdrant | Agent 长期记忆 RAG、用户资料库索引 | ✅ 已用 |
+| S3-compatible (MinIO) | 知识库文件存储 | ✅ 已用 |
+| Redis | session、presence、限流计数、热数据缓存 | ⬜ 未部署，横向扩展时才需要 |
+| NATS Streams | 消息扇出（user.{uid}.events）+ Agent runtime 任务队列 | ⬜ 未部署，横向扩展时才需要 |
 
 ## 客户端架构
 
 - **基座**：Tauri 2.0（Rust 内核 + WebView 渲染）
-- **前端**：React 18 + TypeScript + Tailwind CSS
+- **前端**：React 19 + TypeScript + Tailwind CSS
 - **状态管理**：Zustand 或 Jotai（轻量）
 - **路由**：TanStack Router
 - **网络**：原生 fetch + native WebSocket + EventSource (SSE)
@@ -136,21 +149,18 @@
 
 ### 单实例（个人/小团队）
 
+实际的 `docker-compose.prod.yml`（agent-runtime / identity 是 gateway 内的库，不是独立服务）：
+
 ```
-docker-compose.yml:
-  - gateway       (Bun 服务)
-  - agent-runtime (Bun 服务)
-  - conversation  (Bun 服务)
-  - identity      (Bun 服务)
+  - gateway   (Bun 服务，单副本 — 见文首)
+  - client    (nginx 托管前端)
+  - migrate   (一次性任务)
   - postgres
-  - redis
-  - nats
   - qdrant
   - minio
-  - caddy / traefik  (反向代理 + TLS)
 ```
 
-部署方式：`docker compose up -d` 起来就能用。
+部署方式：`docker compose -f docker-compose.prod.yml up -d` 起来就能用。
 
 ### 企业实例
 
@@ -160,6 +170,9 @@ docker-compose.yml:
 - 内部用户走 SSO 登录
 
 ### 云端（Confer 自家云）
+
+> 前置条件：gateway 目前是单副本（进程内状态）。多副本前必须先把 WS 连接表、
+> A2A nonce、限流计数迁到共享存储，否则重放防护会静默失效。
 
 - Kubernetes 多租户
 - 每个用户/企业有自己的 namespace 或 schema

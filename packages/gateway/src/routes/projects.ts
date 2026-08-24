@@ -8,7 +8,8 @@ import { and, eq, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { getDb } from '../db/connection.js';
-import { peerAgents, peerContacts, projectMemory } from '../db/schema.js';
+import { peerAgents, projectMemory } from '../db/schema.js';
+import { assertIsContact } from '../lib/tenant.js';
 import { authMiddleware } from '../middleware/auth.js';
 import type { AppEnv } from '../types.js';
 
@@ -31,18 +32,6 @@ function parseProjectId(raw: string): string {
   const parsed = projectIdSchema.safeParse(raw);
   if (!parsed.success) throw new AppError('invalid_project_id', 'Invalid project_id', 400);
   return parsed.data;
-}
-
-// Only peers the user has connected to may have memory written for them. Reads
-// are scoped to user.sub so they can't see another user's rows regardless.
-async function assertContact(userId: string, peerId: string): Promise<void> {
-  const db = getDb();
-  const [contact] = await db
-    .select()
-    .from(peerContacts)
-    .where(and(eq(peerContacts.user_id, userId), eq(peerContacts.peer_id, peerId)))
-    .limit(1);
-  if (!contact) throw new AppError('not_a_contact', 'Peer is not a contact', 403);
 }
 
 // List the peers that have any memory under this project, with the peer's live
@@ -116,7 +105,7 @@ projectsRoutes.put('/:projectId/peers/:peerId/facts', async (c) => {
   const peerId = c.req.param('peerId');
   const body = projectFactsWriteSchema.parse(await c.req.json());
 
-  await assertContact(user.sub, peerId);
+  await assertIsContact(user.sub, peerId);
 
   // Set only facts_md on conflict so a facts write can never clear decisions_md.
   const [row] = await db
@@ -153,7 +142,7 @@ projectsRoutes.put('/:projectId/peers/:peerId/decisions', async (c) => {
   const peerId = c.req.param('peerId');
   const body = projectDecisionsWriteSchema.parse(await c.req.json());
 
-  await assertContact(user.sub, peerId);
+  await assertIsContact(user.sub, peerId);
 
   // Set only decisions_md on conflict so a decisions write can never clear facts_md.
   const [row] = await db

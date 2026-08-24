@@ -81,8 +81,7 @@ describe('requestCodeReview', () => {
       files: [{ path: 'a.ts', content: 'x' }],
       waitSeconds: 0,
     });
-    expect((calls[0]?.body as { question: string }).question).toContain(
-      'correctness + vendor gotchas',
-    );
+    const body = calls[0]?.body as { question: string } | undefined;
+    expect(body?.question).toContain('correctness + vendor gotchas');
   });
 });

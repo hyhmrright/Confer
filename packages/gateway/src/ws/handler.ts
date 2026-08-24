@@ -18,6 +18,9 @@ export interface WsData {
   subscriptions: Set<string>;
 }
 
+// Process-local: a socket is only reachable from the instance that accepted it.
+// This is one of the three things that pin the gateway to a single replica (with
+// `lib/nonce-cache.ts` and `middleware/rate-limit.ts`) — see docs/02-architecture.md.
 const connectionsByUser = new Map<string, Set<ServerWebSocket<WsData>>>();
 
 // Cap concurrent sockets per user (docs/05-api.md: "单用户最多 10 个并发连接").

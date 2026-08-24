@@ -1,28 +1,33 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import { useFileAttachment } from '../hooks/useFileAttachment.js';
+import { FOCUS_RING } from '../lib/styles.js';
 import { useChatStore } from '../stores/chat.js';
-import { CitationCapsule } from './CitationCapsule.js';
 import { Bot, Paperclip, Send, X } from './Icons.js';
 import { LoadingDots } from './LoadingDots.js';
 import { MessageBubble } from './MessageBubble.js';
-import { TypingIndicator } from './TypingIndicator.js';
+import { StreamingMessage } from './StreamingMessage.js';
 
 export function MessageView() {
   const { t } = useTranslation();
-  const {
-    conversations,
-    activeConversationId,
-    messages,
-    messagesLoading,
-    sendMessage,
-    streaming,
-    streamContent,
-    streamCitations,
-    agentStatus,
-  } = useChatStore();
+  // Per-field selectors. `useChatStore()` returns the whole state object, whose
+  // identity changes on every set — including the per-token stream updates,
+  // which would re-render this entire list. Note what is *absent*: streamContent
+  // and streamCitations are subscribed to by StreamingMessage alone.
+  const messages = useChatStore((s) => s.messages);
+  const messagesLoading = useChatStore((s) => s.messagesLoading);
+  const sendMessage = useChatStore((s) => s.sendMessage);
+  const streaming = useChatStore((s) => s.streaming);
+  const agentStatus = useChatStore((s) => s.agentStatus);
+  const hasOlderMessages = useChatStore((s) => s.hasOlderMessages);
+  const loadingOlder = useChatStore((s) => s.loadingOlder);
+  const loadOlderMessages = useChatStore((s) => s.loadOlderMessages);
+  // Selecting the name itself, rather than the conversations array, keeps this
+  // to a string comparison — the header does not re-render when an unrelated
+  // conversation's unread count changes.
+  const conversationName = useChatStore(
+    (s) => s.conversations.find((c) => c.id === s.activeConversationId)?.name,
+  );
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const { attachedFile, fileInputRef, handleFileChange, openFilePicker, clearAttachment } =
@@ -31,10 +36,11 @@ export function MessageView() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollRaf = useRef(0);
 
-  const activeConversation = conversations.find((c) => c.id === activeConversationId);
-
-  // messages/streamContent are intentional re-run triggers (scroll on new
-  // content), not values read in the body — keep them despite the lint rule.
+  // Keyed on the *last* message rather than the array: loading older history
+  // prepends, and depending on `messages` would yank the reader to the bottom
+  // the moment they asked to see further back. Scrolling to follow the stream
+  // lives in StreamingMessage, the only subscriber left to it.
+  const lastMessageId = messages[messages.length - 1]?.id;
   // biome-ignore lint/correctness/useExhaustiveDependencies: scroll trigger
   useEffect(() => {
     cancelAnimationFrame(scrollRaf.current);
@@ -42,7 +48,7 @@ export function MessageView() {
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
     });
     return () => cancelAnimationFrame(scrollRaf.current);
-  }, [messages, streamContent]);
+  }, [lastMessageId]);
 
   useEffect(() => {
     if (!streaming && textareaRef.current) textareaRef.current.focus();
@@ -93,7 +99,7 @@ export function MessageView() {
             <Bot className="w-3.5 h-3.5 text-primary-400" />
           </div>
           <span className="text-sm font-medium text-ink-primary truncate">
-            {activeConversation?.name ?? t('message.title')}
+            {conversationName ?? t('message.title')}
           </span>
         </div>
         {streaming && (
@@ -117,46 +123,35 @@ export function MessageView() {
           </div>
         ) : null}
 
+        {hasOlderMessages && (
+          <button
+            type="button"
+            onClick={loadOlderMessages}
+            disabled={loadingOlder}
+            className={`w-full py-2 text-xs text-ink-secondary hover:text-ink-primary hover:bg-dark-hover rounded-lg disabled:opacity-40 transition-colors ${FOCUS_RING}`}
+          >
+            {loadingOlder ? t('common.loading') : t('message.loadOlder')}
+          </button>
+        )}
+
         {messages.map((msg) => (
           <MessageBubble key={msg.id} message={msg} />
         ))}
 
-        {/* Streaming response */}
-        {streaming && streamContent && (
-          <div className="flex gap-3 animate-fade-in">
-            <div className="w-8 h-8 rounded-full bg-dark-card border border-dark-border flex items-center justify-center shrink-0">
-              <Bot className="w-4 h-4 text-ink-secondary" />
-            </div>
-            <div className="max-w-[78%]">
-              <div className="agent-bubble bg-dark-card border border-dark-border rounded-2xl rounded-tl-sm px-4 py-3">
-                <div className="markdown-content text-sm leading-relaxed text-ink-primary">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{streamContent}</ReactMarkdown>
-                </div>
-                <span className="inline-block w-[3px] h-4 bg-primary-400 animate-cursor-blink rounded-sm ml-0.5 align-text-bottom" />
-              </div>
-              {streamCitations.length > 0 && <CitationCapsule citations={streamCitations} />}
-            </div>
-          </div>
-        )}
-
-        {/* Typing / status indicator */}
-        {streaming && !streamContent && (
-          <div className="flex gap-3 items-center animate-fade-in">
-            <div className="w-8 h-8 rounded-full bg-dark-card border border-dark-border flex items-center justify-center shrink-0">
-              <Bot className="w-4 h-4 text-ink-secondary" />
-            </div>
-            <div className="bg-dark-card border border-dark-border rounded-2xl rounded-tl-sm px-4 py-3">
-              <TypingIndicator label={agentStatus ?? undefined} />
-            </div>
-          </div>
-        )}
+        {/* The in-flight reply, and the typing indicator that precedes its first
+            token. Both live behind this one boundary so the per-token state
+            never reaches the list above. */}
+        {streaming && <StreamingMessage scrollAnchor={bottomRef} />}
 
         <div ref={bottomRef} />
       </div>
 
       {/* Input */}
       <div className="px-4 pb-4 pt-2 shrink-0">
-        <div className="rounded-xl border border-dark-border bg-dark-input transition-colors focus-within:border-primary-600/50">
+        {/* The composer's focus indicator lives here rather than on the textarea:
+            the bordered wrapper is what reads as the control, and the textarea
+            inside it keeps `outline-hidden` so the two don't both draw. */}
+        <div className="rounded-xl border border-dark-border bg-dark-input transition-colors focus-within:ring-2 focus-within:ring-primary-500 focus-within:border-transparent">
           {/* Attached file preview */}
           {attachedFile && (
             <div className="flex items-center gap-2 px-3 pt-3 pb-0">
@@ -201,7 +196,7 @@ export function MessageView() {
               placeholder={t('message.composerPlaceholder')}
               rows={1}
               className="flex-1 bg-transparent text-ink-primary text-sm leading-relaxed resize-none
-                focus:outline-none placeholder:text-ink-muted py-1.5 px-1 max-h-40 scrollbar-thin"
+                focus:outline-hidden placeholder:text-ink-muted py-1.5 px-1 max-h-40 scrollbar-thin"
               disabled={sending || streaming}
             />
 

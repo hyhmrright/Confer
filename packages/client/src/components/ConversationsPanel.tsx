@@ -1,20 +1,25 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { dateLocale } from '../i18n/index.js';
+import { FOCUS_RING } from '../lib/styles.js';
 import { useChatStore } from '../stores/chat.js';
 import { Bot, Plus, Search, Trash } from './Icons.js';
 
-export function ConversationsPanel() {
+// `onNavigate` fires once a conversation becomes the active one. On a narrow
+// viewport the panel is inside the drawer covering the messages, so picking a
+// conversation has to dismiss it or the user never sees what they picked.
+export function ConversationsPanel({ onNavigate }: { onNavigate?: () => void }) {
   const { t } = useTranslation();
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
-  const {
-    conversations,
-    activeConversationId,
-    selectConversation,
-    createConversation,
-    deleteConversation,
-  } = useChatStore();
+  // Per-field selectors: this panel is always mounted alongside the message
+  // view, so subscribing to the whole chat store would re-render the entire
+  // conversation list on every streamed token.
+  const conversations = useChatStore((s) => s.conversations);
+  const activeConversationId = useChatStore((s) => s.activeConversationId);
+  const selectConversation = useChatStore((s) => s.selectConversation);
+  const createConversation = useChatStore((s) => s.createConversation);
+  const deleteConversation = useChatStore((s) => s.deleteConversation);
 
   const filtered = conversations.filter((c) =>
     (c.name ?? '').toLowerCase().includes(query.toLowerCase()),
@@ -23,6 +28,12 @@ export function ConversationsPanel() {
   const handleNew = async () => {
     const id = await createConversation();
     await selectConversation(id);
+    onNavigate?.();
+  };
+
+  const handleSelect = async (id: string) => {
+    await selectConversation(id);
+    onNavigate?.();
   };
 
   return (
@@ -53,9 +64,8 @@ export function ConversationsPanel() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={t('conversations.searchPlaceholder')}
-            className="w-full pl-8 pr-3 py-1.5 bg-dark-input text-ink-secondary text-xs rounded-md
-              border border-dark-border placeholder:text-ink-muted
-              focus:outline-none focus:border-primary-600/40 transition-colors"
+            className={`w-full pl-8 pr-3 py-1.5 bg-dark-input text-ink-secondary text-xs rounded-md
+              border border-dark-border placeholder:text-ink-muted ${FOCUS_RING} transition-colors`}
           />
         </div>
       </div>
@@ -70,6 +80,7 @@ export function ConversationsPanel() {
           filtered.map((conv) => {
             const active = conv.id === activeConversationId;
             return (
+              // biome-ignore lint/a11y/noStaticElementInteractions: hover-only affordance; the real control is the nested <button>, which already carries keyboard focus
               <div
                 key={conv.id}
                 className={`relative group transition-colors duration-100
@@ -82,7 +93,7 @@ export function ConversationsPanel() {
                 )}
                 <button
                   type="button"
-                  onClick={() => selectConversation(conv.id)}
+                  onClick={() => handleSelect(conv.id)}
                   className="w-full flex items-center gap-3 px-4 py-3 text-left cursor-pointer"
                 >
                   <div

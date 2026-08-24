@@ -26,12 +26,12 @@ import { ensureMemoryCollection } from '../lib/memory-store.js';
 import { clearNonceCache } from '../lib/nonce-cache.js';
 import { ensureCollection, upsertChunks } from '../lib/qdrant.js';
 import {
-  type SeededUser,
   get,
   headers,
   mockFetch,
   post,
   resetDb,
+  type SeededUser,
   seedUser,
 } from '../test/helpers.js';
 
@@ -488,11 +488,13 @@ describe('A2A signed message (real Ed25519, mocked DID resolution)', () => {
     expect(res.status).toBe(200);
     const pending = (await res.json()).permissions as Array<{
       action: string;
-      description: string;
+      scope: { content?: string };
     }>;
     const ask = pending.find((p) => p.action === 'ask');
     expect(ask).toBeTruthy();
-    expect(ask?.description).toContain('Ship dates?');
+    // The question text reaches the owner through the stored scope, which the
+    // client renders via i18n — the server no longer pre-words the sentence.
+    expect(ask?.scope.content).toContain('Ship dates?');
   });
 
   test('approving a held question lets the agent answer it (own_agent reply appears)', async () => {

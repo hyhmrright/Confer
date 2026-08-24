@@ -10,7 +10,8 @@ import { FieldLabel, StatusMsg } from './SettingsShared.js';
 
 export function ProfileTab() {
   const { t } = useTranslation();
-  const { user, refreshUser } = useAuthStore();
+  const user = useAuthStore((s) => s.user);
+  const refreshUser = useAuthStore((s) => s.refreshUser);
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
@@ -56,8 +57,9 @@ export function ProfileTab() {
   return (
     <div className="space-y-4">
       <div>
-        <FieldLabel>{t('settings.profileUsername')}</FieldLabel>
+        <FieldLabel htmlFor="profile-username">{t('settings.profileUsername')}</FieldLabel>
         <input
+          id="profile-username"
           type="text"
           value={user?.username ?? ''}
           disabled
@@ -66,8 +68,9 @@ export function ProfileTab() {
         <p className="text-[11px] text-ink-muted mt-1">{t('settings.profileUsernameHint')}</p>
       </div>
       <div>
-        <FieldLabel>{t('settings.profileDid')}</FieldLabel>
+        <FieldLabel htmlFor="profile-did">{t('settings.profileDid')}</FieldLabel>
         <input
+          id="profile-did"
           type="text"
           value={user?.did ?? ''}
           disabled
@@ -76,8 +79,9 @@ export function ProfileTab() {
         <p className="text-[11px] text-ink-muted mt-1">{t('settings.profileDidHint')}</p>
       </div>
       <div>
-        <FieldLabel>{t('settings.profileDisplayName')}</FieldLabel>
+        <FieldLabel htmlFor="profile-display-name">{t('settings.profileDisplayName')}</FieldLabel>
         <input
+          id="profile-display-name"
           type="text"
           value={displayName}
           onChange={(e) => setDisplayName(e.target.value)}
@@ -86,8 +90,9 @@ export function ProfileTab() {
         />
       </div>
       <div>
-        <FieldLabel>{t('settings.profileEmail')}</FieldLabel>
+        <FieldLabel htmlFor="profile-email">{t('settings.profileEmail')}</FieldLabel>
         <input
+          id="profile-email"
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
@@ -96,8 +101,9 @@ export function ProfileTab() {
         />
       </div>
       <div>
-        <FieldLabel>{t('settings.profilePhone')}</FieldLabel>
+        <FieldLabel htmlFor="profile-phone">{t('settings.profilePhone')}</FieldLabel>
         <input
+          id="profile-phone"
           type="tel"
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
@@ -107,8 +113,8 @@ export function ProfileTab() {
       </div>
 
       <div>
-        <FieldLabel>{t('language.label')}</FieldLabel>
-        <LanguageSwitcher />
+        <FieldLabel htmlFor="profile-language">{t('language.label')}</FieldLabel>
+        <LanguageSwitcher id="profile-language" />
       </div>
 
       <StatusMsg error={error} success={success} />

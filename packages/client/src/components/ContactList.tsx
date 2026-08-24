@@ -4,11 +4,21 @@ import { useChatStore } from '../stores/chat.js';
 import { useContactsStore } from '../stores/contacts.js';
 import { ContactDetail } from './ContactDetail.js';
 import { Bot, Shield, Trash } from './Icons.js';
+import { LoadMore } from './LoadMore.js';
 
 export function ContactList() {
   const { t } = useTranslation();
-  const { contacts, loadContacts, removeContact, openDetail } = useContactsStore();
-  const { createConversation, selectConversation } = useChatStore();
+  const contacts = useContactsStore((s) => s.contacts);
+  const contactsTotal = useContactsStore((s) => s.contactsTotal);
+  const loadingMore = useContactsStore((s) => s.loadingMore);
+  const loadContacts = useContactsStore((s) => s.loadContacts);
+  const loadMoreContacts = useContactsStore((s) => s.loadMoreContacts);
+  const removeContact = useContactsStore((s) => s.removeContact);
+  const openDetail = useContactsStore((s) => s.openDetail);
+  // Selectors here, unlike the contacts store above: this list stays mounted
+  // next to the message view, and the chat store updates once per streamed token.
+  const createConversation = useChatStore((s) => s.createConversation);
+  const selectConversation = useChatStore((s) => s.selectConversation);
 
   useEffect(() => {
     loadContacts();
@@ -74,6 +84,12 @@ export function ContactList() {
           </button>
         </div>
       ))}
+      <LoadMore
+        shown={contacts.length}
+        total={contactsTotal}
+        busy={loadingMore}
+        onMore={loadMoreContacts}
+      />
       <ContactDetail />
     </div>
   );

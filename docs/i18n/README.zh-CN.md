@@ -126,7 +126,7 @@ monorepo 布局、测试栈与代码约定见 **[`CONTRIBUTING.md`](../../CONTRI
 ## 技术栈
 
 - **后端**：Bun + TypeScript + Hono
-- **客户端**：Tauri 2.0 + React 18 + TypeScript + Tailwind
+- **客户端**：Tauri 2.0 + React 19 + TypeScript + Tailwind
 - **数据**：PostgreSQL 16 + Redis + NATS + Qdrant + MinIO
 - **协议**：W3C DID、HTTP 消息签名（RFC 9421）、MCP、A2A、NANDA AgentFacts
 - **LLM**：自带密钥（Claude · GPT · DeepSeek · Qwen · GLM · Ollama）

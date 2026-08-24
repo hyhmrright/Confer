@@ -10,6 +10,7 @@ mock.module('../lib/api.js', () => ({
   setToken: mock(() => {}),
   setRefreshToken: mock(() => {}),
   setOnAuthExpired: mock(() => {}),
+  setOnTokenRefreshed: mock(() => {}),
 }));
 
 const { useChatStore } = await import('./chat.js');
@@ -68,12 +69,50 @@ describe('chat store', () => {
 
     await useChatStore.getState().selectConversation('c1');
 
-    expect(get).toHaveBeenCalledWith('/conversations/c1/messages');
+    expect(get).toHaveBeenCalledWith('/conversations/c1/messages?limit=50');
     const state = useChatStore.getState();
     expect(state.activeConversationId).toBe('c1');
     expect(state.messages).toEqual(messages as never);
     expect(state.messagesLoading).toBe(false);
     expect(state.streaming).toBe(false);
+    // A short page means the whole thread is on screen; no "load earlier" offer.
+    expect(state.hasOlderMessages).toBe(false);
+  });
+
+  test('loadOlderMessages walks backwards from the oldest message on screen', async () => {
+    // A full page on open is the signal that there is history behind it.
+    get.mockResolvedValueOnce({
+      messages: Array.from({ length: 50 }, (_, i) => makeMessage({ id: `m${i + 50}` })),
+    });
+    await useChatStore.getState().selectConversation('c1');
+    expect(useChatStore.getState().hasOlderMessages).toBe(true);
+
+    get.mockResolvedValueOnce({ messages: [makeMessage({ id: 'm1' })] });
+    await useChatStore.getState().loadOlderMessages();
+
+    expect(get).toHaveBeenLastCalledWith('/conversations/c1/messages?limit=50&before=m50');
+    const state = useChatStore.getState();
+    expect(state.messages[0]?.id).toBe('m1');
+    expect(state.messages).toHaveLength(51);
+    expect(state.loadingOlder).toBe(false);
+    // The short page means we have reached the beginning of the thread.
+    expect(state.hasOlderMessages).toBe(false);
+  });
+
+  test('loadOlderMessages discards a page that arrives after the user switched threads', async () => {
+    get.mockResolvedValueOnce({
+      messages: Array.from({ length: 50 }, (_, i) => makeMessage({ id: `m${i + 50}` })),
+    });
+    await useChatStore.getState().selectConversation('c1');
+
+    // The older page resolves only after the active conversation has moved on.
+    get.mockImplementationOnce(async () => {
+      useChatStore.setState({ activeConversationId: 'c2', messages: [] });
+      return { messages: [makeMessage({ id: 'm1' })] };
+    });
+    await useChatStore.getState().loadOlderMessages();
+
+    expect(useChatStore.getState().messages).toEqual([]);
   });
 
   test('selectConversation maps citations_json into citations', async () => {

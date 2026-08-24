@@ -3,7 +3,7 @@ import { newId } from '@confer/shared';
 import { getDb } from '../db/connection.js';
 import { agentMemories } from '../db/schema.js';
 import { ensureMemoryCollection, searchMemories, upsertMemory } from '../lib/memory-store.js';
-import { type SeededUser, del, get, patch, post, resetDb, seedUser } from '../test/helpers.js';
+import { del, get, patch, post, resetDb, type SeededUser, seedUser } from '../test/helpers.js';
 
 const BASE = '/api/v1/memories';
 let user: SeededUser;

@@ -16,7 +16,7 @@ git clone https://github.com/hyhmrright/Confer.git
 cd Confer
 bun install                  # install all workspace deps
 cp .env.example .env
-docker compose up -d         # infra only: Postgres, Redis, NATS, Qdrant, MinIO
+docker compose up -d         # infra only: Postgres, Qdrant, MinIO
 bun run db:migrate
 bun run dev                  # gateway on :3000, client (Vite) on :1420
 ```
@@ -31,10 +31,9 @@ Bun workspaces under `packages/*`. Each package has one clear responsibility.
 | Package | Purpose |
 |---------|---------|
 | `gateway` | Hono HTTP server — A2A endpoints, REST API, WebSocket, DB & middleware. `gateway/lib/` holds the RAG pipeline (MinIO storage, Qdrant search, multi-provider embedding). |
-| `client` | Tauri 2.0 + React 18 desktop app — UI components, Zustand stores, Vite dev server. |
+| `client` | Tauri 2.0 + React 19 desktop app — UI components, Zustand stores, Vite dev server. |
 | `identity` | DID:web, HTTP Message Signatures (RFC 9421), crypto primitives, AgentFacts. |
 | `agent-runtime` | LLM orchestration engine and policy enforcement. |
-| `conversation` | Message bus (NATS) and conversation threading. |
 | `shared` | Zod schemas, shared types, utility functions. |
 | `mcp-a2a` | stdio MCP server that lets Claude Code consult peer Agents. Ships as the `confer-a2a` plugin (`plugins/confer-a2a/`). |
 

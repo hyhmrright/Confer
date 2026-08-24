@@ -143,7 +143,7 @@ milestone ごとにスライスし、各 milestone は提供可能でデモ可�
 - [ ] `packages/shared`：共有型定義（zod または valibot を使用）
 - [ ] `packages/gateway`：Bun + Hono アプリの骨格
 - [ ] `packages/agent-runtime`：Agent 状態機の骨格
-- [ ] `packages/conversation`：メッセージ保存 / 配信サービス
+- [x] ~~`packages/conversation`：メッセージ保存 / 配信サービス~~ — gateway に統合済み（`ws/handler.ts` + `routes/conversations.ts`）。独立パッケージは利用者ゼロのため 2026-08-07 に削除
 - [ ] `packages/identity`：DID + AgentFacts + A2A 検証
 - [ ] PostgreSQL migration ツール（drizzle-kit または prisma）
 - [ ] すべてのデータテーブルの migration ファイルの作成

@@ -1,5 +1,5 @@
 import { AppError, newId } from '@confer/shared';
-import { and, eq } from 'drizzle-orm';
+import { and, count, desc, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { getDb } from '../db/connection.js';
@@ -10,6 +10,7 @@ import { ingestQueue } from '../lib/concurrency.js';
 import { guessContentType, parseDocument } from '../lib/doc-parser.js';
 import { type EmbeddingProvider, embedTexts } from '../lib/embedding.js';
 import { getUserLlmKeys, resolveEmbeddingKey } from '../lib/llm-keys.js';
+import { parseLimit, parseOffset } from '../lib/pagination.js';
 import { deleteByDocId, deleteByKbId, ensureCollection, upsertChunks } from '../lib/qdrant.js';
 import { getObject, putObject, removeObject } from '../lib/storage.js';
 import { authMiddleware } from '../middleware/auth.js';
@@ -135,12 +136,26 @@ knowledgeBasesRoutes.get('/:kbId/documents', async (c) => {
   const user = c.get('user');
   const db = getDb();
   const kbId = c.req.param('kbId');
+  const limit = parseLimit(c.req.query('limit'), 50, 100);
+  const offset = parseOffset(c.req.query('offset'));
 
   await requireKb(kbId, user.sub);
 
-  const docs = await db.select().from(knowledgeDocuments).where(eq(knowledgeDocuments.kb_id, kbId));
+  // A knowledge base is an upload target, so this is the one list here that
+  // genuinely grows without bound. Ordered by id (ULID) for a stable,
+  // newest-first window that offset paging can walk without gaps.
+  const inKb = eq(knowledgeDocuments.kb_id, kbId);
+  const docs = await db
+    .select()
+    .from(knowledgeDocuments)
+    .where(inKb)
+    .orderBy(desc(knowledgeDocuments.id))
+    .limit(limit)
+    .offset(offset);
 
-  return c.json({ documents: docs });
+  const [totals] = await db.select({ value: count() }).from(knowledgeDocuments).where(inKb);
+
+  return c.json({ documents: docs, total: totals?.value ?? 0 });
 });
 
 knowledgeBasesRoutes.post('/:kbId/documents', async (c) => {

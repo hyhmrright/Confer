@@ -74,7 +74,7 @@ PUT    /api/v1/agents/me/llm-keys      # 加密存储 LLM API keys
 ### 联系人 / Peer Agents
 
 ```
-GET    /api/v1/contacts                     # 列出联系人
+GET    /api/v1/contacts                     # 列出联系人。分页：?limit=&offset=
 POST   /api/v1/contacts                     # 添加联系人
 GET    /api/v1/contacts/{contact_id}        # 单个联系人详情（带 peer）
 DELETE /api/v1/contacts/{contact_id}
@@ -91,6 +91,8 @@ POST   /api/v1/contacts/lookup              # 按 DID / 域名 / username 查找
   "value": "abc-industries.com"
 }
 ```
+
+`GET /api/v1/contacts` 返回 `{ contacts, total }`。`limit` 默认 50、上限 100，`offset` 默认 0；按 `id`（ULID）倒序，即最新在前——排序是唯一且确定的，offset 窗口才不会漏行或重行。`total` 是全量计数而非本页条数，客户端据此判断"已到底"。无法解析的 `limit`/`offset` 取默认值而非报错。
 
 响应：返回找到的候选 Agent 列表。lookup 会把发现到的 peer **落库到 `peer_agents`** 并在每个候选里带上本地 `id`（`peer_id`）——`POST /api/v1/contacts` 正是用这个 `id` 添加联系人。`POST /contacts` 幂等：重复添加同一 peer 返回已存在的联系人（`200`）而非报错。
 
@@ -185,6 +187,41 @@ PUT    /api/v1/projects/{project_id}/peers/{peer_id}/decisions    # ✅ 已实�
 - `project_id` 受 `^[a-zA-Z0-9._\-/]+$`（1–255 字符）校验，非法返回 `400 invalid_project_id`。
 - `GET peers` 在空项目下返回空数组；记忆通过 PUT facts/decisions 隐式建立 (project, peer) 关系（本期不做 `POST peers` 显式注册）。
 
+### 知识库（RAG）
+
+```
+GET    /api/v1/knowledge-bases                                  # 列出我的知识库
+POST   /api/v1/knowledge-bases                                  # 新建
+DELETE /api/v1/knowledge-bases/{kb_id}                          # 连同其全部文档与向量一并删除
+
+GET    /api/v1/knowledge-bases/{kb_id}/documents                # 分页：?limit=&offset=
+POST   /api/v1/knowledge-bases/{kb_id}/documents                # multipart upload，字段名 file
+DELETE /api/v1/knowledge-bases/{kb_id}/documents/{doc_id}
+POST   /api/v1/knowledge-bases/{kb_id}/documents/{doc_id}/retry # 重新入库
+```
+
+`POST /knowledge-bases` 的 body 是 `{ name, description? }`（`name` 1–255 字符），返回 `201` + `{ knowledge_base }`。`GET /knowledge-bases` 返回 `{ knowledge_bases }`，**不分页**：一个用户的知识库是手工建的，数量有界。
+
+`GET /{kb_id}/documents` 返回 `{ documents, total }`。`limit` 默认 50、上限 100，`offset` 默认 0；按 `id`（ULID）倒序，即最新在前——排序唯一且确定，offset 窗口才不会漏行或重行。`total` 是全量计数而非本页条数。无法解析的 `limit`/`offset` 取默认值而非报错。这是本节唯一会无界增长的列表，因为知识库正是上传目标。
+
+上传走 `multipart/form-data`，文件字段名固定为 `file`，单个文件上限 **10 MB**（超出返回 `400 bad_request`）。`Content-Type` 优先取表单里带的，缺失时按扩展名推断。响应 `201` + `{ document }`，此时 `status` 已是 `processing`：**切分、向量化、写入 Qdrant 是响应之后异步跑的**，上传接口不等它完成。客户端据此轮询文档列表直到 `status` 变化。
+
+`status` 取值：
+
+| 值 | 含义 |
+|---|---|
+| `processing` | 已入库、正在切分/向量化。上传与 retry 后的初始态 |
+| `ready` | 可被检索。`chunk_count` 为该文档的分片数 |
+| `failed` | 入库失败（解析、embedding key 缺失或向量库写入失败） |
+
+`POST /{doc_id}/retry` 从对象存储取回原文件重新入库，先清掉该文档已有的向量再重跑，因此不会产生重复分片。原文件已不在（`storage_key` 为空）或文档仍在 `processing` 时返回 `400`。响应 `{ document }`，`status` 复位为 `processing`、`chunk_count` 归零。
+
+删除知识库会级联删除其全部文档行与 Qdrant 中的向量；删除单个文档同时清理向量与对象存储中的原文件。向量/对象存储的清理失败不会阻断数据库删除——留下孤儿对象好过留下指向已删数据的行。
+
+所有端点都 scope 到 `user.sub`：访问他人的 kb 或文档返回 `404`（而非 `403`，不泄露其存在性）。
+
+> 反向代理需放行 10 MB 请求体。`infra/nginx.conf` 在 `/api/` 上设了 `client_max_body_size 10m`；用 nginx 默认的 1 MB 时，1–10 MB 的文件根本到不了 gateway，浏览器拿到的是 nginx 自己的 413 页面。
+
 ### 文件附件
 
 ```
@@ -275,11 +312,20 @@ conversation.updated
       "paths": ["src/modbus/"],
       "exclude": [".env", "secrets/"]
     },
-    "description": "Agent 想分享 src/modbus/ 给 ABC Agent（12 个文件）",
+    "peer_name": "ABC Agent",
+    "peer_did": "did:web:acme.com:agents:support",
     "requested_at": "2024-11-15T14:30:00Z"
   }
 }
 ```
+
+**载荷里没有 `description`，这是有意的。** 服务端不知道读者用什么语言，所以只发结构化事实
+（`action` + peer 身份 + 已存储的 `scope`），供审批阅读的句子由客户端按 i18n 拼装
+（`packages/client/src/lib/permission-text.ts`）。这条契约由 `@confer/shared` 的
+`permissionRequestEventSchema` 单独拥有：gateway 出站前用它 parse，客户端入站后用它 parse。
+
+`GET /api/v1/permissions/pending` 的每一行是同一个形状（额外带一个 `decision` 字段），
+由同一个构造器生成，所以轮询到的行和 socket 推来的行逐字节一致。
 
 ## SSE（LLM streaming）
 

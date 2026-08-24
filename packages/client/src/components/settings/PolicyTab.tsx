@@ -9,8 +9,14 @@ import { FieldLabel, StatusMsg } from './SettingsShared.js';
 
 export function PolicyTab() {
   const { t } = useTranslation();
-  const { agent, loading, saving, error, success, loadAgent, updatePolicies, clearMessages } =
-    useSettingsStore();
+  const agent = useSettingsStore((s) => s.agent);
+  const loading = useSettingsStore((s) => s.loading);
+  const saving = useSettingsStore((s) => s.saving);
+  const error = useSettingsStore((s) => s.error);
+  const success = useSettingsStore((s) => s.success);
+  const loadAgent = useSettingsStore((s) => s.loadAgent);
+  const updatePolicies = useSettingsStore((s) => s.updatePolicies);
+  const clearMessages = useSettingsStore((s) => s.clearMessages);
   const [decision, setDecision] = useState<string>('');
 
   useEffect(() => {
@@ -44,9 +50,10 @@ export function PolicyTab() {
   return (
     <div className="space-y-4">
       <div>
-        <FieldLabel>{t('settings.agentDefaultPolicy')}</FieldLabel>
+        <FieldLabel htmlFor="agent-default-policy">{t('settings.agentDefaultPolicy')}</FieldLabel>
         <p className="text-xs text-ink-muted mb-2">{t('settings.agentDefaultPolicyHint')}</p>
         <PolicyEditor
+          id="agent-default-policy"
           decision={decision}
           onChange={setDecision}
           inheritLabel={null}

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import { FOCUS_RING } from '../../lib/styles.js';
 import { Key } from '../Icons.js';
 
 // One provider key row: shows the provider name + configured/extra badges and an
@@ -91,7 +92,7 @@ export function ProviderKeyEditor({
             value={keyValue}
             onChange={(e) => onChange(e.target.value)}
             placeholder={inputPlaceholder}
-            className="flex-1 px-3 py-1.5 bg-dark-input border border-dark-border rounded-lg text-xs font-mono text-ink-primary placeholder:text-ink-muted focus:outline-none focus:border-primary-600/40 transition-colors"
+            className={`flex-1 px-3 py-1.5 bg-dark-input border border-dark-border rounded-lg text-xs font-mono text-ink-primary placeholder:text-ink-muted ${FOCUS_RING} transition-colors`}
           />
           <button
             type="button"

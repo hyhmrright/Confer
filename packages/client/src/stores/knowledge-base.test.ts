@@ -10,6 +10,7 @@ mock.module('../lib/api.js', () => ({
   setToken: mock(() => {}),
   setRefreshToken: mock(() => {}),
   setOnAuthExpired: mock(() => {}),
+  setOnTokenRefreshed: mock(() => {}),
   getToken: mock(() => null),
 }));
 
@@ -72,10 +73,38 @@ describe('knowledge-base store', () => {
 
   test('fetchDocuments stores the document list keyed by kbId', async () => {
     const documents = [{ id: 'd1', kb_id: 'kb1', user_id: 'u1', filename: 'a.pdf' }];
-    get.mockResolvedValueOnce({ documents });
+    get.mockResolvedValueOnce({ documents, total: 1 });
     await useKbStore.getState().fetchDocuments('kb1');
-    expect(get).toHaveBeenCalledWith('/knowledge-bases/kb1/documents');
+    expect(get).toHaveBeenCalledWith('/knowledge-bases/kb1/documents?limit=50&offset=0');
     expect(useKbStore.getState().documents.kb1).toEqual(documents as never);
+    expect(useKbStore.getState().documentsTotal.kb1).toBe(1);
+  });
+
+  test('loadMoreDocuments appends the next page for that kb only', async () => {
+    useKbStore.setState({
+      documents: { kb1: [{ id: 'd1' }], kb2: [{ id: 'x1' }] } as never,
+      documentsTotal: { kb1: 2, kb2: 1 },
+    });
+    get.mockResolvedValueOnce({ documents: [{ id: 'd2' }], total: 2 });
+
+    await useKbStore.getState().loadMoreDocuments('kb1');
+
+    expect(get).toHaveBeenCalledWith('/knowledge-bases/kb1/documents?limit=50&offset=1');
+    const state = useKbStore.getState();
+    expect(state.documents.kb1.map((d) => d.id)).toEqual(['d1', 'd2']);
+    expect(state.documents.kb2.map((d) => d.id)).toEqual(['x1']);
+    expect(state.loadingMoreDocs).toBeNull();
+  });
+
+  test('loadMoreDocuments does nothing when the kb is fully loaded', async () => {
+    useKbStore.setState({
+      documents: { kb1: [{ id: 'd1' }] } as never,
+      documentsTotal: { kb1: 1 },
+    });
+
+    await useKbStore.getState().loadMoreDocuments('kb1');
+
+    expect(get).not.toHaveBeenCalled();
   });
 
   test('uploadDocument posts the form and prepends the document', async () => {

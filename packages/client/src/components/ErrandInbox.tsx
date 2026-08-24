@@ -10,7 +10,10 @@ import { Plus } from './Icons.js';
 // PermissionInbox.
 export function ErrandInbox() {
   const { t } = useTranslation();
-  const { pendingCards, creating, error, createErrand } = useErrandsStore();
+  const pendingCards = useErrandsStore((s) => s.pendingCards);
+  const creating = useErrandsStore((s) => s.creating);
+  const error = useErrandsStore((s) => s.error);
+  const createErrand = useErrandsStore((s) => s.createErrand);
   const [title, setTitle] = useState('');
   const [open, setOpen] = useState(false);
 
@@ -36,7 +39,7 @@ export function ErrandInbox() {
   }
 
   return (
-    <div className="fixed bottom-4 right-4 z-40 w-80 space-y-2">
+    <div className="fixed bottom-4 right-4 z-40 w-80 max-w-[calc(100vw-2rem)] space-y-2">
       {pendingCards.map((card) => (
         <ErrandCard key={card.id} card={card} />
       ))}

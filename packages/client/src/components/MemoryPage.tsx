@@ -1,15 +1,19 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { dateLocale } from '../i18n/index.js';
-import { INPUT_CLS } from '../lib/styles.js';
+import { FOCUS_RING, INPUT_CLS } from '../lib/styles.js';
 import { useMemoriesStore } from '../stores/memories.js';
 import { Plus, Search, Trash } from './Icons.js';
 import { LoadingDots } from './LoadingDots.js';
 
 export function MemoryPage() {
   const { t } = useTranslation();
-  const { memories, loading, loadMemories, createMemory, updateMemory, deleteMemory } =
-    useMemoriesStore();
+  const memories = useMemoriesStore((s) => s.memories);
+  const loading = useMemoriesStore((s) => s.loading);
+  const loadMemories = useMemoriesStore((s) => s.loadMemories);
+  const createMemory = useMemoriesStore((s) => s.createMemory);
+  const updateMemory = useMemoriesStore((s) => s.updateMemory);
+  const deleteMemory = useMemoriesStore((s) => s.deleteMemory);
   const [query, setQuery] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [newTitle, setNewTitle] = useState('');
@@ -67,8 +71,8 @@ export function MemoryPage() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={t('memory.searchPlaceholder')}
-            className="w-full pl-8 pr-3 py-1.5 bg-dark-input border border-dark-border text-ink-secondary
-              text-xs rounded-md placeholder:text-ink-muted focus:outline-none focus:border-primary-600/40 transition-colors"
+            className={`w-full pl-8 pr-3 py-1.5 bg-dark-input border border-dark-border text-ink-secondary
+              text-xs rounded-md placeholder:text-ink-muted ${FOCUS_RING} transition-colors`}
           />
         </div>
       </div>
@@ -136,13 +140,13 @@ export function MemoryPage() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     {mem.pinned && (
-                      <span className="text-[10px] font-medium text-primary-400 bg-primary-600/15 px-1.5 py-0.5 rounded border border-primary-600/20 shrink-0">
+                      <span className="text-[10px] font-medium text-primary-400 bg-primary-600/15 px-1.5 py-0.5 rounded-sm border border-primary-600/20 shrink-0">
                         {t('memory.pinned')}
                       </span>
                     )}
                     {mem.source === 'auto' && (
                       <span
-                        className="text-[10px] font-medium text-ink-muted bg-dark-border px-1.5 py-0.5 rounded shrink-0"
+                        className="text-[10px] font-medium text-ink-muted bg-dark-border px-1.5 py-0.5 rounded-sm shrink-0"
                         title={t('memory.autoTitle')}
                       >
                         {t('memory.auto')}
@@ -158,7 +162,7 @@ export function MemoryPage() {
                       {mem.tags.map((tag) => (
                         <span
                           key={tag}
-                          className="text-[10px] text-ink-muted bg-dark-border px-1.5 py-0.5 rounded font-mono"
+                          className="text-[10px] text-ink-muted bg-dark-border px-1.5 py-0.5 rounded-sm font-mono"
                         >
                           #{tag}
                         </span>
@@ -200,7 +204,7 @@ export function MemoryPage() {
                   <button
                     type="button"
                     onClick={() => deleteMemory(mem.id)}
-                    className="p-1 rounded text-ink-muted hover:text-red-400 hover:bg-red-900/20 transition-colors"
+                    className="p-1 rounded-sm text-ink-muted hover:text-red-400 hover:bg-red-900/20 transition-colors"
                     title={t('memory.delete')}
                   >
                     <Trash className="w-3.5 h-3.5" />

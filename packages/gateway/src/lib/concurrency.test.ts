@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { IngestQueue, boundedMap } from './concurrency.js';
+import { boundedMap, IngestQueue } from './concurrency.js';
 
 function deferred(): { promise: Promise<void>; resolve: () => void } {
   let resolve!: () => void;

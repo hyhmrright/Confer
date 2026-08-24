@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useProviderModelFetch } from '../../hooks/useProviderModelFetch.js';
-import { LLM_PROVIDERS, STATIC_MODELS, llmProviderName, modelLabel } from '../../lib/providers.js';
+import { LLM_PROVIDERS, llmProviderName, modelLabel, STATIC_MODELS } from '../../lib/providers.js';
 import { INPUT_FIELD_CLS, SELECT_FIELD_CLS } from '../../lib/styles.js';
 import { useSettingsStore } from '../../stores/settings.js';
 import { LoadingDots } from '../LoadingDots.js';
@@ -10,8 +10,14 @@ import { FieldLabel, StatusMsg } from './SettingsShared.js';
 
 export function AgentTab() {
   const { t } = useTranslation();
-  const { agent, loading, saving, error, success, loadAgent, updateAgent, clearMessages } =
-    useSettingsStore();
+  const agent = useSettingsStore((s) => s.agent);
+  const loading = useSettingsStore((s) => s.loading);
+  const saving = useSettingsStore((s) => s.saving);
+  const error = useSettingsStore((s) => s.error);
+  const success = useSettingsStore((s) => s.success);
+  const loadAgent = useSettingsStore((s) => s.loadAgent);
+  const updateAgent = useSettingsStore((s) => s.updateAgent);
+  const clearMessages = useSettingsStore((s) => s.clearMessages);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [provider, setProvider] = useState('');
@@ -75,8 +81,9 @@ export function AgentTab() {
   return (
     <div className="space-y-4">
       <div>
-        <FieldLabel>{t('settings.agentName')}</FieldLabel>
+        <FieldLabel htmlFor="agent-name">{t('settings.agentName')}</FieldLabel>
         <input
+          id="agent-name"
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
@@ -85,8 +92,9 @@ export function AgentTab() {
         />
       </div>
       <div>
-        <FieldLabel>{t('settings.agentDescription')}</FieldLabel>
+        <FieldLabel htmlFor="agent-description">{t('settings.agentDescription')}</FieldLabel>
         <textarea
+          id="agent-description"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           placeholder={t('settings.agentDescriptionPlaceholder')}
@@ -95,8 +103,9 @@ export function AgentTab() {
         />
       </div>
       <div>
-        <FieldLabel>{t('settings.agentProvider')}</FieldLabel>
+        <FieldLabel htmlFor="agent-provider">{t('settings.agentProvider')}</FieldLabel>
         <select
+          id="agent-provider"
           value={provider}
           onChange={(e) => handleProviderChange(e.target.value)}
           className={SELECT_FIELD_CLS}
@@ -111,7 +120,9 @@ export function AgentTab() {
       </div>
       {provider && (
         <div>
-          <FieldLabel>
+          {/* Both branches below carry the same id, so the label stays bound
+              whichever control the provider's model list produces. */}
+          <FieldLabel htmlFor="agent-model">
             {t('settings.agentModel')}
             {loadingModels && (
               <span className="text-ink-muted font-normal ml-2 text-[11px]">
@@ -121,6 +132,7 @@ export function AgentTab() {
           </FieldLabel>
           {modelOptions.length > 0 ? (
             <select
+              id="agent-model"
               value={model}
               onChange={(e) => setModel(e.target.value)}
               className={SELECT_FIELD_CLS}
@@ -134,6 +146,7 @@ export function AgentTab() {
             </select>
           ) : (
             <input
+              id="agent-model"
               type="text"
               value={model}
               onChange={(e) => setModel(e.target.value)}
@@ -148,8 +161,9 @@ export function AgentTab() {
         </div>
       )}
       <div>
-        <FieldLabel>{t('settings.agentSystemPrompt')}</FieldLabel>
+        <FieldLabel htmlFor="agent-system-prompt">{t('settings.agentSystemPrompt')}</FieldLabel>
         <textarea
+          id="agent-system-prompt"
           value={systemPrompt}
           onChange={(e) => setSystemPrompt(e.target.value)}
           placeholder={t('settings.agentSystemPromptPlaceholder')}

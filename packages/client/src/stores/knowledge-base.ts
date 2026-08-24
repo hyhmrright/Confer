@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { api } from '../lib/api.js';
+import { appendNew, prependNew } from '../lib/list.js';
 
 export interface KnowledgeBase {
   id: string;
@@ -25,12 +26,15 @@ export interface KnowledgeDocument {
 interface KbState {
   kbs: KnowledgeBase[];
   documents: Record<string, KnowledgeDocument[]>;
+  documentsTotal: Record<string, number>;
+  loadingMoreDocs: string | null;
   loading: boolean;
   uploading: boolean;
   fetchKbs: () => Promise<void>;
   createKb: (name: string, description?: string) => Promise<void>;
   deleteKb: (kbId: string) => Promise<void>;
   fetchDocuments: (kbId: string) => Promise<void>;
+  loadMoreDocuments: (kbId: string) => Promise<void>;
   uploadDocument: (kbId: string, file: File) => Promise<void>;
   deleteDocument: (kbId: string, docId: string) => Promise<void>;
   retryDocument: (kbId: string, docId: string) => Promise<void>;
@@ -38,9 +42,31 @@ interface KbState {
 
 const TERMINAL_STATUSES = new Set(['ready', 'error', 'failed']);
 
-export const useKbStore = create<KbState>((set) => ({
+// A knowledge base is an upload target, so this list is the one that genuinely
+// grows. One "load more" step; the gateway caps `limit` at 100.
+const DOC_PAGE_SIZE = 50;
+
+interface DocumentList {
+  documents: KnowledgeDocument[];
+  total: number;
+}
+
+// Fold a freshly-fetched first page over what is already cached: refresh the
+// rows it covers, keep the ones it doesn't (anything the user paged in beyond
+// it), and prepend rows that are genuinely new. The upload poller re-reads page
+// one to watch a status settle, and a plain assignment there would silently
+// throw away every page loaded after the first.
+function mergeDocs(cached: KnowledgeDocument[], page: KnowledgeDocument[]): KnowledgeDocument[] {
+  const fresh = new Map(page.map((doc) => [doc.id, doc]));
+  const refreshed = cached.map((doc) => fresh.get(doc.id) ?? doc);
+  return prependNew(refreshed, page);
+}
+
+export const useKbStore = create<KbState>((set, get) => ({
   kbs: [],
   documents: {},
+  documentsTotal: {},
+  loadingMoreDocs: null,
   loading: false,
   uploading: false,
 
@@ -67,14 +93,42 @@ export const useKbStore = create<KbState>((set) => ({
     set((s) => ({
       kbs: s.kbs.filter((kb) => kb.id !== kbId),
       documents: Object.fromEntries(Object.entries(s.documents).filter(([k]) => k !== kbId)),
+      documentsTotal: Object.fromEntries(
+        Object.entries(s.documentsTotal).filter(([k]) => k !== kbId),
+      ),
     }));
   },
 
   fetchDocuments: async (kbId) => {
-    const data = await api.get<{ documents: KnowledgeDocument[] }>(
-      `/knowledge-bases/${kbId}/documents`,
+    const data = await api.get<DocumentList>(
+      `/knowledge-bases/${kbId}/documents?limit=${DOC_PAGE_SIZE}&offset=0`,
     );
-    set((s) => ({ documents: { ...s.documents, [kbId]: data.documents } }));
+    set((s) => ({
+      documents: { ...s.documents, [kbId]: data.documents },
+      documentsTotal: { ...s.documentsTotal, [kbId]: data.total },
+    }));
+  },
+
+  loadMoreDocuments: async (kbId) => {
+    const { documents, documentsTotal, loadingMoreDocs } = get();
+    const shown = documents[kbId] ?? [];
+    if (loadingMoreDocs || shown.length >= (documentsTotal[kbId] ?? 0)) return;
+    set({ loadingMoreDocs: kbId });
+    try {
+      const data = await api.get<DocumentList>(
+        `/knowledge-bases/${kbId}/documents?limit=${DOC_PAGE_SIZE}&offset=${shown.length}`,
+      );
+      set((s) => ({
+        documents: {
+          ...s.documents,
+          [kbId]: appendNew(s.documents[kbId] ?? [], data.documents),
+        },
+        documentsTotal: { ...s.documentsTotal, [kbId]: data.total },
+        loadingMoreDocs: null,
+      }));
+    } catch {
+      set({ loadingMoreDocs: null });
+    }
   },
 
   uploadDocument: async (kbId, file) => {
@@ -91,6 +145,7 @@ export const useKbStore = create<KbState>((set) => ({
           ...s.documents,
           [kbId]: [data.document, ...(s.documents[kbId] ?? [])],
         },
+        documentsTotal: { ...s.documentsTotal, [kbId]: (s.documentsTotal[kbId] ?? 0) + 1 },
       }));
       // Embedding runs server-side after upload, so a freshly uploaded document
       // stays "processing" until it finishes. Poll a few times to reflect the
@@ -100,17 +155,22 @@ export const useKbStore = create<KbState>((set) => ({
         void (async () => {
           for (let i = 0; i < 20; i++) {
             await new Promise((resolve) => setTimeout(resolve, 1500));
-            let docs: KnowledgeDocument[];
+            let page: DocumentList;
             try {
-              const polled = await api.get<{ documents: KnowledgeDocument[] }>(
-                `/knowledge-bases/${kbId}/documents`,
+              page = await api.get<DocumentList>(
+                `/knowledge-bases/${kbId}/documents?limit=${DOC_PAGE_SIZE}&offset=0`,
               );
-              docs = polled.documents;
             } catch {
               return;
             }
-            set((s) => ({ documents: { ...s.documents, [kbId]: docs } }));
-            const doc = docs.find((d) => d.id === docId);
+            set((s) => ({
+              documents: {
+                ...s.documents,
+                [kbId]: mergeDocs(s.documents[kbId] ?? [], page.documents),
+              },
+              documentsTotal: { ...s.documentsTotal, [kbId]: page.total },
+            }));
+            const doc = page.documents.find((d) => d.id === docId);
             if (!doc || (doc.status != null && TERMINAL_STATUSES.has(doc.status))) return;
           }
         })();
@@ -123,6 +183,10 @@ export const useKbStore = create<KbState>((set) => ({
   deleteDocument: async (kbId, docId) => {
     await api.delete(`/knowledge-bases/${kbId}/documents/${docId}`);
     set((s) => ({
+      documentsTotal: {
+        ...s.documentsTotal,
+        [kbId]: Math.max(0, (s.documentsTotal[kbId] ?? 0) - 1),
+      },
       documents: {
         ...s.documents,
         [kbId]: (s.documents[kbId] ?? []).filter((d) => d.id !== docId),

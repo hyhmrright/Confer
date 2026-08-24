@@ -15,7 +15,9 @@ function formatDecidedAt(value: string | null): string {
 
 export function PermissionHistory() {
   const { t } = useTranslation();
-  const { history, historyError, loadHistory } = usePermissionsStore();
+  const history = usePermissionsStore((s) => s.history);
+  const historyError = usePermissionsStore((s) => s.historyError);
+  const loadHistory = usePermissionsStore((s) => s.loadHistory);
 
   useEffect(() => {
     loadHistory();

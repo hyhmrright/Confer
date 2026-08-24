@@ -8,9 +8,20 @@ on:
       tag:
         description: 'Tag to release (e.g. v0.1.0)'
         required: true
+      dry_run:
+        description: 'Rehearsal — build every platform, publish nothing'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
+
+# The release jobs can't reuse .github/actions/setup — its dependency cache path
+# is Linux/macOS-only and these run on Windows too — so the Bun version is pinned
+# here instead. Keep it in step with that action; `latest` would let an upstream
+# Bun release break a release build with no change of ours.
+env:
+  BUN_VERSION: '1.4.0'
 
 jobs:
   # ── 1. Generate trilingual release notes ──────────────────────────────────
@@ -20,7 +31,7 @@ jobs:
       body: ${{ steps.notes.outputs.body }}
       tag: ${{ steps.tag.outputs.value }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
 
@@ -37,11 +48,17 @@ jobs:
           echo "value=$VALUE" >> "$GITHUB_OUTPUT"
 
       - name: Verify tag is on main
+        # A rehearsal is dispatched against a branch, where this can never pass
+        # by construction. On a tag push the `inputs` context is empty, so the
+        # guard evaluates true and the check runs exactly as it always has.
+        if: ${{ !inputs.dry_run }}
+        env:
+          TAG: ${{ steps.tag.outputs.value }}
         run: |
           git fetch origin main --depth=1
-          TAG_COMMIT=$(git rev-parse "${{ steps.tag.outputs.value }}")
+          TAG_COMMIT=$(git rev-parse "$TAG")
           if ! git merge-base --is-ancestor "$TAG_COMMIT" origin/main; then
-            echo "::error::Tag ${{ steps.tag.outputs.value }} is not reachable from origin/main. Only release from main."
+            echo "::error::Tag $TAG is not reachable from origin/main. Only release from main."
             exit 1
           fi
 
@@ -95,13 +112,13 @@ jobs:
     name: Desktop (${{ matrix.label }})
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
-          bun-version: latest
+          bun-version: ${{ env.BUN_VERSION }}
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
         with:
           targets: ${{ matrix.rust-targets }}
 
@@ -123,14 +140,20 @@ jobs:
             exit 1
           fi
 
-      - uses: tauri-apps/tauri-action@v0
+      - uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: packages/client
           tauriScript: bunx tauri
-          tagName: ${{ needs.prepare.outputs.tag }}
-          releaseName: "Confer ${{ needs.prepare.outputs.tag }}"
+          # Omitting tagName, releaseName and releaseId is tauri-action's own
+          # documented way to build without uploading anything, which is what a
+          # rehearsal wants. Note the guard is `!dry_run && value || ''` and NOT
+          # `dry_run && '' || value`: GitHub's `a && b || c` yields c whenever b
+          # is falsy, and '' is falsy, so the obvious spelling would hand back
+          # the real tag on a dry run and publish a release.
+          tagName: ${{ !inputs.dry_run && needs.prepare.outputs.tag || '' }}
+          releaseName: ${{ !inputs.dry_run && format('Confer {0}', needs.prepare.outputs.tag) || '' }}
           releaseBody: ${{ needs.prepare.outputs.body }}
           # Fresh tag pushes land as a draft for manual review; a manual
           # workflow_dispatch re-release keeps the existing release published.
@@ -145,23 +168,23 @@ jobs:
     name: Android
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
-          bun-version: latest
+          bun-version: ${{ env.BUN_VERSION }}
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
         with:
           targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android,i686-linux-android
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
           java-version: 17
 
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4
 
       - name: Install Android NDK
         run: sdkmanager "ndk;27.0.12077973"
@@ -210,7 +233,7 @@ jobs:
         run: bunx tauri android build --apk
 
       - name: Upload Android artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: android-apk
           path: packages/client/src-tauri/gen/android/app/build/outputs/apk/**/*.apk
@@ -218,8 +241,10 @@ jobs:
       - name: Attach APK to release
         # Fires for both tag pushes and manual workflow_dispatch re-runs (on
         # dispatch github.ref is the branch, not the tag, so gate on the resolved tag).
-        if: startsWith(needs.prepare.outputs.tag, 'v')
-        uses: softprops/action-gh-release@v2
+        # The APK is still built and still uploaded as a workflow artifact on a
+        # rehearsal; only the release attachment is skipped.
+        if: ${{ !inputs.dry_run && startsWith(needs.prepare.outputs.tag, 'v') }}
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3
         with:
           # Match the desktop job: draft on tag push, published on re-release.
           draft: ${{ github.event_name != 'workflow_dispatch' }}
@@ -234,7 +259,7 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/')
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Update repository About
         env:

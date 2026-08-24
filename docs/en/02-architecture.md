@@ -106,7 +106,7 @@ For the detailed protocol design, see `docs/03-protocol.md`.
 ## Client architecture
 
 - **Foundation**: Tauri 2.0 (Rust core + WebView rendering)
-- **Frontend**: React 18 + TypeScript + Tailwind CSS
+- **Frontend**: React 19 + TypeScript + Tailwind CSS
 - **State management**: Zustand or Jotai (lightweight)
 - **Routing**: TanStack Router
 - **Networking**: native fetch + native WebSocket + EventSource (SSE)

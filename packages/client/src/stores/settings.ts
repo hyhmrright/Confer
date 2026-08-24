@@ -87,7 +87,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     set({ saving: true, error: null, success: null });
     try {
       // Whole-object replace. The server stores the body verbatim
-      // (`z.record(z.unknown())`), so the client is the only guard that the
+      // (`z.record(z.string(), z.unknown())`), so the client is the only guard that the
       // shape is the correct engine vocabulary — hence the `PolicyOverrides` type.
       await api.put('/agents/me/policies', policies);
       set((s) => ({

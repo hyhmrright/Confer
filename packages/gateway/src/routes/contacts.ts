@@ -1,10 +1,11 @@
-import { SsrfBlockedError, assertPublicHostname, resolveDID } from '@confer/identity';
+import { assertPublicHostname, resolveDID, SsrfBlockedError } from '@confer/identity';
 import { AppError, contactLookupSchema, newId, policyOverridesSchema } from '@confer/shared';
-import { and, eq, like } from 'drizzle-orm';
+import { and, count, desc, eq, like } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { getDb } from '../db/connection.js';
 import { agents, peerAgents, peerContacts } from '../db/schema.js';
+import { parseLimit, parseOffset } from '../lib/pagination.js';
 import { upsertPeerAgent } from '../lib/peer-agent.js';
 import { authMiddleware } from '../middleware/auth.js';
 import type { AppEnv } from '../types.js';
@@ -72,18 +73,30 @@ contactRoutes.use('/*', authMiddleware);
 contactRoutes.get('/', async (c) => {
   const user = c.get('user');
   const db = getDb();
+  const limit = parseLimit(c.req.query('limit'), 50, 100);
+  const offset = parseOffset(c.req.query('offset'));
+  const owned = eq(peerContacts.user_id, user.sub);
 
+  // Ordered by id: these are ULIDs, so it is newest-first and, unlike
+  // created_at, unique — an offset window can't drop or repeat a row when two
+  // contacts share a timestamp.
   const contacts = await db
     .select()
     .from(peerContacts)
     .innerJoin(peerAgents, eq(peerContacts.peer_id, peerAgents.id))
-    .where(eq(peerContacts.user_id, user.sub));
+    .where(owned)
+    .orderBy(desc(peerContacts.id))
+    .limit(limit)
+    .offset(offset);
+
+  const [totals] = await db.select({ value: count() }).from(peerContacts).where(owned);
 
   return c.json({
     contacts: contacts.map((row) => ({
       ...row.peer_contacts,
       peer: row.peer_agents,
     })),
+    total: totals?.value ?? 0,
   });
 });
 

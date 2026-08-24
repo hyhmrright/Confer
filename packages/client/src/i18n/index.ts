@@ -1,9 +1,7 @@
 import i18n, { type ParseKeys } from 'i18next';
 import LanguageDetector from 'i18next-browser-languagedetector';
 import { initReactI18next } from 'react-i18next';
-import { en } from './locales/en.js';
-import { ja } from './locales/ja.js';
-import { zh } from './locales/zh.js';
+import type { Resources } from './locales/zh.js';
 
 export const SUPPORTED_LANGUAGES = ['en', 'zh', 'ja'] as const;
 export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];
@@ -12,25 +10,72 @@ export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];
 // type fields that hold an i18n key for later lookup via t(key).
 export type TranslationKey = ParseKeys;
 
-i18n
-  .use(LanguageDetector)
-  .use(initReactI18next)
-  .init({
-    resources: {
-      en: { translation: en },
-      zh: { translation: zh },
-      ja: { translation: ja },
-    },
-    fallbackLng: 'en',
-    supportedLngs: SUPPORTED_LANGUAGES,
-    load: 'languageOnly',
-    detection: {
-      order: ['localStorage', 'navigator'],
-      lookupLocalStorage: 'confer_lang',
-      caches: ['localStorage'],
-    },
-    interpolation: { escapeValue: false },
-  });
+// Dynamic imports, so a visitor downloads the one language they read instead of
+// all three — 7.8 KB gzip of the initial chunk was the other two. Safe to load
+// only one because every locale is typed as `Resources`, making the key sets
+// identical by construction: `fallbackLng` has nothing to fall back *to*, so it
+// never fires for a missing key.
+//
+// Written out rather than built from SUPPORTED_LANGUAGES because the specifier
+// has to be statically analysable — a computed one makes Rollup give up and
+// bundle all three back into the caller.
+const LOADERS: Record<SupportedLanguage, () => Promise<Resources>> = {
+  en: () => import('./locales/en.js').then((m) => m.en),
+  zh: () => import('./locales/zh.js').then((m) => m.zh),
+  ja: () => import('./locales/ja.js').then((m) => m.ja),
+};
+
+function isSupported(lng: string): lng is SupportedLanguage {
+  return (SUPPORTED_LANGUAGES as readonly string[]).includes(lng);
+}
+
+async function loadResources(lng: string): Promise<void> {
+  const key = isSupported(lng) ? lng : 'en';
+  if (i18n.hasResourceBundle(key, 'translation')) return;
+  i18n.addResourceBundle(key, 'translation', await LOADERS[key]());
+}
+
+// Switch language, resources first. Calling i18next's own changeLanguage
+// directly would announce the switch before the bundle existed, and every
+// string on screen would flash its raw key for a frame.
+//
+// The ticket guards an ordering the old synchronous switch could not get wrong:
+// each language's first switch is a real fetch, so two quick clicks on the
+// compact switcher have two imports racing, and the slower one would win the
+// last word regardless of which was asked for last.
+let latestRequest = 0;
+
+export async function changeLanguage(lng: string): Promise<void> {
+  const ticket = ++latestRequest;
+  await loadResources(lng);
+  if (ticket !== latestRequest) return;
+  await i18n.changeLanguage(lng);
+}
+
+let started: Promise<void> | undefined;
+
+// Await before the first render. Resolving after this point means the tree can
+// mount with its strings already in place.
+export function initI18n(): Promise<void> {
+  started ??= i18n
+    .use(LanguageDetector)
+    .use(initReactI18next)
+    .init({
+      resources: {},
+      fallbackLng: 'en',
+      supportedLngs: SUPPORTED_LANGUAGES,
+      load: 'languageOnly',
+      detection: {
+        order: ['localStorage', 'navigator'],
+        lookupLocalStorage: 'confer_lang',
+        caches: ['localStorage'],
+      },
+      interpolation: { escapeValue: false },
+    })
+    .then(() => loadResources(i18n.language))
+    .then(syncDocumentLang);
+  return started;
+}
 
 const DATE_LOCALES: Record<SupportedLanguage, string> = {
   en: 'en-US',
@@ -43,5 +88,14 @@ const DATE_LOCALES: Record<SupportedLanguage, string> = {
 export function dateLocale(): string {
   return DATE_LOCALES[i18n.language as SupportedLanguage] ?? 'en-US';
 }
+
+// The served index.html can only carry one static `lang`, so it is wrong for
+// two of the three UI languages — and that attribute is what tells a screen
+// reader which voice to use. Keep it on the real language instead, reusing the
+// same BCP-47 tags the date formatter maps to.
+function syncDocumentLang() {
+  document.documentElement.lang = dateLocale();
+}
+i18n.on('languageChanged', syncDocumentLang);
 
 export default i18n;

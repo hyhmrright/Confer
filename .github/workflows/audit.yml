@@ -1,0 +1,39 @@
+name: Scheduled audit
+
+# ci.yml already gates every PR and push on `bun audit`, which covers advisories
+# that exist when someone pushes. This covers the gap between pushes: an advisory
+# published during a quiet week stays invisible until the next commit, and then
+# turns that unrelated commit red as though it introduced the problem. GHSA-2v37-
+# 7h3g-55p8 (nanoid, via client › postcss) did exactly that over eight days.
+#
+# GitHub runs scheduled workflows only from the default branch, so this audits
+# main — the release branch — and mails the repo owner when it fails. Work on dev
+# is still covered by ci.yml's own audit job on every push.
+on:
+  schedule:
+    - cron: '17 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: ./.github/actions/setup
+
+      # Same commands and thresholds as ci.yml's audit job — they must not
+      # drift, or a nightly pass would mean nothing about what CI will do to a
+      # PR. RustSec publishes on the same quiet-week schedule npm advisories do,
+      # so the Rust side needs the nightly sweep for the same reason.
+      - name: Security audit
+        run: bun audit --audit-level=high
+
+      - uses: taiki-e/install-action@b6ff580856c41316412a0b9b60540fbc6f8c82cc # v2.86.7
+        with:
+          tool: cargo-audit
+      - name: Security audit (Rust)
+        working-directory: packages/client/src-tauri
+        run: cargo-audit audit
