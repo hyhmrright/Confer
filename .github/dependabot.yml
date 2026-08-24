@@ -1,7 +1,23 @@
 version: 2
+
+# Dependabot reads this file — and schedules every job below — from the DEFAULT
+# BRANCH only. The previous version lived on dev alone from 2026-08-07 and
+# opened exactly zero pull requests for that reason. It is the same stale-main
+# problem that let seven SHA-pinned actions drift up to three majors behind with
+# no signal anywhere except a Node 20 deprecation notice at the foot of a green
+# CI log. If main falls behind dev again, every entry here goes quiet again —
+# and quiet is indistinguishable from up to date.
 updates:
-  # PRs target dev, the daily working branch — main only takes release merges.
-  - package-ecosystem: npm
+  # Pull requests target dev, the daily working branch — main only takes release
+  # merges. Knock-on effect worth knowing: aiming target-branch at a non-default
+  # branch turns Dependabot *security* updates off, so what is configured here
+  # is weekly version updates only. Advisories are gated by `bun audit` and
+  # `cargo audit` in ci.yml and audit.yml instead.
+  - package-ecosystem: bun
+    # Was `npm`, which cannot read bun.lock — so this entry had nothing to
+    # resolve even setting the branch problem aside. One entry covers every
+    # workspace. Majors are deliberately left ungrouped: they get their own PR
+    # because they need reading, not just a green check.
     directory: /
     target-branch: dev
     schedule:
@@ -10,9 +26,58 @@ updates:
     groups:
       dev-dependencies:
         dependency-type: development
+      production-minor-patch:
+        dependency-type: production
+        update-types: [minor, patch]
 
+  # The Tauri crate. Nothing could watch it before 2026-08-24, because it had no
+  # Cargo.lock for Dependabot to resolve against.
+  - package-ecosystem: cargo
+    directory: /packages/client/src-tauri
+    target-branch: dev
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      cargo-minor-patch:
+        patterns: ['*']
+        update-types: [minor, patch]
+
+  # Reaches .github/workflows and nothing else. Composite actions are a
+  # documented blind spot (dependabot-core#6704, #7495), so the two pins inside
+  # .github/actions/setup/action.yml — oven-sh/setup-bun and actions/cache —
+  # stay manual. Re-check them by hand whenever that file is touched.
   - package-ecosystem: github-actions
     directory: /
+    target-branch: dev
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      actions:
+        patterns: ['*']
+
+  # Compose pinned qdrant at v1.12.0 — an October 2024 release — for 22 months,
+  # because no tool was watching image tags either. confer-gateway/client/migrate
+  # are built locally by deploy.sh and exist in no registry to check.
+  - package-ecosystem: docker-compose
+    directory: /
+    target-branch: dev
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    ignore:
+      - dependency-name: confer-*
+    groups:
+      infra-images:
+        patterns: ['*']
+
+  # infra/*.Dockerfile. alpine is pinned at 3.22 and needs review rather than a
+  # reflex merge: the client image depends on Alpine's own nginx build for the
+  # brotli module, and reverting that base is fatal to the container. oven/bun:1
+  # floats by design — see the deploy notes in CLAUDE.md.
+  - package-ecosystem: docker
+    directory: /infra
     target-branch: dev
     schedule:
       interval: weekly
