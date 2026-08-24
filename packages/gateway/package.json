@@ -16,15 +16,15 @@
     "@confer/shared": "workspace:*",
     "argon2": "^0.45.1",
     "drizzle-orm": "^0.45.2",
-    "hono": "^4.13.1",
-    "jose": "^6.2.8",
+    "hono": "^4.13.4",
+    "jose": "^6.2.10",
     "minio": "^8.0.7",
     "pdf-parse": "^2.4.5",
     "postgres": "^3.4.9",
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@types/bun": "^1.3.14",
+    "@types/bun": "^1.4.0",
     "drizzle-kit": "^0.31.10"
   }
 }
