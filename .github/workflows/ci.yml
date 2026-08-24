@@ -105,6 +105,21 @@ jobs:
       - name: Security audit
         run: bun audit --audit-level=high
 
+      # The crate's 470 dependencies went unaudited until 2026-08-24 — cargo
+      # audit reads Cargo.lock, and there wasn't one to read. Today it reports
+      # 0 vulnerabilities and 17 warnings (unmaintained gtk3/unic bindings that
+      # tauri pulls in, none actionable here); `cargo audit` exits non-zero on
+      # vulnerabilities only, so warnings don't gate — the same shape as
+      # --audit-level=high on the bun side. install-action fetches a prebuilt
+      # binary that runs standalone, so this needs no Rust toolchain and
+      # `cargo install` never has to compile for a minute.
+      - uses: taiki-e/install-action@b6ff580856c41316412a0b9b60540fbc6f8c82cc # v2.86.7
+        with:
+          tool: cargo-audit
+      - name: Security audit (Rust)
+        working-directory: packages/client/src-tauri
+        run: cargo-audit audit
+
   # Single required status check (branch ruleset on main requires `check`).
   # Adding gates above must not add required checks here, or PRs deadlock —
   # this job aggregates them into the one name the ruleset knows about.

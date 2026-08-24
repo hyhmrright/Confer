@@ -24,7 +24,16 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/setup
 
-      # Same command and threshold as ci.yml's audit job — they must not drift,
-      # or a nightly pass would mean nothing about what CI will do to a PR.
+      # Same commands and thresholds as ci.yml's audit job — they must not
+      # drift, or a nightly pass would mean nothing about what CI will do to a
+      # PR. RustSec publishes on the same quiet-week schedule npm advisories do,
+      # so the Rust side needs the nightly sweep for the same reason.
       - name: Security audit
         run: bun audit --audit-level=high
+
+      - uses: taiki-e/install-action@b6ff580856c41316412a0b9b60540fbc6f8c82cc # v2.86.7
+        with:
+          tool: cargo-audit
+      - name: Security audit (Rust)
+        working-directory: packages/client/src-tauri
+        run: cargo-audit audit
