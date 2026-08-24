@@ -54,8 +54,13 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
     groups:
-      actions:
+      # Minor and patch only. Every one of the seven majors lifted on
+      # 2026-08-24 needed its breaking changes checked against this repo
+      # specifically — checkout v7's fork-PR block, tauri-action v1's renamed
+      # inputs — so a major has to arrive as its own reviewable PR.
+      actions-minor-patch:
         patterns: ['*']
+        update-types: [minor, patch]
 
   # Compose pinned qdrant at v1.12.0 — an October 2024 release — for 22 months,
   # because no tool was watching image tags either. confer-gateway/client/migrate
@@ -69,8 +74,12 @@ updates:
     ignore:
       - dependency-name: confer-*
     groups:
-      infra-images:
+      # Same rule, learned from this group's first PR: it bundled qdrant
+      # v1.12→v1.19 together with postgres 16→18, putting a database major
+      # behind the same review as a routine bump.
+      infra-images-minor-patch:
         patterns: ['*']
+        update-types: [minor, patch]
 
   # infra/*.Dockerfile. alpine is pinned at 3.22 and needs review rather than a
   # reflex merge: the client image depends on Alpine's own nginx build for the
