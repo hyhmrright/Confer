@@ -5,7 +5,7 @@
 #   docker compose -p confer-test -f docker-compose.test.yml down
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     ports:
       - "5433:5432"
     environment:
