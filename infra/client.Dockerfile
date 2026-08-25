@@ -17,7 +17,7 @@ RUN cd packages/client && bun run build
 # run per-request, but it is free at build time and beats gzip -9 by ~14% on
 # this bundle. Content-hashed filenames mean these variants can never go stale.
 # woff2 is already brotli-compressed internally and is deliberately excluded.
-FROM alpine:3.22 AS compress
+FROM alpine:3.24 AS compress
 RUN apk add --no-cache brotli gzip
 COPY --from=build /app/packages/client/dist /dist
 RUN find /dist -type f \( -name '*.js' -o -name '*.css' -o -name '*.html' \
@@ -31,7 +31,7 @@ RUN find /dist -type f \( -name '*.js' -o -name '*.css' -o -name '*.html' \
 # nginx.org's module set (which the official image uses) has no brotli at all,
 # so `brotli_static` is unavailable there. Config therefore lives in http.d/,
 # which is where Alpine's nginx.conf includes server blocks from.
-FROM alpine:3.22
+FROM alpine:3.24
 RUN apk add --no-cache nginx nginx-mod-http-brotli \
     && ln -sf /dev/stdout /var/log/nginx/access.log \
     && ln -sf /dev/stderr /var/log/nginx/error.log

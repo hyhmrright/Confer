@@ -73,12 +73,23 @@ updates:
     open-pull-requests-limit: 5
     ignore:
       - dependency-name: confer-*
+      # A Postgres major is a pg_upgrade behind a maintenance window, never a
+      # merged pull request: 18 refuses to start on a 16 data directory, and
+      # 18+ images additionally moved the mount point to /var/lib/postgresql,
+      # so the compose file needs editing too. Minors within 16.x still flow.
+      - dependency-name: postgres
+        update-types: [version-update:semver-major]
     groups:
       # Same rule, learned from this group's first PR: it bundled qdrant
       # v1.12→v1.19 together with postgres 16→18, putting a database major
       # behind the same review as a routine bump.
       infra-images-minor-patch:
         patterns: ['*']
+        # Qdrant needs excluding on top of that rule, because its breakage is
+        # not major-versioned: v1.19 panics on storage written by v1.12, which
+        # wrote a segment.json variant the newer reader rejects. Upgrades are
+        # stepwise, so each bump has to arrive as its own reviewable PR.
+        exclude-patterns: ['qdrant/qdrant']
         update-types: [minor, patch]
 
   # infra/*.Dockerfile. alpine is pinned at 3.22 and needs review rather than a
