@@ -588,6 +588,7 @@ async function processA2AMessage(params: ProcessA2AMessageParams): Promise<void>
 
   const modelConfig = targetAgent.model_config_json as Record<string, unknown> | null;
   const providerName = (modelConfig?.provider as string) ?? 'anthropic';
+  const model = (modelConfig?.model as string) || undefined;
 
   const db = getDb();
   const env = getEnv();
@@ -615,6 +616,7 @@ async function processA2AMessage(params: ProcessA2AMessageParams): Promise<void>
   const { content: replyContent, citations } = await runAgentTurn({
     provider,
     systemPromptBase: targetAgent.description ?? 'You are a helpful AI agent.',
+    model,
     history,
     userMessage: messageContent,
     userId: targetAgent.user_id,
@@ -661,6 +663,7 @@ async function processA2AMessage(params: ProcessA2AMessageParams): Promise<void>
     void extractAndStore({
       userId: targetAgent.user_id,
       provider,
+      model,
       embeddingKey,
       embeddingProvider,
       recentTurns,
