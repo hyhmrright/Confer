@@ -18,6 +18,11 @@ COPY packages/shared ./packages/shared
 COPY packages/identity ./packages/identity
 COPY packages/agent-runtime ./packages/agent-runtime
 COPY packages/gateway ./packages/gateway
+# Bun 1.4 stopped hoisting workspace dependencies to the root node_modules —
+# each package now resolves its own through symlinks into the root .bun store.
+# Copying only the root leaves those links behind and nothing can find
+# drizzle-orm. Must stay after the source copies, which would overwrite them.
+COPY --from=install /app/packages ./packages
 
 USER bun
 EXPOSE 3000
