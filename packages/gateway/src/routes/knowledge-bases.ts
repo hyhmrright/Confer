@@ -99,8 +99,25 @@ function submitIngestion(job: IngestJob, failureLabel: string): void {
 knowledgeBasesRoutes.get('/', async (c) => {
   const user = c.get('user');
   const db = getDb();
-  const rows = await db.select().from(knowledgeBases).where(eq(knowledgeBases.user_id, user.sub));
-  return c.json({ knowledge_bases: rows });
+  // Knowledge bases are created by hand, so the page is generous enough that no
+  // real owner pages through it — the bound is here because nothing caps how
+  // many an API client can create, not because the UI expects to scroll.
+  // Ordered by id (ULID) for a stable newest-first window.
+  const limit = parseLimit(c.req.query('limit'), 100, 200);
+  const offset = parseOffset(c.req.query('offset'));
+
+  const owned = eq(knowledgeBases.user_id, user.sub);
+  const rows = await db
+    .select()
+    .from(knowledgeBases)
+    .where(owned)
+    .orderBy(desc(knowledgeBases.id))
+    .limit(limit)
+    .offset(offset);
+
+  const [totals] = await db.select({ value: count() }).from(knowledgeBases).where(owned);
+
+  return c.json({ knowledge_bases: rows, total: totals?.value ?? 0 });
 });
 
 knowledgeBasesRoutes.post('/', async (c) => {

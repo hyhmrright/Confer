@@ -44,6 +44,25 @@ describe('knowledge base CRUD', () => {
     expect((await del(`${BASE}/${id}`, { token: user.token })).status).toBe(404);
   });
 
+  // The list used to select every row the owner had. Nothing caps how many an
+  // API client can create, so the response size was unbounded even though the
+  // UI never pages through it.
+  test('bounds the knowledge base list and reports the full count', async () => {
+    for (const name of ['One', 'Two', 'Three']) await createKb(name);
+
+    const page = await (await get(`${BASE}?limit=2`, { token: user.token })).json();
+    expect(page.knowledge_bases).toHaveLength(2);
+    expect(page.total).toBe(3);
+
+    const rest = await (await get(`${BASE}?limit=2&offset=2`, { token: user.token })).json();
+    expect(rest.knowledge_bases).toHaveLength(1);
+    // Newest-first by ULID, so the window walks without repeating a row.
+    const ids = [...page.knowledge_bases, ...rest.knowledge_bases].map(
+      (kb: { id: string }) => kb.id,
+    );
+    expect(new Set(ids).size).toBe(3);
+  });
+
   test('rejects an empty name with 400', async () => {
     expect((await post(BASE, { token: user.token, body: { name: '' } })).status).toBe(400);
   });
