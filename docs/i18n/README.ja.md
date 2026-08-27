@@ -53,18 +53,24 @@
 
 ### 1 · 自分のインスタンスを起動する
 
-必要なのは Docker だけ。gateway と Web クライアントをビルドし、マイグレーションを実行し、
-すべてのサービスを起動します：
+必要なのは Docker だけ。clone もビルドも不要です。公開済みイメージを取得し、このインスタンス
+専用のシークレットを生成し、マイグレーションを実行してすべてのサービスを起動します：
 
 ```bash
-git clone https://github.com/hyhmrright/Confer.git
-cd Confer
-cp .env.example .env    # ローカルなら既定値で可——公開する前にシークレットを必ず変更
-docker compose -f docker-compose.prod.yml up -d --build
+curl -O https://raw.githubusercontent.com/hyhmrright/Confer/main/docker-compose.ghcr.yml
+printf 'JWT_SECRET=%s\nENCRYPTION_KEY=%s\n' "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > .env
+docker compose -f docker-compose.ghcr.yml up -d
 ```
 
 **http://localhost** を開き、最初のアカウントを登録してから、**設定**で LLM API キーを
 入力してください（ユーザーごとに暗号化して保存されます）。
+
+この `.env` は必ず保管してください。インスタンスに保存された API キーは `ENCRYPTION_KEY`
+で復号されるため、失うとキーも失われます。停止してデータを残すには
+`docker compose -f docker-compose.ghcr.yml down` を実行します。
+
+イメージは `main` への push ごとに linux/amd64 と linux/arm64 向けにビルドされます。
+ソースからビルドする場合は [3 · Confer 自体を開発する](#3--confer-自体を開発する) を参照。
 
 設定・リバースプロキシ・トラブルシュートは **[`docs/09-deployment.md`](../09-deployment.md)** を参照。
 

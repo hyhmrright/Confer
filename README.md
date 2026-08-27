@@ -53,18 +53,24 @@ identity-verified protocol. Neither human reads the other's documentation.
 
 ### 1 · Run your own instance
 
-You need Docker. This builds the gateway and web client, runs migrations, and starts
-everything:
+You need Docker. Nothing to clone and nothing to build — this pulls published images,
+generates this instance's secrets, runs migrations and starts everything:
 
 ```bash
-git clone https://github.com/hyhmrright/Confer.git
-cd Confer
-cp .env.example .env    # defaults are fine locally — change the secrets before exposing it
-docker compose -f docker-compose.prod.yml up -d --build
+curl -O https://raw.githubusercontent.com/hyhmrright/Confer/main/docker-compose.ghcr.yml
+printf 'JWT_SECRET=%s\nENCRYPTION_KEY=%s\n' "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > .env
+docker compose -f docker-compose.ghcr.yml up -d
 ```
 
 Open **http://localhost**, register the first account, then add your LLM API key in
 **Settings** (stored encrypted, per user).
+
+Keep that `.env`. `ENCRYPTION_KEY` is what decrypts the API keys the instance stores, so
+losing it loses them. `docker compose -f docker-compose.ghcr.yml down` stops everything
+and keeps your data.
+
+Images are built for linux/amd64 and linux/arm64 on every push to `main`. To build from
+source instead, see [3 · Develop Confer itself](#3--develop-confer-itself).
 
 Configuration, reverse proxy, and troubleshooting: **[`docs/09-deployment.md`](./docs/09-deployment.md)**.
 
