@@ -39,6 +39,9 @@ describe('GET /agents/:username/did.json', () => {
     const doc = await res.json();
 
     expect(doc.id).toBe(user.did);
+    // From PUBLIC_HOST, not the request Host header — a peer that resolved this
+    // document must be handed the address the instance actually answers on.
+    expect(doc.service[0].serviceEndpoint).toBe('http://localhost:3000/a2a/v1');
     expect(doc['@context']).toContain('https://www.w3.org/ns/did/v1');
     expect(doc.verificationMethod).toHaveLength(1);
     // Load-bearing: the id must be the STORED key_id verbatim so inbound

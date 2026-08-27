@@ -3,12 +3,16 @@ import { and, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { getDb } from '../db/connection.js';
 import { agents, keypairs } from '../db/schema.js';
+import { instanceDid, selfA2AEndpoint } from '../lib/public-identity.js';
 
 export const wellKnownRoutes = new Hono();
 
 wellKnownRoutes.get('/did.json', async (c) => {
-  const host = c.req.header('host') ?? 'localhost';
-  const did = `did:web:${host}`;
+  // PUBLIC_HOST, not the request Host header: this document's `id` must be the
+  // DID peers resolve, and behind a proxy the Host they present can be an
+  // internal name. It is also what user DIDs are minted from, so deriving it
+  // any other way lets the instance disagree with its own accounts.
+  const did = instanceDid();
   const db = getDb();
 
   // Only public columns — never `private_key_jwk_encrypted`.
@@ -26,7 +30,7 @@ wellKnownRoutes.get('/did.json', async (c) => {
   // (`verificationMethod: []`, `authentication: []`) rather than 404ing.
   const doc = buildDIDDocument({
     did,
-    serviceEndpoint: `https://${host}/a2a/v1`,
+    serviceEndpoint: selfA2AEndpoint(),
     key: kp ? { keyId: kp.key_id, publicKeyMultibase: kp.public_key_multibase } : undefined,
   });
 

@@ -14,6 +14,7 @@ import { getDb } from '../db/connection.js';
 import { agents, keypairs, sessions, users } from '../db/schema.js';
 import { getEnv } from '../env.js';
 import { getConfigValue } from '../lib/app-config.js';
+import { userDid } from '../lib/public-identity.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rate-limit.js';
 
@@ -95,7 +96,7 @@ authRoutes.post('/register', rateLimit(3, 3600_000), async (c) => {
   }
 
   const userId = newId();
-  const did = `did:web:localhost:agents:${body.username}`;
+  const did = userDid(body.username);
   const passwordHash = await hashPassword(body.password);
 
   const [user] = await db

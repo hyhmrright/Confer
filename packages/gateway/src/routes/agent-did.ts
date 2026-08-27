@@ -4,6 +4,7 @@ import { and, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { getDb } from '../db/connection.js';
 import { keypairs, users } from '../db/schema.js';
+import { selfA2AEndpoint } from '../lib/public-identity.js';
 
 export const agentDidRoutes = new Hono();
 
@@ -13,7 +14,6 @@ export const agentDidRoutes = new Hono();
 // signature gate — and it only ever exposes public key material.
 agentDidRoutes.get('/:username/did.json', async (c) => {
   const username = c.req.param('username');
-  const host = c.req.header('host') ?? 'localhost';
   const db = getDb();
 
   const [user] = await db
@@ -48,7 +48,7 @@ agentDidRoutes.get('/:username/did.json', async (c) => {
   // behavior as the instance document in well-known.ts).
   const doc = buildDIDDocument({
     did: user.did,
-    serviceEndpoint: `https://${host}/a2a/v1`,
+    serviceEndpoint: selfA2AEndpoint(),
     key: kp ? { keyId: kp.key_id, publicKeyMultibase: kp.public_key_multibase } : undefined,
   });
 

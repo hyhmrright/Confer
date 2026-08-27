@@ -153,8 +153,13 @@ on the public internet:
 
 - Put it behind a TLS-terminating reverse proxy (Caddy, Traefik, or nginx with a
   cert). A2A signature verification and DID:web both assume HTTPS in the real world.
-- Set `PUBLIC_HOST` (in `.env`) to the externally reachable host so DID documents and
-  AgentFacts advertise the correct address.
+- Set `PUBLIC_HOST` (in `.env`) to the externally reachable host — including a
+  non-default `EXPOSE_PORT`. Every DID this instance mints is derived from it, so
+  this is not cosmetic: left at `localhost`, the identities you hand a peer resolve
+  to *the peer's own* loopback and federation cannot work at all. Set it before you
+  create accounts. Changing it later re-hosts identities still carrying the old
+  `localhost` default on the next start (a one-off, logged); any peer already
+  holding an old DID has to re-add the contact.
 - Change every default secret (`JWT_SECRET`, `ENCRYPTION_KEY`, DB and MinIO passwords).
 - Registration is open by default. An admin can close it at any time from the
   **Admin → Config** tab (`registration_open`), or front it with an invite/allowlist.

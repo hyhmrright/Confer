@@ -7,11 +7,16 @@ import { get, resetDb, seedUser } from '../test/helpers.js';
 beforeEach(resetDb);
 
 describe('GET /.well-known/did.json', () => {
-  test('serves a did:web document for the host', async () => {
+  // Derived from PUBLIC_HOST, not the request Host header: this document's id
+  // is the DID peers resolve and the one user DIDs are minted from, so reading
+  // it off an incoming header lets a proxy make the instance disagree with its
+  // own accounts. Loopback is advertised over http — there is no certificate.
+  test('serves a did:web document derived from PUBLIC_HOST', async () => {
     const res = await get('/.well-known/did.json');
     expect(res.status).toBe(200);
     const doc = await res.json();
-    expect(doc.id).toBe('did:web:localhost');
+    expect(doc.id).toBe('did:web:localhost%3A3000');
+    expect(doc.service[0].serviceEndpoint).toBe('http://localhost:3000/a2a/v1');
     expect(doc['@context']).toContain('https://www.w3.org/ns/did/v1');
     expect(doc.verificationMethod).toEqual([]); // no instance key seeded yet
   });
