@@ -106,7 +106,10 @@ describe('contacts', () => {
     expect(res.status).toBe(400);
   });
 
-  test('looks up public agents by username', async () => {
+  // Regression: this lookup returned raw `agents` rows, which carry no peer id.
+  // Adding a contact takes a `peer_id`, so every agent discovered by username
+  // was impossible to actually add — the whole local-discovery path was dead.
+  test('looks up public agents by username and returns an addable peer', async () => {
     await getDb().insert(agents).values({
       id: newId(),
       user_id: user.id,
@@ -123,6 +126,10 @@ describe('contacts', () => {
     const { candidates } = await res.json();
     expect(candidates).toHaveLength(1);
     expect(candidates[0].did).toBe('did:web:localhost:agents:findme');
+    expect(candidates[0].id).toHaveLength(26);
+
+    const added = await post(BASE, { token: user.token, body: { peer_id: candidates[0].id } });
+    expect(added.status).toBe(201);
   });
 
   test('domain lookup persists only DIDs bound to the queried host (anti-poisoning)', async () => {

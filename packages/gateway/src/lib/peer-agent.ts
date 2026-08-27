@@ -2,6 +2,9 @@ import { newId } from '@confer/shared';
 import { getDb } from '../db/connection.js';
 import { peerAgents } from '../db/schema.js';
 
+/** A persisted peer agent, including the id that contact creation requires. */
+export type PeerAgentRow = typeof peerAgents.$inferSelect;
+
 export interface UpsertPeerAgentInput {
   did: string;
   endpoint: string;
@@ -18,7 +21,7 @@ export interface UpsertPeerAgentInput {
 // written on conflict, so a metadata-light caller (inbound A2A, which knows only
 // did + endpoint) never clobbers richer metadata a discovery lookup already
 // stored for the same peer.
-export async function upsertPeerAgent(input: UpsertPeerAgentInput) {
+export async function upsertPeerAgent(input: UpsertPeerAgentInput): Promise<PeerAgentRow> {
   const db = getDb();
   const agentFacts = (input.agentFacts ?? {}) as Record<string, unknown>;
 
@@ -48,5 +51,11 @@ export async function upsertPeerAgent(input: UpsertPeerAgentInput) {
     })
     .returning();
 
+  // `insert … onConflictDoUpdate … returning()` always yields exactly one row;
+  // the destructure is what makes it look optional. Fail loudly rather than
+  // handing callers an undefined they would use as a peer id.
+  if (!row) {
+    throw new Error(`Failed to upsert peer agent ${input.did}`);
+  }
   return row;
 }
