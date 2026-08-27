@@ -14,6 +14,13 @@
       "name": "@confer/agent-runtime",
       "version": "0.1.0",
     },
+    "packages/cli": {
+      "name": "confer-cli",
+      "version": "0.3.1",
+      "bin": {
+        "confer": "./dist/confer.mjs",
+      },
+    },
     "packages/client": {
       "name": "@confer/client",
       "version": "0.3.1",
@@ -460,6 +467,8 @@
     "character-reference-invalid": ["character-reference-invalid@2.0.1", "", {}, "sha512-iBZ4F4wRbyORVsu0jPV7gXkOsGYjGHPmAyv+HiHG8gi5PtC9KI2j1+v8/tlibRvjoWX027ypmG/n0HtO5t7unw=="],
 
     "comma-separated-tokens": ["comma-separated-tokens@2.0.3", "", {}, "sha512-Fu4hJdvzeylCfQPp9SGWidpzrMs7tTrlu6Vb8XGaRGck8QSNZJJp538Wrb60Lax4fPwR64ViY468OIUTbRlGZg=="],
+
+    "confer-cli": ["confer-cli@workspace:packages/cli"],
 
     "content-disposition": ["content-disposition@1.1.0", "", {}, "sha512-5jRCH9Z/+DRP7rkvY83B+yGIGX96OYdJmzngqnw2SBSxqCFPd0w2km3s5iawpGX8krnwSGmF0FW5Nhr0Hfai3g=="],
 
