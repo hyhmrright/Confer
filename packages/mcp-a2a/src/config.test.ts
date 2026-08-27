@@ -54,4 +54,51 @@ describe('loadConfig', () => {
   test('parses an overridden project id', () => {
     expect(loadConfig({ ...base, CONFER_PROJECT_ID: 'widgets' }).projectId).toBe('widgets');
   });
+
+  // Claude Code passes the literal `${VAR}` from .mcp.json when the variable is
+  // not exported, so each of these arrives looking like a real value. Built by
+  // escaping rather than written out, so the shape stays exactly what the
+  // plugin ships without reading as a forgotten template string.
+  const unexpanded = (body: string) => `\${${body}}`;
+
+  describe('unexpanded placeholders', () => {
+    test('rejects a placeholder username', () => {
+      expect(() =>
+        loadConfig({ CONFER_USERNAME: unexpanded('CONFER_USERNAME'), CONFER_PASSWORD: 'secret' }),
+      ).toThrow(/CONFER_USERNAME/);
+    });
+
+    test('rejects a placeholder password', () => {
+      expect(() =>
+        loadConfig({ CONFER_USERNAME: 'alice', CONFER_PASSWORD: unexpanded('CONFER_PASSWORD') }),
+      ).toThrow(/CONFER_PASSWORD/);
+    });
+
+    test('falls back to the default gateway url', () => {
+      const env = {
+        ...base,
+        CONFER_GATEWAY_URL: unexpanded('CONFER_GATEWAY_URL:-http://localhost:3000'),
+      };
+      expect(loadConfig(env).gatewayUrl).toBe('http://localhost:3000');
+    });
+
+    test('falls back to the default consult wait', () => {
+      const env = { ...base, CONFER_CONSULT_WAIT: unexpanded('CONFER_CONSULT_WAIT:-25') };
+      expect(loadConfig(env).defaultWaitSeconds).toBe(25);
+    });
+
+    test('falls back to the cwd basename for the project id', () => {
+      const env = { ...base, CONFER_PROJECT_ID: unexpanded('CONFER_PROJECT_ID') };
+      expect(loadConfig(env).projectId).toBe(basename(process.cwd()));
+    });
+
+    // Only a value that is entirely a placeholder counts as one — a password
+    // that merely contains those characters is a real password.
+    test('accepts a value that only contains placeholder characters', () => {
+      const password = `pa${unexpanded('ss')}word`;
+      expect(loadConfig({ CONFER_USERNAME: 'alice', CONFER_PASSWORD: password }).password).toBe(
+        password,
+      );
+    });
+  });
 });
