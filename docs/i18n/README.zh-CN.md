@@ -47,17 +47,23 @@ Claude Code 通过 MCP 咨询它，拿到**带引用的答案**，并把验证�
 
 ### 1 · 跑起你自己的实例
 
-只需要 Docker。这条命令会构建 gateway 与 Web 客户端、执行数据库迁移并启动全部服务：
+只需要 Docker。不用 clone，也不用构建——下面这几条会拉取已发布的镜像、生成这个实例自己的
+密钥、执行数据库迁移并启动全部服务：
 
 ```bash
-git clone https://github.com/hyhmrright/Confer.git
-cd Confer
-cp .env.example .env    # 本地用默认值即可——对外暴露前务必改掉密钥
-docker compose -f docker-compose.prod.yml up -d --build
+curl -O https://raw.githubusercontent.com/hyhmrright/Confer/main/docker-compose.ghcr.yml
+printf 'JWT_SECRET=%s\nENCRYPTION_KEY=%s\n' "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > .env
+docker compose -f docker-compose.ghcr.yml up -d
 ```
 
 打开 **http://localhost**，注册第一个账号，然后在**设置**里填入你的 LLM API key
 （按用户加密存储）。
+
+请保存好这份 `.env`。实例里存的 API key 是用 `ENCRYPTION_KEY` 解密的，弄丢它就等于弄丢
+那些 key。`docker compose -f docker-compose.ghcr.yml down` 可以停掉全部服务并保留数据。
+
+镜像在每次推送到 `main` 时构建，同时提供 linux/amd64 与 linux/arm64。想从源码构建见
+[3 · 开发 Confer 本身](#3--开发-confer-本身)。
 
 配置、反向代理与排错见 **[`docs/09-deployment.md`](../09-deployment.md)**。
 

@@ -10,7 +10,7 @@ aspirational.
 
 ## What you get
 
-One command builds and starts the whole platform:
+One command starts the whole platform:
 
 | Service | Image / build | Role |
 |---------|---------------|------|
@@ -37,9 +37,36 @@ nginx (inside `client`) serves the SPA on port **80** and reverse-proxies
   only hard requirement for the one-command path.
 - Roughly 4 GB free RAM and 2 GB disk for images + volumes.
 - [Bun](https://bun.sh) ≥ 1.1 — only if you want the hot-reload dev workflow
-  (option B below) or to regenerate migrations.
+  (option C below) or to regenerate migrations.
 
-## A. One-command self-host (recommended)
+## A. Published images (recommended)
+
+Nothing to clone, nothing to build:
+
+```bash
+curl -O https://raw.githubusercontent.com/hyhmrright/Confer/main/docker-compose.ghcr.yml
+printf 'JWT_SECRET=%s\nENCRYPTION_KEY=%s\n' "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > .env
+docker compose -f docker-compose.ghcr.yml up -d
+```
+
+`ghcr.io/hyhmrright/confer-gateway` and `-client` are built for linux/amd64 and
+linux/arm64 on every push to `main`, and tagged `latest`, the commit SHA, and the
+release version. Pin one with `CONFER_VERSION` in `.env`.
+
+Unlike `docker-compose.prod.yml`, this file runs `migrate` and `gateway` from the
+*same* image. That is only safe because nothing is built here — see the warning
+under option B, which is where the two can drift apart.
+
+Then open **http://localhost**, register the first account, and add an LLM API key
+in **Settings** — the same three steps listed under B below.
+
+Everything after this point that says `-f docker-compose.prod.yml` applies equally
+here with `-f docker-compose.ghcr.yml`, except updating: there is nothing to
+rebuild, so an update is `docker compose -f docker-compose.ghcr.yml pull && … up -d`.
+
+## B. Build from a clone
+
+Use this to run a modified tree, or to self-host without depending on GHCR:
 
 ```bash
 git clone https://github.com/hyhmrright/Confer.git
@@ -106,7 +133,7 @@ docker compose -f docker-compose.prod.yml up -d --build   # migrate re-runs auto
 docker compose -f docker-compose.prod.yml down -v          # -v also deletes the volumes
 ```
 
-## B. Local development (hot reload)
+## C. Local development (hot reload)
 
 Run only the infra in Docker and the app code with Bun:
 
@@ -131,8 +158,8 @@ URL for your setup:**
 
 | Your setup | `CONFER_GATEWAY_URL` |
 |------------|----------------------|
-| One-command self-host (option A) | `http://localhost` (nginx on port 80; the gateway's 3000 is not published) |
-| Local dev (option B) | `http://localhost:3000` (the default) |
+| Published images or a clone (options A/B) | `http://localhost` (nginx on port 80; the gateway's 3000 is not published) |
+| Local dev (option C) | `http://localhost:3000` (the default) |
 | Remote instance | `https://your-host` |
 
 ```bash
