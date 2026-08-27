@@ -47,6 +47,7 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
     try {
       const modelConfig = agent.model_config_json as Record<string, unknown> | null;
       const providerName = (modelConfig?.provider as string) ?? 'anthropic';
+      const model = (modelConfig?.model as string) || undefined;
       const systemPrompt = (modelConfig?.system_prompt as string) ?? DEFAULT_SYSTEM_PROMPT;
 
       const llmKeys = await getUserLlmKeys(user.sub);
@@ -87,6 +88,7 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
       const { content: fullContent, citations } = await runAgentTurn({
         provider,
         systemPromptBase: systemPrompt,
+        model,
         history,
         userMessage: msg.content ?? '',
         userId: user.sub,
@@ -147,6 +149,7 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
         void extractAndStore({
           userId: user.sub,
           provider,
+          model,
           embeddingKey,
           embeddingProvider,
           recentTurns,
@@ -156,6 +159,9 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Stream failed';
+      // Log server-side too: the SSE error reaches only that one client, so an
+      // otherwise-clean log made provider misconfiguration invisible to operators.
+      console.error(`Stream turn failed for user ${user.sub}: ${message}`);
       await stream.writeSSE({ event: 'error', data: JSON.stringify({ message }) });
     }
   });

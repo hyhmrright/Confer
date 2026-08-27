@@ -78,14 +78,17 @@ async function seedParticipant(conversationId: string, userId: string): Promise<
   });
 }
 
-async function seedAgent(userId: string): Promise<void> {
+async function seedAgent(
+  userId: string,
+  modelConfig: Record<string, unknown> = { provider: 'openai' },
+): Promise<void> {
   await getDb()
     .insert(agents)
     .values({
       id: newId(),
       user_id: userId,
       did: `did:web:localhost:agents:a-${newId().toLowerCase()}`,
-      model_config_json: { provider: 'openai' },
+      model_config_json: modelConfig,
     });
 }
 
@@ -169,5 +172,47 @@ describe('GET /stream tool execution', () => {
     // Regression: this previously sent { result: tc.name }, i.e. "web_search".
     expect(payload.result).toBe('摘要：TAVILY_MARKER_42');
     expect(payload.result).not.toBe('web_search');
+  });
+
+  // Regression: the model picked in Agent settings was persisted to
+  // model_config_json.model and then never read, so every call silently used the
+  // provider's hardcoded default. Nothing failed loudly for the cloud providers
+  // — you just got billed for a model you did not choose — and Ollama 404'd on
+  // its `llama3` default. Assert the configured id reaches the wire.
+  test('sends the model configured in agent settings, not the provider default', async () => {
+    const convId = await seedConversation(user.id);
+    const msgId = await seedMessage(convId, user.id);
+    await seedParticipant(convId, user.id);
+    await seedAgent(user.id, { provider: 'openai', model: 'gpt-4.1-mini' });
+
+    await put('/api/v1/agents/me/llm-keys', {
+      token: user.token,
+      body: { provider: 'openai', api_key: 'sk-test-llm' },
+    });
+
+    const sentModels: string[] = [];
+    restoreFetch = mockFetch((url, init) => {
+      if (url.includes('/embeddings')) {
+        const v = new Array(1536).fill(0);
+        v[0] = 1;
+        return Response.json({ data: [{ embedding: v, index: 0 }] });
+      }
+      if (!url.includes('/chat/completions')) return undefined;
+      sentModels.push(JSON.parse(String(init?.body)).model);
+      return new Response('data: {"choices":[{"delta":{"content":"Hi."}}]}\n\ndata: [DONE]\n\n', {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+      });
+    });
+
+    const res = await get(`/api/v1/stream/${convId}/${msgId}`, { token: user.token });
+    expect(res.status).toBe(200);
+    await res.text();
+
+    // Assert every chat call rather than an exact list: memory extraction is
+    // fire-and-forget, so whether its (also model-carrying) call has landed by
+    // now is a race. The turn itself is always the first.
+    expect(sentModels[0]).toBe('gpt-4.1-mini');
+    expect(sentModels.every((m) => m === 'gpt-4.1-mini')).toBe(true);
   });
 });

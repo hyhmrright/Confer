@@ -79,6 +79,14 @@ services:
       NODE_ENV: production
       HOST: 0.0.0.0
       PORT: 3000
+      # The address peers reach this instance at. Every DID this gateway mints
+      # is derived from it, so it is not cosmetic: leave it at localhost and no
+      # other instance can resolve this one's identities. Defaults to the host
+      # the client container serves on (port 80), NOT the gateway's own 3000.
+      # Set it to your domain — including a non-80 EXPOSE_PORT — before
+      # federating. Changing it re-hosts identities minted under the old
+      # localhost default; see rehostLegacyDids in bootstrap.ts.
+      PUBLIC_HOST: ${PUBLIC_HOST:-localhost}
       ADMIN_USERNAMES: ${ADMIN_USERNAMES:-}
       QDRANT_URL: http://qdrant:6333
       MINIO_ENDPOINT: minio

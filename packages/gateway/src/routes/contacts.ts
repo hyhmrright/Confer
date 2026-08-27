@@ -6,7 +6,8 @@ import { z } from 'zod';
 import { getDb } from '../db/connection.js';
 import { agents, peerAgents, peerContacts } from '../db/schema.js';
 import { parseLimit, parseOffset } from '../lib/pagination.js';
-import { upsertPeerAgent } from '../lib/peer-agent.js';
+import { type PeerAgentRow, upsertPeerAgent } from '../lib/peer-agent.js';
+import { selfA2AEndpoint } from '../lib/public-identity.js';
 import { authMiddleware } from '../middleware/auth.js';
 import type { AppEnv } from '../types.js';
 
@@ -235,8 +236,13 @@ contactRoutes.delete('/:id', async (c) => {
 // Each lookup strategy returns the discovered candidates (and an optional
 // error string); the route attaches `method` to the response. Splitting them
 // keeps each path independently readable and testable.
+//
+// Candidates are peer_agents rows, not raw metadata: adding a contact takes a
+// `peer_id`, so a candidate without one cannot be acted on. The type says so —
+// it used to be `unknown[]`, which let the username lookup return id-less rows
+// and made every agent found that way unaddable.
 interface LookupResult {
-  candidates: unknown[];
+  candidates: PeerAgentRow[];
   error?: string;
 }
 
@@ -326,7 +332,6 @@ async function lookupByUsername(value: string): Promise<LookupResult> {
       did: agents.did,
       name: agents.name,
       description: agents.description,
-      is_public: agents.is_public,
     })
     .from(agents)
     .where(
@@ -338,7 +343,22 @@ async function lookupByUsername(value: string): Promise<LookupResult> {
       ),
     )
     .limit(20);
-  return { candidates: rows };
+
+  // These agents live on this instance, so they all share its A2A endpoint —
+  // the same relationship the domain lookup relies on for a remote instance.
+  const endpoint = selfA2AEndpoint();
+  const candidates: PeerAgentRow[] = [];
+  for (const row of rows) {
+    candidates.push(
+      await upsertPeerAgent({
+        did: row.did,
+        name: row.name ?? undefined,
+        description: row.description ?? undefined,
+        endpoint,
+      }),
+    );
+  }
+  return { candidates };
 }
 
 contactRoutes.post('/lookup', async (c) => {

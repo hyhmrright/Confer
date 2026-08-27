@@ -261,6 +261,35 @@ describe('chat store', () => {
     expect(useChatStore.getState().messages).toEqual([]);
   });
 
+  // Regression: the gateway broadcasts `message.new` over the WebSocket before
+  // it writes the stream's `done` event, so by the time the reply is finalized
+  // it is normally already in `messages`. finalizeAgent appended regardless,
+  // which rendered every single answer twice until the user reloaded.
+  test('sendMessage does not re-append a reply the WebSocket already delivered', async () => {
+    const sse = 'event: token\ndata: {"text":"hi"}\n\nevent: done\ndata: {"message_id":"a1"}\n\n';
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = mock(
+      async () => new Response(sse, { status: 200 }),
+    ) as unknown as typeof fetch;
+    post.mockResolvedValue({ id: 'u1', stream_url: '/stream/c1/u1' });
+
+    // The agent reply has already landed over the WebSocket.
+    useChatStore.setState({
+      activeConversationId: 'c1',
+      messages: [makeMessage({ id: 'a1', sender_type: 'own_agent', content: 'hi' })] as never,
+    });
+
+    try {
+      await useChatStore.getState().sendMessage('hello');
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+
+    const { messages, streaming } = useChatStore.getState();
+    expect(messages.filter((m) => m.id === 'a1')).toHaveLength(1);
+    expect(streaming).toBe(false);
+  });
+
   test('setStreaming updates streaming flag and content', () => {
     useChatStore.getState().setStreaming(true, 'partial');
     expect(useChatStore.getState().streaming).toBe(true);

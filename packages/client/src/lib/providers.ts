@@ -40,7 +40,13 @@ export const LLM_PROVIDERS: LlmProvider[] = [
   { id: 'deepseek', name: 'DeepSeek' },
   { id: 'qwen', name: 'Qwen', aliasKey: 'providers.qwenAlias', supportsEmbedding: true },
   { id: 'glm', name: 'GLM', aliasKey: 'providers.glmAlias', supportsEmbedding: true },
-  { id: 'ollama', name: 'Ollama', aliasKey: 'providers.ollamaAlias', isLocal: true },
+  {
+    id: 'ollama',
+    name: 'Ollama',
+    aliasKey: 'providers.ollamaAlias',
+    supportsEmbedding: true,
+    isLocal: true,
+  },
 ];
 
 export interface StaticModel {

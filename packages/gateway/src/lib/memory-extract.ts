@@ -18,12 +18,16 @@ function stripFences(raw: string): string {
 
 // Extract durable facts about the user from a conversation snippet. Returns []
 // on any parse failure — extraction is a best-effort enhancement, never fatal.
-export async function extractFacts(provider: LLMProvider, recentTurns: string): Promise<string[]> {
+export async function extractFacts(
+  provider: LLMProvider,
+  recentTurns: string,
+  model?: string,
+): Promise<string[]> {
   const messages: LLMMessage[] = [
     { role: 'system', content: EXTRACTION_SYSTEM_PROMPT },
     { role: 'user', content: recentTurns },
   ];
-  const res = await provider.chat(messages, { temperature: 0 });
+  const res = await provider.chat(messages, { temperature: 0, model });
   let parsed: unknown;
   try {
     parsed = JSON.parse(stripFences(res.content));

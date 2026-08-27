@@ -15,6 +15,9 @@ const RECALL_MIN_SCORE = 0.3;
 export interface ExtractAndStoreInput {
   userId: string;
   provider: LLMProvider;
+  // Same model the turn itself ran on; omitting it would fall back to the
+  // provider's default, which for Ollama is a model the owner has not pulled.
+  model?: string;
   embeddingKey: string;
   embeddingProvider: EmbeddingProvider;
   recentTurns: string;
@@ -23,7 +26,7 @@ export interface ExtractAndStoreInput {
 // Extract durable facts from the latest turn and persist new ones to both
 // Qdrant and Postgres. Best-effort: callers run this fire-and-forget.
 export async function extractAndStore(input: ExtractAndStoreInput): Promise<void> {
-  const facts = await extractFacts(input.provider, input.recentTurns);
+  const facts = await extractFacts(input.provider, input.recentTurns, input.model);
   if (facts.length === 0) return;
 
   const vectors = await embedTexts(facts, input.embeddingKey, input.embeddingProvider);

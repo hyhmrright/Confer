@@ -36,7 +36,11 @@ describe('POST /auth/register', () => {
     expect(json.access_token).toBeTruthy();
     expect(json.refresh_token).toBeTruthy();
     expect(json.user).toMatchObject({ username: 'alice', display_name: 'Alice' });
-    expect(json.user.did).toBe('did:web:localhost:agents:alice');
+    // Derived from PUBLIC_HOST (`localhost:3000` under the test env), not the
+    // hardcoded `localhost` this used to mint — which no peer could resolve,
+    // because it pointed at the peer's own loopback. The port is `%3A`-encoded
+    // because did:web splits its method-specific id on `:`.
+    expect(json.user.did).toBe('did:web:localhost%3A3000:agents:alice');
 
     const [row] = await getDb().select().from(users).where(eq(users.username, 'alice'));
     expect(row?.password_hash).toBeTruthy();

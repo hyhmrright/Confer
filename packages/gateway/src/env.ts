@@ -1,4 +1,16 @@
 import { z } from 'zod';
+import { parsePublicHost } from './lib/public-host.js';
+
+// Every DID this instance mints is built from PUBLIC_HOST, so a value that
+// cannot be parsed would mint identities no peer can resolve — silently, and
+// permanently for every account created meanwhile. Fail at startup instead.
+function isParsableHost(value: string): boolean {
+  try {
+    return parsePublicHost(value).hostname.length > 0;
+  } catch {
+    return false;
+  }
+}
 
 const envSchema = z.object({
   DATABASE_URL: z.string().url(),
@@ -11,7 +23,10 @@ const envSchema = z.object({
   ADMIN_USERNAMES: z.string().default(''),
   PORT: z.coerce.number().default(3000),
   HOST: z.string().default('0.0.0.0'),
-  PUBLIC_HOST: z.string().default('localhost:3000'),
+  PUBLIC_HOST: z
+    .string()
+    .refine(isParsableHost, 'must be a host[:port] this instance is reachable at')
+    .default('localhost:3000'),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   ENCRYPTION_KEY: z.string().length(64),
   TAVILY_API_KEY: z.string().default(''),

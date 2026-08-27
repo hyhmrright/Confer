@@ -1,4 +1,9 @@
-import type { LLMMessage, LLMProvider, LLMToolDefinition } from '@confer/agent-runtime';
+import type {
+  LLMChatOptions,
+  LLMMessage,
+  LLMProvider,
+  LLMToolDefinition,
+} from '@confer/agent-runtime';
 import type { EmbeddingProvider } from '../lib/embedding.js';
 import { ensureMemoryCollection } from '../lib/memory-store.js';
 import {
@@ -28,6 +33,10 @@ export interface RunAgentTurnOptions {
   // Base system prompt before the KB instruction + memory fragment are layered
   // on. Sourced per caller (chat: model_config.system_prompt; A2A: agent.description).
   systemPromptBase: string;
+  // Model id from the owner's agent settings (`model_config.model`). Undefined
+  // falls back to the provider's own default — which for Ollama is a model the
+  // user almost certainly has not pulled, so leaving this unset 404s.
+  model?: string;
   history: LLMMessage[];
   userMessage: string;
   userId: string;
@@ -111,7 +120,7 @@ async function executeToolCall(
 async function runAgentWithTools(
   provider: LLMProvider,
   initialMessages: LLMMessage[],
-  tools: LLMToolDefinition[],
+  llmOptions: LLMChatOptions,
   ctx: ToolExecContext,
 ): Promise<string> {
   let agentMessages = initialMessages;
@@ -121,7 +130,7 @@ async function runAgentWithTools(
     const pendingToolCalls: Array<{ id: string; name: string; arguments: string }> = [];
     let turnContent = '';
 
-    for await (const event of provider.stream(agentMessages, { tools })) {
+    for await (const event of provider.stream(agentMessages, llmOptions)) {
       switch (event.type) {
         case 'token':
           if (event.text) {
@@ -197,14 +206,19 @@ export async function runAgentTurn(opts: RunAgentTurnOptions): Promise<RunAgentT
   ];
 
   const citations: KbCitation[] = [];
-  const content = await runAgentWithTools(opts.provider, initialMessages, tools, {
-    userId: opts.userId,
-    embeddingKey: opts.embeddingKey,
-    embeddingProvider: opts.embeddingProvider,
-    tavilyApiKey: opts.tavilyApiKey,
-    citations,
-    emit: opts.emit,
-  });
+  const content = await runAgentWithTools(
+    opts.provider,
+    initialMessages,
+    { tools, model: opts.model },
+    {
+      userId: opts.userId,
+      embeddingKey: opts.embeddingKey,
+      embeddingProvider: opts.embeddingProvider,
+      tavilyApiKey: opts.tavilyApiKey,
+      citations,
+      emit: opts.emit,
+    },
+  );
 
   return { content, citations };
 }

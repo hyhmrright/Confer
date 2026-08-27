@@ -1,9 +1,11 @@
 import { exportPrivateKey, generateEd25519KeyPair, publicKeyToMultibase } from '@confer/identity';
 import { encrypt, newId } from '@confer/shared';
-import { and, eq, inArray, ne } from 'drizzle-orm';
+import { and, eq, inArray, like, ne } from 'drizzle-orm';
 import { getDb } from './db/connection.js';
-import { keypairs, users } from './db/schema.js';
+import { agents, keypairs, peerAgents, users } from './db/schema.js';
 import { getEnv } from './env.js';
+import { toDidAuthority } from './lib/public-host.js';
+import { instanceDid } from './lib/public-identity.js';
 
 // Promote the accounts named in ADMIN_USERNAMES to the 'admin' role. Idempotent:
 // accounts already admin (or not yet registered) are left untouched. This is the
@@ -28,11 +30,116 @@ export async function bootstrapAdmins(): Promise<void> {
   }
 }
 
+// The DID registration hardcoded until 2026-08-27, ignoring PUBLIC_HOST.
+const LEGACY_DID = 'did:web:localhost';
+
+// Matches the legacy value itself and anything built on top of it — the
+// per-user `…:agents:<name>` form and the `…#key-1` key ids — without matching
+// a genuinely different host that merely starts the same way (localhost.dev).
+function isLegacyDid(did: string): boolean {
+  return did === LEGACY_DID || did.startsWith(`${LEGACY_DID}:`) || did.startsWith(`${LEGACY_DID}#`);
+}
+
+// Re-host identities this instance minted under the old hardcoded `localhost`.
+//
+// Because registration ignored PUBLIC_HOST, every user and agent DID pointed at
+// whatever machine happened to resolve it — which, for a peer, is the peer's own
+// loopback. Cross-instance A2A therefore could not work at all: the signer's DID
+// document was unreachable and `/lookup` by domain rejected the identities as
+// not belonging to the advertising host.
+//
+// Deliberately scoped to the old hardcoded value. A host that has merely changed
+// (example.com -> other.com) is an operator decision about an identity peers may
+// already have on file, and must not be rewritten behind their back.
+// Idempotent: a second run finds nothing.
+async function rehostLegacyDids(): Promise<void> {
+  const authority = toDidAuthority(getEnv().PUBLIC_HOST);
+  if (authority === 'localhost') return;
+
+  const db = getDb();
+  const rehost = (did: string) => `did:web:${authority}${did.slice(LEGACY_DID.length)}`;
+  const prefix = `${LEGACY_DID}%`;
+
+  // One transaction: a key_id left behind by a half-applied rewrite would no
+  // longer match the DID document built from it, and every inbound A2A
+  // signature would fail verification until someone noticed.
+  const { userCount, agentCount, keyCount } = await db.transaction(async (tx) => {
+    // The LIKE narrows the scan; isLegacyDid then rejects a host that merely
+    // shares the prefix, which LIKE cannot express without escaping games. Every
+    // select below aliases its DID column to `did`, so the filter and the
+    // rewrite read identically across all three tables.
+    const legacyOnly = async <T extends { did: string }>(rows: PromiseLike<T[]>): Promise<T[]> =>
+      (await rows).filter((row) => isLegacyDid(row.did));
+
+    const staleUsers = await legacyOnly(
+      tx.select({ id: users.id, did: users.did }).from(users).where(like(users.did, prefix)),
+    );
+    for (const row of staleUsers) {
+      await tx
+        .update(users)
+        .set({ did: rehost(row.did), updated_at: new Date() })
+        .where(eq(users.id, row.id));
+    }
+
+    const staleAgents = await legacyOnly(
+      tx.select({ id: agents.id, did: agents.did }).from(agents).where(like(agents.did, prefix)),
+    );
+    for (const row of staleAgents) {
+      await tx
+        .update(agents)
+        .set({ did: rehost(row.did), updated_at: new Date() })
+        .where(eq(agents.id, row.id));
+    }
+
+    // Key ids must move with the DID: inbound verification matches the stored
+    // key_id against the one in the request's Signature-Input, and the DID
+    // document is built from this column.
+    const staleKeys = await legacyOnly(
+      tx
+        .select({ id: keypairs.id, did: keypairs.key_id })
+        .from(keypairs)
+        .where(like(keypairs.key_id, prefix)),
+    );
+    for (const row of staleKeys) {
+      await tx
+        .update(keypairs)
+        .set({ key_id: rehost(row.did) })
+        .where(eq(keypairs.id, row.id));
+    }
+
+    return {
+      userCount: staleUsers.length,
+      agentCount: staleAgents.length,
+      keyCount: staleKeys.length,
+    };
+  });
+
+  if (userCount + agentCount + keyCount > 0) {
+    console.log(
+      `Re-hosted ${userCount + agentCount + keyCount} legacy ${LEGACY_DID} identities to ` +
+        `did:web:${authority} (${userCount} users, ${agentCount} agents, ${keyCount} keys).`,
+    );
+  }
+
+  // peer_agents rows describe *remote* parties, so rewriting them would be
+  // rewriting somebody else's identity. Say so instead and let the owner re-add.
+  const stalePeers = (
+    await db.select({ did: peerAgents.did }).from(peerAgents).where(like(peerAgents.did, prefix))
+  ).filter((row) => isLegacyDid(row.did));
+  if (stalePeers.length > 0) {
+    console.warn(
+      `${stalePeers.length} peer_agents row(s) still reference ${LEGACY_DID} and will not resolve. ` +
+        'Re-add those contacts by their new DID.',
+    );
+  }
+}
+
 export async function bootstrap(): Promise<void> {
   const db = getDb();
   const env = getEnv();
 
   await bootstrapAdmins();
+  await rehostLegacyDids();
 
   const [existing] = await db
     .select()
@@ -55,7 +162,7 @@ export async function bootstrap(): Promise<void> {
     id: newId(),
     owner_type: 'instance',
     owner_id: 'system',
-    key_id: 'did:web:localhost#key-1',
+    key_id: `${instanceDid()}#key-1`,
     public_key_multibase: pubMultibase,
     private_key_jwk_encrypted: encryptedKey.value,
   });

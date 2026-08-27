@@ -41,6 +41,28 @@ describe('resolveEmbeddingKey', () => {
     });
   });
 
+  // A fully local install has no hosted key at all. Before Ollama joined the
+  // priority list this returned null, which disabled the knowledge base and
+  // memory recall outright — the one thing the local path could not do.
+  test('falls back to the local Ollama base URL when no hosted key exists', async () => {
+    const llmKeys = { ollama: await enc('http://host.docker.internal:11434') };
+    expect(await resolveEmbeddingKey(llmKeys, KEY)).toEqual({
+      apiKey: 'http://host.docker.internal:11434',
+      provider: 'ollama',
+    });
+  });
+
+  // ...but only as a fallback: an owner running a local chat model alongside a
+  // hosted embedding key keeps the hosted one, so their existing vectors stay
+  // comparable to the new ones.
+  test('prefers a hosted key over Ollama', async () => {
+    const llmKeys = { ollama: await enc('http://localhost:11434'), glm: await enc('glm-key') };
+    expect(await resolveEmbeddingKey(llmKeys, KEY)).toEqual({
+      apiKey: 'glm-key',
+      provider: 'glm',
+    });
+  });
+
   test('skips a provider whose key fails to decrypt and falls through', async () => {
     const llmKeys = {
       openai: await enc('openai-key', OTHER_KEY), // undecryptable with KEY
