@@ -243,7 +243,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
           in_reply_to: data.id,
         };
         set((s) => ({
-          messages: [...s.messages, agentMsg],
+          // The gateway broadcasts `message.new` over the WebSocket *before* it
+          // writes the stream's `done` event, so this same reply has usually
+          // already arrived via addMessage. Appending unconditionally rendered
+          // every answer twice until the next reload.
+          messages: s.messages.some((m) => m.id === agentMsg.id)
+            ? s.messages
+            : [...s.messages, agentMsg],
           streaming: false,
           streamContent: '',
           streamCitations: [],
