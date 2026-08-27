@@ -1,8 +1,15 @@
 import { exportPrivateKey, generateEd25519KeyPair, publicKeyToMultibase } from '@confer/identity';
 import { encrypt, newId } from '@confer/shared';
-import { and, eq, inArray, like, ne } from 'drizzle-orm';
+import { and, eq, inArray, isNull, like, ne } from 'drizzle-orm';
 import { getDb } from './db/connection.js';
-import { agents, keypairs, peerAgents, users } from './db/schema.js';
+import {
+  agents,
+  conversationParticipants,
+  conversations,
+  keypairs,
+  peerAgents,
+  users,
+} from './db/schema.js';
 import { getEnv } from './env.js';
 import { toDidAuthority } from './lib/public-host.js';
 import { instanceDid } from './lib/public-identity.js';
@@ -52,7 +59,7 @@ function isLegacyDid(did: string): boolean {
 // (example.com -> other.com) is an operator decision about an identity peers may
 // already have on file, and must not be rewritten behind their back.
 // Idempotent: a second run finds nothing.
-async function rehostLegacyDids(): Promise<void> {
+export async function rehostLegacyDids(): Promise<void> {
   const authority = toDidAuthority(getEnv().PUBLIC_HOST);
   if (authority === 'localhost') return;
 
@@ -134,12 +141,52 @@ async function rehostLegacyDids(): Promise<void> {
   }
 }
 
+// Give A2A conversations created before v0.3.1 the owner participant row they
+// were never seeded with.
+//
+// `GET /conversations` lists purely by participant row, so a thread whose owner
+// has none is invisible to them — their own agent answering in a conversation
+// they cannot see. v0.3.1 fixed the seeding, but only for threads created after
+// it. Idempotent: the left join finds nothing on a second run.
+export async function backfillOwnerParticipants(): Promise<void> {
+  const db = getDb();
+
+  const orphaned = await db
+    .select({ id: conversations.id, owner: conversations.created_by })
+    .from(conversations)
+    .leftJoin(
+      conversationParticipants,
+      and(
+        eq(conversationParticipants.conversation_id, conversations.id),
+        eq(conversationParticipants.participant_type, 'user'),
+        eq(conversationParticipants.user_id, conversations.created_by),
+      ),
+    )
+    // Scoped to inbound A2A threads, the only path that ever missed the row.
+    // `role: 'owner'` mirrors what that path writes today.
+    .where(and(eq(conversations.type, 'direct_agent_agent'), isNull(conversationParticipants.id)));
+
+  if (orphaned.length === 0) return;
+
+  await db.insert(conversationParticipants).values(
+    orphaned.map((conv) => ({
+      id: newId(),
+      conversation_id: conv.id,
+      participant_type: 'user',
+      user_id: conv.owner,
+      role: 'owner',
+    })),
+  );
+  console.log(`Backfilled the owner participant row on ${orphaned.length} A2A conversation(s).`);
+}
+
 export async function bootstrap(): Promise<void> {
   const db = getDb();
   const env = getEnv();
 
   await bootstrapAdmins();
   await rehostLegacyDids();
+  await backfillOwnerParticipants();
 
   const [existing] = await db
     .select()
