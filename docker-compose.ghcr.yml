@@ -1,0 +1,110 @@
+# Runs Confer from published images instead of building from source.
+#
+# docker-compose.prod.yml is the self-host-from-a-clone path: it builds, and the
+# image names in it are a contract that infra/deploy.sh and infra/rollback.sh
+# read. This file is the try-it-in-a-minute path — no clone, no toolchain, no
+# build. `npx confer-cli` writes a copy of this file and starts it; anyone who
+# would rather not involve Node can run it directly.
+#
+#   curl -O https://raw.githubusercontent.com/hyhmrright/Confer/main/docker-compose.ghcr.yml
+#   docker compose -f docker-compose.ghcr.yml up -d
+#
+# JWT_SECRET and ENCRYPTION_KEY have no defaults on purpose — an instance that
+# boots with a publicly known encryption key would hand out every stored LLM key
+# to anyone who read this file. Generate them (the CLI does it for you):
+#   JWT_SECRET=$(openssl rand -hex 32) ENCRYPTION_KEY=$(openssl rand -hex 32)
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: confer
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-confer}
+      POSTGRES_DB: confer
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U confer"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  qdrant:
+    image: qdrant/qdrant:v1.12.0
+    restart: unless-stopped
+    volumes:
+      - qdrantdata:/qdrant/storage
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-confer}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-confer-secret}
+    command: server /data --console-address ":9001"
+    volumes:
+      - miniodata:/data
+
+  # migrate and gateway are the same image here, differing only in command.
+  # docker-compose.prod.yml keeps them as two separately built tags, which is
+  # what makes it possible to rebuild `gateway` and leave a stale `migrate`
+  # running the old migration set while still printing "Migrations complete".
+  # Nothing is built on this path, so that split buys nothing and the shared
+  # image makes the failure impossible.
+  migrate:
+    image: ${CONFER_IMAGE_PREFIX:-ghcr.io/hyhmrright/confer}-gateway:${CONFER_VERSION:-latest}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    working_dir: /app/packages/gateway
+    environment:
+      DATABASE_URL: postgres://confer:${POSTGRES_PASSWORD:-confer}@postgres:5432/confer
+    command: ["bun", "run", "src/db/migrate.ts"]
+    restart: "no"
+
+  # Single instance by design — WebSocket connections, A2A replay nonces and
+  # rate-limit counters all live in this process's memory. Adding a replica
+  # would silently break A2A replay protection (a replay routed to the other
+  # replica finds an empty nonce table). Scaling out requires moving that state
+  # to a shared store first; see docs/02-architecture.md.
+  gateway:
+    image: ${CONFER_IMAGE_PREFIX:-ghcr.io/hyhmrright/confer}-gateway:${CONFER_VERSION:-latest}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      minio:
+        condition: service_started
+      qdrant:
+        condition: service_started
+    environment:
+      DATABASE_URL: postgres://confer:${POSTGRES_PASSWORD:-confer}@postgres:5432/confer
+      JWT_SECRET: ${JWT_SECRET}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 3000
+      ADMIN_USERNAMES: ${ADMIN_USERNAMES:-}
+      QDRANT_URL: http://qdrant:6333
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: 9000
+      MINIO_USE_SSL: "false"
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-confer}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-confer-secret}
+      MINIO_BUCKET: knowledge-docs
+
+  client:
+    image: ${CONFER_IMAGE_PREFIX:-ghcr.io/hyhmrright/confer}-client:${CONFER_VERSION:-latest}
+    restart: unless-stopped
+    ports:
+      - "${EXPOSE_PORT:-80}:80"
+    depends_on:
+      - gateway
+
+volumes:
+  pgdata:
+  qdrantdata:
+  miniodata:
