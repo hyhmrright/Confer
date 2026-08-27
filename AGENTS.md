@@ -61,7 +61,7 @@ TypeScript everywhere. Bun + Hono (server), Tauri 2.0 + React 19 + Zustand (clie
 3. AgentFacts must validate against NANDA schema
 4. Migration files are immutable once merged
 5. `.claude/peers/*` must stay human-readable Markdown
-6. Embedding provider auto-selected by the `EMBEDDING_PROVIDER_PRIORITY` constant in `lib/embedding.ts` (openai → glm → qwen) — first provider with a user-configured key wins
+6. Embedding provider auto-selected by the `EMBEDDING_PROVIDER_PRIORITY` constant in `lib/embedding.ts` (openai → glm → qwen → ollama) — first provider with a user-configured key wins. Ollama is last on purpose: it is the local fallback, so configuring a local chat model never takes embeddings away from a hosted key the owner already had. Its "key" is really a base URL (same slot-reuse as the chat provider) and `nomic-embed-text` returns 768 dimensions, which `toVectorSize` zero-pads to `VECTOR_SIZE` — padding leaves cosine similarity untouched, and points already carry the provider that produced them
 
 ## Forbidden
 
