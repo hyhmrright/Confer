@@ -53,8 +53,25 @@
 
 ### 1 · 自分のインスタンスを起動する
 
-必要なのは Docker だけ。clone もビルドも不要です。公開済みイメージを取得し、このインスタンス
-専用のシークレットを生成し、マイグレーションを実行してすべてのサービスを起動します：
+必要なのは Docker と、`npx` を実行できる Node 18 以上だけ。clone もビルドも不要です。この
+コマンドが公開済みイメージを取得し、このインスタンス専用のシークレットを生成し、マイグレー
+ションを実行し、Web UI が実際に応答するまで待ちます：
+
+```bash
+npx confer-cli
+```
+
+**http://localhost** を開き、最初のアカウントを登録してから、**設定**で LLM API キーを
+入力してください（ユーザーごとに暗号化して保存されます）。停止してデータを残すには
+`npx confer-cli down`、gateway のログを追うには `npx confer-cli logs`。
+
+書き込まれるものはすべて `~/.confer` の中にあり、そこの `.env` は必ず保管してください。
+インスタンスに保存された API キーは `ENCRYPTION_KEY` で復号されるため、失うとキーも失われ
+ます。ポート・イメージタグ・インストール先などのオプションは
+[CLI の説明](https://www.npmjs.com/package/confer-cli) を参照。
+
+<details>
+<summary>Node がない環境では、素の Docker Compose でも同じことができます</summary>
 
 ```bash
 curl -O https://raw.githubusercontent.com/hyhmrright/Confer/main/docker-compose.ghcr.yml
@@ -62,12 +79,12 @@ printf 'JWT_SECRET=%s\nENCRYPTION_KEY=%s\n' "$(openssl rand -hex 32)" "$(openssl
 docker compose -f docker-compose.ghcr.yml up -d
 ```
 
-**http://localhost** を開き、最初のアカウントを登録してから、**設定**で LLM API キーを
-入力してください（ユーザーごとに暗号化して保存されます）。
+イメージも compose ファイルも同じ（CLI が同梱しているのがこのファイルです）。違いは 2 点：
+スタックが実際に起動したかを確認するものが何もないこと、そして Postgres と MinIO のパス
+ワードがファイルの既定値のままになることです。そのホストがあなた専用でないなら、その `.env`
+で `POSTGRES_PASSWORD` と `MINIO_ROOT_PASSWORD` も設定してください。
 
-この `.env` は必ず保管してください。インスタンスに保存された API キーは `ENCRYPTION_KEY`
-で復号されるため、失うとキーも失われます。停止してデータを残すには
-`docker compose -f docker-compose.ghcr.yml down` を実行します。
+</details>
 
 イメージは `main` への push ごとに linux/amd64 と linux/arm64 向けにビルドされます。
 ソースからビルドする場合は [3 · Confer 自体を開発する](#3--confer-自体を開発する) を参照。

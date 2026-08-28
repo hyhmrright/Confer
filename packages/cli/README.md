@@ -36,12 +36,19 @@ Everything lives in `--dir`, and nothing else on the machine is touched:
   Rewritten on every `up`, so an upgrade picks up topology changes; edits to this copy
   do not survive.
 - `.env` — `JWT_SECRET`, `ENCRYPTION_KEY` and the database and object-store passwords,
-  generated with `crypto.randomBytes` on first run and written `0600`. Written once and
-  never touched again.
+  generated with `crypto.randomBytes` on first run and written `0600`, plus
+  `PUBLIC_HOST`. Written once and never touched again.
 
 **Keep `.env`.** `ENCRYPTION_KEY` decrypts every LLM API key stored in the instance, and
 losing it means losing them. It is generated once and then reused, so a later `up` keeps
 working against the same data.
+
+**Set `PUBLIC_HOST` before federating.** It starts as `localhost`, and every DID this
+instance mints is derived from it — so while it says
+localhost, no other instance can resolve your identities. Point it at the host peers
+actually reach you on, then run `npx confer-cli` again. On startup the gateway re-hosts
+identities minted under a plain `did:web:localhost`; any other change of host is left
+alone on purpose, since peers may already hold the old identity.
 
 If a docker compose project named `confer` already exists on the machine and this CLI did
 not create it, the CLI stops rather than adopt it — compose volumes are keyed by project

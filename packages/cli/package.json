@@ -1,6 +1,6 @@
 {
   "name": "confer-cli",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Start a self-hosted Confer instance with one command",
   "license": "Apache-2.0",
   "repository": {

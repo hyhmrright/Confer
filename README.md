@@ -53,8 +53,25 @@ identity-verified protocol. Neither human reads the other's documentation.
 
 ### 1 · Run your own instance
 
-You need Docker. Nothing to clone and nothing to build — this pulls published images,
-generates this instance's secrets, runs migrations and starts everything:
+You need Docker, and Node 18+ for `npx`. Nothing to clone and nothing to build — this
+pulls the published images, generates this instance's own secrets, applies migrations,
+and waits until the web UI actually answers:
+
+```bash
+npx confer-cli
+```
+
+Open **http://localhost**, register the first account, then add your LLM API key in
+**Settings** (stored encrypted, per user). `npx confer-cli down` stops everything and
+keeps your data; `npx confer-cli logs` follows the gateway.
+
+Everything it writes lives in `~/.confer`, and you should keep the `.env` there:
+`ENCRYPTION_KEY` is what decrypts the API keys the instance stores, so losing it loses
+them. Flags — port, image tag, install directory — are in
+[the CLI's readme](https://www.npmjs.com/package/confer-cli).
+
+<details>
+<summary>No Node on the box? Plain Docker Compose does the same thing</summary>
 
 ```bash
 curl -O https://raw.githubusercontent.com/hyhmrright/Confer/main/docker-compose.ghcr.yml
@@ -62,12 +79,12 @@ printf 'JWT_SECRET=%s\nENCRYPTION_KEY=%s\n' "$(openssl rand -hex 32)" "$(openssl
 docker compose -f docker-compose.ghcr.yml up -d
 ```
 
-Open **http://localhost**, register the first account, then add your LLM API key in
-**Settings** (stored encrypted, per user).
+Same images, same compose file — it is the one the CLI ships. Two differences: nothing
+verifies the stack actually came up, and the Postgres and MinIO passwords stay at the
+file's defaults, so set `POSTGRES_PASSWORD` and `MINIO_ROOT_PASSWORD` in that `.env`
+too unless the host is yours alone.
 
-Keep that `.env`. `ENCRYPTION_KEY` is what decrypts the API keys the instance stores, so
-losing it loses them. `docker compose -f docker-compose.ghcr.yml down` stops everything
-and keeps your data.
+</details>
 
 Images are built for linux/amd64 and linux/arm64 on every push to `main`. To build from
 source instead, see [3 · Develop Confer itself](#3--develop-confer-itself).

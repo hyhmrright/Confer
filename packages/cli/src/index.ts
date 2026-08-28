@@ -218,6 +218,11 @@ async function up(options: Options): Promise<void> {
         ENCRYPTION_KEY: encryptionKey,
         POSTGRES_PASSWORD: randomBytes(18).toString('hex'),
         MINIO_ROOT_PASSWORD: randomBytes(18).toString('hex'),
+        // Written out rather than left to the compose default so there is something
+        // to edit: every DID this instance mints is derived from it. Left bare even
+        // under --port, since that is the one value the gateway later re-hosts on
+        // its own once a real host is set.
+        PUBLIC_HOST: 'localhost',
       }),
       { mode: 0o600 },
     );

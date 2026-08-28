@@ -33,8 +33,10 @@ nginx (inside `client`) serves the SPA on port **80** and reverse-proxies
 
 ## Prerequisites
 
-- **Docker** with Compose v2 (`docker compose`, not `docker-compose`). That is the
-  only hard requirement for the one-command path.
+- **Docker** with Compose v2 (`docker compose`, not `docker-compose`). The only hard
+  requirement.
+- **Node 18+** — only for `npx confer-cli` (option A). The plain-Compose path, also
+  under A, does without it.
 - Roughly 4 GB free RAM and 2 GB disk for images + volumes.
 - [Bun](https://bun.sh) ≥ 1.1 — only if you want the hot-reload dev workflow
   (option C below) or to regenerate migrations.
@@ -44,10 +46,35 @@ nginx (inside `client`) serves the SPA on port **80** and reverse-proxies
 Nothing to clone, nothing to build:
 
 ```bash
+npx confer-cli
+```
+
+[`confer-cli`](https://www.npmjs.com/package/confer-cli) refuses to start unless Docker
+is actually running, writes `docker-compose.ghcr.yml` and a `0600` `.env` into
+`~/.confer` — `JWT_SECRET`, `ENCRYPTION_KEY` and the database and object-store
+passwords, all generated with `crypto.randomBytes` on first run and then reused — pulls
+the images, applies migrations, and polls `/health` for up to three minutes. It reports
+success when a page is served, not when containers start; if that never happens it
+prints the last 40 lines of the `migrate` and `gateway` logs. `npx confer-cli down`
+stops everything and keeps the data, `npx confer-cli logs` follows the gateway.
+
+Flags: `--port` (default 80), `--dir` (default `~/.confer`), `--version` (image tag),
+`--project` (compose project name). If a compose project named `confer` already exists
+and this CLI did not create it, the CLI stops rather than adopt it — compose volumes are
+keyed by project name, so starting would point these images at that stack's database.
+
+The same thing by hand, for a host without Node:
+
+```bash
 curl -O https://raw.githubusercontent.com/hyhmrright/Confer/main/docker-compose.ghcr.yml
 printf 'JWT_SECRET=%s\nENCRYPTION_KEY=%s\n' "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > .env
 docker compose -f docker-compose.ghcr.yml up -d
 ```
+
+That leaves `POSTGRES_PASSWORD` and `MINIO_ROOT_PASSWORD` at the compose file's
+defaults (`confer` / `confer-secret`), which the CLI would have randomised. Neither port
+is published, so it is not a hole on a single-tenant box — but set both in `.env` on any
+host you share.
 
 `ghcr.io/hyhmrright/confer-gateway` and `-client` are built for linux/amd64 and
 linux/arm64 on every push to `main`, and tagged `latest`, the commit SHA, and the
@@ -61,8 +88,9 @@ Then open **http://localhost**, register the first account, and add an LLM API k
 in **Settings** — the same three steps listed under B below.
 
 Everything after this point that says `-f docker-compose.prod.yml` applies equally
-here with `-f docker-compose.ghcr.yml`, except updating: there is nothing to
-rebuild, so an update is `docker compose -f docker-compose.ghcr.yml pull && … up -d`.
+here with `-f docker-compose.ghcr.yml`, run from wherever that file lives (`~/.confer`
+if the CLI put it there), except updating: there is nothing to rebuild, so an update is
+`npx confer-cli` again, or `docker compose -f docker-compose.ghcr.yml pull && … up -d`.
 
 ## B. Build from a clone
 

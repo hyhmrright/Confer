@@ -150,7 +150,8 @@ docker-compose.yml:
   - caddy / traefik  (反向代理 + TLS)
 ```
 
-Deployment: just run `docker compose up -d` and it works.
+Deployment: `npx confer-cli` for the published images, or
+`docker compose -f docker-compose.prod.yml up -d` to build from a clone.
 
 ### Enterprise instance
 

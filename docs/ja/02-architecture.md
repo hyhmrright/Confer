@@ -150,7 +150,7 @@ docker-compose.yml:
   - caddy / traefik  (反向代理 + TLS)
 ```
 
-デプロイ方法：`docker compose up -d` を実行すればそのまま使える。
+デプロイ方法：公開済みイメージなら `npx confer-cli`、clone からビルドするなら `docker compose -f docker-compose.prod.yml up -d`。
 
 ### エンタープライズインスタンス
 

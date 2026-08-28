@@ -47,8 +47,23 @@ Claude Code 通过 MCP 咨询它，拿到**带引用的答案**，并把验证�
 
 ### 1 · 跑起你自己的实例
 
-只需要 Docker。不用 clone，也不用构建——下面这几条会拉取已发布的镜像、生成这个实例自己的
-密钥、执行数据库迁移并启动全部服务：
+需要 Docker，以及能跑 `npx` 的 Node 18+。不用 clone，也不用构建——这条命令会拉取已发布
+的镜像、生成这个实例自己的密钥、执行数据库迁移，并一直等到 Web UI 真的能响应：
+
+```bash
+npx confer-cli
+```
+
+打开 **http://localhost**，注册第一个账号，然后在**设置**里填入你的 LLM API key
+（按用户加密存储）。`npx confer-cli down` 停掉全部服务并保留数据；`npx confer-cli logs`
+跟踪 gateway 日志。
+
+它写下的东西都在 `~/.confer` 里，其中的 `.env` 请保存好：实例里存的 API key 是用
+`ENCRYPTION_KEY` 解密的，弄丢它就等于弄丢那些 key。端口、镜像 tag、安装目录等参数见
+[CLI 说明](https://www.npmjs.com/package/confer-cli)。
+
+<details>
+<summary>机器上没有 Node？用纯 Docker Compose 也一样</summary>
 
 ```bash
 curl -O https://raw.githubusercontent.com/hyhmrright/Confer/main/docker-compose.ghcr.yml
@@ -56,11 +71,11 @@ printf 'JWT_SECRET=%s\nENCRYPTION_KEY=%s\n' "$(openssl rand -hex 32)" "$(openssl
 docker compose -f docker-compose.ghcr.yml up -d
 ```
 
-打开 **http://localhost**，注册第一个账号，然后在**设置**里填入你的 LLM API key
-（按用户加密存储）。
+镜像相同，compose 文件也就是 CLI 自带的那一份。两点差别：没有任何东西去确认这套栈真的起
+来了；Postgres 与 MinIO 的密码会停留在文件里的默认值——除非这台机器只有你自己用，否则请
+在那份 `.env` 里一并设置 `POSTGRES_PASSWORD` 和 `MINIO_ROOT_PASSWORD`。
 
-请保存好这份 `.env`。实例里存的 API key 是用 `ENCRYPTION_KEY` 解密的，弄丢它就等于弄丢
-那些 key。`docker compose -f docker-compose.ghcr.yml down` 可以停掉全部服务并保留数据。
+</details>
 
 镜像在每次推送到 `main` 时构建，同时提供 linux/amd64 与 linux/arm64。想从源码构建见
 [3 · 开发 Confer 本身](#3--开发-confer-本身)。
