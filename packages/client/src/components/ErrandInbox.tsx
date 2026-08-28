@@ -25,27 +25,31 @@ export function ErrandInbox() {
     setOpen(false);
   };
 
+  // `bottom-24`, not `bottom-4`: the composer owns the bottom of the message
+  // area, and at `bottom-4` this stack sat directly on top of the send button.
+  const ANCHOR = 'fixed bottom-24 right-4 z-40';
+
   if (pendingCards.length === 0 && !open) {
     return (
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="fixed bottom-4 right-4 z-40 flex items-center gap-1 px-3 py-2 rounded-full bg-dark-card border border-dark-border text-xs text-ink-secondary hover:text-ink-primary shadow-lg"
+        className={`${ANCHOR} flex items-center gap-1.5 px-3 py-2 rounded-full bg-dark-card/90 backdrop-blur-sm border border-dark-border text-xs text-ink-secondary hover:text-ink-primary hover:border-dark-active shadow-lg shadow-black/30 transition-colors`}
       >
-        <Plus className="w-4 h-4" />
+        <Plus className="w-3.5 h-3.5" />
         {t('errand.createTitle')}
       </button>
     );
   }
 
   return (
-    <div className="fixed bottom-4 right-4 z-40 w-80 max-w-[calc(100vw-2rem)] space-y-2">
+    <div className={`${ANCHOR} w-80 max-w-[calc(100vw-2rem)] space-y-2`}>
       {pendingCards.map((card) => (
         <ErrandCard key={card.id} card={card} />
       ))}
 
       {open ? (
-        <div className="rounded-lg border-2 border-dark-border bg-dark-card px-4 py-3 space-y-2">
+        <div className="rounded-lg border border-dark-border bg-dark-card px-4 py-3 space-y-2 shadow-lg shadow-black/30">
           <p className="text-xs font-medium text-ink-secondary">{t('errand.createTitle')}</p>
           <input
             value={title}
@@ -62,7 +66,7 @@ export function ErrandInbox() {
               type="button"
               onClick={submit}
               disabled={creating || title.trim() === ''}
-              className="px-3 py-1 text-xs rounded-md bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-50"
+              className="px-3 py-1 text-xs rounded-md bg-primary-600 text-white hover:bg-primary-500 disabled:opacity-50"
             >
               {creating ? t('errand.creating') : t('errand.create')}
             </button>

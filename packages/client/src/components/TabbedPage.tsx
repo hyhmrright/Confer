@@ -71,9 +71,12 @@ export function TabbedPage<Id extends string>({
           ))}
         </nav>
 
+        {/* `mx-auto`: `contentClassName` is a width cap, and without centring it
+            the forms sat hard against the left edge of a 1200px column with the
+            rest of the page empty. */}
         <div className="flex-1 min-w-0 overflow-y-auto scrollbar-thin p-4 md:p-8 bg-dark-base">
-          <div className={contentClassName}>
-            <h2 className="text-base font-semibold text-ink-primary mb-6">
+          <div className={`mx-auto w-full ${contentClassName ?? ''}`}>
+            <h2 className="font-display text-xl text-ink-primary mb-6">
               {tabs.find((item) => item.id === activeTab)?.label}
             </h2>
             {children}

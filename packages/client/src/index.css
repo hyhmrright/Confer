@@ -49,41 +49,96 @@
 }
 
 @theme {
-  --font-sans: "Anthropic Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+  /*
+    `--font-sans` used to name "Anthropic Sans" first. That font was never
+    packaged — no @font-face, no file in public/ — so the declaration resolved
+    to nothing and every screen in the product was in fact set in the OS UI
+    font. Naming a face we don't ship is worse than naming none: it hides the
+    gap. This stack says what actually renders, and puts the CJK faces in it
+    explicitly, since the UI ships zh/ja and the generic fallback picks those
+    badly on Windows.
+  */
+  --font-sans:
+    ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI",
+    "PingFang SC", "Hiragino Sans", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
+  /*
+    The documentary voice — wordmark, page titles, empty-state headlines. Confer
+    is correspondence between represented parties, and a serif is what that
+    world sets its letterhead in. Deliberately a system stack rather than a
+    downloaded webfont: `ui-serif` is New York on Apple platforms and Georgia on
+    Windows, both of which carry the tone at 20-32px, and it costs zero bytes on
+    a desktop app that otherwise touches no network at launch. Used sparingly —
+    never for UI chrome, never below 16px, never for CJK body copy.
+  */
+  --font-display: ui-serif, "New York", Georgia, "Songti SC", "Hiragino Mincho ProN", serif;
   --font-mono: "JetBrains Mono", "Fira Code", Menlo, monospace;
 
-  --color-primary-50: #fdf8f3;
-  --color-primary-100: #f9edd9;
-  --color-primary-200: #f3d9b9;
-  --color-primary-300: #e8be95;
-  --color-primary-400: #d4a27f;
-  --color-primary-500: #c4875f;
-  /* White text sits on primary-600 in every primary button. At the previous
-     #b06844 that measured 4.28:1 — just under the 4.5:1 WCAG AA needs for
-     normal-size text. Darkened just enough to clear it (~4.6:1) while keeping
-     the hue; anything lighter fails, so don't nudge this back up. */
-  --color-primary-600: #a86341;
-  --color-primary-700: #8c4e2c;
-  --color-primary-800: #6b3819;
-  --color-primary-900: #4d270d;
+  /*
+    ── Seal (`primary-*`) ──
+    Vermilion, the colour of a stamped seal. It means *authority* here and
+    nothing else: the owner's own voice, a signature, a granted permission, the
+    send action. Not a decorative accent — if it appears, something was
+    authorised by the person using the app.
 
-  --color-dark-base: #09090b;
-  --color-dark-nav: #0b0c0e;
-  --color-dark-panel: #0f1013;
-  --color-dark-card: #141417;
-  --color-dark-input: #111215;
-  --color-dark-border: #222226;
-  --color-dark-hover: #1a1a1e;
-  --color-dark-active: #252527;
+    White text sits on seal-600 in every primary button; measured 5.39:1,
+    clearing the 4.5:1 WCAG AA floor for normal text with room to spare (the
+    previous #a86341 sat at 4.6:1 with almost none).
+  */
+  --color-primary-50: #fdf3f0;
+  --color-primary-100: #fae0d8;
+  --color-primary-200: #f2bfb0;
+  --color-primary-300: #e99a83;
+  --color-primary-400: #dd7455;
+  --color-primary-500: #c9553a;
+  --color-primary-600: #b8442a;
+  --color-primary-700: #96351f;
+  --color-primary-800: #732818;
+  --color-primary-900: #4f1b10;
 
-  --color-ink-primary: #dedede;
-  --color-ink-secondary: #9e9e9e;
-  /* Carries real text — empty-state hints, placeholders, captions — not just
-     decoration. At the previous #505050 that measured 2.36:1 against the panel
-     background, well under the 4.5:1 WCAG AA floor. Measured at 4.62:1 on
-     dark-panel, the lightest surface it appears on; #7b7b7b lands at 4.49 and
-     fails, so this has very little room below it. */
-  --color-ink-muted: #7d7d7d;
+  /*
+    ── Verdigris (`peer-*`) ──
+    Oxidised bronze: the other party. Peer agents, verified DIDs, inbound A2A.
+    It exists because this product has more than two speaking roles and a single
+    accent cannot say which side of a conversation you are looking at. Kept
+    rare on purpose — attribution rules, identity badges, connection state.
+    peer-400 measures 7.48:1 on panel; white on peer-600 measures 5.73:1.
+  */
+  --color-peer-100: #d5f0ea;
+  --color-peer-300: #7fd2c4;
+  --color-peer-400: #4fb3a4;
+  --color-peer-500: #2f9587;
+  --color-peer-600: #1f7268;
+  --color-peer-700: #17564e;
+
+  /*
+    ── Ground ──
+    Iron-gall ink rather than neutral black: every surface carries a little blue,
+    so the app reads as ink on paper turned over, not as a greyscale "dark mode"
+    default. The steps are perceptually even, which is what lets a card sit on a
+    panel without a border doing all the work.
+  */
+  --color-dark-base: #080a0f;
+  --color-dark-nav: #0a0d13;
+  --color-dark-panel: #0e1118;
+  --color-dark-card: #12161e;
+  --color-dark-input: #0d1017;
+  --color-dark-border: #1e242f;
+  --color-dark-hover: #161b24;
+  --color-dark-active: #212836;
+
+  --color-ink-primary: #e2e5ea;
+  --color-ink-secondary: #a4abb8;
+  /* Carries real text — empty-state hints, placeholders, captions, timestamps —
+     not just decoration, so it is held to the 4.5:1 body-text floor rather than
+     the 3:1 one.
+
+     Check it against `dark-active`, not `dark-card`. The active conversation row
+     in ConversationsPanel is the one place a surface that light sits under this
+     colour, and it carries an ink-muted timestamp; an earlier pass measured only
+     up to dark-card, called that "the lightest surface it appears on", and
+     shipped 4.30:1 on the row you are looking at most of the time. At #8f98a7
+     that measurement is 5.08:1, and every other surface is 5.9:1 or better. */
+  --color-ink-muted: #8f98a7;
 
   --animate-dot-bounce: dot-bounce 1.4s infinite ease-in-out both;
   --animate-fade-in: fade-in 0.25s ease-out;
@@ -154,7 +209,7 @@
 
 @utility scrollbar-thin {
   scrollbar-width: thin;
-  scrollbar-color: #222226 transparent;
+  scrollbar-color: var(--color-dark-border) transparent;
   &::-webkit-scrollbar {
     width: 4px;
   }
@@ -162,152 +217,205 @@
     background: transparent;
   }
   &::-webkit-scrollbar-thumb {
-    background-color: #222226;
+    background-color: var(--color-dark-border);
     border-radius: 2px;
   }
   &::-webkit-scrollbar-thumb:hover {
-    background-color: #333337;
+    background-color: var(--color-dark-active);
   }
+}
+
+/* Figures that are meant to be compared down a column — rates, prices, counts —
+   need to line up. Applied to the markdown tables an agent's answer is mostly
+   made of, and to any hand-built figure list. */
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* The micro-label that names a region or an attribution: mono, uppercase, wide.
+   It is the app's one structural typographic device, so it lives here rather
+   than being retyped as six utilities at every call site. */
+@utility eyebrow {
+  font-family: var(--font-mono);
+  /* 11px, not 10: uppercase mono with 0.11em tracking loses a lot of legibility
+     per point, and this carries the attribution line — who is speaking, for
+     whom — which is content rather than ornament. */
+  font-size: 11px;
+  line-height: 1.4;
+  font-weight: 500;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
 }
 
 @layer utilities {
   body {
     margin: 0;
-    background: #09090b;
-    color: #dedede;
-    font-family: "Anthropic Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: var(--color-dark-base);
+    color: var(--color-ink-primary);
+    font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
 }
 
-/* ── Markdown — dark theme ── */
+/*
+  Quality floor: the app animates on message arrival, on drawer open and on
+  every streamed token, and none of it was guarded. Vestibular triggers are a
+  real accessibility failure, not a preference — honour the OS setting rather
+  than removing the motion for everyone.
+*/
+@media (prefers-reduced-motion: reduce) {
+  /* Biome flags the `!important`s below. They are the mechanism, not a
+     shortcut around specificity: this override has to beat every animation
+     utility Tailwind emits, including ones authored inline at the call site.
+     Warnings only — `biome check` still exits 0, so CI stays green. */
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ── Markdown — the body of every agent answer ── */
+.markdown-content {
+  color: var(--color-ink-primary);
+}
+
 .markdown-content p {
-  margin-bottom: 0.5em;
+  margin-bottom: 0.6em;
 }
 .markdown-content p:last-child {
   margin-bottom: 0;
 }
 
 .markdown-content pre {
-  background: #0b0c0e;
-  color: #dedede;
-  border: 1px solid #222226;
+  background: var(--color-dark-nav);
+  color: var(--color-ink-primary);
+  border: 1px solid var(--color-dark-border);
   border-radius: 0.5rem;
   padding: 0.75rem 1rem;
   overflow-x: auto;
   font-size: 0.8125rem;
-  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-family: var(--font-mono);
   line-height: 1.6;
-  margin: 0.5em 0;
+  margin: 0.65em 0;
 }
 
 .markdown-content code {
-  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-family: var(--font-mono);
   font-size: 0.875em;
 }
 
 .markdown-content :not(pre) > code {
-  background: rgba(212, 162, 127, 0.1);
-  color: #d4a27f;
+  background: color-mix(in srgb, var(--color-primary-400) 12%, transparent);
+  color: var(--color-primary-300);
   padding: 0.15em 0.4em;
   border-radius: 0.25rem;
-  border: 1px solid rgba(212, 162, 127, 0.2);
+  border: 1px solid color-mix(in srgb, var(--color-primary-400) 22%, transparent);
 }
 
 .markdown-content ul,
 .markdown-content ol {
-  padding-left: 1.5em;
-  margin: 0.25em 0;
+  padding-left: 1.4em;
+  margin: 0.4em 0;
 }
 .markdown-content li {
-  margin: 0.15em 0;
+  margin: 0.2em 0;
+}
+.markdown-content li::marker {
+  color: var(--color-ink-muted);
 }
 
 .markdown-content blockquote {
-  border-left: 2px solid #b06844;
-  padding-left: 0.75em;
-  margin: 0.5em 0;
-  color: #9e9e9e;
-  font-style: italic;
+  border-left: 2px solid var(--color-primary-600);
+  padding-left: 0.8em;
+  margin: 0.6em 0;
+  color: var(--color-ink-secondary);
 }
 
 .markdown-content a {
-  color: #d4a27f;
+  color: var(--color-primary-300);
   text-decoration: underline;
   text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+}
+.markdown-content a:hover {
+  color: var(--color-primary-200);
 }
 
+/*
+  Ledger, not grid. An agent's answer is mostly comparison tables, and the
+  previous full box-rule treatment fought the numbers for attention while
+  setting the cells in secondary ink — the data was the quietest thing in its
+  own table. Horizontal hairlines only, figures in primary ink and tabular so
+  columns align, header demoted to a micro-label.
+
+  `display: block` is what keeps a wide table inside the column: it scrolls
+  itself rather than forcing the whole message region to scroll sideways.
+*/
 .markdown-content table {
+  display: block;
+  overflow-x: auto;
   border-collapse: collapse;
-  margin: 0.5em 0;
-  font-size: 0.875em;
+  margin: 0.8em 0;
+  font-size: 0.8125rem;
   width: 100%;
+  font-variant-numeric: tabular-nums;
 }
 .markdown-content th,
 .markdown-content td {
-  border: 1px solid #222226;
-  padding: 0.35em 0.75em;
+  border: none;
+  border-bottom: 1px solid var(--color-dark-border);
+  padding: 0.45em 1.1em 0.45em 0;
+  text-align: left;
+  white-space: nowrap;
 }
 .markdown-content th {
-  background: #141417;
-  color: #dedede;
-  font-weight: 600;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--color-ink-muted);
+  border-bottom-color: var(--color-ink-muted);
+  padding-bottom: 0.4em;
 }
 .markdown-content td {
-  color: #9e9e9e;
+  color: var(--color-ink-primary);
+}
+.markdown-content tr:last-child td {
+  border-bottom: none;
 }
 
 .markdown-content h1,
 .markdown-content h2,
 .markdown-content h3 {
-  color: #dedede;
+  color: var(--color-ink-primary);
   font-weight: 600;
-  margin: 0.75em 0 0.25em;
+  margin: 1em 0 0.35em;
   line-height: 1.3;
 }
+.markdown-content h1:first-child,
+.markdown-content h2:first-child,
+.markdown-content h3:first-child {
+  margin-top: 0;
+}
 .markdown-content h1 {
-  font-size: 1.25em;
+  font-size: 1.2em;
 }
 .markdown-content h2 {
-  font-size: 1.1em;
+  font-size: 1.08em;
 }
 .markdown-content h3 {
   font-size: 1em;
+  color: var(--color-ink-secondary);
 }
 
 .markdown-content hr {
   border: none;
-  border-top: 1px solid #222226;
-  margin: 0.75em 0;
-}
-
-/* ── User bubble overrides ── */
-.user-bubble .markdown-content :not(pre) > code {
-  background: rgba(255, 255, 255, 0.15);
-  color: #fff;
-  border-color: rgba(255, 255, 255, 0.2);
-}
-.user-bubble .markdown-content a {
-  color: #f9edd9;
-}
-.user-bubble .markdown-content blockquote {
-  border-left-color: rgba(255, 255, 255, 0.4);
-  color: rgba(255, 255, 255, 0.7);
-}
-.user-bubble .markdown-content pre {
-  background: rgba(0, 0, 0, 0.25);
-  border-color: rgba(255, 255, 255, 0.1);
-}
-.user-bubble .markdown-content th,
-.user-bubble .markdown-content td {
-  border-color: rgba(255, 255, 255, 0.15);
-}
-.user-bubble .markdown-content th {
-  background: rgba(255, 255, 255, 0.08);
-}
-.user-bubble .markdown-content h1,
-.user-bubble .markdown-content h2,
-.user-bubble .markdown-content h3 {
-  color: #fff;
+  border-top: 1px solid var(--color-dark-border);
+  margin: 0.9em 0;
 }

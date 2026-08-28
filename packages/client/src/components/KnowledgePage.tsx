@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import i18n from '../i18n/index.js';
 import { INPUT_CLS } from '../lib/styles.js';
 import { type KnowledgeDocument, useKbStore } from '../stores/knowledge-base.js';
+import { EmptyState } from './EmptyState.js';
 import { ChevronDown, Plus, Trash } from './Icons.js';
 import { LoadingDots } from './LoadingDots.js';
 import { LoadMore } from './LoadMore.js';
@@ -218,9 +219,7 @@ export function KnowledgePage() {
     <div className="flex flex-col h-full min-h-0">
       {/* Header */}
       <div className="px-4 py-3 flex items-center justify-between border-b border-dark-border shrink-0">
-        <span className="text-xs font-semibold text-ink-secondary tracking-wider uppercase font-mono">
-          {t('knowledge.title')}
-        </span>
+        <span className="eyebrow text-ink-muted">{t('knowledge.title')}</span>
         <button
           type="button"
           onClick={() => setShowForm((v) => !v)}
@@ -278,10 +277,7 @@ export function KnowledgePage() {
             <LoadingDots />
           </div>
         ) : kbs.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-ink-muted pt-10">
-            <p className="text-xs">{t('knowledge.empty')}</p>
-            <p className="text-[10px] mt-0.5 opacity-60">{t('knowledge.emptyHint')}</p>
-          </div>
+          <EmptyState title={t('knowledge.empty')} hint={t('knowledge.emptyHint')} />
         ) : (
           kbs.map((kb) => <KbCard key={kb.id} kbId={kb.id} />)
         )}

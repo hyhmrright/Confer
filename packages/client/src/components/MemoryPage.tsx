@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { dateLocale } from '../i18n/index.js';
 import { FOCUS_RING, INPUT_CLS } from '../lib/styles.js';
 import { useMemoriesStore } from '../stores/memories.js';
+import { EmptyState } from './EmptyState.js';
 import { Plus, Search, Trash } from './Icons.js';
 import { LoadingDots } from './LoadingDots.js';
 
@@ -47,9 +48,7 @@ export function MemoryPage() {
     <div className="flex flex-col h-full min-h-0">
       {/* Header */}
       <div className="px-4 py-3 flex items-center justify-between border-b border-dark-border shrink-0">
-        <span className="text-xs font-semibold text-ink-secondary tracking-wider uppercase font-mono">
-          {t('memory.title')}
-        </span>
+        <span className="eyebrow text-ink-muted">{t('memory.title')}</span>
         <button
           type="button"
           onClick={() => setShowForm((v) => !v)}
@@ -121,10 +120,7 @@ export function MemoryPage() {
             <LoadingDots />
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-ink-muted pt-10">
-            <p className="text-xs">{t('memory.empty')}</p>
-            <p className="text-[10px] mt-0.5 text-ink-muted opacity-60">{t('memory.emptyHint')}</p>
-          </div>
+          <EmptyState title={t('memory.empty')} hint={t('memory.emptyHint')} />
         ) : (
           filtered.map((mem) => (
             <div

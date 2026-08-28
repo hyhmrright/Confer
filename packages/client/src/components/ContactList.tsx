@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useChatStore } from '../stores/chat.js';
 import { useContactsStore } from '../stores/contacts.js';
 import { ContactDetail } from './ContactDetail.js';
+import { EmptyState } from './EmptyState.js';
 import { Bot, Shield, Trash } from './Icons.js';
 import { LoadMore } from './LoadMore.js';
 
@@ -33,13 +34,7 @@ export function ContactList() {
   };
 
   if (contacts.length === 0) {
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center text-ink-muted p-6">
-        <Bot className="w-10 h-10 mb-3 opacity-40" />
-        <p className="text-sm text-center">{t('contacts.empty')}</p>
-        <p className="text-xs text-center mt-1">{t('contacts.emptyHint')}</p>
-      </div>
-    );
+    return <EmptyState icon={Bot} title={t('contacts.empty')} hint={t('contacts.emptyHint')} />;
   }
 
   return (

@@ -6,6 +6,7 @@ import { INPUT_FIELD_CLS } from '../../lib/styles.js';
 import { useAuthStore } from '../../stores/auth.js';
 import { LanguageSwitcher } from '../LanguageSwitcher.js';
 import { SaveButton } from '../SaveButton.js';
+import { IdentityCard } from './IdentityCard.js';
 import { FieldLabel, StatusMsg } from './SettingsShared.js';
 
 export function ProfileTab() {
@@ -56,6 +57,8 @@ export function ProfileTab() {
 
   return (
     <div className="space-y-4">
+      {user?.did && <IdentityCard did={user.did} />}
+
       <div>
         <FieldLabel htmlFor="profile-username">{t('settings.profileUsername')}</FieldLabel>
         <input
@@ -66,17 +69,6 @@ export function ProfileTab() {
           className="w-full px-3 py-2 bg-dark-base border border-dark-border rounded-lg text-sm text-ink-muted font-mono opacity-60"
         />
         <p className="text-[11px] text-ink-muted mt-1">{t('settings.profileUsernameHint')}</p>
-      </div>
-      <div>
-        <FieldLabel htmlFor="profile-did">{t('settings.profileDid')}</FieldLabel>
-        <input
-          id="profile-did"
-          type="text"
-          value={user?.did ?? ''}
-          disabled
-          className="w-full px-3 py-2 bg-dark-base border border-dark-border rounded-lg text-xs text-ink-muted font-mono opacity-60"
-        />
-        <p className="text-[11px] text-ink-muted mt-1">{t('settings.profileDidHint')}</p>
       </div>
       <div>
         <FieldLabel htmlFor="profile-display-name">{t('settings.profileDisplayName')}</FieldLabel>

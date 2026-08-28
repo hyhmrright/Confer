@@ -14,9 +14,7 @@ function ContactsPanel() {
   return (
     <div className="flex flex-col h-full min-h-0">
       <div className="px-4 py-3 flex items-center justify-between border-b border-dark-border shrink-0">
-        <span className="text-xs font-semibold text-ink-secondary tracking-wider uppercase font-mono">
-          {t('contacts.title')}
-        </span>
+        <span className="eyebrow text-ink-muted">{t('contacts.title')}</span>
         <button
           type="button"
           onClick={openDialog}
