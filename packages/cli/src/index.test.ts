@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { generateSecrets, parseArgs, renderEnvFile, stopFlags } from './index.js';
 
@@ -102,6 +104,36 @@ describe('renderEnvFile', () => {
     expect(rendered).toContain('\nENCRYPTION_KEY=b\n');
     expect(rendered.startsWith('#')).toBe(true);
     expect(rendered).toEndWith('\n');
+  });
+});
+
+// Nothing in-process can exercise the entry guard: it turns on module identity
+// and process.argv, which are fixed by the time a test runs. So build the real
+// bundle and run it the way npm installs it. 0.3.1 shipped with this broken —
+// the guard compared an unresolved argv[1] against a resolved import.meta.url,
+// so `npx confer-cli` did nothing at all and still exited 0.
+describe('the binary the CLI ships', () => {
+  test('does its job when invoked through a bin symlink', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'confer-cli-entry-'));
+    try {
+      const bundle = join(dir, 'confer.mjs');
+      const built = spawnSync(
+        'bun',
+        ['build', join(import.meta.dir, 'index.ts'), '--target=node', '--outfile', bundle],
+        { encoding: 'utf8' },
+      );
+      expect(built.status).toBe(0);
+
+      // What `npm install` creates: node_modules/.bin/confer -> the real file.
+      const shim = join(dir, 'confer');
+      symlinkSync(bundle, shim);
+
+      const ran = spawnSync('node', [shim, '--help'], { encoding: 'utf8' });
+      expect(ran.status).toBe(0);
+      expect(ran.stdout).toContain('run a self-hosted Confer instance');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 

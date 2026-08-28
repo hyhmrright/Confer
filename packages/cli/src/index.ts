@@ -6,7 +6,7 @@
 
 import { spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { copyFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -291,6 +291,11 @@ export async function main(argv: readonly string[]): Promise<void> {
 }
 
 // `import.meta.main` is a Bun-ism; this has to work under plain Node too.
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+// argv[1] is the path as invoked, which for an npm-installed bin is the
+// `node_modules/.bin/confer` symlink, while import.meta.url is already
+// resolved to the real file. Comparing the two without realpath made every
+// `npx confer-cli` a silent no-op that still exited 0 (shipped in 0.3.1).
+const entry = process.argv[1];
+if (entry && realpathSync(entry) === fileURLToPath(import.meta.url)) {
   await main(process.argv.slice(2));
 }
