@@ -6,7 +6,7 @@ Confer の完全なインスタンスを自分で動かす方法 — 試しに�
 
 ## 得られるもの
 
-1 つのコマンドでプラットフォーム全体がビルドされ起動します:
+1 つのコマンドでプラットフォーム全体が起動します:
 
 | サービス | イメージ / ビルド | 役割 |
 |---------|---------------|------|
@@ -14,8 +14,6 @@ Confer の完全なインスタンスを自分で動かす方法 — 試しに�
 | `gateway` | `infra/gateway.Dockerfile` からビルド | Hono API、A2A エンドポイント、WebSocket |
 | `migrate` | ワンショット | Drizzle マイグレーションを実行してから終了 |
 | `postgres` | `postgres:16-alpine` | プライマリデータストア |
-| `redis` | `redis:7-alpine` | セッション、レート制限、キャッシュ |
-| `nats` | `nats:2-alpine` | メッセージバス / ファンアウト |
 | `qdrant` | `qdrant/qdrant:v1.12.0` | RAG ナレッジベース向けのベクトル検索 |
 | `minio` | `minio/minio` | S3 互換のファイルストレージ |
 
@@ -23,11 +21,34 @@ nginx（`client` 内）はポート **80** で SPA を配信し、`/api`、`/ws`
 
 ## 前提条件
 
-- Compose v2（`docker-compose` ではなく `docker compose`）を備えた **Docker**。これがワンコマンド手順の唯一の必須要件です。
+- Compose v2（`docker-compose` ではなく `docker compose`）を備えた **Docker**。唯一の必須要件です。
+- **Node 18 以上** — `npx confer-cli`（オプション A）を使う場合のみ。後述の素の Compose 手順なら不要です。
 - イメージ + ボリューム用に概ね 4 GB の空き RAM と 2 GB のディスク。
 - [Bun](https://bun.sh) ≥ 1.1 — ホットリロードの開発ワークフロー（後述のオプション B）を使いたい場合、またはマイグレーションを再生成したい場合のみ。
 
 ## A. ワンコマンドでのセルフホスト（推奨）
+
+clone もビルドも不要 — 公開済みイメージをそのまま動かします:
+
+```bash
+npx confer-cli
+```
+
+[`confer-cli`](https://www.npmjs.com/package/confer-cli) は Docker が実際に動いていなければ起動を拒否し、`~/.confer` に `docker-compose.ghcr.yml` と `0600` の `.env`（`JWT_SECRET`、`ENCRYPTION_KEY`、データベースとオブジェクトストアのパスワード。初回に `crypto.randomBytes` で生成し、以降は再利用）を書き出し、イメージを取得し、マイグレーションを適用し、コンテナが起動した瞬間ではなくスタックが実際に応答するまで `/health` をポーリングします。停止してデータを残すには `npx confer-cli down`、gateway のログを追うには `npx confer-cli logs`。
+
+オプション: `--port`（既定 80）、`--dir`（既定 `~/.confer`）、`--version`（イメージタグ）、`--project`（compose プロジェクト名）。
+
+Node のないホストでは、同じことを手作業で:
+
+```bash
+curl -O https://raw.githubusercontent.com/hyhmrright/Confer/main/docker-compose.ghcr.yml
+printf 'JWT_SECRET=%s\nENCRYPTION_KEY=%s\n' "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > .env
+docker compose -f docker-compose.ghcr.yml up -d
+```
+
+この手順では、CLI ならランダム化する `POSTGRES_PASSWORD` と `MINIO_ROOT_PASSWORD` が compose ファイルの既定値のままになります。共有ホストでは `.env` で両方を設定してください。
+
+改変したツリーを動かしたい場合は、clone して `docker-compose.prod.yml` でビルドします:
 
 ```bash
 git clone https://github.com/hyhmrright/Confer.git
@@ -36,13 +57,15 @@ cp .env.example .env
 docker compose -f docker-compose.prod.yml up -d --build
 ```
 
-初回のビルドには数分かかります。完了したら:
+いずれの場合も、完了したら:
 
 1. **http://localhost** を開きます。
 2. **登録 / Register** をクリックして最初のアカウントを作成します。（登録は IP ごとに 1 時間あたり 3 回までにレート制限されています。）
 3. **Settings** に移動して LLM API キー（Claude / OpenAI / DeepSeek / Qwen / Ollama）を追加します。キーは `ENCRYPTION_KEY`（AES-256-GCM）で保存時に暗号化され、クライアントに送信されることはありません。
 
 これで完了です — 動作する Agent が手に入りました。Web UI で会話し、連絡先を追加し、ピア Agent に相談できます。
+
+> `npx confer-cli` で起動した場合、以下で `-f docker-compose.prod.yml` と書かれている箇所は、`~/.confer` で `-f docker-compose.ghcr.yml` に読み替えてください。ただし更新だけは別で、ビルドするものがないので `npx confer-cli` をもう一度実行するだけです。
 
 ### 正常性を確認する
 

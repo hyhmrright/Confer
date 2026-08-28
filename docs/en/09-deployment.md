@@ -10,7 +10,7 @@ aspirational.
 
 ## What you get
 
-One command builds and starts the whole platform:
+One command starts the whole platform:
 
 | Service | Image / build | Role |
 |---------|---------------|------|
@@ -18,8 +18,6 @@ One command builds and starts the whole platform:
 | `gateway` | built from `infra/gateway.Dockerfile` | Hono API, A2A endpoints, WebSocket |
 | `migrate` | one-shot | runs Drizzle migrations, then exits |
 | `postgres` | `postgres:16-alpine` | primary datastore |
-| `redis` | `redis:7-alpine` | sessions, rate limits, cache |
-| `nats` | `nats:2-alpine` | message bus / fan-out |
 | `qdrant` | `qdrant/qdrant:v1.12.0` | vector search for the RAG knowledge base |
 | `minio` | `minio/minio` | S3-compatible file storage |
 
@@ -29,13 +27,45 @@ nginx (inside `client`) serves the SPA on port **80** and reverse-proxies
 
 ## Prerequisites
 
-- **Docker** with Compose v2 (`docker compose`, not `docker-compose`). That is the
-  only hard requirement for the one-command path.
+- **Docker** with Compose v2 (`docker compose`, not `docker-compose`). The only hard
+  requirement.
+- **Node 18+** — only for `npx confer-cli` (option A). The plain-Compose path below
+  does without it.
 - Roughly 4 GB free RAM and 2 GB disk for images + volumes.
 - [Bun](https://bun.sh) ≥ 1.1 — only if you want the hot-reload dev workflow
   (option B below) or to regenerate migrations.
 
 ## A. One-command self-host (recommended)
+
+Nothing to clone, nothing to build — this runs the published images:
+
+```bash
+npx confer-cli
+```
+
+[`confer-cli`](https://www.npmjs.com/package/confer-cli) refuses to start unless Docker
+is actually running, writes `docker-compose.ghcr.yml` and a `0600` `.env` into
+`~/.confer` — `JWT_SECRET`, `ENCRYPTION_KEY` and the database and object-store
+passwords, generated with `crypto.randomBytes` on first run and then reused — pulls the
+images, applies migrations, and polls `/health` until the stack actually answers rather
+than reporting success the moment containers start. `npx confer-cli down` stops it and
+keeps the data; `npx confer-cli logs` follows the gateway.
+
+Flags: `--port` (default 80), `--dir` (default `~/.confer`), `--version` (image tag),
+`--project` (compose project name).
+
+The same thing by hand, for a host without Node:
+
+```bash
+curl -O https://raw.githubusercontent.com/hyhmrright/Confer/main/docker-compose.ghcr.yml
+printf 'JWT_SECRET=%s\nENCRYPTION_KEY=%s\n' "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > .env
+docker compose -f docker-compose.ghcr.yml up -d
+```
+
+This leaves `POSTGRES_PASSWORD` and `MINIO_ROOT_PASSWORD` at the compose file's
+defaults, which the CLI would have randomised — set both in `.env` on a shared host.
+
+To run a modified tree instead, clone it and build with `docker-compose.prod.yml`:
 
 ```bash
 git clone https://github.com/hyhmrright/Confer.git
@@ -44,7 +74,7 @@ cp .env.example .env
 docker compose -f docker-compose.prod.yml up -d --build
 ```
 
-The first build takes a few minutes. When it finishes:
+Either way, when it finishes:
 
 1. Open **http://localhost**.
 2. Click **Register** and create the first account. (Registration is
@@ -55,6 +85,11 @@ The first build takes a few minutes. When it finishes:
 
 That's it — you now have a working Agent. Talk to it in the web UI, add contacts,
 and consult peer Agents.
+
+> Started with `npx confer-cli`? Everything below that says
+> `-f docker-compose.prod.yml` applies from `~/.confer` with
+> `-f docker-compose.ghcr.yml` instead — except updating, where there is nothing to
+> rebuild: run `npx confer-cli` again.
 
 ### Check it's healthy
 

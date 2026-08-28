@@ -300,15 +300,13 @@
           <h4 data-i18n="start.1t">Run it yourself</h4>
           <p data-i18n="start.1b">You only need Docker. Builds the gateway + web client, runs migrations, starts every service.</p>
         </div>
-<pre><code class="block"><span class="c"># clone & configure</span>
-git clone https://github.com/hyhmrright/Confer.git
-cd Confer
-cp .env.example .env
+<pre><code class="block"><span class="c"># pull the images, generate secrets, migrate, start</span>
+<span class="k">npx</span> confer-cli
 
-<span class="c"># build + run the whole stack</span>
-docker compose -f docker-compose.prod.yml <span class="k">up</span> -d --build
+<span class="c"># open http://localhost → Register → add your LLM key</span>
 
-<span class="c"># open http://localhost → Register → add your LLM key</span></code></pre>
+<span class="c"># stop it, keeping all data</span>
+<span class="k">npx</span> confer-cli down</code></pre>
       </div>
       <div class="qs-card">
         <div class="top">
@@ -389,7 +387,7 @@ docker compose -f docker-compose.prod.yml <span class="k">up</span> -d --build
       "how.3t":"A cited answer comes back","how.3b":"The vendor Agent answers from its own knowledge, with citations — verified and attributable, in the original language.",
       "how.4t":"It persists to project memory","how.4b":"The verified fact is written to <code>.claude/peers/{vendor}/facts.md</code>, committed with git, and reused automatically next time.",
       "start.eyebrow":"Quick start","start.title":"Two commands to a running network.",
-      "start.1tag":"Self-host","start.1t":"Run it yourself","start.1b":"You only need Docker. Builds the gateway + web client, runs migrations, starts every service.",
+      "start.1tag":"Self-host","start.1t":"Run it yourself","start.1b":"You need Docker, and Node 18+ for npx. It pulls the published images, generates this instance's secrets, runs migrations, and waits until the UI actually answers.",
       "start.2tag":"Claude Code","start.2t":"Consult from Claude Code","start.2b":"Install the confer-a2a plugin against any gateway you have an account on. The signing key never leaves the gateway.",
       "foot.tag":"Your AI confers, with anyone's. An open protocol for Agents that speak on your behalf.",
       "foot.docs":"Documentation","foot.project":"Project","foot.plugin":"Claude Code plugin","foot.built":"Built on A2A · DID:web · RFC 9421 · NANDA"
@@ -419,7 +417,7 @@ docker compose -f docker-compose.prod.yml <span class="k">up</span> -d --build
       "how.3t":"带引用的答案返回","how.3b":"供应商 Agent 用自己的知识回答并附引用——可验证、可溯源，保留原文语言。",
       "how.4t":"沉淀到项目记忆","how.4b":"验证过的事实写入 <code>.claude/peers/{vendor}/facts.md</code>，随 git 提交，下次自动复用。",
       "start.eyebrow":"快速开始","start.title":"两条命令，跑起一张网络。",
-      "start.1tag":"自托管","start.1t":"自己跑起来","start.1b":"只需要 Docker。构建 gateway + Web 客户端，跑迁移，启动所有服务。",
+      "start.1tag":"自托管","start.1t":"自己跑起来","start.1b":"需要 Docker，以及能跑 npx 的 Node 18+。拉取已发布的镜像、生成这个实例自己的密钥、执行迁移，并一直等到界面真的能打开。",
       "start.2tag":"Claude Code","start.2t":"从 Claude Code 咨询","start.2b":"针对任何你有账号的 gateway 安装 confer-a2a 插件。签名私钥永远留在 gateway。",
       "foot.tag":"你的 AI，替你与任何人商议。一个让 Agent 替你发声的开放协议。",
       "foot.docs":"文档","foot.project":"项目","foot.plugin":"Claude Code 插件","foot.built":"基于 A2A · DID:web · RFC 9421 · NANDA"
@@ -449,7 +447,7 @@ docker compose -f docker-compose.prod.yml <span class="k">up</span> -d --build
       "how.3t":"引用付きの回答が返る","how.3b":"ベンダー Agent が自らの知識から引用付きで回答——検証可能・出所明示、原文の言語のまま。",
       "how.4t":"プロジェクト記憶に永続化","how.4b":"検証済みの事実を <code>.claude/peers/{vendor}/facts.md</code> に書き込み、git でコミット、次回から自動再利用。",
       "start.eyebrow":"クイックスタート","start.title":"二つのコマンドで、動くネットワークへ。",
-      "start.1tag":"セルフホスト","start.1t":"自分で動かす","start.1b":"必要なのは Docker だけ。gateway + Web クライアントをビルドし、マイグレーションを実行、全サービスを起動。",
+      "start.1tag":"セルフホスト","start.1t":"自分で動かす","start.1b":"必要なのは Docker と、npx を実行できる Node 18 以上。公開済みイメージを取得し、このインスタンス専用のシークレットを生成し、マイグレーションを実行し、UI が実際に応答するまで待ちます。",
       "start.2tag":"Claude Code","start.2t":"Claude Code から問い合わせ","start.2b":"アカウントを持つ任意の gateway に対し confer-a2a プラグインを導入。署名鍵は常に gateway に留まる。",
       "foot.tag":"あなたの AI が、誰とでも会議する。あなたの代わりに発言する Agent のためのオープンプロトコル。",
       "foot.docs":"ドキュメント","foot.project":"プロジェクト","foot.plugin":"Claude Code プラグイン","foot.built":"A2A · DID:web · RFC 9421 · NANDA ベース"

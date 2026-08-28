@@ -37,6 +37,7 @@ Bun workspaces monorepo (`packages/*`):
 | `agent-runtime` | LLM orchestration engine, policy enforcement |
 | `shared` | Zod schemas, shared types, utility functions |
 | `mcp-a2a` | stdio MCP server — lets Claude Code consult peer Agents; ships as the `confer-a2a` plugin (`plugins/confer-a2a/`) |
+| `cli` | `npx confer-cli` — the documented way to self-host. Plain Node (no Bun API), published to npm by hand; see Release rules |
 | `gateway/lib/` | Infrastructure adapters + cross-cutting gates — MinIO storage, Qdrant vector search, embedding (OpenAI / GLM / Qwen), `tenant.ts`, `a2a-admission.ts` |
 | `gateway/orchestration/` | The LLM agent loop (`agent-orchestrator.ts`). Sits ABOVE `tools/`, which sits above `lib/` — keep that direction; `lib/` must never import `tools/` or `orchestration/` |
 
@@ -105,6 +106,8 @@ A Dependabot PR bumping a **container image is not covered by its own green chec
 Every release: merge to `main` first, then `git tag v* && git push origin v*` from main. Workflow rejects tags not reachable from `origin/main`. Run `.github/scripts/gen-release-notes.sh <tag>`, review draft, **translate ZH/JA sections** before publishing. Workflow auto-updates GitHub About + labels on finalize. Never publish untranslated placeholder text.
 
 `release.yml` is the one workflow CI cannot exercise — only a tag triggers it — so it has a rehearsal mode: dispatch it with an existing tag and `dry_run: true`, and it builds all four desktop targets and the Android APK, generates the notes, and publishes nothing (tauri-action treats an omitted `tagName`/`releaseName` as build-only). Run it after touching that file or any action it pins. One trap when editing those guards: GitHub's `a && b || c` yields `c` whenever `b` is falsy, and `''` is falsy — so the guard must read `!inputs.dry_run && value || ''` and never `inputs.dry_run && '' || value`, which would quietly hand back the real tag and cut a release in the middle of the rehearsal.
+
+`packages/cli` — the `confer-cli` npm package the README now leads with — is published **by hand**. No workflow does it, no tag triggers it, and its version is its own rather than the app's. Two things follow. `prepack` copies the repo's `docker-compose.ghcr.yml` into the tarball, so edits to that file reach `npx confer-cli` users only when someone republishes the CLI; changing it and shipping nothing is a silent divergence between the repo and what people actually run. And verify a publish by running the published artifact, never by `npm publish`'s exit code: 0.3.1 shipped with a broken entry guard — `argv[1]` is the `node_modules/.bin/confer` symlink while `import.meta.url` is already resolved, so `main()` never ran and `npx confer-cli` did nothing at all while exiting 0. `packages/cli/src/index.test.ts` now builds the bundle, symlinks it the way npm does and runs it under plain `node`, which is the only way that guard can be exercised at all.
 
 ## Deployment
 

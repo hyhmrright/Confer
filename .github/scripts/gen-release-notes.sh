@@ -167,11 +167,17 @@ cat <<EOF
 ### Server · 服务端 · サーバー
 
 \`\`\`bash
-# Clone & start with Docker Compose
-git clone https://github.com/${REPO} && cd Confer
-cp .env.example .env        # Edit PUBLIC_HOST, JWT_SECRET, ENCRYPTION_KEY
-docker compose up -d
+# One command — needs Docker, plus Node 18+ for npx.
+# Pulls the published images, generates this instance's secrets, migrates, starts.
+npx confer-cli
+
+# ...or pin the images to this release instead of latest:
+npx confer-cli --version ${VERSION}
 \`\`\`
+
+> Open http://localhost, register the first account, add an LLM API key in Settings.
+> 打开 http://localhost 注册第一个账号，然后在设置里填入 LLM API key。
+> http://localhost を開き、最初のアカウントを登録し、設定で LLM API キーを追加します。
 
 ---
 
@@ -180,6 +186,7 @@ docker compose up -d
 | | |
 |---|---|
 | 📖 Documentation | [docs/](https://github.com/${REPO}/tree/main/docs) |
+| 📦 Server CLI | [confer-cli](https://www.npmjs.com/package/confer-cli) |
 | 🐛 Report a Bug | [Issues](https://github.com/${REPO}/issues/new?labels=bug) |
 | 💡 Feature Request | [Discussions](https://github.com/${REPO}/discussions) |
 | 🔒 Security | [SECURITY.md](https://github.com/${REPO}/blob/main/SECURITY.md) |

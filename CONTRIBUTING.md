@@ -36,6 +36,7 @@ Bun workspaces under `packages/*`. Each package has one clear responsibility.
 | `agent-runtime` | LLM orchestration engine and policy enforcement. |
 | `shared` | Zod schemas, shared types, utility functions. |
 | `mcp-a2a` | stdio MCP server that lets Claude Code consult peer Agents. Ships as the `confer-a2a` plugin (`plugins/confer-a2a/`). |
+| `cli` | `npx confer-cli` — starts a self-hosted instance from the published images. Runs under plain Node, so nothing in it may use a Bun API. |
 
 For how these fit together at runtime, read
 [`docs/02-architecture.md`](./docs/02-architecture.md). The design docs
