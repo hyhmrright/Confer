@@ -4,13 +4,39 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { getDb } from '../db/connection.js';
 import { agentMemories } from '../db/schema.js';
-import { deleteMemory } from '../lib/memory-store.js';
+import { getEnv } from '../env.js';
+import { type EmbeddingProvider, embedTexts } from '../lib/embedding.js';
+import { getUserLlmKeys, resolveEmbeddingKey } from '../lib/llm-keys.js';
+import { deleteMemory, upsertMemory } from '../lib/memory-store.js';
 import { authMiddleware } from '../middleware/auth.js';
 import type { AppEnv } from '../types.js';
 
 export const memoriesRoutes = new Hono<AppEnv>();
 
 memoriesRoutes.use('/*', authMiddleware);
+
+// A memory is only reachable through vector search — the agent recalls from
+// Qdrant, never from this table. So writing the row without indexing it does
+// not create a memory the agent uses less often, it creates one it can never
+// see at all, listed in the UI as though it worked. Both write paths here now
+// index, and refuse rather than store something inert: same contract as the
+// knowledge base, which already rejects a document it cannot embed.
+async function embedMemory(
+  userId: string,
+  text: string,
+): Promise<{ vector: number[]; provider: EmbeddingProvider }> {
+  const config = await resolveEmbeddingKey(await getUserLlmKeys(userId), getEnv().ENCRYPTION_KEY);
+  if (!config) {
+    throw new AppError(
+      'embedding_unavailable',
+      'No embedding provider configured — please add an OpenAI, ZhipuAI (GLM), or Qwen API key in Settings',
+      400,
+    );
+  }
+  const [vector] = await embedTexts([text], config.apiKey, config.provider);
+  if (!vector) throw new AppError('embedding_failed', 'Could not embed this memory', 502);
+  return { vector, provider: config.provider };
+}
 
 const createSchema = z.object({
   title: z.string().min(1).max(255),
@@ -40,10 +66,15 @@ memoriesRoutes.post('/', async (c) => {
   const db = getDb();
   const body = createSchema.parse(await c.req.json());
 
+  // Embed before writing anything, so a missing key fails the request instead
+  // of leaving a row behind.
+  const { vector, provider } = await embedMemory(user.sub, body.content);
+
+  const memoryId = newId();
   const [row] = await db
     .insert(agentMemories)
     .values({
-      id: newId(),
+      id: memoryId,
       user_id: user.sub,
       title: body.title,
       content: body.content,
@@ -51,6 +82,16 @@ memoriesRoutes.post('/', async (c) => {
       pinned: body.pinned ?? false,
     })
     .returning();
+
+  try {
+    await upsertMemory({ memoryId, userId: user.sub, text: body.content, vector, provider });
+  } catch (err) {
+    // Undo the row rather than keep an unrecallable one. The reverse orphan (a
+    // vector with no row) would be worse: recall reads its text from the
+    // payload, so it would answer from a memory the owner cannot see or delete.
+    await db.delete(agentMemories).where(eq(agentMemories.id, memoryId));
+    throw err;
+  }
 
   return c.json({ memory: row }, 201);
 });
@@ -60,11 +101,24 @@ memoriesRoutes.patch('/:id', async (c) => {
   const db = getDb();
   const id = c.req.param('id');
   const body = updateSchema.parse(await c.req.json());
+  const owned = and(eq(agentMemories.id, id), eq(agentMemories.user_id, user.sub));
+
+  // Editing the text without re-indexing leaves recall answering from the old
+  // wording — the one the owner just corrected. Re-index first: if the row
+  // update then fails the request errors and they retry, whereas the reverse
+  // order fails silently on an otherwise successful edit.
+  if (body.content !== undefined) {
+    const [existing] = await db.select({ id: agentMemories.id }).from(agentMemories).where(owned);
+    if (!existing) throw new AppError('not_found', 'Memory not found', 404);
+
+    const { vector, provider } = await embedMemory(user.sub, body.content);
+    await upsertMemory({ memoryId: id, userId: user.sub, text: body.content, vector, provider });
+  }
 
   const [row] = await db
     .update(agentMemories)
     .set({ ...body, updated_at: new Date() })
-    .where(and(eq(agentMemories.id, id), eq(agentMemories.user_id, user.sub)))
+    .where(owned)
     .returning();
 
   if (!row) throw new AppError('not_found', 'Memory not found', 404);
