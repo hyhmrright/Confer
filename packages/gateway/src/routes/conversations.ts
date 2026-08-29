@@ -1,4 +1,9 @@
-import { AppError, newId, sendMessageRequestSchema } from '@confer/shared';
+import {
+  AppError,
+  createConversationRequestSchema,
+  newId,
+  sendMessageRequestSchema,
+} from '@confer/shared';
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { getDb } from '../db/connection.js';
@@ -47,15 +52,15 @@ conversationRoutes.get('/', async (c) => {
 conversationRoutes.post('/', async (c) => {
   const user = c.get('user');
   const db = getDb();
-  const body = await c.req.json();
+  const body = createConversationRequestSchema.parse(await c.req.json());
 
   const convId = newId();
   const [conv] = await db
     .insert(conversations)
     .values({
       id: convId,
-      type: body.type ?? 'direct_user_agent',
-      name: body.name,
+      type: body.type,
+      name: body.name ?? undefined,
       created_by: user.sub,
     })
     .returning();

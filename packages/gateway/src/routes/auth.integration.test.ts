@@ -54,6 +54,19 @@ describe('POST /auth/register', () => {
     expect((await res.json()).error.code).toBe('username_taken');
   });
 
+  // `email` is unique too, and nothing checked it before the insert — only
+  // `username` had a pre-select. The constraint refused it either way; what was
+  // wrong was calling the refusal an internal error.
+  test('rejects an email another account already holds with 409', async () => {
+    await post(REGISTER, registerBody({ username: 'first', email: 'shared@example.com' }));
+    const res = await post(
+      REGISTER,
+      registerBody({ username: 'second', email: 'shared@example.com' }),
+    );
+    expect(res.status).toBe(409);
+    expect((await res.json()).error.code).toBe('email_taken');
+  });
+
   test('rejects invalid input with 400', async () => {
     const res = await post(REGISTER, { username: 'ab', password: 'short' });
     expect(res.status).toBe(400);
@@ -145,6 +158,57 @@ describe('POST /auth/refresh', () => {
     const rotated = await (await post(REFRESH, { refresh_token: first })).json();
     const again = await post(REFRESH, { refresh_token: rotated.refresh_token });
     expect(again.status).toBe(200);
+  });
+
+  // Presenting an access token here used to reach the hash comparison, which
+  // reads a mismatch as token reuse and deletes the session. So a client bug —
+  // or anyone who could make you send the wrong one of your two tokens — logged
+  // you out of that device.
+  test('rejects an access token without destroying the session', async () => {
+    const { access_token, refresh_token } = await (await post(REGISTER, registerBody())).json();
+
+    expect((await post(REFRESH, { refresh_token: access_token })).status).toBe(401);
+
+    // The real refresh token still works, so nothing was revoked.
+    expect((await post(REFRESH, { refresh_token })).status).toBe(200);
+  });
+
+  test('rejects a refresh token whose session has passed expires_at', async () => {
+    const { refresh_token } = await (await post(REGISTER, registerBody())).json();
+    const db = getDb();
+    const [session] = await db.select().from(sessions).limit(1);
+
+    // `expires_at` was written at login and read by nothing, so the 90-day
+    // absolute lifetime it records never actually arrived: each rotation minted
+    // a fresh 90-day token and the session outlived any bound.
+    await db
+      .update(sessions)
+      .set({ expires_at: new Date(Date.now() - 1000) })
+      .where(eq(sessions.id, session?.id ?? ''));
+
+    expect((await post(REFRESH, { refresh_token })).status).toBe(401);
+    // And the dead row is dropped rather than left to accumulate.
+    expect(await db.select().from(sessions)).toHaveLength(0);
+  });
+});
+
+// Access and refresh differed only in `exp` — same issuer, same subject, same
+// claims, same secret — so a refresh token was a bearer credential for every
+// authenticated route, good for the ninety days it lives rather than the fifteen
+// minutes the access token advertises.
+describe('bearer authentication', () => {
+  test('rejects a refresh token used as a bearer token', async () => {
+    const { refresh_token } = await (await post(REGISTER, registerBody())).json();
+    const res = await apiRequest('/api/v1/users/me', {
+      headers: headers({ token: refresh_token }),
+    });
+    expect(res.status).toBe(401);
+  });
+
+  test('accepts the access token from the same pair', async () => {
+    const { access_token } = await (await post(REGISTER, registerBody())).json();
+    const res = await apiRequest('/api/v1/users/me', { headers: headers({ token: access_token }) });
+    expect(res.status).toBe(200);
   });
 });
 

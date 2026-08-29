@@ -22,9 +22,11 @@ import {
   users,
 } from '../db/schema.js';
 import { getAppConfig, setConfigValue } from '../lib/app-config.js';
+import { clientIp } from '../lib/client-ip.js';
 import { adminMiddleware } from '../middleware/admin.js';
 import { authMiddleware } from '../middleware/auth.js';
 import type { AppEnv } from '../types.js';
+import { disconnectUser } from '../ws/handler.js';
 
 export const adminRoutes = new Hono<AppEnv>();
 
@@ -33,20 +35,22 @@ adminRoutes.use('/*', authMiddleware);
 adminRoutes.use('/*', adminMiddleware);
 
 // The audit_log.ip_address column is Postgres `inet`; anything that is not a
-// valid IPv4/IPv6 literal (e.g. a malformed proxy header) is dropped to null
-// rather than failing the write.
-function toInet(value: string | undefined): string | null {
-  if (!value) return null;
-  const first = value.split(',')[0]?.trim();
-  if (!first) return null;
-  const isIPv4 = /^(\d{1,3}\.){3}\d{1,3}$/.test(first);
-  const isIPv6 = first.includes(':');
-  return isIPv4 || isIPv6 ? first : null;
+// valid IPv4/IPv6 literal (e.g. `unknown` when no proxy header reached us) is
+// dropped to null rather than failing the write.
+function toInet(value: string): string | null {
+  const isIPv4 = /^(\d{1,3}\.){3}\d{1,3}$/.test(value);
+  const isIPv6 = value.includes(':');
+  return isIPv4 || isIPv6 ? value : null;
 }
 
 // Record an admin write action. Actor and client IP both come off the request
 // context, so no call site has to remember to thread them through. Stores only
 // ids/flags in details_json — never PII (per the forbidden list).
+//
+// The IP comes from `clientIp`, the same resolution the rate limiter uses. This
+// read `x-forwarded-for.split(',')[0]` — the first hop, which any caller can
+// prepend to the header — so an admin acting through a proxy of their choosing
+// could write whatever address they liked into the record of what they did.
 async function writeAudit(
   c: Context<AppEnv>,
   action: string,
@@ -59,7 +63,7 @@ async function writeAudit(
       user_id: c.get('user').sub,
       action,
       details_json: details,
-      ip_address: toInet(c.req.header('x-forwarded-for') ?? undefined),
+      ip_address: toInet(clientIp(c)),
     });
 }
 
@@ -156,9 +160,12 @@ adminRoutes.patch('/users/:id', async (c) => {
 
   await db.update(users).set(updates).where(eq(users.id, targetId));
 
-  // Disabling revokes the target's sessions so refresh fails immediately.
+  // Disabling revokes the target's sessions so refresh fails immediately, and
+  // drops the sockets those sessions are holding — a live socket outlives the
+  // row it was authorized by, and /ws is proxied with a one-day read timeout.
   if (body.status === 'disabled') {
     await db.delete(sessions).where(eq(sessions.user_id, targetId));
+    disconnectUser(targetId);
   }
 
   await auditChange(c, {

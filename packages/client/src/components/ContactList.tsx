@@ -25,11 +25,8 @@ export function ContactList() {
     loadContacts();
   }, [loadContacts]);
 
-  const handleStartChat = async (peerId: string, name?: string) => {
-    const id = await createConversation(
-      peerId,
-      name ? t('contacts.chatName', { name }) : undefined,
-    );
+  const handleStartChat = async (name?: string) => {
+    const id = await createConversation(name ? t('contacts.chatName', { name }) : undefined);
     await selectConversation(id);
   };
 
@@ -46,7 +43,7 @@ export function ContactList() {
         >
           <button
             type="button"
-            onClick={() => handleStartChat(contact.peer_id, contact.alias ?? contact.peer.name)}
+            onClick={() => handleStartChat(contact.alias ?? contact.peer.name)}
             className="flex items-center gap-3 flex-1 min-w-0 text-left cursor-pointer"
           >
             <div className="w-9 h-9 rounded-full bg-dark-border flex items-center justify-center shrink-0">

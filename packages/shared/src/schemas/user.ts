@@ -44,3 +44,21 @@ export const loginRequestSchema = z.object({
   device_id: z.string().max(64),
   device_info: deviceInfoSchema,
 });
+
+/**
+ * Body of `PATCH /api/v1/users/me`. Absent fields are left as they were; an
+ * explicit null clears one, which is how the settings screen empties a field.
+ *
+ * The route allow-listed the field NAMES and then wrote whatever value came
+ * with them. So a display name past 128 characters, or an `email` that is not
+ * an address, reached the column and came back as a 500 from Postgres — an
+ * internal error for what is plainly a bad request. The caps here are the
+ * columns' own widths.
+ */
+export const updateProfileRequestSchema = z.object({
+  display_name: z.string().max(128).nullish(),
+  email: z.email().max(255).nullish(),
+  phone: z.string().max(32).nullish(),
+  avatar_url: z.string().max(2048).nullish(),
+  preferences_json: z.record(z.string(), z.unknown()).optional(),
+});

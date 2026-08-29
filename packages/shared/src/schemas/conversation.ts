@@ -7,30 +7,27 @@ export const conversationTypeSchema = z.enum([
   'group',
 ]);
 
-export const conversationSchema = z.object({
-  id: z.string().length(26),
-  type: conversationTypeSchema,
-  name: z.string().max(255).optional(),
-  created_by: z.string().length(26),
-  created_at: z.coerce.date(),
-  updated_at: z.coerce.date(),
-  archived_at: z.coerce.date().optional(),
+/**
+ * Body of `POST /api/v1/conversations`.
+ *
+ * `type` reached a varchar(32) unchecked, so a caller chose it freely — the
+ * value that decides how a thread is rendered and which paths treat it as an
+ * A2A or probe thread. `name` was equally unchecked against its column, which
+ * turned an over-long title into a 500. `probe` is deliberately absent: probe
+ * threads are opened by the probe route itself, never asked for.
+ */
+export const createConversationRequestSchema = z.object({
+  type: conversationTypeSchema.default('direct_user_agent'),
+  name: z.string().max(255).nullish(),
 });
 
-export const participantTypeSchema = z.enum(['user', 'own_agent', 'peer_agent']);
-export const participantRoleSchema = z.enum(['member', 'admin', 'observer']);
-
-export const conversationParticipantSchema = z.object({
-  id: z.string().length(26),
-  conversation_id: z.string().length(26),
-  participant_type: participantTypeSchema,
-  user_id: z.string().length(26).optional(),
-  agent_id: z.string().length(26).optional(),
-  peer_id: z.string().length(26).optional(),
-  role: participantRoleSchema.default('member'),
-  joined_at: z.coerce.date(),
-  last_read_at: z.coerce.date().optional(),
-  notification: z.enum(['all', 'mentions', 'none']).default('all'),
-});
-
-export type Conversation = z.infer<typeof conversationSchema>;
+// `conversationSchema` and the participant schemas stood here, mirroring the
+// `conversations` and `conversation_participants` rows. Nothing imported them,
+// and the participant one had already drifted — it lists `participant_type` as
+// `user | own_agent | peer_agent` while `db/schema.ts` writes `'user'` and
+// `'peer_agent'` only. Row shapes come from Drizzle; only the wire shapes above
+// belong here.
+//
+// The type vocabulary survives because it now has a job: it is what validates
+// the `type` a caller may ask for. Note the table also holds `consult` and
+// `probe` threads, which the routes create themselves and no caller may request.

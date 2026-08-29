@@ -15,6 +15,7 @@ import {
   peerAgents,
   probeAsks,
 } from '../db/schema.js';
+import { parseLimit } from '../lib/pagination.js';
 import { authMiddleware } from '../middleware/auth.js';
 import type { AppEnv } from '../types.js';
 
@@ -151,7 +152,10 @@ probeRoutes.get('/ask-person/pending', async (c) => {
     })
     .from(probeAsks)
     .where(and(eq(probeAsks.asker_user_id, user.sub), isNull(probeAsks.filled_at)))
-    .orderBy(probeAsks.created_at);
+    .orderBy(probeAsks.created_at)
+    // The only unbounded list left in the routes. It drains oldest-first, so a
+    // cap costs the Wizard nothing — the next poll returns what this one left.
+    .limit(parseLimit(c.req.query('limit'), 100, 200));
 
   return c.json({ asks: rows });
 });

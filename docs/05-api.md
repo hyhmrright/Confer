@@ -23,8 +23,15 @@
 ## 认证
 
 - 用户客户端: `Authorization: Bearer <jwt_access_token>`
-- Access token TTL: 15 分钟
-- Refresh token TTL: 90 天，存 HTTP-only cookie
+- Access token TTL: 15 分钟；refresh token TTL: 90 天
+- 两种 token 靠 `typ` claim 区分（`access` / `refresh`），**互不通用**：`Authorization`
+  头只收 `access`，`POST /auth/refresh` 只收 `refresh`。两者此前只有 `exp` 不同，
+  于是 refresh token 在所有需要鉴权的接口上都是一张 90 天的通行证，access token
+  的 15 分钟形同虚设
+- Refresh 每次轮换，并核对 `sessions.refresh_token_hash`；对不上视为重放，整个
+  session 作废。`sessions.expires_at` 是会话的**绝对**上限，轮换不会顺延它
+- Token 存放在客户端本地存储，不是 HTTP-only cookie（客户端是 Tauri 桌面应用，
+  同源 cookie 那套在这里没有对应物）
 
 ## 客户端 API（用户客户端使用）
 
@@ -256,6 +263,12 @@ DELETE /api/v1/attachments/{id}
 WSS  /ws?token=<access_token>&device_id=<device_id>
 ```
 
+握手的鉴权与 REST 完全一致，不是"验个签就放行"：`typ` 必须是 `access`、`sid`
+必须指向一条仍然存在的 session、账号状态不能是 `disabled`。三条缺一不可——缺了
+它们，被封禁的账号只要 token 没过期就能一直重连收消息，而封禁本身（删光 session）
+在这条路径上什么都没撤销。封禁同时会**关掉该用户已经打开的 socket**：nginx 给
+`/ws` 的 `proxy_read_timeout` 是一天，只拦下一次握手拦不住已连上的那条。
+
 ### 消息格式
 
 所有 WS 消息都是 JSON，含 `type` 字段：
@@ -268,12 +281,15 @@ WSS  /ws?token=<access_token>&device_id=<device_id>
 
 ```
 ping                          // 心跳
-subscribe.conversation        // 订阅某个对话
+subscribe.conversation        // 订阅某个对话（服务端校验参与者身份）
 unsubscribe.conversation
-typing.start
+typing.start                  // 仅对已订阅的会话生效
 typing.stop
 read.ack                      // 已读确认
 ```
+
+`typing.*` 的广播以该 socket 的订阅集为准。订阅有闸门而打字事件没有的时候，只要
+知道一个会话 id 就能往任意会话里注入"某某正在输入"，还带着自己的用户名。
 
 ### 服务器 → 客户端
 

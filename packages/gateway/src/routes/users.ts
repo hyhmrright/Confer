@@ -6,6 +6,8 @@ import {
   LLM_PROVIDER_IDS,
   llmProvider,
   providerBaseUrl,
+  updateAgentRequestSchema,
+  updateProfileRequestSchema,
 } from '@confer/shared';
 import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
@@ -13,6 +15,7 @@ import { z } from 'zod';
 import { getDb } from '../db/connection.js';
 import { agents, users } from '../db/schema.js';
 import { getEnv } from '../env.js';
+import { uniqueViolation } from '../lib/db-errors.js';
 import { getUserLlmKeys } from '../lib/llm-keys.js';
 import { authMiddleware } from '../middleware/auth.js';
 import type { AppEnv } from '../types.js';
@@ -82,20 +85,34 @@ userRoutes.get('/me', async (c) => {
 userRoutes.patch('/me', async (c) => {
   const user = c.get('user');
   const db = getDb();
-  const body = await c.req.json();
 
-  const allowedFields = ['display_name', 'avatar_url', 'email', 'phone', 'preferences_json'];
-  const updates: Record<string, unknown> = { updated_at: new Date() };
-  for (const key of allowedFields) {
-    if (key in body) {
-      updates[key] = body[key];
-    }
+  // Zod both allow-lists the fields and checks the values. The hand-rolled
+  // version did only the former: unknown keys were dropped, but anything at all
+  // could ride in on a known one. Zod strips the unknown keys too, so `role` and
+  // `status` are no more reachable than before.
+  const updates = updateProfileRequestSchema.parse(await c.req.json());
+
+  try {
+    await db
+      .update(users)
+      .set({ ...updates, updated_at: new Date() })
+      .where(eq(users.id, user.sub));
+  } catch (error) {
+    // `email` and `phone` are unique across accounts, and taking one someone
+    // else holds is an ordinary thing for a caller to try — two people sharing
+    // a mailbox, or your own second account. It answered 500.
+    const taken = TAKEN_BY_CONSTRAINT[uniqueViolation(error) ?? ''];
+    if (!taken) throw error;
+    throw new AppError(taken, `That ${taken.replace('_taken', '')} is already in use`, 409);
   }
-
-  await db.update(users).set(updates).where(eq(users.id, user.sub));
 
   return c.json({ ok: true });
 });
+
+const TAKEN_BY_CONSTRAINT: Record<string, string> = {
+  users_email_unique: 'email_taken',
+  users_phone_unique: 'phone_taken',
+};
 
 export const agentRoutes = new Hono<AppEnv>();
 
@@ -113,26 +130,17 @@ agentRoutes.get('/me', async (c) => {
 agentRoutes.patch('/me', async (c) => {
   const user = c.get('user');
   const db = getDb();
-  const body = await c.req.json();
 
-  const allowedFields = [
-    'name',
-    'description',
-    'avatar_url',
-    'primary_language',
-    'style',
-    'model_config_json',
-    'capabilities_json',
-    'is_public',
-  ];
-  const updates: Record<string, unknown> = { updated_at: new Date() };
-  for (const key of allowedFields) {
-    if (key in body) {
-      updates[key] = body[key];
-    }
-  }
+  // `status` is the field this most needs to keep out: it is what moderation
+  // sets to suspend an agent, and it was never in the allow-list — but neither
+  // was anything checking the values that WERE allowed, and `is_public` decides
+  // whether the agent is discoverable at all.
+  const updates = updateAgentRequestSchema.parse(await c.req.json());
 
-  await db.update(agents).set(updates).where(eq(agents.user_id, user.sub));
+  await db
+    .update(agents)
+    .set({ ...updates, updated_at: new Date() })
+    .where(eq(agents.user_id, user.sub));
 
   return c.json({ ok: true });
 });

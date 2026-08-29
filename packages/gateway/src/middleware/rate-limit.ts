@@ -1,6 +1,7 @@
 import { AppError } from '@confer/shared';
 import type { Context, Env } from 'hono';
 import { createMiddleware } from 'hono/factory';
+import { clientIp } from '../lib/client-ip.js';
 
 // Process-local, so the effective limit is per-replica: N replicas allow N times
 // the configured rate. One of the three things that pin the gateway to a single
@@ -23,25 +24,6 @@ function sweepExpired(now: number): void {
       counters.delete(key);
     }
   }
-}
-
-// Resolve the real client IP behind nginx. `x-real-ip` is set (overwritten, not
-// appended) by our nginx on the /api/, /a2a/ and /ws locations, so a client
-// can't forge it. The whole `x-forwarded-for` header is client-controllable, so
-// we never trust its leading entries — nginx appends the real peer last, so the
-// last hop is the only trustworthy one.
-function clientIp(c: Context): string {
-  const realIp = c.req.header('x-real-ip')?.trim();
-  if (realIp) return realIp;
-
-  const forwarded = c.req.header('x-forwarded-for');
-  if (forwarded) {
-    const hops = forwarded.split(',');
-    const last = hops[hops.length - 1]?.trim();
-    if (last) return last;
-  }
-
-  return 'unknown';
 }
 
 interface RateLimitOptions<E extends Env> {

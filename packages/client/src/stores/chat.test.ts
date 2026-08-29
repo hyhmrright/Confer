@@ -150,45 +150,28 @@ describe('chat store', () => {
     });
     post.mockResolvedValueOnce({ conversation });
 
-    const id = await useChatStore.getState().createConversation('p1', 'My Chat');
+    const id = await useChatStore.getState().createConversation('My Chat');
 
+    // `peer_id` used to ride along here, and this test asserted it did — so the
+    // suite was holding in place a field `POST /conversations` has never read.
+    // The endpoint has no peer on it; reaching one goes through consult.
     expect(post).toHaveBeenCalledWith('/conversations', {
       type: 'direct_user_agent',
       name: 'My Chat',
-      peer_id: 'p1',
     });
     expect(id).toBe('c2');
     expect(useChatStore.getState().conversations.map((c) => c.id)).toEqual(['c2', 'c1']);
   });
 
-  test('createConversation omits peer_id when none is given', async () => {
+  test('createConversation names an unnamed thread by its creation time', async () => {
     const conversation = { id: 'c2', type: 'direct_user_agent', created_at: 'a', updated_at: 'b' };
     post.mockResolvedValueOnce({ conversation });
 
-    await useChatStore.getState().createConversation(undefined, 'My Chat');
+    await useChatStore.getState().createConversation();
 
-    expect(post).toHaveBeenCalledWith('/conversations', {
-      type: 'direct_user_agent',
-      name: 'My Chat',
-    });
-  });
-
-  test('createConversation falls back to a generated name when none is given', async () => {
-    const conversation = { id: 'c2', type: 'direct_user_agent', created_at: 'a', updated_at: 'b' };
-    post.mockResolvedValueOnce({ conversation });
-
-    await useChatStore.getState().createConversation('p1');
-
-    expect(post).toHaveBeenCalledWith(
-      '/conversations',
-      expect.objectContaining({
-        type: 'direct_user_agent',
-        peer_id: 'p1',
-        name: expect.any(String),
-      }),
-    );
-    const body = (post.mock.calls[0] as [string, { name: string }])[1];
-    expect(body.name.length).toBeGreaterThan(0);
+    const [, body] = post.mock.calls[0] as [string, { type: string; name: string }];
+    expect(body.type).toBe('direct_user_agent');
+    expect(body.name).toBeTruthy();
   });
 
   test('deleteConversation removes it and clears active selection + messages', async () => {

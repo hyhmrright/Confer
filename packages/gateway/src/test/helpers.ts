@@ -3,7 +3,7 @@ import * as jose from 'jose';
 import postgres from 'postgres';
 import { app } from '../app.js';
 import { getDb } from '../db/connection.js';
-import { users } from '../db/schema.js';
+import { sessions, users } from '../db/schema.js';
 
 // Dedicated admin connection for truncation/teardown, separate from the
 // connection the app uses through getDb().
@@ -19,14 +19,24 @@ export async function resetDb(): Promise<void> {
   }
 }
 
-export async function mintToken(sub: string, username: string): Promise<string> {
+// Mint a token with the claims `/auth/login` mints. `typ` and `sid` are not
+// optional extras: bearer auth admits only `typ: 'access'`, and the WebSocket
+// upgrade additionally requires `sid` to name a live session. A helper that
+// omits them signs a token production never issues, which is how a fixture ends
+// up testing nothing — the `sid` in particular is the whole of session
+// revocation.
+export async function mintToken(
+  sub: string,
+  username: string,
+  opts: { sid?: string; typ?: string; expiresIn?: string } = {},
+): Promise<string> {
   const secret = new TextEncoder().encode(process.env.JWT_SECRET);
-  return new jose.SignJWT({ username })
+  return new jose.SignJWT({ username, sid: opts.sid, typ: opts.typ ?? 'access' })
     .setProtectedHeader({ alg: 'HS256' })
     .setSubject(sub)
     .setIssuer(process.env.JWT_ISSUER ?? 'confer')
     .setIssuedAt()
-    .setExpirationTime('15m')
+    .setExpirationTime(opts.expiresIn ?? '15m')
     .sign(secret);
 }
 
@@ -35,6 +45,8 @@ export interface SeededUser {
   username: string;
   did: string;
   token: string;
+  /** The session the token belongs to, as a real row — logout/disable delete it. */
+  sessionId: string;
 }
 
 export async function seedUser(
@@ -44,10 +56,25 @@ export async function seedUser(
   const id = newId();
   const name = username ?? `u${id.slice(-10).toLowerCase()}`;
   const did = `did:web:localhost:agents:${name}`;
+  const sessionId = newId();
   await getDb()
     .insert(users)
     .values({ id, username: name, did, role: opts.role ?? 'member' });
-  return { id, username: name, did, token: await mintToken(id, name) };
+  await getDb()
+    .insert(sessions)
+    .values({
+      id: sessionId,
+      user_id: id,
+      device_id: `test-${sessionId.slice(-8)}`,
+      expires_at: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
+    });
+  return {
+    id,
+    username: name,
+    did,
+    sessionId,
+    token: await mintToken(id, name, { sid: sessionId }),
+  };
 }
 
 let ipCounter = 0;
