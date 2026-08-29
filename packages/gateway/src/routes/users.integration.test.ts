@@ -47,6 +47,38 @@ describe('users /me', () => {
     const res = await get('/api/v1/users/me', { token: user.token });
     expect((await res.json()).user.display_name).toBe('Renamed');
   });
+
+  test('clears a field with an explicit null, the way the settings screen does', async () => {
+    await patch('/api/v1/users/me', { token: user.token, body: { display_name: 'Renamed' } });
+    await patch('/api/v1/users/me', { token: user.token, body: { display_name: null } });
+    const res = await get('/api/v1/users/me', { token: user.token });
+    expect((await res.json()).user.display_name).toBeNull();
+  });
+
+  // The route allow-listed field NAMES and wrote whatever value arrived with
+  // them, so each of these reached its column and came back a 500 from Postgres
+  // — an internal error for what is plainly a bad request.
+  test('rejects values the columns cannot hold with 400', async () => {
+    const cases = [
+      { display_name: 'x'.repeat(129) },
+      { email: 'not-an-address' },
+      { phone: '0'.repeat(33) },
+    ];
+    for (const body of cases) {
+      const res = await patch('/api/v1/users/me', { token: user.token, body });
+      expect(res.status).toBe(400);
+    }
+  });
+
+  test('still ignores fields outside the allow-list', async () => {
+    await patch('/api/v1/users/me', {
+      token: user.token,
+      body: { display_name: 'ok', role: 'admin', status: 'disabled' },
+    });
+    const [row] = await getDb().select().from(users).where(eq(users.id, user.id)).limit(1);
+    expect(row?.role).toBe('member');
+    expect(row?.status).toBe('active');
+  });
 });
 
 describe('agent LLM keys', () => {
@@ -215,5 +247,54 @@ describe('agents /me', () => {
     await patch('/api/v1/agents/me', { token: user.token, body: { is_public: true } });
     const after = await get('/api/v1/agents/me', { token: user.token });
     expect((await after.json()).agent.is_public).toBe(true);
+  });
+
+  test('saves the flat model config the settings screen sends', async () => {
+    await seedAgent(user.id);
+    await patch('/api/v1/agents/me', {
+      token: user.token,
+      body: {
+        name: 'Renamed',
+        model_config_json: { provider: 'ollama', model: 'qwen3', system_prompt: 'Be brief.' },
+      },
+    });
+    const res = await get('/api/v1/agents/me', { token: user.token });
+    const { agent } = await res.json();
+    expect(agent.name).toBe('Renamed');
+    expect(agent.model_config_json).toEqual({
+      provider: 'ollama',
+      model: 'qwen3',
+      system_prompt: 'Be brief.',
+    });
+  });
+
+  test('rejects a provider the catalogue does not carry with 400', async () => {
+    await seedAgent(user.id);
+    const res = await patch('/api/v1/agents/me', {
+      token: user.token,
+      body: { model_config_json: { provider: 'not-a-vendor', model: 'x' } },
+    });
+    expect(res.status).toBe(400);
+  });
+
+  // `status` is what moderation sets to suspend an agent, and `did` is the
+  // identity peers resolve. Neither was ever in the allow-list; this locks that.
+  test('cannot set moderation status or identity fields', async () => {
+    await seedAgent(user.id);
+    await patch('/api/v1/agents/me', {
+      token: user.token,
+      body: { name: 'ok', status: 'active', did: 'did:web:evil.example' },
+    });
+    const [row] = await getDb().select().from(agents).where(eq(agents.user_id, user.id)).limit(1);
+    expect(row?.did).not.toBe('did:web:evil.example');
+  });
+
+  test('rejects a non-boolean is_public with 400', async () => {
+    await seedAgent(user.id);
+    const res = await patch('/api/v1/agents/me', {
+      token: user.token,
+      body: { is_public: 'yes' },
+    });
+    expect(res.status).toBe(400);
   });
 });

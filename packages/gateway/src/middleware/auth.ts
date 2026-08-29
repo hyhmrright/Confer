@@ -6,6 +6,17 @@ import { getDb } from '../db/connection.js';
 import { users } from '../db/schema.js';
 import { getEnv } from '../env.js';
 
+// What a token is for. Access and refresh differed only in `exp` — same issuer,
+// same subject, same claims, same secret — so each was accepted wherever the
+// other was, and the 15-minute access lifetime the session design rests on was
+// a property of a value nobody had to present. Both ends check it: bearer auth
+// admits only `access`, `/refresh` only `refresh`.
+//
+// It lives here rather than beside the minting code in `routes/auth.ts` because
+// that file already imports this one — the other direction would be a cycle,
+// and a route is the wrong owner for a rule the middleware enforces.
+export const TOKEN_TYPE = { access: 'access', refresh: 'refresh' } as const;
+
 export interface AuthPayload {
   sub: string;
   username: string;
@@ -33,6 +44,14 @@ export const authMiddleware = createMiddleware<{
     const { payload } = await jose.jwtVerify(token, secret, {
       issuer: env.JWT_ISSUER,
     });
+    // Only an access token authenticates a request. The two kinds were
+    // indistinguishable — identical claims, identical secret, differing only in
+    // `exp` — so a refresh token was a bearer credential for every route here,
+    // good for 90 days. The short access lifetime only limits anything if the
+    // long-lived token is refused at this door.
+    if (payload.typ !== TOKEN_TYPE.access) {
+      throw new AppError('unauthorized', 'Invalid or expired token', 401);
+    }
     sub = payload.sub as string;
     username = payload.username as string;
     sid = typeof payload.sid === 'string' ? payload.sid : undefined;

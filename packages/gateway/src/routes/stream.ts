@@ -218,11 +218,16 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
         });
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Stream failed';
-      // Log server-side too: the SSE error reaches only that one client, so an
+      const detail = error instanceof Error ? error.message : 'Stream failed';
+      // Log server-side: the SSE error reaches only that one client, so an
       // otherwise-clean log made provider misconfiguration invisible to operators.
-      console.error(`Stream turn failed for user ${user.sub}: ${message}`);
-      await stream.writeSSE({ event: 'error', data: JSON.stringify({ message }) });
+      console.error(`Stream turn failed for user ${user.sub}: ${detail}`);
+      // A code, not the detail. `detail` here is whatever threw — and for the
+      // common case that is `${vendor} API error (${status}): ${body}`, the
+      // vendor's raw response relayed verbatim into the browser. It is also
+      // English prose from a process with no locale, which is the same reason
+      // the model-config branch above sends a code.
+      await stream.writeSSE({ event: 'error', data: JSON.stringify({ message: 'turn_failed' }) });
     } finally {
       // Released on failure too, or one dropped turn would wedge that message
       // permanently: no reply row exists to replay, and every retry would be

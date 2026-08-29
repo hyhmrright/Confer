@@ -7,6 +7,20 @@ export const conversationTypeSchema = z.enum([
   'group',
 ]);
 
+/**
+ * Body of `POST /api/v1/conversations`.
+ *
+ * `type` reached a varchar(32) unchecked, so a caller chose it freely — the
+ * value that decides how a thread is rendered and which paths treat it as an
+ * A2A or probe thread. `name` was equally unchecked against its column, which
+ * turned an over-long title into a 500. `probe` is deliberately absent: probe
+ * threads are opened by the probe route itself, never asked for.
+ */
+export const createConversationRequestSchema = z.object({
+  type: conversationTypeSchema.default('direct_user_agent'),
+  name: z.string().max(255).nullish(),
+});
+
 export const conversationSchema = z.object({
   id: z.string().length(26),
   type: conversationTypeSchema,

@@ -134,4 +134,23 @@ describe('conversations', () => {
     const res = await get(BASE, { token: outsider.token });
     expect((await res.json()).conversations).toHaveLength(0);
   });
+
+  // `type` went into a varchar(32) unchecked, so a caller picked the value that
+  // decides how the thread is rendered and which paths treat it as an A2A or
+  // probe thread; an over-long `name` was a 500 rather than a 400.
+  test('rejects a conversation type outside the vocabulary with 400', async () => {
+    const res = await post(BASE, { token: user.token, body: { type: 'probe' } });
+    expect(res.status).toBe(400);
+  });
+
+  test('rejects a name longer than the column with 400', async () => {
+    const res = await post(BASE, { token: user.token, body: { name: 'x'.repeat(256) } });
+    expect(res.status).toBe(400);
+  });
+
+  test('defaults the type when none is given', async () => {
+    const res = await post(BASE, { token: user.token, body: {} });
+    expect(res.status).toBe(201);
+    expect((await res.json()).conversation.type).toBe('direct_user_agent');
+  });
 });

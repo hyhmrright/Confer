@@ -8,10 +8,11 @@ import {
   conversations,
   peerAgents,
   peerContacts,
+  sessions,
   users,
 } from '../db/schema.js';
 import { getEnv } from '../env.js';
-import type { AuthPayload } from '../middleware/auth.js';
+import { type AuthPayload, TOKEN_TYPE } from '../middleware/auth.js';
 
 export interface WsData {
   user: AuthPayload;
@@ -51,6 +52,25 @@ export function sendToUser(userId: string, message: WsServerMessage): void {
   }
 }
 
+/**
+ * Authenticate a socket the way every other authenticated surface does.
+ *
+ * A valid signature was the whole of the check here, and that is three gates
+ * short of what `authMiddleware` applies to a REST call. None of the three is
+ * theoretical:
+ *
+ *   - No token-type check, so a REFRESH token opened a socket. Those live 90
+ *     days.
+ *   - No account-status check, so an admin disabling an account stopped its
+ *     REST calls and nothing else.
+ *   - No session check, so logging out — or an admin deleting every session,
+ *     which is exactly what disabling does — revoked nothing here.
+ *
+ * Together they mean a banned user reconnected at will and kept receiving every
+ * `message.new` for their conversations, for as long as the token had left. The
+ * socket is a read channel over the same data the REST API serves; it gets the
+ * same door.
+ */
 async function authenticateUpgrade(req: Request): Promise<AuthPayload | null> {
   const url = new URL(req.url);
   const token = url.searchParams.get('token');
@@ -58,11 +78,53 @@ async function authenticateUpgrade(req: Request): Promise<AuthPayload | null> {
 
   const env = getEnv();
   const secret = new TextEncoder().encode(env.JWT_SECRET);
+
+  let sub: string;
+  let username: string;
+  let sid: string;
   try {
     const { payload } = await jose.jwtVerify(token, secret, { issuer: env.JWT_ISSUER });
-    return { sub: payload.sub as string, username: payload.username as string };
+    if (payload.typ !== TOKEN_TYPE.access) return null;
+    if (typeof payload.sid !== 'string') return null;
+    sub = payload.sub as string;
+    username = payload.username as string;
+    sid = payload.sid;
   } catch {
     return null;
+  }
+
+  const db = getDb();
+  const [row] = await db
+    .select({ status: users.status })
+    .from(users)
+    .where(eq(users.id, sub))
+    .limit(1);
+  if (!row || row.status === 'disabled') return null;
+
+  const [session] = await db
+    .select({ id: sessions.id })
+    .from(sessions)
+    .where(eq(sessions.id, sid))
+    .limit(1);
+  if (!session) return null;
+
+  return { sub, username, sid };
+}
+
+/**
+ * Close every socket this user holds.
+ *
+ * Refusing the next upgrade is not enough on its own: `proxy_read_timeout` on
+ * /ws is a day, and nothing obliges a client to reconnect. A socket opened one
+ * minute before a ban would have gone on delivering messages indefinitely, so
+ * the ban has to reach the sockets that are already open.
+ */
+export function disconnectUser(userId: string): void {
+  const connections = connectionsByUser.get(userId);
+  if (!connections) return;
+  // Copy first: `close` fires the handler below, which mutates this set.
+  for (const ws of [...connections]) {
+    ws.close(1008, 'Session revoked');
   }
 }
 
@@ -136,6 +198,12 @@ export const websocket = {
 
       case 'typing.start':
       case 'typing.stop':
+        // Subscribing is gated (`authorizeSubscription`); this was not, so a
+        // conversation id was the only thing needed to inject "X is typing…"
+        // — under your own username — into a thread you have no part in. The
+        // subscription set is already the answer to "may this socket take part
+        // here", so consult it rather than re-querying.
+        if (!ws.data.subscriptions.has(msg.data.conversation_id)) break;
         broadcastToConversation(
           msg.data.conversation_id,
           {

@@ -10,12 +10,13 @@ import {
 import { and, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import * as jose from 'jose';
+import { z } from 'zod';
 import { getDb } from '../db/connection.js';
 import { agents, keypairs, sessions, users } from '../db/schema.js';
 import { getEnv } from '../env.js';
 import { getConfigValue } from '../lib/app-config.js';
 import { userDid } from '../lib/public-identity.js';
-import { authMiddleware } from '../middleware/auth.js';
+import { authMiddleware, TOKEN_TYPE } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rate-limit.js';
 
 export const authRoutes = new Hono();
@@ -32,6 +33,8 @@ async function verifyPassword(hash: string, password: string): Promise<boolean> 
 
 // Both tokens carry the session id (`sid`) so `/refresh` can consult the backing
 // session (revoked on logout) and `/logout` can target the exact session row.
+//
+// They also carry `typ` — see `TOKEN_TYPE` in middleware/auth.ts for why.
 async function issueTokens(userId: string, username: string, sessionId: string) {
   const env = getEnv();
   const secret = new TextEncoder().encode(env.JWT_SECRET);
@@ -40,23 +43,20 @@ async function issueTokens(userId: string, username: string, sessionId: string) 
   // issuances in the same wall-clock second are identical (JWT `iat` is
   // second-granular), so refresh rotation would be a silent no-op — the "new"
   // refresh token would equal the old one and its hash would still match.
-  const accessToken = await new jose.SignJWT({ username, sid: sessionId })
-    .setProtectedHeader({ alg: 'HS256' })
-    .setJti(newId())
-    .setSubject(userId)
-    .setIssuer(env.JWT_ISSUER)
-    .setIssuedAt()
-    .setExpirationTime('15m')
-    .sign(secret);
+  const sign = (typ: string, ttl: string) =>
+    new jose.SignJWT({ username, sid: sessionId, typ })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setJti(newId())
+      .setSubject(userId)
+      .setIssuer(env.JWT_ISSUER)
+      .setIssuedAt()
+      .setExpirationTime(ttl)
+      .sign(secret);
 
-  const refreshToken = await new jose.SignJWT({ username, sid: sessionId })
-    .setProtectedHeader({ alg: 'HS256' })
-    .setJti(newId())
-    .setSubject(userId)
-    .setIssuer(env.JWT_ISSUER)
-    .setIssuedAt()
-    .setExpirationTime('90d')
-    .sign(secret);
+  const [accessToken, refreshToken] = await Promise.all([
+    sign(TOKEN_TYPE.access, '15m'),
+    sign(TOKEN_TYPE.refresh, '90d'),
+  ]);
 
   return { accessToken, refreshToken, expiresIn: 900 };
 }
@@ -221,11 +221,15 @@ authRoutes.post('/login', rateLimit(10, 60_000), async (c) => {
   });
 });
 
-authRoutes.post('/refresh', async (c) => {
-  const { refresh_token } = await c.req.json();
-  if (!refresh_token) {
-    throw new AppError('invalid_request', 'refresh_token is required', 400);
-  }
+const refreshRequestSchema = z.object({ refresh_token: z.string().min(1) });
+
+// Rate-limited like the other credential endpoints. It was the one that wasn't,
+// and it is the one that can delete a session on a failed attempt (reuse
+// detection, below) — so an unauthenticated caller who learns a session id
+// could hammer it. The limit is generous: a legitimate client refreshes about
+// four times an hour.
+authRoutes.post('/refresh', rateLimit(30, 60_000), async (c) => {
+  const { refresh_token } = refreshRequestSchema.parse(await c.req.json());
 
   const env = getEnv();
   const secret = new TextEncoder().encode(env.JWT_SECRET);
@@ -234,6 +238,14 @@ authRoutes.post('/refresh', async (c) => {
     const { payload } = await jose.jwtVerify(refresh_token, secret, {
       issuer: env.JWT_ISSUER,
     });
+
+    // Only a refresh token refreshes. Checked before the hash comparison below,
+    // because that comparison treats a mismatch as token reuse and destroys the
+    // session — so an access token presented here (a plausible client bug, and
+    // a cheap way to log someone out) would have taken their session with it.
+    if (payload.typ !== TOKEN_TYPE.refresh) {
+      throw new AppError('unauthorized', 'Invalid or expired refresh token', 401);
+    }
 
     // A disabled account must not be able to mint fresh tokens. Re-check status
     // on every refresh so disabling takes effect within one access-token cycle.
@@ -257,6 +269,17 @@ authRoutes.post('/refresh', async (c) => {
     }
     const [session] = await db.select().from(sessions).where(eq(sessions.id, sid)).limit(1);
     if (!session) {
+      throw new AppError('unauthorized', 'Invalid or expired refresh token', 401);
+    }
+
+    // The absolute lifetime of the session, as opposed to the lifetime of the
+    // token presenting it. `expires_at` was written at login and never read
+    // once, so it was a column, not a limit: every rotation minted a fresh 90-day
+    // token, and a client that refreshed on a timer held a credential that could
+    // not age out. Expiring here makes 90 days mean 90 days, and drops the row so
+    // the sweep isn't left to a table that only ever grows.
+    if (session.expires_at.getTime() <= Date.now()) {
+      await db.delete(sessions).where(eq(sessions.id, sid));
       throw new AppError('unauthorized', 'Invalid or expired refresh token', 401);
     }
 
