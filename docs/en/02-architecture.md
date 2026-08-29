@@ -207,7 +207,7 @@ Identity and discovery:
 | Backend language | Bun + TypeScript | Go | The MCP/A2A SDKs are TS-first; full-stack type sharing |
 | Web framework | Hono | Elysia, Fastify | Lightweight, fast, stable ecosystem |
 | Client | Tauri 2.0 | Flutter, Electron | One codebase across 5 platforms, Rust safety, small footprint |
-| Primary store | PostgreSQL 16 | MySQL | Good JSON support, strong extensibility, pgvector optional |
+| Primary store | PostgreSQL 18 | MySQL | Good JSON support, strong extensibility, pgvector optional |
 | Message bus | NATS | Kafka, Redis Pub/Sub | Lightweight, persistent, precise subscriptions |
 | Vector store | Qdrant | Pinecone, pgvector | Mature self-hosting, stable performance (written in Rust) |
 | Identity | DID:web | DID:key, OAuth-only | Compatible with web infrastructure, recommended by NANDA |

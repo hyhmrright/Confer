@@ -281,6 +281,17 @@ describe('the compose file the CLI ships', () => {
     expect(compose).toContain(`JWT_SECRET: ${interpolate('JWT_SECRET')}`);
     expect(compose).toContain(`ENCRYPTION_KEY: ${interpolate('ENCRYPTION_KEY')}`);
   });
+
+  test('mounts the database where postgres 18 keeps it', () => {
+    // The CLI reads /var/lib/postgresql/PG_VERSION to recognise a data
+    // directory written by 16, and that file is only the old marker while the
+    // volume is mounted one level above it. Moving this back to the 16-era
+    // `/var/lib/postgresql/data` would leave the check probing a path inside
+    // the data directory instead of beside it, and the guard would pass every
+    // instance it exists to catch.
+    expect(compose).toContain('pgdata:/var/lib/postgresql\n');
+    expect(compose).not.toContain('pgdata:/var/lib/postgresql/data');
+  });
 });
 
 // `--domain` composes this on top of the file above, so it ships too.

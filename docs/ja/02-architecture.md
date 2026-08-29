@@ -206,7 +206,7 @@ docker-compose.yml:
 | バックエンド言語 | Bun + TypeScript | Go | MCP/A2A SDK が TS-first；フルスタックで型を共有できる |
 | Web フレームワーク | Hono | Elysia, Fastify | 軽量・高速・エコシステムが安定 |
 | クライアント | Tauri 2.0 | Flutter, Electron | 単一コードベースで 5 プラットフォーム、Rust による安全性、サイズが小さい |
-| メインストレージ | PostgreSQL 16 | MySQL | JSON サポートが良好、拡張性が高い、pgvector も選択可能 |
+| メインストレージ | PostgreSQL 18 | MySQL | JSON サポートが良好、拡張性が高い、pgvector も選択可能 |
 | メッセージバス | NATS | Kafka, Redis Pub/Sub | 軽量・永続化・正確な購読 |
 | ベクトルストア | Qdrant | Pinecone, pgvector | セルフホストが成熟、Rust 製でパフォーマンスが安定 |
 | 身分 | DID:web | DID:key, OAuth-only | web インフラと互換、NANDA が推奨 |

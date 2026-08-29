@@ -174,8 +174,9 @@ function run(command: string, args: readonly string[], cwd?: string, env?: NodeJ
   return spawnSync(command, args, { cwd, stdio: 'inherit', encoding: 'utf8', env });
 }
 
-function capture(command: string, args: readonly string[]) {
-  return spawnSync(command, args, { encoding: 'utf8' });
+/** As `run`, but with the output captured rather than shown. */
+function capture(command: string, args: readonly string[], cwd?: string, env?: NodeJS.ProcessEnv) {
+  return spawnSync(command, args, { cwd, encoding: 'utf8', env });
 }
 
 function fail(message: string): never {
@@ -220,6 +221,47 @@ function assertProjectIsOurs(project: string, composePath: string): void {
         '        Run with --project <other-name> to start a separate instance.',
     );
   }
+}
+
+/**
+ * Refuse to start on a database directory an older PostgreSQL wrote.
+ *
+ * 16 kept its data at the root of the volume; 18 keeps it in a major-versioned
+ * subdirectory. The image recognises the old layout and refuses to start rather
+ * than initialising an empty database beside it, which is the outcome that
+ * matters — the data is still there. But it surfaces as a container restarting
+ * in the background, so `up -d` succeeds and the failure arrives three minutes
+ * later as a health-check timeout, with the gateway's "cannot reach postgres"
+ * on screen and postgres's own explanation nowhere in it. Say it up front.
+ *
+ * Fails open, like assertProjectIsOurs: a docker that cannot answer should not
+ * be the reason an otherwise fine instance refuses to start.
+ */
+function assertPostgresDataIsCurrent(options: Options, env: NodeJS.ProcessEnv): void {
+  // 18 writes PG_VERSION inside the versioned subdirectory, so finding one at
+  // the mount point itself means a 16-era data directory. Asking compose rather
+  // than `docker run` keeps the image and the volume name where they are
+  // declared; --no-deps so this starts nothing else.
+  const probe = capture(
+    'docker',
+    [
+      ...composeArgs(options),
+      ...['run', '--rm', '--no-deps', '--entrypoint', 'sh', 'postgres', '-c'],
+      'test -f /var/lib/postgresql/PG_VERSION',
+    ],
+    options.dir,
+    env,
+  );
+  if (probe.status !== 0) return;
+
+  fail(
+    "this instance's database was created by PostgreSQL 16, and this release runs 18.\n" +
+      '        18 cannot read a 16 data directory. Nothing is lost — the move needs a dump\n' +
+      '        and a restore, and the steps are in docs/09-deployment.md:\n' +
+      '        https://github.com/hyhmrright/Confer/blob/main/docs/09-deployment.md\n\n' +
+      '        To stay on the old versions in the meantime, run the previous CLI, which\n' +
+      '        ships the previous compose file:  npx confer-cli@0.3.3',
+  );
 }
 
 async function waitForHealth(url: string, timeoutMs: number): Promise<boolean> {
@@ -340,10 +382,13 @@ async function up(options: Options): Promise<void> {
   }
 
   const env = composeEnv(options);
+  // postgres and qdrant are in here because the gateway's own log reports their
+  // failures only as "cannot connect" — a stack that will not start usually
+  // says why in a container the gateway never names.
   const diagnose = () =>
     run(
       'docker',
-      [...composeArgs(options), 'logs', '--tail', '40', 'migrate', 'gateway'],
+      [...composeArgs(options), 'logs', '--tail', '40', 'postgres', 'qdrant', 'migrate', 'gateway'],
       options.dir,
       env,
     );
@@ -355,6 +400,9 @@ async function up(options: Options): Promise<void> {
   if (run('docker', [...composeArgs(options), 'pull'], options.dir, env).status !== 0) {
     fail('could not pull the images. Check your network, then retry.');
   }
+
+  // After the pull, so the image this checks inside is the one about to run.
+  assertPostgresDataIsCurrent(options, env);
 
   process.stdout.write('Starting…\n');
   if (run('docker', [...composeArgs(options), 'up', '-d'], options.dir, env).status !== 0) {

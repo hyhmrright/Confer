@@ -1,13 +1,20 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     restart: unless-stopped
     environment:
       POSTGRES_USER: confer
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-confer}
       POSTGRES_DB: confer
+    # 18 stores its data under a major-versioned subdirectory, so the mount is
+    # one level up from the /var/lib/postgresql/data that 16 used. A volume
+    # written by 16 is NOT readable either way: the entrypoint detects the old
+    # layout at both paths and refuses to start rather than initialising an
+    # empty database over it, which is the outcome that matters — the data is
+    # still there, and `docker compose logs postgres` says exactly what to do.
+    # Moving from 16 means a dump and restore; see docs/09-deployment.md.
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U confer"]
       interval: 5s
@@ -15,7 +22,12 @@ services:
       retries: 5
 
   qdrant:
-    image: qdrant/qdrant:v1.12.0
+    # Storage written by 1.12 is not readable here either: 1.18 renamed a
+    # segment.json variant and the server panics on load rather than migrating
+    # it. Vectors are derived data — re-embedding rebuilds them — but the
+    # cheaper path is to export the points and upsert them back, which needs no
+    # embedding calls at all. Same section of docs/09-deployment.md.
+    image: qdrant/qdrant:v1.19.0
     restart: unless-stopped
     volumes:
       - qdrantdata:/qdrant/storage

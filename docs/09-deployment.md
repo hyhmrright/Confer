@@ -18,8 +18,8 @@ One command starts the whole platform:
 | `client` | built from `infra/client.Dockerfile` | Web UI + nginx reverse proxy (the only port exposed) |
 | `gateway` | built from `infra/gateway.Dockerfile` | Hono API, A2A endpoints, WebSocket — **single replica, see below** |
 | `migrate` | one-shot | runs Drizzle migrations, then exits |
-| `postgres` | `postgres:16-alpine` | primary datastore |
-| `qdrant` | `qdrant/qdrant:v1.12.0` | vector search for the RAG knowledge base |
+| `postgres` | `postgres:18-alpine` | primary datastore |
+| `qdrant` | `qdrant/qdrant:v1.19.0` | vector search for the RAG knowledge base |
 | `minio` | `minio/minio` | S3-compatible file storage |
 
 > **Do not scale `gateway` past one replica.** WebSocket connections, A2A replay
@@ -292,10 +292,108 @@ stack builds and runs on `arm64`.
 Without `CONFER_DOMAIN` this serves plain HTTP by IP — fine for testing, but the
 instance cannot federate, because `did:web` resolves over HTTPS only.
 
+## Upgrading an instance created before 2026-08-29
+
+Confer now runs **PostgreSQL 18** and **Qdrant 1.19**; it previously ran 16 and
+1.12. Neither reads storage the older one wrote, so an instance that already
+holds data needs one migration before it will start. Nothing is lost, and both
+failures are loud: postgres refuses to start and says why, and qdrant panics on
+load. A fresh install needs none of this.
+
+`npx confer-cli` checks for the postgres case before it starts anything and
+prints the same instructions. To stay on the old versions in the meantime, run
+the CLI that shipped them: `npx confer-cli@0.3.3`.
+
+Substitute your own compose file and project name below — `docker-compose.prod.yml`
+for a clone, or `-p confer -f ~/.confer/docker-compose.ghcr.yml` for the CLI path.
+Volumes are named `<project>_pgdata` and `<project>_qdrantdata`.
+
+**1. Back up, twice.** A logical dump and a byte copy of each volume fail in
+different ways, which is the point of taking both.
+
+```bash
+docker compose -f docker-compose.prod.yml exec -T postgres pg_dumpall -U confer > pg16-dumpall.sql
+for v in pgdata qdrantdata; do
+  docker volume create confer_${v}_backup
+  docker run --rm -v confer_$v:/from -v confer_${v}_backup:/to alpine:3.24 sh -c 'cd /from && cp -a . /to/'
+done
+```
+
+**2. Export the vectors** — with their vectors, so nothing has to be embedded
+again. Save the output to `qdrant-export.json`:
+
+```bash
+docker compose -f docker-compose.prod.yml exec -T gateway bun -e '
+const base = "http://qdrant:6333", out = {};
+for (const { name } of (await (await fetch(base + "/collections")).json()).result.collections) {
+  const info = (await (await fetch(base + "/collections/" + name)).json()).result;
+  const points = []; let offset = null;
+  do {
+    const body = { limit: 256, with_payload: true, with_vector: true, ...(offset ? { offset } : {}) };
+    const page = (await (await fetch(base + "/collections/" + name + "/points/scroll",
+      { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })).json()).result;
+    points.push(...page.points); offset = page.next_page_offset;
+  } while (offset);
+  out[name] = { config: info.config.params, points };
+}
+console.log(JSON.stringify(out));' > qdrant-export.json
+```
+
+**3. Replace the volumes and start the new versions.** Removing the volumes is
+the destructive step; do not run it until step 1 and step 2 have produced files
+you have looked at.
+
+```bash
+docker compose -f docker-compose.prod.yml down
+docker volume rm confer_pgdata confer_qdrantdata
+docker compose -f docker-compose.prod.yml up -d postgres qdrant --wait
+```
+
+**4. Restore.** The dump recreates the `confer` role and database that the fresh
+container already made, so two `already exists` errors are expected; anything
+else is not.
+
+```bash
+docker compose -f docker-compose.prod.yml exec -T postgres psql -U confer -d postgres < pg16-dumpall.sql
+docker compose -f docker-compose.prod.yml up -d
+```
+
+Then put the vectors back — collections first, since the app only creates them
+lazily:
+
+```bash
+docker compose -f docker-compose.prod.yml exec -T gateway bun -e '
+const base = "http://qdrant:6333";
+const data = JSON.parse(await new Response(Bun.stdin.stream()).text());
+for (const [name, { config, points }] of Object.entries(data)) {
+  await fetch(base + "/collections/" + name,
+    { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(config) });
+  if (points.length === 0) continue;
+  await fetch(base + "/collections/" + name + "/points?wait=true",
+    { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ points }) });
+}' < qdrant-export.json
+```
+
+**5. Verify against the data, not the logs.** Row counts should match what the
+old instance had, and a search should return results:
+
+```bash
+docker compose -f docker-compose.prod.yml exec -T postgres \
+  psql -U confer -d confer -tAc "select count(*) from users;"
+docker compose -f docker-compose.prod.yml exec -T gateway bun -e '
+const j = await (await fetch("http://qdrant:6333/collections/knowledge_chunks")).json();
+console.log(j.result.points_count);'
+```
+
+Keep `confer_pgdata_backup` and `confer_qdrantdata_backup` until you have used
+the instance for a while — they are the only way back.
+
 ## Troubleshooting
 
 | Symptom | Likely cause / fix |
 |---------|--------------------|
+| `postgres` restarts on loop after an upgrade | Its volume was written by PostgreSQL 16. See [Upgrading an instance created before 2026-08-29](#upgrading-an-instance-created-before-2026-08-29). |
+| `qdrant` exits 101 with a panic backtrace | Its storage was written by Qdrant 1.12. Same section as above. |
 | `port is already allocated` on 80 | Something else owns port 80. Set `EXPOSE_PORT=8080` in `.env` and open http://localhost:8080. |
 | Web UI loads but every request 500s | Check `docker compose -f docker-compose.prod.yml logs gateway`. Most often `JWT_SECRET` or `ENCRYPTION_KEY` is empty — they have no compose default, so they must be present in `.env`. |
 | `migrate` exits non-zero | Postgres wasn't healthy yet or `DATABASE_URL` is wrong. Re-run `docker compose -f docker-compose.prod.yml up -d`; `migrate` is idempotent. |

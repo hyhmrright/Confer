@@ -16,14 +16,21 @@
 
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     restart: unless-stopped
     environment:
       POSTGRES_USER: confer
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-confer}
       POSTGRES_DB: confer
+    # 18 keeps its data in a major-versioned subdirectory, so this mount is one
+    # level up from the /var/lib/postgresql/data that 16 used. An instance that
+    # already holds a volume written by 16 will not start on this image, at
+    # either path — the entrypoint recognises the old layout and refuses rather
+    # than initialising an empty database beside it. Nothing is lost, but the
+    # move needs a dump and restore; `npx confer-cli` checks for it up front and
+    # prints the commands. docs/09-deployment.md has them too.
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U confer"]
       interval: 5s
@@ -31,7 +38,9 @@ services:
       retries: 5
 
   qdrant:
-    image: qdrant/qdrant:v1.12.0
+    # Storage written by 1.12 is not readable here: 1.18 renamed a segment.json
+    # variant and the server panics on load. Same note as postgres above.
+    image: qdrant/qdrant:v1.19.0
     restart: unless-stopped
     volumes:
       - qdrantdata:/qdrant/storage

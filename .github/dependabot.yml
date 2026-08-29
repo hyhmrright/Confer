@@ -63,8 +63,11 @@ updates:
         update-types: [minor, patch]
 
   # Compose pinned qdrant at v1.12.0 — an October 2024 release — for 22 months,
-  # because no tool was watching image tags either. confer-gateway/client/migrate
-  # are built locally by deploy.sh and exist in no registry to check.
+  # because no tool was watching image tags either. Both it and postgres were
+  # migrated by hand on 2026-08-29 (1.19 / 18); the rules below are what keeps
+  # the NEXT pair of those from arriving as a routine merge, not leftovers from
+  # the last one. confer-gateway/client/migrate are built locally by deploy.sh
+  # and exist in no registry to check.
   - package-ecosystem: docker-compose
     directory: /
     target-branch: dev
@@ -73,10 +76,11 @@ updates:
     open-pull-requests-limit: 5
     ignore:
       - dependency-name: confer-*
-      # A Postgres major is a pg_upgrade behind a maintenance window, never a
-      # merged pull request: 18 refuses to start on a 16 data directory, and
-      # 18+ images additionally moved the mount point to /var/lib/postgresql,
-      # so the compose file needs editing too. Minors within 16.x still flow.
+      # A Postgres major is a dump and restore behind a maintenance window,
+      # never a merged pull request: 18 refused to start on the 16 data
+      # directory, at either mount point, and 18+ images moved the mount to
+      # /var/lib/postgresql, so the compose file needed editing too. 19 will be
+      # the same. Minors within 18.x still flow.
       - dependency-name: postgres
         update-types: [version-update:semver-major]
     groups:
@@ -92,7 +96,7 @@ updates:
         exclude-patterns: ['qdrant/qdrant']
         update-types: [minor, patch]
 
-  # infra/*.Dockerfile. alpine is pinned at 3.22 and needs review rather than a
+  # infra/*.Dockerfile. alpine is pinned at 3.24 and needs review rather than a
   # reflex merge: the client image depends on Alpine's own nginx build for the
   # brotli module, and reverting that base is fatal to the container. oven/bun:1
   # floats by design — see the deploy notes in CLAUDE.md.

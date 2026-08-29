@@ -13,8 +13,8 @@ Confer の完全なインスタンスを自分で動かす方法 — 試しに�
 | `client` | `infra/client.Dockerfile` からビルド | Web UI + nginx リバースプロキシ（公開される唯一のポート） |
 | `gateway` | `infra/gateway.Dockerfile` からビルド | Hono API、A2A エンドポイント、WebSocket |
 | `migrate` | ワンショット | Drizzle マイグレーションを実行してから終了 |
-| `postgres` | `postgres:16-alpine` | プライマリデータストア |
-| `qdrant` | `qdrant/qdrant:v1.12.0` | RAG ナレッジベース向けのベクトル検索 |
+| `postgres` | `postgres:18-alpine` | プライマリデータストア |
+| `qdrant` | `qdrant/qdrant:v1.19.0` | RAG ナレッジベース向けのベクトル検索 |
 | `minio` | `minio/minio` | S3 互換のファイルストレージ |
 
 nginx（`client` 内）はポート **80** で SPA を配信し、`/api`、`/ws`、`/a2a`、`/.well-known` を gateway にリバースプロキシします。gateway 自身のポート（3000）は本番環境では**公開されません** — すべてはポート 80 の nginx を経由します。
@@ -102,6 +102,13 @@ docker compose -f docker-compose.prod.yml up -d
 git pull
 docker compose -f docker-compose.prod.yml up -d --build   # migrate re-runs automatically
 ```
+
+> **2026-08-29 より前に作成されたインスタンスは、先に一度だけ移行が必要です。** スタックは
+> PostgreSQL 18 と Qdrant 1.19 に移行しており、どちらも旧バージョンが書いたストレージを
+> 読めません。データが失われることはなく、失敗も明示的です（postgres は理由を示して起動を
+> 拒否し、qdrant は読み込み時に panic します）が、移行にはダンプとリストアが必要です。手順は
+> [中国語版ガイド](../09-deployment.md#upgrading-an-instance-created-before-2026-08-29)
+> にあります。`npx confer-cli` は起動前にこれを検出し、同じ手順を表示します。
 
 ### リセット（すべてのデータを消去）
 
