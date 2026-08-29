@@ -26,12 +26,17 @@ beforeEach(async () => {
   user = await seedUser();
 });
 
-// Seed the user's own agent with an active, AES-encrypted signing key so
-// deliverConsult can sign the outbound consult.
+// Seed the user's own agent and signing key in exactly the shape registration
+// writes them (auth.ts): the agent DID is the owner's with an `:agent` suffix,
+// and the single keypair belongs to the OWNER — that is the key published at
+// `/agents/<username>/did.json`, so it is the only one a peer can verify
+// against. This fixture used to invent an `owner_type: 'agent'` row keyed by
+// the agent id, which no code path has ever written; it made these tests pass
+// while every real consult failed with `no_signing_key`.
 async function seedOwnAgent(): Promise<void> {
   const db = getDb();
   const agentId = newId();
-  myAgentDid = `did:web:localhost:agents:me-${agentId.slice(-6).toLowerCase()}`;
+  myAgentDid = `${user.did}:agent`;
   await db
     .insert(agents)
     .values({ id: agentId, user_id: user.id, did: myAgentDid, policies_json: {} });
@@ -43,9 +48,9 @@ async function seedOwnAgent(): Promise<void> {
 
   await db.insert(keypairs).values({
     id: newId(),
-    owner_type: 'agent',
-    owner_id: agentId,
-    key_id: `${myAgentDid}#key-1`,
+    owner_type: 'user',
+    owner_id: user.id,
+    key_id: `${user.did}#key-1`,
     public_key_multibase: await publicKeyToMultibase(kp.publicKey),
     private_key_jwk_encrypted: enc.value,
     is_active: true,

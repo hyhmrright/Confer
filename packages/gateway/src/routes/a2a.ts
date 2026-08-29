@@ -4,7 +4,6 @@ import {
   MAX_CLOCK_SKEW_MS,
   multibaseToPublicKey,
   parseSignatureInput,
-  resolveDID,
   verifyRequestSignature,
 } from '@confer/identity';
 import { AppError, newId } from '@confer/shared';
@@ -14,7 +13,7 @@ import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import { z } from 'zod';
 import { sendA2AMessage } from '../a2a/outbound.js';
-import { loadActiveAgentKey } from '../a2a/signing.js';
+import { loadOwnerSigningKey } from '../a2a/signing.js';
 import { getDb } from '../db/connection.js';
 import {
   agents,
@@ -27,9 +26,11 @@ import {
 } from '../db/schema.js';
 import { getEnv } from '../env.js';
 import { decideAdmission, isSenderAuthorized } from '../lib/a2a-admission.js';
+import { isOwnIdentity, resolveDidDocument } from '../lib/did-resolution.js';
 import { decryptUserKey, getUserLlmKeys, resolveAgentCapabilities } from '../lib/llm-keys.js';
 import { addNonce, hasNonce } from '../lib/nonce-cache.js';
 import { upsertPeerAgent } from '../lib/peer-agent.js';
+import { selfA2AEndpoint } from '../lib/public-identity.js';
 import { isContact } from '../lib/tenant.js';
 import { rateLimit } from '../middleware/rate-limit.js';
 import { runAgentTurn } from '../orchestration/agent-orchestrator.js';
@@ -52,7 +53,16 @@ const a2aMessageSchema = z.object({
 // Resolve a peer's A2A service endpoint from its DID document. Returns '' if
 // the DID cannot be resolved or advertises no service endpoint.
 async function resolvePeerEndpoint(did: string): Promise<string> {
-  const result = await resolveDID(did);
+  // Every identity on an instance shares that instance's A2A endpoint — the
+  // same rule contact discovery relies on when it reads `.well-known/agents.json`
+  // — so anything under our own authority is reachable here without a lookup.
+  // It has to be short-circuited rather than resolved: a Confer peer signs as
+  // its owner but sends `from` as its AGENT DID (`…:agents:<user>:agent`), and
+  // no route serves a document for that, so resolution would come back empty
+  // and the peer would be recorded with nowhere to reply to.
+  if (isOwnIdentity(did)) return selfA2AEndpoint();
+
+  const result = await resolveDidDocument(did);
   if (!result.ok) return '';
   return result.value.service?.find((s) => s.serviceEndpoint)?.serviceEndpoint ?? '';
 }
@@ -286,7 +296,7 @@ const verifyA2ASignature: MiddlewareHandler = async (c, next) => {
     throw new AppError('signature_invalid', 'Invalid keyId format in signature', 401);
   }
 
-  const didResult = await resolveDID(senderDid);
+  const didResult = await resolveDidDocument(senderDid);
   if (!didResult.ok) {
     throw new AppError('did_resolution_failed', didResult.error, 401);
   }
@@ -679,7 +689,7 @@ async function processA2AMessage(params: ProcessA2AMessageParams): Promise<void>
     return;
   }
 
-  const key = await loadActiveAgentKey(targetAgent.id);
+  const key = await loadOwnerSigningKey(targetAgent.user_id);
   if (!key.ok) {
     console.error(`Cannot sign A2A reply for agent ${targetAgent.id}: ${key.error}`);
     return;

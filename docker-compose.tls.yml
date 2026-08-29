@@ -1,0 +1,63 @@
+# HTTPS overlay. Layer it on either base file:
+#
+#   docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml up -d
+#   docker compose -f docker-compose.ghcr.yml  -f docker-compose.tls.yml up -d
+#
+# Federation needs this, not just the padlock. did:web resolution is https-only:
+# a peer handed `did:web:your.domain:agents:you` fetches
+# `https://your.domain/agents/you/did.json`, so an instance served over plain
+# http publishes identities nobody can verify. Without TLS the stack runs
+# perfectly well for its own users and cannot talk to any other instance.
+#
+# Requirements, all three:
+#   * PUBLIC_HOST is the bare domain — `confer.example.com`, no scheme, no port.
+#     Caddy serves it on 443 and the mapping below is fixed, so a `:8443` here
+#     would have Caddy listening on a port nothing forwards to.
+#   * That domain's A/AAAA record already points at this host.
+#   * Ports 80 and 443 are reachable from the internet. 80 is not optional —
+#     Let's Encrypt validates over it before anything is served on 443.
+#
+# Changing PUBLIC_HOST re-hosts identities minted under the old value; see
+# rehostLegacyDids in bootstrap.ts.
+
+services:
+  client:
+    # Caddy takes 80 and 443, so the client must stop publishing 80 or the two
+    # bind the same port. `!override` REPLACES the base file's list — compose
+    # merges sequences by default, and a plain empty list here would leave the
+    # base mapping in place.
+    ports: !override []
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp" # HTTP/3
+    # Configured by flags rather than a Caddyfile so this overlay is the whole
+    # story. `npx confer-cli` ships compose files, not a config directory, and a
+    # second file to copy is a second file that can silently fall out of step
+    # with the repo. `reverse-proxy` provisions and renews the certificate on its
+    # own for a public name, and passes the Host header through, which the
+    # client's nginx needs.
+    # The image declares no ENTRYPOINT — its whole `caddy run …` line is the
+    # CMD — so the binary has to be named here too.
+    command:
+      - caddy
+      - reverse-proxy
+      - --from
+      - ${PUBLIC_HOST:?set PUBLIC_HOST to the bare domain this instance serves, e.g. confer.example.com}
+      - --to
+      - client:80
+    # Certificates and account keys. Losing this volume means re-issuing on the
+    # next start, which Let's Encrypt rate-limits — keep it.
+    volumes:
+      - caddydata:/data
+      - caddyconfig:/config
+    depends_on:
+      - client
+
+volumes:
+  caddydata:
+  caddyconfig:

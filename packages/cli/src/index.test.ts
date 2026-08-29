@@ -1,9 +1,18 @@
 import { describe, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { generateSecrets, parseArgs, renderEnvFile, stopFlags } from './index.js';
+import {
+  generateSecrets,
+  instanceUrl,
+  parseArgs,
+  renderEnvFile,
+  stopFlags,
+  storedDomain,
+  validateDomain,
+  withEnvValue,
+} from './index.js';
 
 function ok(argv: string[]) {
   const parsed = parseArgs(argv);
@@ -62,6 +71,67 @@ describe('parseArgs', () => {
   });
 });
 
+describe('--domain', () => {
+  test('is carried through and leaves the http port alone', () => {
+    expect(ok(['--domain', 'confer.example.com'])).toMatchObject({
+      domain: 'confer.example.com',
+      port: 80,
+    });
+  });
+
+  test('is absent unless asked for', () => {
+    expect(ok([]).domain).toBeUndefined();
+  });
+
+  // Each of these is handed to Caddy as the name to obtain a certificate for,
+  // and to the gateway as the authority it mints every DID from. A wrong one
+  // fails late and obscurely, so it is refused here with the reason.
+  test.each([
+    ['https://confer.example.com', 'https://'],
+    ['confer.example.com/app', 'path'],
+    ['confer.example.com:8443', 'port'],
+    ['localhost', 'public domain'],
+    ['-bad.example.com', 'valid domain'],
+  ])('rejects %s', (value, because) => {
+    expect(validateDomain(value)).toContain(because);
+    expect(parseArgs(['--domain', value])).toHaveProperty('error');
+  });
+
+  test('accepts a plain name', () => {
+    expect(validateDomain('confer.example.com')).toBeUndefined();
+    expect(validateDomain('a.b.c.co.uk')).toBeUndefined();
+  });
+
+  // Caddy binds 80 and 443 under TLS, so a --port would publish on a port
+  // nothing serves. Refused rather than silently overridden.
+  test('refuses --port alongside it', () => {
+    const parsed = parseArgs(['--domain', 'confer.example.com', '--port', '8080']);
+    expect((parsed as { error: string }).error).toContain('--port has no meaning with --domain');
+  });
+});
+
+describe('withEnvValue', () => {
+  test('replaces a value in place, leaving everything else', () => {
+    const body = 'JWT_SECRET=a\nPUBLIC_HOST=localhost\nENCRYPTION_KEY=b\n';
+    expect(withEnvValue(body, 'PUBLIC_HOST', 'confer.example.com')).toBe(
+      'JWT_SECRET=a\nPUBLIC_HOST=confer.example.com\nENCRYPTION_KEY=b\n',
+    );
+  });
+
+  test('appends when the key is absent', () => {
+    expect(withEnvValue('JWT_SECRET=a\n', 'PUBLIC_HOST', 'x.example')).toBe(
+      'JWT_SECRET=a\nPUBLIC_HOST=x.example\n',
+    );
+  });
+
+  test('does not match a key that merely starts the same', () => {
+    const body = 'PUBLIC_HOSTNAME=keep\n';
+    expect(withEnvValue(body, 'PUBLIC_HOST', 'x.example')).toBe(
+      'PUBLIC_HOSTNAME=keep\nPUBLIC_HOST=x.example\n',
+    );
+  });
+});
+
 describe('generateSecrets', () => {
   test('produces an ENCRYPTION_KEY the gateway will accept', () => {
     // env.ts requires exactly 64 characters and crypto.ts reads them as hex.
@@ -78,6 +148,46 @@ describe('generateSecrets', () => {
     const second = generateSecrets();
     expect(first.encryptionKey).not.toBe(second.encryptionKey);
     expect(first.jwtSecret).not.toBe(second.jwtSecret);
+  });
+});
+
+describe('storedDomain', () => {
+  function envDir(body: string): string {
+    const dir = mkdtempSync(join(tmpdir(), 'confer-cli-env-'));
+    writeFileSync(join(dir, '.env'), body);
+    return dir;
+  }
+
+  test('reads back what up --domain recorded', () => {
+    expect(storedDomain(envDir('PUBLIC_HOST=x.example\nCONFER_DOMAIN=x.example\n'))).toBe(
+      'x.example',
+    );
+  });
+
+  // PUBLIC_HOST answers a different question — it is legitimately localhost, an
+  // IP, or a domain — so TLS must not be inferred from it. Inferring would
+  // compose the TLS overlay for anyone who set it to a bare IP.
+  test('does not infer TLS from PUBLIC_HOST alone', () => {
+    expect(storedDomain(envDir('PUBLIC_HOST=203.0.113.4\n'))).toBeUndefined();
+    expect(storedDomain(envDir('PUBLIC_HOST=confer.example.com\n'))).toBeUndefined();
+    expect(storedDomain(envDir('PUBLIC_HOST=localhost\n'))).toBeUndefined();
+  });
+
+  test('is undefined when there is no instance there', () => {
+    expect(storedDomain(join(tmpdir(), 'confer-cli-nothing-here'))).toBeUndefined();
+  });
+});
+
+describe('instanceUrl', () => {
+  test('is https at the domain when there is one', () => {
+    expect(instanceUrl({ domain: 'confer.example.com', port: 80 })).toBe(
+      'https://confer.example.com',
+    );
+  });
+
+  test('drops the default port and keeps any other', () => {
+    expect(instanceUrl({ port: 80 })).toBe('http://localhost');
+    expect(instanceUrl({ port: 8080 })).toBe('http://localhost:8080');
   });
 });
 
@@ -170,5 +280,32 @@ describe('the compose file the CLI ships', () => {
     // A default here would ship every instance the same AES key.
     expect(compose).toContain(`JWT_SECRET: ${interpolate('JWT_SECRET')}`);
     expect(compose).toContain(`ENCRYPTION_KEY: ${interpolate('ENCRYPTION_KEY')}`);
+  });
+});
+
+// `--domain` composes this on top of the file above, so it ships too.
+describe('the TLS overlay the CLI ships', () => {
+  const overlay = readFileSync(
+    join(import.meta.dir, '..', '..', '..', 'docker-compose.tls.yml'),
+    'utf8',
+  );
+
+  test('adds the TLS terminator', () => {
+    expect(overlay).toContain('\n  caddy:');
+    expect(overlay).toContain('"443:443"');
+  });
+
+  test('takes the published port away from the client', () => {
+    // Both would otherwise bind 80. Compose MERGES sequences, so only an
+    // explicit !override empties the base file's list — a bare `ports: []`
+    // here would leave the collision in place.
+    expect(overlay).toContain('ports: !override []');
+  });
+
+  test('demands a domain rather than defaulting to one', () => {
+    // `${PUBLIC_HOST:-localhost}` here would have Caddy issue itself an
+    // untrusted certificate for "localhost" and report success.
+    expect(overlay).toContain('${PUBLIC_HOST:?');
+    expect(overlay).not.toContain('${PUBLIC_HOST:-');
   });
 });

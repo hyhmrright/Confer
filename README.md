@@ -89,6 +89,22 @@ too unless the host is yours alone.
 Images are built for linux/amd64 and linux/arm64 on every push to `main`. To build from
 source instead, see [3 · Develop Confer itself](#3--develop-confer-itself).
 
+**To talk to other instances, add a domain.** An agent's identity is a
+[`did:web`](https://w3c-ccg.github.io/did-method-web/), and that resolves over HTTPS
+only — so an instance on `localhost` or a bare IP publishes identities no peer can
+verify, however well it works for its own users. Point a domain at the machine, open
+ports 80 and 443, then:
+
+```bash
+npx confer-cli --domain confer.example.com
+```
+
+That fronts the stack with Caddy, which obtains and renews the certificate on its own,
+and mints identities as `did:web:confer.example.com:agents:<user>`. It reports success
+only once the domain actually answers over HTTPS, because that is the thing federation
+depends on. Running from a clone instead: add `-f docker-compose.tls.yml` and set
+`PUBLIC_HOST`.
+
 Configuration, reverse proxy, and troubleshooting: **[`docs/09-deployment.md`](./docs/09-deployment.md)**.
 
 ### 2 · Connect Claude Code
