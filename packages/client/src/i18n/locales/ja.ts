@@ -236,6 +236,9 @@ export const ja: Resources = {
     pin: 'ピン留め',
     unpin: 'ピン留め解除',
     delete: '削除',
+    noEmbedding:
+      'まず設定で embedding プロバイダ（OpenAI・智譜 GLM・Qwen、またはローカルの Ollama）を設定してください。ないとこのメモリは呼び出せません。',
+    saveFailed: 'このメモリは保存されませんでした。もう一度お試しください。',
   },
   knowledge: {
     title: 'ナレッジベース',

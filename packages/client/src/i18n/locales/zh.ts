@@ -227,6 +227,9 @@ export const zh = {
     pin: '置顶',
     unpin: '取消置顶',
     delete: '删除',
+    noEmbedding:
+      '需要先在设置里配置一个 embedding 提供方（OpenAI、智谱 GLM、通义千问，或本地 Ollama），否则这条记忆无法被检索到。',
+    saveFailed: '这条记忆没能保存，请重试。',
   },
   knowledge: {
     title: '知识库',

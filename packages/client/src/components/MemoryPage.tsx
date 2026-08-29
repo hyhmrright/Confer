@@ -20,6 +20,7 @@ export function MemoryPage() {
   const [newTitle, setNewTitle] = useState('');
   const [newContent, setNewContent] = useState('');
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     loadMemories();
@@ -34,11 +35,25 @@ export function MemoryPage() {
   const handleCreate = async () => {
     if (!newTitle.trim() || !newContent.trim()) return;
     setSaving(true);
+    setSaveError(null);
     try {
       await createMemory(newTitle.trim(), newContent.trim());
       setNewTitle('');
       setNewContent('');
       setShowForm(false);
+    } catch (err) {
+      // The server refuses a memory it cannot index, because an unindexed one
+      // is invisible to recall. Say which of the two it is — an unhandled
+      // rejection here left the form open with no explanation at all.
+      //
+      // Read the code off the error rather than testing `instanceof ApiError`:
+      // no component imports that class today, and the first one to do so has
+      // to be declared by every test that mock.module's the api (the mock is
+      // process-global, so one omission breaks unrelated files).
+      const code = (err as { code?: unknown })?.code;
+      setSaveError(
+        code === 'embedding_unavailable' ? t('memory.noEmbedding') : t('memory.saveFailed'),
+      );
     } finally {
       setSaving(false);
     }
@@ -92,10 +107,18 @@ export function MemoryPage() {
             rows={3}
             className={`${INPUT_CLS} resize-none`}
           />
+          {saveError && (
+            <p role="alert" className="text-xs text-red-400">
+              {saveError}
+            </p>
+          )}
           <div className="flex gap-2 justify-end">
             <button
               type="button"
-              onClick={() => setShowForm(false)}
+              onClick={() => {
+                setShowForm(false);
+                setSaveError(null);
+              }}
               className="px-3 py-1.5 text-xs text-ink-muted hover:text-ink-secondary transition-colors"
             >
               {t('common.cancel')}

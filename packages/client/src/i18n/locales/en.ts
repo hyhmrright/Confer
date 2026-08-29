@@ -234,6 +234,9 @@ export const en: Resources = {
     pin: 'Pin',
     unpin: 'Unpin',
     delete: 'Delete',
+    noEmbedding:
+      'Set up an embedding provider in Settings first (OpenAI, ZhipuAI GLM, Qwen, or a local Ollama) — without one this memory could never be recalled.',
+    saveFailed: 'That memory was not saved. Try again.',
   },
   knowledge: {
     title: 'Knowledge base',

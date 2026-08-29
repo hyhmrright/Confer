@@ -44,11 +44,20 @@ const patch = mock(async () => {
   throw new Error('server said no');
 });
 
+const post = mock(async (): Promise<unknown> => ({}));
+
+// Shaped like the real ApiError, which carries the server's machine code on the
+// thrown error. Not that class: `mock.module` is process-global, so importing it
+// into a component would oblige every other api mock in the suite to export it.
+function apiError(code: string): Error {
+  return Object.assign(new Error(code), { status: 400, code });
+}
+
 mock.module('../lib/api.js', () => ({
   api: {
     get,
     patch,
-    post: mock(async () => ({})),
+    post,
     put: mock(async () => ({})),
     del: mock(async () => ({})),
   },
@@ -123,6 +132,34 @@ describe('authenticated screens mount', () => {
   test('MemoryPage renders its empty state without throwing', async () => {
     wrap(<MemoryPage />);
     await waitFor(() => expect(document.body.textContent?.length ?? 0).toBeGreaterThan(0));
+  });
+
+  // The server refuses a memory it cannot embed, because an unindexed one is
+  // invisible to recall. The form had no catch at all, so the refusal arrived
+  // as an unhandled rejection: the entry silently vanished and the owner was
+  // told nothing — the worst of both behaviours.
+  test('a memory the server cannot index says why instead of failing silently', async () => {
+    post.mockImplementationOnce(async () => {
+      throw apiError('embedding_unavailable');
+    });
+    wrap(<MemoryPage />);
+
+    fireEvent.click(screen.getByText(i18n.t('common.new')));
+    fireEvent.change(screen.getByPlaceholderText(i18n.t('memory.titlePlaceholder')), {
+      target: { value: 'Supplier' },
+    });
+    fireEvent.change(screen.getByPlaceholderText(i18n.t('memory.contentPlaceholder')), {
+      target: { value: 'Hengxin ships in three days' },
+    });
+    fireEvent.click(screen.getByText(i18n.t('common.save')));
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert').textContent).toBe(i18n.t('memory.noEmbedding')),
+    );
+    // The draft survives, so the owner can add a key and save without retyping.
+    expect(
+      (screen.getByPlaceholderText(i18n.t('memory.titlePlaceholder')) as HTMLInputElement).value,
+    ).toBe('Supplier');
   });
 
   test('PermissionInbox renders nothing when there is nothing pending', () => {
