@@ -7,7 +7,7 @@ import {
   verifyRequestSignature,
 } from '@confer/identity';
 import { AppError, newId } from '@confer/shared';
-import { and, asc, eq, inArray, lt } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import type { MiddlewareHandler } from 'hono';
 import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
@@ -28,6 +28,7 @@ import {
 import { getEnv } from '../env.js';
 import { decideAdmission, isSenderAuthorized } from '../lib/a2a-admission.js';
 import { type ModelConfigError, resolveAgentModel } from '../lib/agent-model.js';
+import { historyBefore } from '../lib/conversation-history.js';
 import { derivedId } from '../lib/derived-id.js';
 import { isOwnIdentity, resolveDidDocument } from '../lib/did-resolution.js';
 import { getUserLlmKeys, resolveAgentCapabilities } from '../lib/llm-keys.js';
@@ -659,26 +660,20 @@ interface ProcessA2AMessageParams {
   inboundMessageId: string;
 }
 
-// Load up to 20 prior visible messages of an A2A thread as LLM history,
+// The most recent 20 visible messages of an A2A thread as LLM history,
 // excluding the current inbound message. The peer asking is the `user`; this
 // agent's own prior replies are `assistant`, mirroring the chat path's role
 // mapping. Moderator-hidden messages are excluded from the LLM context.
+//
+// This wrote the query itself and took the OLDEST twenty — the same defect the
+// chat path was fixed for, left here because it could not surface while every
+// inbound message opened a conversation of its own. Now that a thread persists
+// past twenty messages, it would have. Both paths share `historyBefore`.
 async function loadA2AHistory(
   conversationId: string,
   inboundMessageId: string,
 ): Promise<LLMMessage[]> {
-  const rows = await getDb()
-    .select()
-    .from(messages)
-    .where(
-      and(
-        eq(messages.conversation_id, conversationId),
-        lt(messages.id, inboundMessageId),
-        eq(messages.moderation_status, 'visible'),
-      ),
-    )
-    .orderBy(asc(messages.created_at))
-    .limit(20);
+  const rows = await historyBefore(conversationId, inboundMessageId, 20);
 
   return rows.map((m) => ({
     role: m.sender_type === 'peer_agent' ? 'user' : 'assistant',

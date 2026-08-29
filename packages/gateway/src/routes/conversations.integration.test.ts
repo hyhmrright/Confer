@@ -57,6 +57,33 @@ describe('conversations', () => {
     expect(messages[0].content).toBe('hello there');
   });
 
+  // Paging was untested, and it paged by id while ordering by created_at —
+  // two different keys, which disagreed whenever rows landed in the same
+  // millisecond and let a page skip a message or repeat one. Both are the id
+  // now, and `newId` is monotonic so it is exact insertion order.
+  test('a cursor pages back through what came before it, without gaps', async () => {
+    const id = await createConversation(user.token);
+    const sent: string[] = [];
+    for (let i = 0; i < 5; i++) {
+      const res = await post(`${BASE}/${id}/messages`, {
+        token: user.token,
+        body: { content: `m-${i}` },
+      });
+      sent.push((await res.json()).id);
+    }
+
+    const first = await get(`${BASE}/${id}/messages?limit=2`, { token: user.token });
+    const page1 = (await first.json()).messages as Array<{ id: string; content: string }>;
+    expect(page1.map((m) => m.content)).toEqual(['m-3', 'm-4']);
+
+    const second = await get(`${BASE}/${id}/messages?limit=2&before=${page1[0]?.id}`, {
+      token: user.token,
+    });
+    const page2 = (await second.json()).messages as Array<{ content: string }>;
+    expect(page2.map((m) => m.content)).toEqual(['m-1', 'm-2']);
+    expect(sent).toHaveLength(5);
+  });
+
   test('rejects an empty message body with 400', async () => {
     const id = await createConversation(user.token);
     const res = await post(`${BASE}/${id}/messages`, { token: user.token, body: { content: '' } });

@@ -336,6 +336,18 @@ describe('same-instance A2A', () => {
     expect((await app.request(signed)).status).toBeLessThan(300);
   }
 
+  /**
+   * The completion bodies that are actual agent turns.
+   *
+   * Memory extraction posts to the same endpoint, so position alone cannot tell
+   * the two apart — and its prompt quotes the conversation back, which means an
+   * assertion that lands on it passes whether or not any history reached the
+   * model. Exactly what these tests are here to check.
+   */
+  function turnPrompts(traffic: A2ATraffic): string[] {
+    return traffic.prompts.filter((body) => !body.includes('记忆抽取器'));
+  }
+
   // The turn is spawned off the request, so every assertion about what Bob sent
   // has to wait for it rather than sleeping a fixed amount.
   async function waitForOutbound(traffic: A2ATraffic, count: number): Promise<void> {
@@ -531,7 +543,50 @@ describe('same-instance A2A', () => {
 
     // And the agent actually saw the earlier turn: history is what a shared
     // thread is FOR, so counting rows alone would pass on a thread nobody reads.
-    expect(seen.prompts[1]).toContain('Are you free on Thursday?');
+    expect(turnPrompts(seen)[1]).toContain('Are you free on Thursday?');
+  });
+
+  // The A2A history window took the OLDEST twenty — the same defect the chat
+  // path had been fixed for. It could not surface while every inbound message
+  // opened its own conversation, so consolidating threads is what made it
+  // reachable: past twenty messages the agent would answer every question from
+  // the opening of the thread and never see what was just asked.
+  test('answers from the end of a long peer thread, not its beginning', async () => {
+    const { alice, bob } = await connectedPair({ model: true });
+    const seen = captureA2ATraffic();
+
+    await ask(alice, bob, PEER_THREAD, 'Are you free on Thursday?');
+    await waitForOutbound(seen, 1);
+
+    const [thread] = await getDb()
+      .select({ id: conversations.id })
+      .from(conversations)
+      .where(eq(conversations.created_by, bob.userId));
+
+    // Twenty-five more messages in the thread, so the exchange above falls off
+    // the far end of the window. Ids are monotonic, so insertion order is the
+    // order the window pages by — no timestamps to fix in place.
+    for (let i = 0; i < 25; i++) {
+      await getDb()
+        .insert(messages)
+        .values({
+          id: newId(),
+          conversation_id: thread?.id ?? '',
+          sender_type: 'peer_agent',
+          sender_id: bob.userId,
+          content: `bulk-${i}`,
+        });
+    }
+
+    await ask(alice, bob, PEER_THREAD, 'And Friday?');
+    await waitForOutbound(seen, 2);
+
+    // Taking the OLDEST twenty would have handed the model the opening exchange
+    // and bulk-0 onward, and never the twenty-five most recent.
+    const prompt = turnPrompts(seen)[1] ?? '';
+    expect(prompt).toContain('bulk-24');
+    expect(prompt).not.toContain('bulk-0"');
+    expect(prompt).not.toContain('Are you free on Thursday?');
   });
 
   // An agent with nothing configured used to dial a hardcoded 'anthropic', get

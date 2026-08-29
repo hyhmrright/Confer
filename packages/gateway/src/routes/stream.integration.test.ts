@@ -399,8 +399,11 @@ describe('GET /stream conversation history window', () => {
       body: { provider: 'openai', api_key: 'sk-test-llm' },
     });
 
-    // 30 earlier messages, then the one being answered. ULIDs are monotonic, so
-    // insertion order is both the id order and the timestamp order.
+    // 30 earlier messages, then the one being answered. These are written as
+    // fast as the machine allows, so most of them share a millisecond — which
+    // is exactly the case that used to break the window: ids were random
+    // within one, and this test failed about half the time on CI because of
+    // it. `newId` is monotonic now, and the window pages by that id.
     for (let i = 0; i < 30; i++) {
       await getDb()
         .insert(messages)

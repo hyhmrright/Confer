@@ -1,12 +1,13 @@
 import type { LLMMessage } from '@confer/agent-runtime';
 import { AppError, newId } from '@confer/shared';
-import { and, desc, eq, lt } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { type Context, Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import { getDb } from '../db/connection.js';
 import { agents, messages } from '../db/schema.js';
 import { getEnv } from '../env.js';
 import { resolveAgentModel } from '../lib/agent-model.js';
+import { historyBefore } from '../lib/conversation-history.js';
 import { getUserLlmKeys, resolveAgentCapabilities } from '../lib/llm-keys.js';
 import { assertIsConversationParticipant } from '../lib/tenant.js';
 import { authMiddleware } from '../middleware/auth.js';
@@ -132,25 +133,9 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
       }
       const { provider, model } = resolved.value;
 
-      // The last HISTORY_WINDOW messages before this one, oldest-first for the
-      // model. Ordering ascending and taking the first 20 — which is what this
-      // did — hands back the twenty OLDEST messages instead, so past that many
-      // the agent kept re-reading the start of the conversation and never saw
-      // anything recent. Moderator-hidden messages stay out of the context.
-      const historyRows = (
-        await db
-          .select()
-          .from(messages)
-          .where(
-            and(
-              eq(messages.conversation_id, conversationId),
-              lt(messages.id, messageId),
-              eq(messages.moderation_status, 'visible'),
-            ),
-          )
-          .orderBy(desc(messages.created_at))
-          .limit(HISTORY_WINDOW)
-      ).reverse();
+      // Moderator-hidden messages stay out of the model's context; see
+      // historyBefore for why the window is taken newest-first and reversed.
+      const historyRows = await historyBefore(conversationId, messageId, HISTORY_WINDOW);
 
       const history: LLMMessage[] = historyRows.map((m) => ({
         role: m.sender_type === 'user' ? 'user' : 'assistant',
