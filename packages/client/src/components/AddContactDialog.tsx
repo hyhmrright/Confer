@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FOCUS_RING } from '../lib/styles.js';
+import { DISABLED_FILLED, FOCUS_RING } from '../lib/styles.js';
 import { useContactsStore } from '../stores/contacts.js';
 import { Bot, Loader, Search } from './Icons.js';
 import { Modal } from './Modal.js';
@@ -9,11 +9,11 @@ export function AddContactDialog() {
   const { t } = useTranslation();
   const dialogOpen = useContactsStore((s) => s.dialogOpen);
   const closeDialog = useContactsStore((s) => s.closeDialog);
-  const lookupByDomain = useContactsStore((s) => s.lookupByDomain);
+  const lookupPeer = useContactsStore((s) => s.lookupPeer);
   const addContact = useContactsStore((s) => s.addContact);
   const loading = useContactsStore((s) => s.loading);
   const error = useContactsStore((s) => s.error);
-  const [domain, setDomain] = useState('');
+  const [query, setQuery] = useState('');
   const [results, setResults] = useState<
     Array<{ id: string; did: string; name?: string; description?: string }>
   >([]);
@@ -23,10 +23,10 @@ export function AddContactDialog() {
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!domain.trim()) return;
+    if (!query.trim()) return;
     setSearching(true);
     try {
-      const candidates = await lookupByDomain(domain.trim());
+      const candidates = await lookupPeer(query.trim());
       setResults(candidates);
     } catch {
       setResults([]);
@@ -35,7 +35,7 @@ export function AddContactDialog() {
   };
 
   const handleClose = () => {
-    setDomain('');
+    setQuery('');
     setResults([]);
     closeDialog();
   };
@@ -49,18 +49,18 @@ export function AddContactDialog() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-muted" />
             <input
               type="text"
-              name="contact-domain"
-              value={domain}
-              onChange={(e) => setDomain(e.target.value)}
-              placeholder={t('contacts.domainPlaceholder')}
-              aria-label={t('contacts.domainPlaceholder')}
+              name="contact-query"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={t('contacts.lookupPlaceholder')}
+              aria-label={t('contacts.lookupPlaceholder')}
               className={`w-full pl-9 pr-3 py-2.5 bg-dark-input border border-dark-border rounded-xl text-sm text-ink-primary placeholder:text-ink-muted ${FOCUS_RING} transition-colors`}
             />
           </div>
           <button
             type="submit"
-            disabled={searching || !domain.trim()}
-            className={`px-4 py-2.5 bg-primary-600 text-white rounded-xl text-sm hover:bg-primary-700 disabled:opacity-50 transition-colors flex items-center gap-1.5 ${FOCUS_RING}`}
+            disabled={searching || !query.trim()}
+            className={`px-4 py-2.5 bg-primary-600 text-white rounded-xl text-sm hover:bg-primary-700 ${DISABLED_FILLED} transition-colors flex items-center gap-1.5 ${FOCUS_RING}`}
           >
             {searching ? <Loader className="w-3.5 h-3.5" /> : <Search className="w-3.5 h-3.5" />}
             {t('contacts.search')}
@@ -104,7 +104,7 @@ export function AddContactDialog() {
                   type="button"
                   onClick={() => addContact(agent.id)}
                   disabled={loading}
-                  className={`px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors shrink-0 ${FOCUS_RING}`}
+                  className={`px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 ${DISABLED_FILLED} transition-colors shrink-0 ${FOCUS_RING}`}
                 >
                   {t('contacts.add')}
                 </button>
@@ -112,7 +112,7 @@ export function AddContactDialog() {
             ))}
           </ul>
         ) : (
-          domain &&
+          query &&
           !searching &&
           !error && (
             <div role="status" className="text-center py-8">

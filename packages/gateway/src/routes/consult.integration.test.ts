@@ -26,12 +26,17 @@ beforeEach(async () => {
   user = await seedUser();
 });
 
-// Seed the user's own agent with an active, AES-encrypted signing key so
-// deliverConsult can sign the outbound consult.
+// Seed the user's own agent and signing key in exactly the shape registration
+// writes them (auth.ts): the agent DID is the owner's with an `:agent` suffix,
+// and the single keypair belongs to the OWNER — that is the key published at
+// `/agents/<username>/did.json`, so it is the only one a peer can verify
+// against. This fixture used to invent an `owner_type: 'agent'` row keyed by
+// the agent id, which no code path has ever written; it made these tests pass
+// while every real consult failed with `no_signing_key`.
 async function seedOwnAgent(): Promise<void> {
   const db = getDb();
   const agentId = newId();
-  myAgentDid = `did:web:localhost:agents:me-${agentId.slice(-6).toLowerCase()}`;
+  myAgentDid = `${user.did}:agent`;
   await db
     .insert(agents)
     .values({ id: agentId, user_id: user.id, did: myAgentDid, policies_json: {} });
@@ -43,9 +48,9 @@ async function seedOwnAgent(): Promise<void> {
 
   await db.insert(keypairs).values({
     id: newId(),
-    owner_type: 'agent',
-    owner_id: agentId,
-    key_id: `${myAgentDid}#key-1`,
+    owner_type: 'user',
+    owner_id: user.id,
+    key_id: `${user.did}#key-1`,
     public_key_multibase: await publicKeyToMultibase(kp.publicKey),
     private_key_jwk_encrypted: enc.value,
     is_active: true,
@@ -186,6 +191,43 @@ describe('consult', () => {
       token: user.token,
     });
     expect(res.status).toBe(200);
+    expect((await res.json()).status).toBe('pending');
+  });
+
+  // The cursor used to lead on created_at, and the driver hands that back as a
+  // millisecond JS Date after the column stored microseconds — so a reply from
+  // the same millisecond as the question read as "later than" it whichever
+  // order they were actually written in. The reply here is timestamped after
+  // the question but minted before it, which is what that truncation looks
+  // like from the query's side.
+  test('a peer reply that predates the question is not returned as its answer', async () => {
+    await seedOwnAgent();
+    const peerId = await seedPeerContact();
+    mockOutbound();
+    const sent = await post(`${CONSULT}/${peerId}`, { token: user.token, body: { question: 'q' } });
+    const { conversation_id, message_id } = await sent.json();
+
+    const [question] = await getDb()
+      .select({ created_at: messages.created_at })
+      .from(messages)
+      .where(eq(messages.id, message_id))
+      .limit(1);
+
+    await getDb()
+      .insert(messages)
+      .values({
+        // Sorts before the question's id, so it was minted before it.
+        id: `0${'0'.repeat(25)}`,
+        conversation_id,
+        sender_type: 'peer_agent',
+        sender_id: peerId,
+        content: 'answer to something else',
+        created_at: new Date((question?.created_at.getTime() ?? 0) + 500),
+      });
+
+    const res = await get(`${CONSULT}/${conversation_id}/reply?after=${message_id}&wait=1`, {
+      token: user.token,
+    });
     expect((await res.json()).status).toBe('pending');
   });
 

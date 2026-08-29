@@ -1,5 +1,12 @@
-import type { EncryptedValue } from '@confer/shared';
-import { AppError, decrypt, encrypt } from '@confer/shared';
+import type { EncryptedValue, LlmProviderSpec } from '@confer/shared';
+import {
+  AppError,
+  decrypt,
+  encrypt,
+  LLM_PROVIDER_IDS,
+  llmProvider,
+  providerBaseUrl,
+} from '@confer/shared';
 import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { z } from 'zod';
@@ -10,15 +17,37 @@ import { getUserLlmKeys } from '../lib/llm-keys.js';
 import { authMiddleware } from '../middleware/auth.js';
 import type { AppEnv } from '../types.js';
 
-const PROVIDERS = ['anthropic', 'deepseek', 'openai', 'qwen', 'glm', 'ollama', 'tavily'] as const;
-type Provider = (typeof PROVIDERS)[number];
+// Key slots the owner can fill: every catalogued LLM provider, plus the tool
+// services that also authenticate with a stored key. The LLM half comes from
+// the shared catalogue so a new vendor is one edit, not two.
+const TOOL_PROVIDERS = ['tavily'] as const;
+const PROVIDERS = [...LLM_PROVIDER_IDS, ...TOOL_PROVIDERS] as readonly string[];
+type Provider = string;
 
-type LlmKeysJson = Partial<Record<Provider, EncryptedValue>>;
+type LlmKeysJson = Record<string, EncryptedValue>;
 
-const llmKeyBodySchema = z.object({
-  provider: z.enum(PROVIDERS),
-  api_key: z.string().min(1),
-});
+const llmKeyBodySchema = z
+  .object({
+    provider: z.string().refine((p) => PROVIDERS.includes(p), 'Unknown provider'),
+    api_key: z.string().min(1),
+  })
+  // For a local runtime this field is an address, not a credential, and the
+  // gateway goes on to dial it — both to chat and to list models. Check it is a
+  // plain http(s) URL at the point it is stored: the owner gets told now rather
+  // than through a puzzling failure at chat time, and the fetch can never be
+  // handed a `file:` or other scheme.
+  .refine(
+    ({ provider, api_key }) => !llmProvider(provider)?.keyIsBaseUrl || isHttpUrl(api_key),
+    'Local runtimes take a base URL, e.g. http://host.docker.internal:11434',
+  );
+
+function isHttpUrl(value: string): boolean {
+  try {
+    return ['http:', 'https:'].includes(new URL(value).protocol);
+  } catch {
+    return false;
+  }
+}
 
 const policyBodySchema = z.record(z.string(), z.unknown());
 
@@ -161,60 +190,82 @@ agentRoutes.delete('/me/llm-keys/:provider', async (c) => {
   return c.json({ ok: true });
 });
 
+/*
+  Ask the vendor which models this account can use.
+
+  Every outcome used to collapse to `{ models: [] }` — no key, an undecryptable
+  key, a rejected key, a vendor that was down — and the settings UI read all
+  four as "this provider has no models" and quietly fell back to a hand-written
+  list. The reason now ships with the (still empty) list so the UI can say
+  which of them happened.
+*/
+type ModelsFailure = 'no_key' | 'unsupported' | 'unauthorized' | 'unreachable';
+
 agentRoutes.get('/me/llm-keys/:provider/models', async (c) => {
   const user = c.get('user');
-  const provider = c.req.param('provider') as Provider;
+  const spec = llmProvider(c.req.param('provider'));
 
-  if (!(PROVIDERS as readonly string[]).includes(provider)) {
-    throw new AppError('invalid_provider', `Unknown provider: ${provider}`, 400);
+  if (!spec) {
+    throw new AppError('invalid_provider', `Unknown provider: ${c.req.param('provider')}`, 400);
   }
-
-  if (provider === 'ollama') {
-    return c.json({ models: [] });
+  if (!spec.modelsPath) {
+    return c.json({ models: [], error: 'unsupported' satisfies ModelsFailure });
   }
 
   const stored = await loadLlmKeys(user.sub);
-  const encryptedKey = stored[provider];
-  if (!encryptedKey) {
-    return c.json({ models: [] });
+  const encryptedKey = stored[spec.id];
+
+  // A local runtime authenticates with nothing — it stores an address here, or
+  // falls back to the catalogue's. Everyone else needs a key that decrypts.
+  let key = '';
+  if (encryptedKey) {
+    const decrypted = await decrypt(encryptedKey, getEnv().ENCRYPTION_KEY);
+    if (!decrypted.ok) {
+      return c.json({ models: [], error: 'no_key' satisfies ModelsFailure });
+    }
+    key = decrypted.value;
+  } else if (!spec.keyIsBaseUrl) {
+    return c.json({ models: [], error: 'no_key' satisfies ModelsFailure });
   }
 
-  const decrypted = await decrypt(encryptedKey, getEnv().ENCRYPTION_KEY);
-  if (!decrypted.ok) {
-    return c.json({ models: [] });
-  }
-
-  const models = await fetchProviderModels(provider, decrypted.value);
-  return c.json({ models });
+  return c.json(await fetchProviderModels(spec, key));
 });
 
-// URL of the provider's "list models" endpoint, or null for providers that
-// don't expose one (only anthropic/openai/deepseek/qwen do).
-function providerModelUrl(provider: Provider): string | null {
-  if (provider === 'anthropic') return 'https://api.anthropic.com/v1/models';
-  if (provider === 'openai') return 'https://api.openai.com/v1/models';
-  if (provider === 'deepseek') return 'https://api.deepseek.com/models';
-  if (provider === 'qwen') return 'https://dashscope.aliyuncs.com/compatible-mode/v1/models';
-  return null;
+function modelsAuthHeaders(spec: LlmProviderSpec, key: string): Record<string, string> {
+  if (spec.keyIsBaseUrl) return {};
+  if (spec.kind === 'anthropic') return { 'x-api-key': key, 'anthropic-version': '2023-06-01' };
+  return { Authorization: `Bearer ${key}` };
 }
 
-async function fetchProviderModels(provider: Provider, apiKey: string): Promise<{ id: string }[]> {
-  const url = providerModelUrl(provider);
-  if (!url) return [];
+async function fetchProviderModels(
+  spec: LlmProviderSpec,
+  key: string,
+): Promise<{ models: { id: string }[]; error?: ModelsFailure }> {
+  const url = `${providerBaseUrl(spec, key)}${spec.modelsPath}`;
+  const headers = modelsAuthHeaders(spec, key);
+
   try {
-    const headers: Record<string, string> =
-      provider === 'anthropic'
-        ? { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' }
-        : { Authorization: `Bearer ${apiKey}` };
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10_000);
     const resp = await fetch(url, { headers, signal: controller.signal });
     clearTimeout(timeout);
-    if (!resp.ok) return [];
-    const data = (await resp.json()) as { data?: { id: string }[] };
-    return data.data ?? [];
+
+    if (resp.status === 401 || resp.status === 403) {
+      return { models: [], error: 'unauthorized' };
+    }
+    if (!resp.ok) return { models: [], error: 'unreachable' };
+
+    // Take the ids and nothing else. The rest of a vendor's model object is
+    // unused, and for a local runtime the address came from the owner — this
+    // endpoint should not become a way to read back whatever a chosen host
+    // puts in a `data` array.
+    const body = (await resp.json()) as { data?: { id?: unknown }[] };
+    const models = (body.data ?? [])
+      .filter((m) => typeof m.id === 'string')
+      .map((m) => ({ id: m.id as string }));
+    return { models };
   } catch {
-    return [];
+    return { models: [], error: 'unreachable' };
   }
 }
 

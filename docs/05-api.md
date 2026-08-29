@@ -68,7 +68,25 @@ PATCH  /api/v1/users/me
 GET    /api/v1/agents/me
 PATCH  /api/v1/agents/me
 PUT    /api/v1/agents/me/policies
+GET    /api/v1/agents/me/llm-keys      # 每个 provider 是否已配置（只返回布尔，不返回密钥）
 PUT    /api/v1/agents/me/llm-keys      # 加密存储 LLM API keys
+DELETE /api/v1/agents/me/llm-keys/{provider}
+GET    /api/v1/agents/me/llm-keys/{provider}/models   # 向厂商实时查询可用模型
+```
+
+`provider` 取值来自 `@confer/shared` 的 provider 目录（`packages/shared/src/llm/catalog.ts`），
+外加工具服务 `tavily`。目录同时被 gateway、agent-runtime 和客户端读取——base URL、模型列表
+路径、默认模型都只写在那一处，新增厂商只改目录。
+
+`/models` 直接转发厂商自己的模型清单，永远不返回本地维护的名单：
+
+```jsonc
+{ "models": [{ "id": "gpt-4o" }] }
+// 空列表必定带上原因，四种互不相同，各自对应不同的补救动作
+{ "models": [], "error": "no_key" }        // 该 provider 还没配置密钥
+{ "models": [], "error": "unauthorized" }  // 厂商拒绝了这个密钥（401/403）
+{ "models": [], "error": "unreachable" }   // 连不上厂商，或它返回了其他错误
+{ "models": [], "error": "unsupported" }   // 该厂商不提供模型清单接口
 ```
 
 ### 联系人 / Peer Agents

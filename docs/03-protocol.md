@@ -279,14 +279,39 @@ peer.unknown:
 
 ### 线程绑定（thread_id 的作用域）
 
-入站消息里的 `thread_id` 是 peer 的**请求**，不是权威指令。gateway 只在同时满足两个条件时复用它，否则新建一条会话：
+入站消息里的 `thread_id` 是 peer 的**请求**，不是权威指令。gateway 只在同时满足两个条件时**按原值**复用它：
 
 1. 该 peer 已是这条会话的参与者；
 2. 这条会话**属于被寻址 Agent 的主人**（`conversations.created_by`）。
 
 第 2 条不可省略：`peer_agents` 按 DID 全局唯一，同一个 peer 可以同时连接多个主人。只校验第 1 条的话，一个连接了 A 和 B 的 peer 就能在给 B 的 Agent 发消息时带上 A 的 `thread_id`，把消息灌进 A 的会话——B 的 Agent 会以 A 的历史为上下文作答，回复被写进 A 的线程并广播给 A，A 的会话内容还会经记忆沉淀进 B 的长期记忆。
 
+两条都满足说明对方是在回答我方发出的消息（`thread_id` 就是我方的会话 id）。不满足时那是 **peer 自己编号里的线程**——本地不指向任何东西，但对 peer 而言是稳定的，所以我方会话 id 由 `sha256('a2a-thread:<主人 id>:<peer 行 id>:<peer 的 thread_id>')` 推导（`lib/derived-id.ts`，输出 26 位 Crockford，与 ULID 同形）。这样同一个 peer 线程里的后续消息始终落回同一条会话。
+
+早先把「不认识的 thread_id」当作「没有线程」，于是接收方**每收到一条消息就新建一条会话**：追问与原问题永不同处，主人的会话列表堆满只有一句话的线程，`loadA2AHistory` 无历史可取，Agent 每轮都当作初次对话作答。
+
+推导而非「存一张映射表」有两个好处：不需要迁移，且天然无竞态——两条消息同时到达会在主键上冲突，而不是各建一条会话（因此建会话走事务 + `onConflictDoNothing`）。拼接串里只有**最后一段**允许是 peer 可控的变长值，前面各段都是定长 26 位 id，冒号不转义也不会产生歧义。
+
 新建会话时，**主人与 peer 同时**写入 `conversation_participants`。主人那条参与者行是会话列表和逐会话读取闸门的依据，缺了它主人就看不到自己 Agent 正在应答的线程。
+
+`thread_id` 因此是**每一侧各自的**会话 id，两边不相同。由此得出两条不可省的规则：
+
+- **回复必须回显提问方发来的 `thread_id`，不是自己的。** 上面第 2 条会（正确地）拒绝一条不属于自己的线程，所以带着我方会话 id 回去的答复，会被对端归进一条全新会话；提问方仍在轮询自己创建的那条，于是 `/api/v1/consult/{id}/reply` 永远停在 `pending`，而两台机器上都躺着一个完好的答案。
+- **`messages.thread_root` 写本地会话 id，绝不写 peer 给的原值。** 该列是 `char(26)`，为我们自己的 ULID 而设：存外来值既会指向一条我们可能并不拥有的会话，也让任何 peer 能用一个超过 26 字符的 `thread_id` 把这个端点打成 500。入站 `thread_id` 另有长度上限校验。
+
+### 答不出来也要回话
+
+被寻址的 Agent 跑不了这一轮时（没配模型、厂商不认识、配了厂商但没有 key、模型调用抛错），回一条 `type: 'notification'`，`context.error` 携带机器可读的原因码（`no_model_configured` / `unknown_provider` / `no_key_for_provider` / `agent_error`），`content` 是一句英文说明。用 `notification` 是因为它不会在对端触发再一次自动回复（只有 `question` 会）。
+
+不这样做的后果不是「少一条提示」：失败只在应答方打一行日志，什么都不发出去，提问方的 `/api/v1/consult/{id}/reply` 就一直轮询到超时并返回 `pending`——每次重试都一样，**没有任何办法区分「还在想」和「永远不会来」**。
+
+跨实例的对端不共享我们的语言，所以判断依据是 `context.error` 这个码；`content` 只是兜底的人类可读文本。这与「服务端不生成用户文案」并不冲突：那条规则约束的是发给**本实例自己客户端**的文案。
+
+### 寻址：两个 DID 都指向同一个 Agent
+
+`to` 同时接受 **Agent DID**（`did:web:<host>:agents:<user>:agent`，公开目录 `/.well-known/agents.json` 列出的就是它）和**主人 DID**（`did:web:<host>:agents:<user>`）。后者是唯一能被解析出 DID 文档的标识，也是客户端展示给用户复制的那一个——只认前者会让「粘贴 DID 加好友」得到一个连得上、验得过、却 404 的联系人。
+
+同理，判定发件 peer 是否已连接时，`from`（Agent DID）与**验签得到的签名者 DID**（主人 DID）都要认：`peer_agents` 按 DID 建行，联系人存的是哪一个取决于当初用什么方式添加，只认 `from` 会让对端的回复变成一条「陌生人的连接请求」。
 
 ### Pending inbox（离线代答）
 

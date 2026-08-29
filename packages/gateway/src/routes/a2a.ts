@@ -1,20 +1,19 @@
 import type { LLMMessage, PermissionLevel } from '@confer/agent-runtime';
-import { classifyPermissionLevel, createProvider, parsePolicyConfig } from '@confer/agent-runtime';
+import { classifyPermissionLevel, parsePolicyConfig } from '@confer/agent-runtime';
 import {
   MAX_CLOCK_SKEW_MS,
   multibaseToPublicKey,
   parseSignatureInput,
-  resolveDID,
   verifyRequestSignature,
 } from '@confer/identity';
 import { AppError, newId } from '@confer/shared';
-import { and, asc, eq, lt } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import type { MiddlewareHandler } from 'hono';
 import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import { z } from 'zod';
-import { sendA2AMessage } from '../a2a/outbound.js';
-import { loadActiveAgentKey } from '../a2a/signing.js';
+import { type OutboundA2AMessage, sendA2AMessage } from '../a2a/outbound.js';
+import { loadOwnerSigningKey } from '../a2a/signing.js';
 import { getDb } from '../db/connection.js';
 import {
   agents,
@@ -24,12 +23,18 @@ import {
   peerAgents,
   peerContacts,
   permissions,
+  users,
 } from '../db/schema.js';
 import { getEnv } from '../env.js';
 import { decideAdmission, isSenderAuthorized } from '../lib/a2a-admission.js';
-import { decryptUserKey, getUserLlmKeys, resolveAgentCapabilities } from '../lib/llm-keys.js';
+import { type ModelConfigError, resolveAgentModel } from '../lib/agent-model.js';
+import { historyBefore } from '../lib/conversation-history.js';
+import { derivedId } from '../lib/derived-id.js';
+import { isOwnIdentity, resolveDidDocument } from '../lib/did-resolution.js';
+import { getUserLlmKeys, resolveAgentCapabilities } from '../lib/llm-keys.js';
 import { addNonce, hasNonce } from '../lib/nonce-cache.js';
 import { upsertPeerAgent } from '../lib/peer-agent.js';
+import { selfA2AEndpoint } from '../lib/public-identity.js';
 import { isContact } from '../lib/tenant.js';
 import { rateLimit } from '../middleware/rate-limit.js';
 import { runAgentTurn } from '../orchestration/agent-orchestrator.js';
@@ -40,7 +45,9 @@ import { notifyPermissionRequest } from './permission-notify.js';
 const a2aMessageSchema = z.object({
   from: z.string().startsWith('did:'),
   to: z.string().startsWith('did:'),
-  thread_id: z.string().optional(),
+  // Bounded because it is peer-supplied and travels with the message. It is
+  // never written to a column — see `thread_root` below.
+  thread_id: z.string().max(128).optional(),
   message: z.object({
     type: z.enum(['question', 'answer', 'notification']),
     content: z.string(),
@@ -52,7 +59,16 @@ const a2aMessageSchema = z.object({
 // Resolve a peer's A2A service endpoint from its DID document. Returns '' if
 // the DID cannot be resolved or advertises no service endpoint.
 async function resolvePeerEndpoint(did: string): Promise<string> {
-  const result = await resolveDID(did);
+  // Every identity on an instance shares that instance's A2A endpoint — the
+  // same rule contact discovery relies on when it reads `.well-known/agents.json`
+  // — so anything under our own authority is reachable here without a lookup.
+  // It has to be short-circuited rather than resolved: a Confer peer signs as
+  // its owner but sends `from` as its AGENT DID (`…:agents:<user>:agent`), and
+  // no route serves a document for that, so resolution would come back empty
+  // and the peer would be recorded with nowhere to reply to.
+  if (isOwnIdentity(did)) return selfA2AEndpoint();
+
+  const result = await resolveDidDocument(did);
   if (!result.ok) return '';
   return result.value.service?.find((s) => s.serviceEndpoint)?.serviceEndpoint ?? '';
 }
@@ -146,6 +162,9 @@ export interface A2AQuestionScope {
   // so the resume re-reads the right agent rather than an arbitrary one.
   agent_id: string;
   content: string;
+  // The thread id the PEER used. Their conversation id, meaningless locally,
+  // kept only so the reply can be addressed in terms they recognise.
+  peer_thread_id?: string;
 }
 
 interface HoldA2AQuestionParams {
@@ -154,6 +173,7 @@ interface HoldA2AQuestionParams {
   peer: typeof peerAgents.$inferSelect;
   senderDid: string;
   conversationId: string;
+  peerThreadId?: string;
   inboundMessageId: string;
   content: string;
 }
@@ -170,6 +190,7 @@ function holdA2AQuestion(params: HoldA2AQuestionParams): Promise<void> {
     sender_did: params.senderDid,
     agent_id: params.agentId,
     content: params.content.slice(0, 500),
+    peer_thread_id: params.peerThreadId,
   };
 
   return requestPeerPermission({
@@ -181,13 +202,38 @@ function holdA2AQuestion(params: HoldA2AQuestionParams): Promise<void> {
   });
 }
 
-// Look up the sending peer by DID, creating it on first contact. The endpoint
-// is resolved from the sender's DID document up front so a reply can be sent
-// once the owner approves the connection. Returns null if the peer can't be
-// persisted.
-async function ensurePeerAgent(fromDid: string): Promise<typeof peerAgents.$inferSelect | null> {
+/**
+ * The peer row this owner knows the sender by, created on first contact with
+ * its endpoint resolved up front so a reply can be sent once the owner
+ * approves. Null if the peer cannot be persisted.
+ *
+ * One peer reaches us under two names, and which one arrives depends on how the
+ * contact was added. `from` carries the AGENT did (`<owner>:agent`), which is
+ * what public discovery lists — but the only DID anyone can *resolve* is the
+ * owner's, so that is what a lookup by DID stores. Keyed on `from` alone, a
+ * contact added from a pasted DID never matched: the peer's own replies came
+ * back as a connection request from a stranger, and the answer to your own
+ * question sat in the permission inbox waiting for you to admit the person you
+ * had just asked.
+ *
+ * `signerDid` is the identity whose document was verified, and
+ * `isSenderAuthorized` has already established that `from` sits beneath it — so
+ * the two name one principal and either row is a legitimate match. Prefer the
+ * one this owner has actually connected to.
+ */
+async function ensurePeerAgent(
+  ownerId: string,
+  fromDid: string,
+  signerDid?: string,
+): Promise<typeof peerAgents.$inferSelect | null> {
   const db = getDb();
-  const [existing] = await db.select().from(peerAgents).where(eq(peerAgents.did, fromDid)).limit(1);
+  const names = signerDid && signerDid !== fromDid ? [fromDid, signerDid] : [fromDid];
+  const known = await db.select().from(peerAgents).where(inArray(peerAgents.did, names));
+
+  for (const row of known) {
+    if (await isContact(ownerId, row.id)) return row;
+  }
+  const existing = known.find((r) => r.did === fromDid) ?? known[0];
   if (existing) return existing;
 
   const created = await upsertPeerAgent({
@@ -197,53 +243,76 @@ async function ensurePeerAgent(fromDid: string): Promise<typeof peerAgents.$infe
   return created ?? null;
 }
 
-// Resolve the conversation for this inbound message: reuse the supplied
-// thread_id only if the peer is already a participant of it AND the thread
-// belongs to the addressed agent's owner, else create a fresh agent-to-agent
-// conversation seeded with both the owner and the peer as participants.
+// Whether `threadId` names a conversation this owner has with this peer — i.e.
+// the peer is answering something we sent, and quoted the thread we asked in.
 //
-// Both halves of that check matter. Peer rows are global (keyed by DID), so a
+// Both halves of the check matter. Peer rows are global (keyed by DID), so a
 // peer connected to two owners passes a peer-only participant check on either
 // owner's thread — it could then steer a message addressed to one owner's agent
 // into the other owner's conversation, where the reply would be broadcast to
 // the wrong owner and that owner's history would feed the wrong agent's context.
+async function ownsThreadWithPeer(
+  threadId: string,
+  peerId: string,
+  userId: string,
+): Promise<boolean> {
+  const [member] = await getDb()
+    .select({ id: conversationParticipants.id })
+    .from(conversationParticipants)
+    .innerJoin(conversations, eq(conversations.id, conversationParticipants.conversation_id))
+    .where(
+      and(
+        eq(conversationParticipants.conversation_id, threadId),
+        eq(conversationParticipants.peer_id, peerId),
+        eq(conversations.created_by, userId),
+      ),
+    )
+    .limit(1);
+  return member !== undefined;
+}
+
+/**
+ * The conversation an inbound message belongs to, created on first use and
+ * seeded with both the owner and the peer as participants.
+ *
+ * Thread ids are per-side: the id a peer sends is theirs, and names nothing
+ * here. Treating an unrecognised one as "no thread" — which is what this did —
+ * meant the receiving side opened a NEW conversation for every inbound message.
+ * A question and its follow-up never sat together, the owner's list filled with
+ * one-line threads, and `loadA2AHistory` had nothing to load, so the agent
+ * answered every message as if it were the first.
+ *
+ * Deriving our id from theirs fixes that without storing the mapping, and
+ * without a race: two messages arriving at once collide on the primary key
+ * instead of creating two threads. A peer's thread id is only unique to that
+ * peer, so it is scoped by both the owner and the peer row.
+ */
 async function resolveOrCreateThread(
   threadId: string | undefined,
   peerId: string,
   userId: string,
 ): Promise<string> {
   const db = getDb();
-  let convId = threadId;
 
-  if (convId) {
-    const [member] = await db
-      .select({ id: conversationParticipants.id })
-      .from(conversationParticipants)
-      .innerJoin(conversations, eq(conversations.id, conversationParticipants.conversation_id))
-      .where(
-        and(
-          eq(conversationParticipants.conversation_id, convId),
-          eq(conversationParticipants.peer_id, peerId),
-          eq(conversations.created_by, userId),
-        ),
-      )
-      .limit(1);
-    if (!member) convId = undefined;
-  }
+  if (threadId && (await ownsThreadWithPeer(threadId, peerId, userId))) return threadId;
 
-  if (!convId) {
-    convId = newId();
-    await db.insert(conversations).values({
-      id: convId,
-      type: 'direct_agent_agent',
-      created_by: userId,
-    });
+  const convId = threadId ? derivedId('a2a-thread', userId, peerId, threadId) : newId();
 
-    // The owner is seeded as a participant alongside the peer: the conversation
-    // list and the per-conversation read gates are both keyed on a participant
-    // row, so without it the owner cannot see the thread their own agent is
-    // answering in.
-    await db.insert(conversationParticipants).values([
+  // Atomic so a conversation row can never persist without its participants,
+  // and conflict-safe so the second concurrent message just joins the thread
+  // the first one created. The owner is seeded alongside the peer: the
+  // conversation list and the per-conversation read gates are both keyed on a
+  // participant row, so without it the owner cannot see the thread their own
+  // agent is answering in.
+  await db.transaction(async (tx) => {
+    const inserted = await tx
+      .insert(conversations)
+      .values({ id: convId, type: 'direct_agent_agent', created_by: userId })
+      .onConflictDoNothing()
+      .returning({ id: conversations.id });
+    if (inserted.length === 0) return;
+
+    await tx.insert(conversationParticipants).values([
       {
         id: newId(),
         conversation_id: convId,
@@ -259,7 +328,7 @@ async function resolveOrCreateThread(
         role: 'member',
       },
     ]);
-  }
+  });
 
   return convId;
 }
@@ -286,7 +355,7 @@ const verifyA2ASignature: MiddlewareHandler = async (c, next) => {
     throw new AppError('signature_invalid', 'Invalid keyId format in signature', 401);
   }
 
-  const didResult = await resolveDID(senderDid);
+  const didResult = await resolveDidDocument(senderDid);
   if (!didResult.ok) {
     throw new AppError('did_resolution_failed', didResult.error, 401);
   }
@@ -340,6 +409,32 @@ const verifyA2ASignature: MiddlewareHandler = async (c, next) => {
   await next();
 };
 
+/**
+ * The local agent a message is addressed to, by either DID that names it.
+ *
+ * Two identifiers reach us for the same agent and both are legitimate. Public
+ * discovery (`/.well-known/agents.json`) lists the AGENT did — `<user>:agent` —
+ * and that is what a domain lookup records. But the only document anyone can
+ * *resolve* is the OWNER's, published at `/agents/<username>/did.json`, and it
+ * is the identifier the app shows its user behind a copy button. A peer holding
+ * that DID is doing exactly the right thing.
+ *
+ * Matching only the agent DID meant every contact added from a pasted DID was
+ * unreachable: the transport connected, the signature verified, and delivery
+ * then failed with "Target agent not found".
+ */
+async function findTargetAgent(to: string) {
+  const db = getDb();
+  const [byAgentDid] = await db.select().from(agents).where(eq(agents.did, to)).limit(1);
+  if (byAgentDid) return byAgentDid;
+
+  const [owner] = await db.select({ id: users.id }).from(users).where(eq(users.did, to)).limit(1);
+  if (!owner) return undefined;
+
+  const [byOwner] = await db.select().from(agents).where(eq(agents.user_id, owner.id)).limit(1);
+  return byOwner;
+}
+
 // A DID `authentication` entry is either a bare string reference to a
 // verification method id or an embedded verification-method object; the key is
 // authorized if it matches either form.
@@ -368,7 +463,7 @@ a2aRoutes.post('/messages', verifyA2ASignature, async (c) => {
     );
   }
 
-  const [targetAgent] = await db.select().from(agents).where(eq(agents.did, body.to)).limit(1);
+  const targetAgent = await findTargetAgent(body.to);
 
   // A suspended agent is treated as absent: moderation takes it off the air for
   // inbound A2A too, not just public discovery. Don't reveal the suspension.
@@ -376,7 +471,7 @@ a2aRoutes.post('/messages', verifyA2ASignature, async (c) => {
     throw new AppError('not_found', 'Target agent not found on this instance', 404);
   }
 
-  const peer = await ensurePeerAgent(body.from);
+  const peer = await ensurePeerAgent(targetAgent.user_id, body.from, signerDid);
 
   if (!peer) {
     throw new AppError('peer_unavailable', 'Failed to resolve peer agent', 500);
@@ -426,7 +521,13 @@ a2aRoutes.post('/messages', verifyA2ASignature, async (c) => {
     content_type: 'text',
     content: body.message.content,
     language: body.message.language,
-    thread_root: body.thread_id,
+    // The LOCAL thread. `thread_root` is char(26) and indexed for our own
+    // conversation ids; storing the peer's raw thread_id put a foreign — and
+    // unvalidated — string there. It named a conversation we may not own
+    // (resolveOrCreateThread rejects a thread that isn't ours and makes a new
+    // one), and anything longer than 26 characters failed the insert outright,
+    // so a peer could 500 this endpoint with a thread id of its choosing.
+    thread_root: convId,
     via: 'a2a',
     delivered_at: new Date(),
   });
@@ -458,6 +559,7 @@ a2aRoutes.post('/messages', verifyA2ASignature, async (c) => {
         peer,
         senderDid: body.from,
         conversationId: convId,
+        peerThreadId: body.thread_id,
         inboundMessageId: msgId,
         content: body.message.content,
       });
@@ -486,6 +588,7 @@ a2aRoutes.post('/messages', verifyA2ASignature, async (c) => {
           senderPeer: peer,
           messageContent: body.message.content,
           conversationId: convId,
+          peerThreadId: body.thread_id,
           inboundMessageId: msgId,
         });
       } catch (error) {
@@ -552,29 +655,25 @@ interface ProcessA2AMessageParams {
   senderPeer: typeof peerAgents.$inferSelect;
   messageContent: string;
   conversationId: string;
+  /** The thread id the peer sent, which the reply must be addressed with. */
+  peerThreadId?: string;
   inboundMessageId: string;
 }
 
-// Load up to 20 prior visible messages of an A2A thread as LLM history,
+// The most recent 20 visible messages of an A2A thread as LLM history,
 // excluding the current inbound message. The peer asking is the `user`; this
 // agent's own prior replies are `assistant`, mirroring the chat path's role
 // mapping. Moderator-hidden messages are excluded from the LLM context.
+//
+// This wrote the query itself and took the OLDEST twenty — the same defect the
+// chat path was fixed for, left here because it could not surface while every
+// inbound message opened a conversation of its own. Now that a thread persists
+// past twenty messages, it would have. Both paths share `historyBefore`.
 async function loadA2AHistory(
   conversationId: string,
   inboundMessageId: string,
 ): Promise<LLMMessage[]> {
-  const rows = await getDb()
-    .select()
-    .from(messages)
-    .where(
-      and(
-        eq(messages.conversation_id, conversationId),
-        lt(messages.id, inboundMessageId),
-        eq(messages.moderation_status, 'visible'),
-      ),
-    )
-    .orderBy(asc(messages.created_at))
-    .limit(20);
+  const rows = await historyBefore(conversationId, inboundMessageId, 20);
 
   return rows.map((m) => ({
     role: m.sender_type === 'peer_agent' ? 'user' : 'assistant',
@@ -582,26 +681,96 @@ async function loadA2AHistory(
   }));
 }
 
-async function processA2AMessage(params: ProcessA2AMessageParams): Promise<void> {
-  const { targetAgent, senderDid, senderPeer, messageContent, conversationId, inboundMessageId } =
-    params;
+/** Sign and deliver one outbound message in the peer's own thread. */
+async function sendToPeer(
+  params: ProcessA2AMessageParams,
+  message: OutboundA2AMessage['message'],
+): Promise<void> {
+  const { targetAgent, senderDid, senderPeer, conversationId, peerThreadId } = params;
 
-  const modelConfig = targetAgent.model_config_json as Record<string, unknown> | null;
-  const providerName = (modelConfig?.provider as string) ?? 'anthropic';
-  const model = (modelConfig?.model as string) || undefined;
+  if (!senderPeer.endpoint) {
+    console.error(`No endpoint known for peer ${senderDid}, skipping outbound message`);
+    return;
+  }
+
+  const key = await loadOwnerSigningKey(targetAgent.user_id);
+  if (!key.ok) {
+    console.error(`Cannot sign A2A message for agent ${targetAgent.id}: ${key.error}`);
+    return;
+  }
+
+  const result = await sendA2AMessage(
+    senderPeer.endpoint,
+    {
+      from: targetAgent.did,
+      to: senderDid,
+      // THEIR thread id, not ours. `resolveOrCreateThread` refuses a thread the
+      // caller does not own — correctly, it is a tenant boundary — so a reply
+      // carrying our conversation id was filed by the peer under a brand new
+      // conversation, and the asker went on polling the one they had created.
+      // Every consult therefore sat at `pending` forever while a perfectly good
+      // answer existed on both machines.
+      thread_id: peerThreadId ?? conversationId,
+      message,
+    },
+    key.value.keyId,
+    key.value.privateKeyJwk,
+  );
+
+  if (!result.ok) {
+    console.error(`Failed to send A2A ${message.type} to ${senderDid}: ${result.error}`);
+  }
+}
+
+type A2AFailure = ModelConfigError | 'agent_error';
+
+/** One-line English summary of a turn that could not be run, sent to the asker. */
+const FAILURE_NOTICE: Record<A2AFailure, string> = {
+  no_model_configured: 'The agent you asked has no model configured yet.',
+  unknown_provider: 'The agent you asked is configured with an unknown model provider.',
+  no_key_for_provider: 'The agent you asked has no API key for its configured provider.',
+  agent_error: 'The agent you asked could not complete this turn.',
+};
+
+/**
+ * Tell the asker their question will not be answered.
+ *
+ * Silence is the wrong answer here and it is what this did: a failure was
+ * logged on the answering side and nothing was sent, so the asker's consult
+ * long-poll ran to its deadline and reported `pending` — forever, on every
+ * retry, with no way to tell "still thinking" from "never coming".
+ *
+ * Sent as a `notification` so it lands in the asker's thread without provoking
+ * a reply, with the machine code in `context` and prose in `content`: the wire
+ * crosses instances, so the receiving client cannot be assumed to share our
+ * locale, but it can act on the code.
+ */
+function notifyPeerOfFailure(params: ProcessA2AMessageParams, failure: A2AFailure): Promise<void> {
+  return sendToPeer(params, {
+    type: 'notification',
+    content: FAILURE_NOTICE[failure],
+    context: { error: failure },
+  });
+}
+
+async function processA2AMessage(params: ProcessA2AMessageParams): Promise<void> {
+  const { targetAgent, messageContent, conversationId, inboundMessageId } = params;
 
   const db = getDb();
   const env = getEnv();
   const llmKeys = await getUserLlmKeys(targetAgent.user_id);
-  const apiKey = await decryptUserKey(llmKeys, providerName, env.ENCRYPTION_KEY);
 
-  const provider = createProvider(providerName, apiKey);
-  if (!provider) {
-    console.error(
-      `No LLM provider configured for agent ${targetAgent.id} (provider: ${providerName})`,
-    );
+  const resolved = await resolveAgentModel(
+    targetAgent.model_config_json as Record<string, unknown> | null,
+    llmKeys,
+    env.ENCRYPTION_KEY,
+  );
+  if (!resolved.ok) {
+    console.error(`Agent ${targetAgent.id} cannot answer: ${resolved.error}`);
+    await notifyPeerOfFailure(params, resolved.error);
     return;
   }
+  const { provider, model } = resolved.value;
 
   // Tools, recall, and extraction all spend the budget of the agent's owner —
   // never the requesting peer's.
@@ -613,7 +782,10 @@ async function processA2AMessage(params: ProcessA2AMessageParams): Promise<void>
 
   const history = await loadA2AHistory(conversationId, inboundMessageId);
 
-  const { content: replyContent, citations } = await runAgentTurn({
+  // A rejected key, a provider outage, a model that no longer exists: each of
+  // these ended the turn here with a log line and nothing on the wire, leaving
+  // the asker to poll a question that would never be answered.
+  const turn = await runAgentTurn({
     provider,
     systemPromptBase: targetAgent.description ?? 'You are a helpful AI agent.',
     model,
@@ -624,7 +796,15 @@ async function processA2AMessage(params: ProcessA2AMessageParams): Promise<void>
     embeddingProvider,
     tavilyApiKey,
     hasKb,
+  }).catch((error) => {
+    console.error(`Agent turn failed for agent ${targetAgent.id}:`, error);
+    return null;
   });
+  if (!turn) {
+    await notifyPeerOfFailure(params, 'agent_error');
+    return;
+  }
+  const { content: replyContent, citations } = turn;
 
   const replyId = newId();
 
@@ -672,37 +852,7 @@ async function processA2AMessage(params: ProcessA2AMessageParams): Promise<void>
     });
   }
 
-  const peerEndpoint = senderPeer.endpoint;
-
-  if (!peerEndpoint) {
-    console.error(`No endpoint known for peer ${senderDid}, skipping outbound reply`);
-    return;
-  }
-
-  const key = await loadActiveAgentKey(targetAgent.id);
-  if (!key.ok) {
-    console.error(`Cannot sign A2A reply for agent ${targetAgent.id}: ${key.error}`);
-    return;
-  }
-
-  const outboundResult = await sendA2AMessage(
-    peerEndpoint,
-    {
-      from: targetAgent.did,
-      to: senderDid,
-      thread_id: conversationId,
-      message: {
-        type: 'answer',
-        content: replyContent,
-      },
-    },
-    key.value.keyId,
-    key.value.privateKeyJwk,
-  );
-
-  if (!outboundResult.ok) {
-    console.error(`Failed to send A2A reply to ${senderDid}: ${outboundResult.error}`);
-  }
+  await sendToPeer(params, { type: 'answer', content: replyContent });
 }
 
 // Narrow a permission's scope_json to the held-question shape, or null if it's
@@ -777,6 +927,7 @@ export async function resumeHeldA2AQuestion(row: typeof permissions.$inferSelect
     senderPeer,
     messageContent: inbound.content,
     conversationId: scope.conversation_id,
+    peerThreadId: scope.peer_thread_id,
     inboundMessageId: scope.inbound_message_id,
   });
 }

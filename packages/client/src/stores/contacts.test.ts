@@ -156,14 +156,26 @@ describe('contacts store', () => {
     expect(state.selectedContact?.peer).toEqual(peer as never);
   });
 
-  test('lookupByDomain sends method+value and returns candidates', async () => {
+  test('lookupPeer sends method+value and returns candidates', async () => {
     const candidates = [{ id: 'p1', did: 'did:web:vendor.example.com', trust_level: 'unknown' }];
     post.mockResolvedValueOnce({ candidates });
-    const result = await useContactsStore.getState().lookupByDomain('vendor.example.com');
+    const result = await useContactsStore.getState().lookupPeer('vendor.example.com');
     expect(post).toHaveBeenCalledWith('/contacts/lookup', {
       method: 'domain',
       value: 'vendor.example.com',
     });
     expect(result).toEqual(candidates as never);
+  });
+
+  // The DID is the identifier Settings puts behind a copy button, so it is what
+  // people paste. The dialog only ever sent `domain`, so pasting one searched
+  // for a domain named `did:web:...` and found nothing.
+  test('lookupPeer recognises a pasted DID', async () => {
+    post.mockResolvedValueOnce({ candidates: [] });
+    await useContactsStore.getState().lookupPeer('did:web:acme.example:agents:bob');
+    expect(post).toHaveBeenCalledWith('/contacts/lookup', {
+      method: 'did',
+      value: 'did:web:acme.example:agents:bob',
+    });
   });
 });

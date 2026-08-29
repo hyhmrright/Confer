@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useFileAttachment } from '../hooks/useFileAttachment.js';
-import { FOCUS_RING } from '../lib/styles.js';
+import { DISABLED, DISABLED_FILLED, FOCUS_RING } from '../lib/styles.js';
 import { useChatStore } from '../stores/chat.js';
 import { Bot, Paperclip, Send, X } from './Icons.js';
 import { LoadingDots } from './LoadingDots.js';
@@ -93,65 +93,79 @@ export function MessageView() {
   return (
     <div className="flex-1 flex flex-col bg-dark-base min-w-0 overflow-hidden">
       {/* Chat header */}
-      <div className="h-[52px] shrink-0 flex items-center px-5 border-b border-dark-border bg-dark-panel/40">
-        <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-full bg-primary-600/15 border border-primary-600/25 flex items-center justify-center">
-            <Bot className="w-3.5 h-3.5 text-primary-400" />
-          </div>
-          <span className="text-sm font-medium text-ink-primary truncate">
-            {conversationName ?? t('message.title')}
-          </span>
-        </div>
+      <div className="h-[52px] shrink-0 flex items-center gap-3 px-6 border-b border-dark-border bg-dark-panel/40">
+        <h1 className="font-display text-base text-ink-primary truncate min-w-0">
+          {conversationName ?? t('message.title')}
+        </h1>
         {streaming && (
-          <div className="ml-auto flex items-center gap-1.5 text-xs text-primary-400 font-mono">
+          <div className="ml-auto shrink-0 flex items-center gap-1.5 eyebrow text-primary-400">
             <span className="w-1.5 h-1.5 rounded-full bg-primary-400 animate-pulse" />
             {agentStatus ?? t('message.thinking')}
           </div>
         )}
       </div>
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto scrollbar-thin px-5 py-5 space-y-5">
-        {messagesLoading ? (
-          <div className="flex items-center justify-center h-full">
-            <LoadingDots size="md" />
-          </div>
-        ) : messages.length === 0 && !streaming ? (
-          <div className="flex flex-col items-center justify-center h-full text-ink-muted gap-2">
-            <Bot className="w-8 h-8 opacity-30" />
-            <p className="text-sm text-ink-muted">{t('message.start')}</p>
-          </div>
-        ) : null}
+      {/*
+        The measure is capped and centred. Entries run the full width of their
+        column now that the bubbles are gone, and on a 1440px window that put a
+        140-character line in front of the reader — unreadable for prose, while
+        the tables that need the width still get 860px.
+      */}
+      {/* `pb-28` rather than a symmetric `py-6`: the errand stack floats over the
+          bottom-right of this region at `bottom-24`, and without room past it
+          the last entry could never be scrolled out from under it. */}
+      <div className="flex-1 overflow-y-auto scrollbar-thin px-6 pt-6 pb-28">
+        <div className="mx-auto w-full max-w-[860px] space-y-6">
+          {messagesLoading ? (
+            <div className="flex items-center justify-center py-20">
+              <LoadingDots size="md" />
+            </div>
+          ) : messages.length === 0 && !streaming ? (
+            <div className="flex flex-col items-center justify-center py-24 gap-2 text-center">
+              <Bot className="w-7 h-7 text-ink-muted opacity-40" />
+              <p className="font-display text-lg text-ink-secondary">{t('message.start')}</p>
+            </div>
+          ) : null}
 
-        {hasOlderMessages && (
-          <button
-            type="button"
-            onClick={loadOlderMessages}
-            disabled={loadingOlder}
-            className={`w-full py-2 text-xs text-ink-secondary hover:text-ink-primary hover:bg-dark-hover rounded-lg disabled:opacity-40 transition-colors ${FOCUS_RING}`}
-          >
-            {loadingOlder ? t('common.loading') : t('message.loadOlder')}
-          </button>
-        )}
+          {hasOlderMessages && (
+            <button
+              type="button"
+              onClick={loadOlderMessages}
+              disabled={loadingOlder}
+              className={`w-full py-2 eyebrow text-ink-muted hover:text-ink-secondary hover:bg-dark-hover rounded-lg ${DISABLED} transition-colors ${FOCUS_RING}`}
+            >
+              {loadingOlder ? t('common.loading') : t('message.loadOlder')}
+            </button>
+          )}
 
-        {messages.map((msg) => (
-          <MessageBubble key={msg.id} message={msg} />
-        ))}
+          {messages.map((msg) => (
+            <MessageBubble key={msg.id} message={msg} />
+          ))}
 
-        {/* The in-flight reply, and the typing indicator that precedes its first
-            token. Both live behind this one boundary so the per-token state
-            never reaches the list above. */}
-        {streaming && <StreamingMessage scrollAnchor={bottomRef} />}
+          {/* The in-flight reply, and the typing indicator that precedes its first
+              token. Both live behind this one boundary so the per-token state
+              never reaches the list above. */}
+          {streaming && <StreamingMessage scrollAnchor={bottomRef} />}
 
-        <div ref={bottomRef} />
+          <div ref={bottomRef} />
+        </div>
       </div>
 
       {/* Input */}
-      <div className="px-4 pb-4 pt-2 shrink-0">
+      <div className="px-6 pb-5 pt-1 shrink-0 mx-auto w-full max-w-[908px]">
         {/* The composer's focus indicator lives here rather than on the textarea:
             the bordered wrapper is what reads as the control, and the textarea
-            inside it keeps `outline-hidden` so the two don't both draw. */}
-        <div className="rounded-xl border border-dark-border bg-dark-input transition-colors focus-within:ring-2 focus-within:ring-primary-500 focus-within:border-transparent">
+            inside it keeps `outline-hidden` so the two don't both draw.
+
+            A border change, not a ring. The composer takes focus programmatically
+            whenever a reply finishes, and a textarea always matches
+            `:focus-visible` while focused, so the old 2px seal ring was in
+            practice permanently lit around the widest element on screen — the
+            loudest thing in the window, signalling something that is almost
+            always true. primary-500 as a border measures 4.57:1 against the page
+            and 4.39:1 against the field, both well past the 3:1 WCAG 2.4.11 asks
+            of a focus indicator, so the quiet version is the compliant one too. */}
+        <div className="rounded-xl border border-dark-border bg-dark-input transition-colors focus-within:border-primary-500">
           {/* Attached file preview */}
           {attachedFile && (
             <div className="flex items-center gap-2 px-3 pt-3 pb-0">
@@ -181,7 +195,7 @@ export function MessageView() {
               type="button"
               onClick={openFilePicker}
               disabled={sending || streaming}
-              className="p-2 text-ink-muted hover:text-primary-400 hover:bg-primary-600/10 rounded-lg disabled:opacity-30 transition-colors shrink-0"
+              className={`p-2 text-ink-muted hover:text-primary-400 hover:bg-primary-600/10 rounded-lg ${DISABLED} transition-colors shrink-0`}
               title={t('message.uploadFile')}
             >
               <Paperclip className="w-4 h-4" />
@@ -204,16 +218,13 @@ export function MessageView() {
               type="button"
               onClick={handleSend}
               disabled={!canSend}
-              className="p-2 rounded-lg bg-primary-600 text-white hover:bg-primary-500
-                disabled:opacity-25 disabled:cursor-not-allowed transition-all shrink-0"
+              className={`p-2 rounded-lg bg-primary-600 text-white hover:bg-primary-500
+                ${DISABLED_FILLED} disabled:cursor-not-allowed transition-all shrink-0`}
             >
               <Send className="w-4 h-4" />
             </button>
           </div>
         </div>
-        <p className="text-center text-[10px] text-ink-muted mt-1.5 font-mono">
-          {t('message.sendHint')}
-        </p>
       </div>
     </div>
   );

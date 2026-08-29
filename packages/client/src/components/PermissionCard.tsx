@@ -4,6 +4,8 @@ import { useTranslation } from 'react-i18next';
 import type { TranslationKey } from '../i18n/index.js';
 import { api } from '../lib/api.js';
 import { describePermission } from '../lib/permission-text.js';
+import { DISABLED, FOCUS_RING } from '../lib/styles.js';
+import { DecisionRecord } from './DecisionRecord.js';
 import { Shield } from './Icons.js';
 
 const levelColor: Record<string, string> = {
@@ -50,16 +52,13 @@ export function PermissionCard({
   const borderClass = levelColor[request.level] ?? 'border-dark-border bg-dark-card';
 
   if (decided) {
-    const label = decided.includes('allow') ? t('permission.allowed') : t('permission.denied');
-    const color = decided.includes('allow') ? 'text-green-400' : 'text-red-400';
+    const allowed = decided.includes('allow');
     return (
-      <div className={`rounded-lg border-2 px-4 py-3 ${borderClass} opacity-60`}>
-        <div className="flex items-center gap-2">
-          <Shield className="w-4 h-4 text-ink-muted" />
-          <span className="text-sm text-ink-secondary">{description}</span>
-          <span className={`text-sm font-medium ml-auto ${color}`}>{label}</span>
-        </div>
-      </div>
+      <DecisionRecord
+        summary={description}
+        outcome={allowed ? t('permission.allowed') : t('permission.denied')}
+        tone={allowed ? 'accepted' : 'refused'}
+      />
     );
   }
 
@@ -78,12 +77,30 @@ export function PermissionCard({
         </div>
       </div>
       {error && <p className="text-xs text-red-400 ml-6 mb-1">{error}</p>}
-      <div className="flex gap-2 ml-6">
+      {/*
+        Deny and Allow once carry equal weight; Always allow is quieter than
+        both. It used to be the only filled button on the card — the broadest,
+        most permanent grant rendered as the visual default on the app's consent
+        gate, which is the wrong way round however you weigh it. (Its white text
+        on `green-600` also measured 3.22:1, under the 4.5:1 floor, so the loud
+        version was not even legible.) Nothing here is filled now: three
+        decisions of genuinely different consequence should be read, not
+        aimed at.
+      */}
+      <div className="flex flex-wrap gap-2 ml-6">
+        <button
+          type="button"
+          onClick={() => handleDecide('deny')}
+          disabled={deciding}
+          className={`px-3 py-1 text-xs rounded-md border border-dark-active text-ink-primary hover:bg-dark-hover ${DISABLED} ${FOCUS_RING}`}
+        >
+          {t('permission.deny')}
+        </button>
         <button
           type="button"
           onClick={() => handleDecide('allow_once')}
           disabled={deciding}
-          className="px-3 py-1 text-xs rounded-md border border-green-800/40 text-green-400 hover:bg-green-900/20 disabled:opacity-50"
+          className={`px-3 py-1 text-xs rounded-md border border-primary-600/50 text-primary-300 hover:bg-primary-600/15 ${DISABLED} ${FOCUS_RING}`}
         >
           {t('permission.allowOnce')}
         </button>
@@ -91,17 +108,9 @@ export function PermissionCard({
           type="button"
           onClick={() => handleDecide('allow_always')}
           disabled={deciding}
-          className="px-3 py-1 text-xs rounded-md bg-green-600 text-white hover:bg-green-500 disabled:opacity-50"
+          className={`px-3 py-1 text-xs rounded-md text-ink-secondary hover:text-ink-primary hover:bg-dark-hover ${DISABLED} ${FOCUS_RING}`}
         >
           {t('permission.allowAlways')}
-        </button>
-        <button
-          type="button"
-          onClick={() => handleDecide('deny')}
-          disabled={deciding}
-          className="px-3 py-1 text-xs rounded-md border border-red-800/40 text-red-400 hover:bg-red-900/20 disabled:opacity-50"
-        >
-          {t('permission.deny')}
         </button>
       </div>
     </div>

@@ -6,7 +6,14 @@
 
 import { spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { copyFileSync, existsSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs';
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  writeFileSync,
+} from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -14,6 +21,9 @@ import { fileURLToPath } from 'node:url';
 const DEFAULT_PROJECT = 'confer';
 const DEFAULT_PORT = 80;
 const COMPOSE_FILE = 'docker-compose.ghcr.yml';
+const TLS_COMPOSE_FILE = 'docker-compose.tls.yml';
+/** Records that this instance is served over TLS. Named as in oracle-bootstrap.sh. */
+const TLS_ENV_KEY = 'CONFER_DOMAIN';
 
 export type Command = 'up' | 'down' | 'logs' | 'help';
 
@@ -23,6 +33,8 @@ export type Options = {
   dir: string;
   project: string;
   version: string;
+  /** Serve on HTTPS at this domain. Unset means plain http on `port`. */
+  domain?: string;
 };
 
 export function defaults(): Omit<Options, 'command'> {
@@ -34,7 +46,23 @@ export function defaults(): Omit<Options, 'command'> {
   };
 }
 
-const FLAGS = ['port', 'dir', 'version', 'project'] as const;
+const FLAGS = ['port', 'dir', 'version', 'project', 'domain'] as const;
+
+// A bare registrable name: no scheme, no port, no path, and at least one dot.
+// Every part of that matters — Caddy is handed this verbatim as the name to
+// obtain a certificate for, and the gateway mints every DID from it.
+const DOMAIN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i;
+
+export function validateDomain(value: string): string | undefined {
+  if (DOMAIN.test(value)) return undefined;
+  if (/^[a-z]+:\/\//i.test(value)) return 'drop the https:// — --domain takes a bare name';
+  if (value.includes('/')) return 'drop the path — --domain takes a bare name';
+  if (value.includes(':')) return 'drop the port — HTTPS is served on 443';
+  if (!value.includes('.')) {
+    return `"${value}" is not a public domain; a certificate can only be issued for a real name`;
+  }
+  return `"${value}" is not a valid domain name`;
+}
 
 export function parseArgs(argv: readonly string[]): Options | { error: string } {
   const positional: string[] = [];
@@ -72,12 +100,25 @@ export function parseArgs(argv: readonly string[]): Options | { error: string } 
     return { error: `--port must be a port number, got "${rawPort}"` };
   }
 
+  const domain = flags.get('domain');
+  if (domain !== undefined) {
+    const invalid = validateDomain(domain);
+    if (invalid) return { error: `--domain: ${invalid}` };
+    // Under TLS the web ports are Caddy's 80 and 443, so honouring --port would
+    // mean publishing on a port nothing serves. Refusing beats a silent
+    // override, the same way a misspelled flag is refused above.
+    if (flags.has('port')) {
+      return { error: '--port has no meaning with --domain: HTTPS is served on 443' };
+    }
+  }
+
   return {
     command,
     port,
     dir: flags.get('dir') ?? fallback.dir,
     project: flags.get('project') ?? fallback.project,
     version: flags.get('version') ?? fallback.version,
+    ...(domain === undefined ? {} : { domain }),
   };
 }
 
@@ -98,6 +139,17 @@ export function renderEnvFile(vars: Record<string, string>): string {
 ${body}\n`;
 }
 
+/** Rewrite one KEY=value line in an existing .env body, or append it. */
+export function withEnvValue(body: string, key: string, value: string): string {
+  const lines = body.split('\n');
+  const at = lines.findIndex((line) => line.startsWith(`${key}=`));
+  if (at === -1) {
+    return `${body.endsWith('\n') ? body : `${body}\n`}${key}=${value}\n`;
+  }
+  lines[at] = `${key}=${value}`;
+  return lines.join('\n');
+}
+
 const HELP = `confer — run a self-hosted Confer instance
 
   npx confer-cli              start it (pulls images, runs migrations)
@@ -105,7 +157,14 @@ const HELP = `confer — run a self-hosted Confer instance
   npx confer-cli logs         follow the gateway log
 
 Options
-  --port <n>       host port for the web UI (default ${DEFAULT_PORT})
+  --domain <name>  serve HTTPS at this domain, with a certificate obtained
+                   automatically. Needed to talk to other Confer instances:
+                   agent identities are did:web, which resolves over HTTPS
+                   only, so an http-only instance publishes identities no
+                   peer can verify. Point the domain here first, and open
+                   ports 80 and 443.
+  --port <n>       host port for the web UI (default ${DEFAULT_PORT}); http only,
+                   and not accepted with --domain
   --dir <path>     where to keep config (default ~/.confer)
   --version <tag>  image tag to run (default latest)
   --project <name> docker compose project name (default ${DEFAULT_PROJECT})
@@ -115,8 +174,9 @@ function run(command: string, args: readonly string[], cwd?: string, env?: NodeJ
   return spawnSync(command, args, { cwd, stdio: 'inherit', encoding: 'utf8', env });
 }
 
-function capture(command: string, args: readonly string[]) {
-  return spawnSync(command, args, { encoding: 'utf8' });
+/** As `run`, but with the output captured rather than shown. */
+function capture(command: string, args: readonly string[], cwd?: string, env?: NodeJS.ProcessEnv) {
+  return spawnSync(command, args, { cwd, encoding: 'utf8', env });
 }
 
 function fail(message: string): never {
@@ -163,22 +223,95 @@ function assertProjectIsOurs(project: string, composePath: string): void {
   }
 }
 
-async function waitForHealth(port: number, timeoutMs: number): Promise<boolean> {
+/**
+ * Refuse to start on a database directory an older PostgreSQL wrote.
+ *
+ * 16 kept its data at the root of the volume; 18 keeps it in a major-versioned
+ * subdirectory. The image recognises the old layout and refuses to start rather
+ * than initialising an empty database beside it, which is the outcome that
+ * matters — the data is still there. But it surfaces as a container restarting
+ * in the background, so `up -d` succeeds and the failure arrives three minutes
+ * later as a health-check timeout, with the gateway's "cannot reach postgres"
+ * on screen and postgres's own explanation nowhere in it. Say it up front.
+ *
+ * Fails open, like assertProjectIsOurs: a docker that cannot answer should not
+ * be the reason an otherwise fine instance refuses to start.
+ */
+function assertPostgresDataIsCurrent(options: Options, env: NodeJS.ProcessEnv): void {
+  // 18 writes PG_VERSION inside the versioned subdirectory, so finding one at
+  // the mount point itself means a 16-era data directory. Asking compose rather
+  // than `docker run` keeps the image and the volume name where they are
+  // declared; --no-deps so this starts nothing else.
+  const probe = capture(
+    'docker',
+    [
+      ...composeArgs(options),
+      ...['run', '--rm', '--no-deps', '--entrypoint', 'sh', 'postgres', '-c'],
+      'test -f /var/lib/postgresql/PG_VERSION',
+    ],
+    options.dir,
+    env,
+  );
+  if (probe.status !== 0) return;
+
+  fail(
+    "this instance's database was created by PostgreSQL 16, and this release runs 18.\n" +
+      '        18 cannot read a 16 data directory. Nothing is lost — the move needs a dump\n' +
+      '        and a restore, and the steps are in docs/09-deployment.md:\n' +
+      '        https://github.com/hyhmrright/Confer/blob/main/docs/09-deployment.md\n\n' +
+      '        To stay on the old versions in the meantime, run the previous CLI, which\n' +
+      '        ships the previous compose file:  npx confer-cli@0.3.3',
+  );
+}
+
+async function waitForHealth(url: string, timeoutMs: number): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
-      const response = await fetch(`http://127.0.0.1:${port}/health`);
+      const response = await fetch(url);
       if (response.ok) return true;
     } catch {
-      // not listening yet
+      // not listening yet, or the certificate is still being issued
     }
     await new Promise((resolve) => setTimeout(resolve, 2000));
   }
   return false;
 }
 
+/**
+ * The domain this instance is served at, or undefined for plain http.
+ *
+ * `down` and `logs` must compose the same file list `up` did — miss the TLS
+ * overlay and they leave its container running, and compose cannot interpolate
+ * it either. Rather than making the user repeat --domain on every command, read
+ * back what `up` recorded.
+ */
+function effectiveDomain(options: Options): string | undefined {
+  return options.domain ?? storedDomain(options.dir);
+}
+
+/**
+ * `up --domain` records the choice under its own key rather than leaving it to
+ * be inferred from PUBLIC_HOST. PUBLIC_HOST answers a different question — the
+ * address peers reach this instance at, which is legitimately `localhost`, an
+ * IP, or a domain — and TLS-ness is not derivable from it. Guessing would have
+ * composed the TLS overlay for anyone who set it to a bare IP.
+ */
+export function storedDomain(dir: string): string | undefined {
+  try {
+    const body = readFileSync(join(dir, '.env'), 'utf8');
+    const line = body.split('\n').find((l) => l.startsWith(`${TLS_ENV_KEY}=`));
+    return line?.slice(TLS_ENV_KEY.length + 1).trim() || undefined;
+  } catch {
+    // No instance here yet, or an unreadable .env — either way, no TLS.
+    return undefined;
+  }
+}
+
 function composeArgs(options: Options): string[] {
-  return ['compose', '-p', options.project, '-f', COMPOSE_FILE];
+  const files = ['-f', COMPOSE_FILE];
+  if (effectiveDomain(options)) files.push('-f', TLS_COMPOSE_FILE);
+  return ['compose', '-p', options.project, ...files];
 }
 
 /**
@@ -186,10 +319,12 @@ function composeArgs(options: Options): string[] {
  * to `pull` would fetch one tag and start another.
  */
 function composeEnv(options: Options): NodeJS.ProcessEnv {
+  const domain = effectiveDomain(options);
   return {
     ...process.env,
     EXPOSE_PORT: String(options.port),
     CONFER_VERSION: options.version,
+    ...(domain ? { PUBLIC_HOST: domain } : {}),
   };
 }
 
@@ -203,10 +338,14 @@ async function up(options: Options): Promise<void> {
 
   // Rewritten every run, so an upgrade picks up topology changes. Local edits
   // to this copy do not survive — change the compose file the CLI is not
-  // managing if you need to customise it.
-  const bundled = join(dirname(fileURLToPath(import.meta.url)), COMPOSE_FILE);
-  if (!existsSync(bundled)) fail(`this install is missing ${COMPOSE_FILE} — reinstall confer-cli`);
-  copyFileSync(bundled, composePath);
+  // managing if you need to customise it. Both files land every time, TLS or
+  // not, so turning HTTPS on later needs no reinstall.
+  const bundleDir = dirname(fileURLToPath(import.meta.url));
+  for (const file of [COMPOSE_FILE, TLS_COMPOSE_FILE]) {
+    const bundled = join(bundleDir, file);
+    if (!existsSync(bundled)) fail(`this install is missing ${file} — reinstall confer-cli`);
+    copyFileSync(bundled, join(options.dir, file));
+  }
 
   const envPath = join(options.dir, '.env');
   if (!existsSync(envPath)) {
@@ -222,18 +361,34 @@ async function up(options: Options): Promise<void> {
         // to edit: every DID this instance mints is derived from it. Left bare even
         // under --port, since that is the one value the gateway later re-hosts on
         // its own once a real host is set.
-        PUBLIC_HOST: 'localhost',
+        PUBLIC_HOST: options.domain ?? 'localhost',
+        ...(options.domain ? { [TLS_ENV_KEY]: options.domain } : {}),
       }),
       { mode: 0o600 },
     );
     process.stdout.write(`Generated secrets in ${envPath}\n`);
+  } else if (options.domain && storedDomain(options.dir) !== options.domain) {
+    // An instance that already exists is being pointed at a domain (or moved to
+    // a different one). Both keys have to land in the .env, not just in this
+    // process's environment: PUBLIC_HOST is what the gateway mints identities
+    // from (it re-hosts the old ones on next start), and CONFER_DOMAIN is what
+    // `down` and `logs` read back to compose the same files again.
+    let body = readFileSync(envPath, 'utf8');
+    for (const key of ['PUBLIC_HOST', TLS_ENV_KEY]) {
+      body = withEnvValue(body, key, options.domain);
+    }
+    writeFileSync(envPath, body, { mode: 0o600 });
+    process.stdout.write(`Set PUBLIC_HOST=${options.domain} in ${envPath}\n`);
   }
 
   const env = composeEnv(options);
+  // postgres and qdrant are in here because the gateway's own log reports their
+  // failures only as "cannot connect" — a stack that will not start usually
+  // says why in a container the gateway never names.
   const diagnose = () =>
     run(
       'docker',
-      [...composeArgs(options), 'logs', '--tail', '40', 'migrate', 'gateway'],
+      [...composeArgs(options), 'logs', '--tail', '40', 'postgres', 'qdrant', 'migrate', 'gateway'],
       options.dir,
       env,
     );
@@ -246,6 +401,9 @@ async function up(options: Options): Promise<void> {
     fail('could not pull the images. Check your network, then retry.');
   }
 
+  // After the pull, so the image this checks inside is the one about to run.
+  assertPostgresDataIsCurrent(options, env);
+
   process.stdout.write('Starting…\n');
   if (run('docker', [...composeArgs(options), 'up', '-d'], options.dir, env).status !== 0) {
     diagnose();
@@ -254,17 +412,36 @@ async function up(options: Options): Promise<void> {
 
   // The success criterion is a served page, not a started container: the
   // gateway can be `running` and still be unable to resolve its dependencies.
-  if (!(await waitForHealth(options.port, 180_000))) {
+  // Under TLS the criterion is stricter on purpose — the check goes to the real
+  // domain over https, so it passes only once DNS points here and a certificate
+  // has been issued. Those are exactly the two things federation needs, and
+  // reporting success without them is how an instance ends up publishing
+  // identities no peer can resolve.
+  const url = instanceUrl(options);
+
+  if (!(await waitForHealth(`${url}/health`, 180_000))) {
     diagnose();
-    fail(`nothing answered on http://localhost:${options.port} within 3 minutes.`);
+    if (options.domain) {
+      fail(
+        `nothing answered on ${url} within 3 minutes. Check that ${options.domain} resolves\n` +
+          '        to this machine and that ports 80 and 443 are open to the internet —\n' +
+          "        Let's Encrypt validates over port 80 before HTTPS can serve anything.",
+      );
+    }
+    fail(`nothing answered on ${url} within 3 minutes.`);
   }
 
-  const url = options.port === 80 ? 'http://localhost' : `http://localhost:${options.port}`;
   process.stdout.write(
     `\n  Confer is running at ${url}\n` +
       '  Register the first account, then add an LLM API key in Settings.\n\n' +
       `  Stop it with:  npx confer-cli down${stopFlags(options)}\n\n`,
   );
+}
+
+/** Where this instance answers once it is up. */
+export function instanceUrl(options: Pick<Options, 'domain' | 'port'>): string {
+  if (options.domain) return `https://${options.domain}`;
+  return options.port === 80 ? 'http://localhost' : `http://localhost:${options.port}`;
 }
 
 /** Whatever the user has to repeat for `down` to find the same instance. */

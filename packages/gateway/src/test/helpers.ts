@@ -72,13 +72,16 @@ export function apiRequest(path: string, init?: RequestInit): Promise<Response> 
 // letting our own infra (Qdrant, MinIO) pass through. The handler returns a
 // Response to stub a request, or undefined to delegate to the real fetch.
 // Returns a restore function.
+// `input` is passed through as the third argument because a caller may hand
+// fetch a fully-built Request — outbound A2A signs one — and then the body is
+// on the Request, not on `init`. Reading `init.body` there yields undefined.
 export function mockFetch(
-  handler: (url: string, init?: RequestInit) => Response | undefined,
+  handler: (url: string, init?: RequestInit, input?: RequestInfo | URL) => Response | undefined,
 ): () => void {
   const realFetch = globalThis.fetch;
   globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-    return handler(url, init) ?? realFetch(input, init);
+    return handler(url, init, input) ?? realFetch(input, init);
   }) as typeof fetch;
   return () => {
     globalThis.fetch = realFetch;

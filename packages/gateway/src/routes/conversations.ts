@@ -1,8 +1,9 @@
 import { AppError, newId, sendMessageRequestSchema } from '@confer/shared';
-import { and, desc, eq, inArray, lt } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { getDb } from '../db/connection.js';
 import { conversationParticipants, conversations, messages } from '../db/schema.js';
+import { historyBefore } from '../lib/conversation-history.js';
 import { parseLimit } from '../lib/pagination.js';
 import { assertIsConversationParticipant, assertOwnsConversation } from '../lib/tenant.js';
 import { authMiddleware } from '../middleware/auth.js';
@@ -97,29 +98,16 @@ conversationRoutes.get('/:id', async (c) => {
 
 conversationRoutes.get('/:id/messages', async (c) => {
   const user = c.get('user');
-  const db = getDb();
   const convId = c.req.param('id');
   const before = c.req.query('before');
   const limit = parseLimit(c.req.query('limit'), 50, 100);
 
   await assertIsConversationParticipant(user.sub, convId);
 
-  // Admin-hidden messages are filtered from regular reads.
-  const visible = eq(messages.moderation_status, 'visible');
-  const query = db
-    .select()
-    .from(messages)
-    .where(
-      before
-        ? and(eq(messages.conversation_id, convId), lt(messages.id, before), visible)
-        : and(eq(messages.conversation_id, convId), visible),
-    )
-    .orderBy(desc(messages.created_at))
-    .limit(limit);
-
-  const msgs = await query;
-
-  return c.json({ messages: msgs.reverse() });
+  // The cursor and the ordering are the same key — see historyBefore. This
+  // paged by id while ordering by created_at, and the two disagreed often
+  // enough for a page to skip a message or repeat one.
+  return c.json({ messages: await historyBefore(convId, before, limit) });
 });
 
 conversationRoutes.delete('/:id', async (c) => {
@@ -131,11 +119,18 @@ conversationRoutes.delete('/:id', async (c) => {
   // creator — a mere participant must not be able to destroy a shared thread.
   await assertOwnsConversation(user.sub, convId);
 
-  await db
-    .delete(conversationParticipants)
-    .where(eq(conversationParticipants.conversation_id, convId));
-  await db.delete(messages).where(eq(messages.conversation_id, convId));
-  await db.delete(conversations).where(eq(conversations.id, convId));
+  // One transaction, because these three used to be three statements and a
+  // crash between them left the conversation row standing with no participants
+  // — a thread nobody can read and nobody can be added back to. An inbound A2A
+  // conversation id is derived from the peer's thread id, so that dead row
+  // would be found again by the peer's next message and quietly collect it.
+  await db.transaction(async (tx) => {
+    await tx
+      .delete(conversationParticipants)
+      .where(eq(conversationParticipants.conversation_id, convId));
+    await tx.delete(messages).where(eq(messages.conversation_id, convId));
+    await tx.delete(conversations).where(eq(conversations.id, convId));
+  });
 
   return c.json({ ok: true });
 });

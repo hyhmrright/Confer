@@ -58,7 +58,7 @@ interface ContactsState {
   loadMoreContacts: () => Promise<void>;
   addContact: (peerId: string, alias?: string) => Promise<void>;
   removeContact: (contactId: string) => Promise<void>;
-  lookupByDomain: (domain: string) => Promise<PeerAgent[]>;
+  lookupPeer: (query: string) => Promise<PeerAgent[]>;
   openDialog: () => void;
   closeDialog: () => void;
   openDetail: (contactId: string) => Promise<void>;
@@ -142,11 +142,14 @@ export const useContactsStore = create<ContactsState>((set, get) => ({
     }));
   },
 
-  lookupByDomain: async (domain) => {
+  // Takes whatever the peer handed over. A DID is what Settings shows with a
+  // copy button, so it is the thing people actually have — until now the dialog
+  // accepted only a domain, and pasting that DID found nothing.
+  lookupPeer: async (query) => {
     set({ error: null });
     const data = await api.post<{ candidates: PeerAgent[]; error?: string }>('/contacts/lookup', {
-      method: 'domain',
-      value: domain,
+      method: query.startsWith('did:') ? 'did' : 'domain',
+      value: query,
     });
     // Surface the backend's reason (e.g. "Private addresses not allowed",
     // resolution timeout) instead of silently collapsing to "未找到 Agent".

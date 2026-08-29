@@ -290,6 +290,64 @@ describe('chat store', () => {
     expect(streaming).toBe(false);
   });
 
+  // Send one message against a stream that answers with a single error event,
+  // and hand back the state the reader settled on.
+  async function sendAgainstStreamError(message: string) {
+    const sse = `event: error\ndata: ${JSON.stringify({ message })}\n\n`;
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = mock(
+      async () => new Response(sse, { status: 200 }),
+    ) as unknown as typeof fetch;
+    post.mockResolvedValue({ id: 'u1', stream_url: '/stream/c1/u1' });
+    useChatStore.setState({ activeConversationId: 'c1', messages: [] });
+
+    try {
+      await useChatStore.getState().sendMessage('hello');
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+    return useChatStore.getState();
+  }
+
+  // The reader ignores `event:` lines and keys off the payload, so an error
+  // event used to fall through to the tail finalize — committing an empty reply
+  // under a random id. A blank bubble presented as the agent's answer is worse
+  // than no bubble, and the gateway now sends this whenever a second request
+  // arrives for a turn already being generated.
+  test.each([
+    // Not a failure: another tab is producing this very answer and it arrives
+    // over the WebSocket, so the reader should go quiet rather than complain.
+    ['already_generating', false],
+    // A misconfiguration names its own fix rather than "try again": the reader
+    // has not chosen a model, and retrying will fail exactly the same way.
+    ['no_model_configured', true],
+    ['no_key_for_provider', true],
+    ['agent_error', true],
+  ])('sendMessage commits nothing when the stream reports %s', async (message, notifies) => {
+    const state = await sendAgainstStreamError(message);
+
+    // Only the message the user sent; no agent turn was produced.
+    expect(state.messages.map((m) => m.sender_type)).toEqual(['user']);
+    expect(state.streaming).toBe(false);
+    expect(state.agentStatus !== null).toBe(notifies);
+    // Whatever is shown is the client's own translated copy, never the
+    // gateway's wording — it has no locale to write in.
+    expect(state.agentStatus).not.toBe(message);
+  });
+
+  // "That turn did not finish, try again" is wrong advice for an agent with no
+  // model: retrying fails identically. The code has to survive the trip as a
+  // code, not be flattened into one generic apology.
+  test('a missing model is worded differently from a failed turn', async () => {
+    const noModel = (await sendAgainstStreamError('no_model_configured')).agentStatus;
+    const noKey = (await sendAgainstStreamError('no_key_for_provider')).agentStatus;
+    const generic = (await sendAgainstStreamError('agent_error')).agentStatus;
+
+    expect(noModel).not.toBe(generic);
+    expect(noKey).not.toBe(generic);
+    expect(noModel).not.toBe(noKey);
+  });
+
   test('setStreaming updates streaming flag and content', () => {
     useChatStore.getState().setStreaming(true, 'partial');
     expect(useChatStore.getState().streaming).toBe(true);

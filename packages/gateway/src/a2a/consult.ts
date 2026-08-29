@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm';
 import { getDb } from '../db/connection.js';
 import { agents, peerAgents } from '../db/schema.js';
 import { sendA2AMessage } from './outbound.js';
-import { loadActiveAgentKey } from './signing.js';
+import { loadOwnerSigningKey } from './signing.js';
 
 export interface DeliverConsultInput {
   userId: string;
@@ -34,7 +34,7 @@ export async function deliverConsult(
   if (!peer) return err('peer_not_found');
   if (!peer.endpoint) return err('peer_no_endpoint');
 
-  const key = await loadActiveAgentKey(agent.id);
+  const key = await loadOwnerSigningKey(input.userId);
   if (!key.ok) return err(key.error);
 
   const result = await sendA2AMessage(

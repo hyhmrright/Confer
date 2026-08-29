@@ -38,8 +38,19 @@ export class OpenAICompatibleProvider implements LLMProvider {
     this.completionsPath = completionsPath;
   }
 
+  // Catalogue entries only carry a default model where we can name a current
+  // one; for the rest the owner picks from the vendor's own list. Say so here,
+  // rather than posting `model: ""` and relaying whatever 400 comes back.
+  private resolveModel(options?: LLMChatOptions): string {
+    const model = options?.model || this.defaultModel;
+    if (!model) {
+      throw new Error(`${this.name}: no model selected — choose one in agent settings`);
+    }
+    return model;
+  }
+
   async chat(messages: LLMMessage[], options?: LLMChatOptions): Promise<LLMResponse> {
-    const model = options?.model ?? this.defaultModel;
+    const model = this.resolveModel(options);
 
     const response = await fetch(`${this.baseUrl}${this.completionsPath}`, {
       method: 'POST',
@@ -81,7 +92,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
   }
 
   async *stream(messages: LLMMessage[], options?: LLMChatOptions): AsyncIterable<LLMStreamEvent> {
-    const model = options?.model ?? this.defaultModel;
+    const model = this.resolveModel(options);
 
     const body: Record<string, unknown> = {
       model,
@@ -154,10 +165,10 @@ export class OpenAICompatibleProvider implements LLMProvider {
 }
 
 /**
- * General-purpose factory for any OpenAI-compatible endpoint. The named
- * factories below delegate to this; callers wiring a custom endpoint can use it
- * directly. Defaults to the OpenAI base URL/model and the standard
- * `/v1/chat/completions` path.
+ * Factory for an OpenAI-compatible endpoint not in the shared catalogue.
+ * Catalogued vendors go through `createProvider`, which reads their base URL,
+ * path and default model from the one list; this stays for callers wiring an
+ * endpoint of their own. Defaults to OpenAI's own address and path.
  */
 export function createOpenAICompatibleProvider(
   name: string,
@@ -171,38 +182,4 @@ export function createOpenAICompatibleProvider(
     opts.model ?? 'gpt-4o',
     opts.completionsPath ?? '/v1/chat/completions',
   );
-}
-
-export function createDeepSeekProvider(apiKey: string): OpenAICompatibleProvider {
-  return createOpenAICompatibleProvider('deepseek', apiKey, {
-    baseUrl: 'https://api.deepseek.com',
-    model: 'deepseek-chat',
-  });
-}
-
-export function createOpenAIProvider(apiKey: string): OpenAICompatibleProvider {
-  return createOpenAICompatibleProvider('openai', apiKey, {
-    baseUrl: 'https://api.openai.com',
-    model: 'gpt-4o',
-  });
-}
-
-export function createQwenProvider(apiKey: string): OpenAICompatibleProvider {
-  return createOpenAICompatibleProvider('qwen', apiKey, {
-    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode',
-    model: 'qwen-plus',
-  });
-}
-
-export function createGlmProvider(apiKey: string): OpenAICompatibleProvider {
-  // GLM API uses /chat/completions directly under its v4 base path
-  return createOpenAICompatibleProvider('glm', apiKey, {
-    baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
-    model: 'glm-4-flash',
-    completionsPath: '/chat/completions',
-  });
-}
-
-export function createOllamaProvider(baseUrl = 'http://localhost:11434'): OpenAICompatibleProvider {
-  return createOpenAICompatibleProvider('ollama', '', { baseUrl, model: 'llama3' });
 }

@@ -40,15 +40,13 @@ export function ConversationsPanel({ onNavigate }: { onNavigate?: () => void }) 
     <div className="flex flex-col h-full min-h-0">
       {/* Header */}
       <div className="px-4 py-3 flex items-center justify-between border-b border-dark-border shrink-0">
-        <span className="text-xs font-semibold text-ink-secondary tracking-wider uppercase font-mono">
-          {t('conversations.title')}
-        </span>
+        <span className="eyebrow text-ink-muted">{t('conversations.title')}</span>
         <button
           type="button"
           onClick={handleNew}
-          className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md
+          className={`flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md
             bg-primary-600/15 text-primary-400 border border-primary-600/20
-            hover:bg-primary-600/25 hover:border-primary-600/35 transition-all"
+            hover:bg-primary-600/25 hover:border-primary-600/35 transition-all ${FOCUS_RING}`}
         >
           <Plus className="w-3 h-3" />
           {t('conversations.new')}
@@ -111,7 +109,7 @@ export function ConversationsPanel({ onNavigate }: { onNavigate?: () => void }) 
                     >
                       {conv.name ?? t('conversations.untitled', { id: conv.id.slice(0, 6) })}
                     </p>
-                    <p className="text-[10px] text-ink-muted mt-0.5 font-mono">
+                    <p className="eyebrow text-ink-muted mt-0.5">
                       {new Date(conv.updated_at).toLocaleString(dateLocale(), {
                         month: 'short',
                         day: 'numeric',

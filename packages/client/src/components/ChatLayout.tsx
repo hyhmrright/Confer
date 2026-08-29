@@ -21,6 +21,7 @@ import { useErrandsStore } from '../stores/errands.js';
 import { usePermissionsStore } from '../stores/permissions.js';
 import { AccountMenu, type AccountUser } from './AccountMenu.js';
 import { AddContactDialog } from './AddContactDialog.js';
+import { EmptyState } from './EmptyState.js';
 import { ErrandInbox } from './ErrandInbox.js';
 import { BookOpen, Database, Menu, MessageCircle, Settings, Shield, Users } from './Icons.js';
 import { LanguageSwitcherCompact } from './LanguageSwitcher.js';
@@ -97,7 +98,7 @@ function NavRail({
             key={id}
             onClick={() => setTab(id)}
             title={t(labelKey)}
-            className={`relative w-9 h-9 flex items-center justify-center rounded-lg transition-all duration-150 group
+            className={`relative w-9 h-9 flex items-center justify-center rounded-lg transition-all duration-150 group ${FOCUS_RING}
               ${
                 active
                   ? 'bg-primary-600/15 text-primary-400'
@@ -123,7 +124,7 @@ function NavRail({
           type="button"
           onClick={onAdmin}
           title={t('nav.admin')}
-          className="w-9 h-9 flex items-center justify-center rounded-lg text-ink-muted hover:text-ink-secondary hover:bg-dark-hover transition-colors"
+          className={`w-9 h-9 flex items-center justify-center rounded-lg text-ink-muted hover:text-ink-secondary hover:bg-dark-hover transition-colors ${FOCUS_RING}`}
         >
           <Shield className="w-[18px] h-[18px]" />
         </button>
@@ -134,7 +135,7 @@ function NavRail({
         type="button"
         onClick={onSettings}
         title={t('nav.settings')}
-        className="w-9 h-9 flex items-center justify-center rounded-lg text-ink-muted hover:text-ink-secondary hover:bg-dark-hover transition-colors"
+        className={`w-9 h-9 flex items-center justify-center rounded-lg text-ink-muted hover:text-ink-secondary hover:bg-dark-hover transition-colors ${FOCUS_RING}`}
       >
         <Settings className="w-[18px] h-[18px]" />
       </button>
@@ -336,14 +337,12 @@ export function ChatLayout() {
         {activeConversationId ? (
           <MessageView />
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center gap-3 text-ink-muted">
-            <div className="w-14 h-14 rounded-2xl bg-dark-card border border-dark-border flex items-center justify-center">
-              <MessageCircle className="w-6 h-6 text-ink-muted opacity-50" />
-            </div>
-            <div className="text-center">
-              <p className="text-sm font-medium text-ink-secondary">{t('nav.emptyTitle')}</p>
-              <p className="text-xs text-ink-muted mt-0.5">{t('nav.emptyHint')}</p>
-            </div>
+          <div className="flex-1 flex items-center justify-center">
+            <EmptyState
+              icon={MessageCircle}
+              title={t('nav.emptyTitle')}
+              hint={t('nav.emptyHint')}
+            />
           </div>
         )}
       </div>

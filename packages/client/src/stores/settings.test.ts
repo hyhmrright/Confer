@@ -152,20 +152,26 @@ describe('settings store', () => {
     expect(state.error).toBe('delete failed');
   });
 
-  test('fetchModels maps model ids into value/label options', async () => {
+  test('fetchModels returns the vendor model ids', async () => {
     get.mockResolvedValueOnce({ models: [{ id: 'gpt-4o' }, { id: 'gpt-4o-mini' }] });
     const result = await useSettingsStore.getState().fetchModels('openai');
     expect(get).toHaveBeenCalledWith('/agents/me/llm-keys/openai/models');
-    expect(result).toEqual([
-      { value: 'gpt-4o', label: 'gpt-4o' },
-      { value: 'gpt-4o-mini', label: 'gpt-4o-mini' },
-    ]);
+    expect(result).toEqual({ models: ['gpt-4o', 'gpt-4o-mini'], error: undefined });
   });
 
-  test('fetchModels returns an empty list on error', async () => {
+  // An empty list is not self-explanatory — the reason travels with it so the
+  // settings UI can say whether a key is missing, rejected, or the vendor is
+  // simply down.
+  test('fetchModels passes the gateway reason through', async () => {
+    get.mockResolvedValueOnce({ models: [], error: 'unauthorized' });
+    const result = await useSettingsStore.getState().fetchModels('openai');
+    expect(result).toEqual({ models: [], error: 'unauthorized' });
+  });
+
+  test('fetchModels reports an unreachable gateway', async () => {
     get.mockRejectedValueOnce(new Error('boom'));
     const result = await useSettingsStore.getState().fetchModels('openai');
-    expect(result).toEqual([]);
+    expect(result).toEqual({ models: [], error: 'unreachable' });
   });
 
   test('clearMessages resets error and success', () => {

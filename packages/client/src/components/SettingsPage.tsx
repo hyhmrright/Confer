@@ -28,7 +28,7 @@ export function SettingsPage() {
       tabs={tabs}
       activeTab={tab}
       onTabChange={setTab}
-      contentClassName="max-w-lg"
+      contentClassName="max-w-xl"
     >
       {tab === 'profile' && <ProfileTab />}
       {tab === 'agent' && <AgentTab />}

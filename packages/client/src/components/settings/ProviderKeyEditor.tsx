@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FOCUS_RING } from '../../lib/styles.js';
+import { DISABLED, DISABLED_FILLED, FOCUS_RING } from '../../lib/styles.js';
 import { Key } from '../Icons.js';
 
 // One provider key row: shows the provider name + configured/extra badges and an
@@ -77,7 +77,7 @@ export function ProviderKeyEditor({
               type="button"
               onClick={onRemove}
               disabled={saving}
-              className="text-xs text-red-400 hover:text-red-300 transition-colors disabled:opacity-40"
+              className={`text-xs text-red-400 hover:text-red-300 transition-colors ${DISABLED}`}
             >
               {t('common.remove')}
             </button>
@@ -98,7 +98,7 @@ export function ProviderKeyEditor({
             type="button"
             onClick={onSave}
             disabled={saving || !keyValue.trim()}
-            className="px-3 py-1.5 bg-primary-600 text-white rounded-lg text-xs hover:bg-primary-500 disabled:opacity-40 transition-colors"
+            className={`px-3 py-1.5 bg-primary-600 text-white rounded-lg text-xs hover:bg-primary-500 ${DISABLED_FILLED} transition-colors`}
           >
             {t('common.save')}
           </button>

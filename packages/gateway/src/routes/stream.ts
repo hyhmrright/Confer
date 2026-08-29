@@ -1,13 +1,14 @@
 import type { LLMMessage } from '@confer/agent-runtime';
-import { createProvider } from '@confer/agent-runtime';
 import { AppError, newId } from '@confer/shared';
-import { and, asc, eq, lt } from 'drizzle-orm';
-import { Hono } from 'hono';
+import { eq } from 'drizzle-orm';
+import { type Context, Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import { getDb } from '../db/connection.js';
 import { agents, messages } from '../db/schema.js';
 import { getEnv } from '../env.js';
-import { decryptUserKey, getUserLlmKeys, resolveAgentCapabilities } from '../lib/llm-keys.js';
+import { resolveAgentModel } from '../lib/agent-model.js';
+import { historyBefore } from '../lib/conversation-history.js';
+import { getUserLlmKeys, resolveAgentCapabilities } from '../lib/llm-keys.js';
 import { assertIsConversationParticipant } from '../lib/tenant.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { runAgentTurn } from '../orchestration/agent-orchestrator.js';
@@ -21,6 +22,45 @@ streamRoutes.use('/*', authMiddleware);
 
 const DEFAULT_SYSTEM_PROMPT =
   '你是一个智能助手，能够帮助用户回答问题、处理任务。你可以使用 web_search 工具搜索实时信息。回答时请用用户使用的语言。';
+
+/** How many earlier messages the model is shown. */
+const HISTORY_WINDOW = 20;
+
+/** A stream that emits a fixed set of events and ends. */
+function sseEvents(c: Context<AppEnv>, events: Array<{ event: string; data: unknown }>): Response {
+  return streamSSE(c, async (stream) => {
+    for (const { event, data } of events) {
+      await stream.writeSSE({ event, data: JSON.stringify(data) });
+    }
+  });
+}
+
+// Message id -> when its turn was claimed.
+//
+// This endpoint is a GET, but running it has side effects: it calls the model
+// and inserts the reply. Nothing stopped it running twice for the same message,
+// so a reload, a flaky connection, or a second tab billed another completion
+// and appended a duplicate answer — reproduced live, two identical replies to
+// one question 25 seconds apart. Process-local is the right scope: the gateway
+// is single-instance by design, exactly like the WS registry, the nonce cache
+// and the rate limiter.
+const inFlight = new Map<string, number>();
+
+// A claim is only honoured while it is fresh. Nothing bounds a turn: the LLM
+// calls carry no timeout, so a provider that accepts the connection and then
+// says nothing holds its claim forever — and because no reply row is ever
+// written, that message could never be answered again, by any request, until
+// the process restarted. Expiring the claim trades that dead end for a
+// duplicate in the one case where a turn really is still running this long.
+const CLAIM_TTL_MS = 5 * 60_000;
+
+/** Take the claim for this message, unless a live one is already held. */
+function claimTurn(messageId: string, now: number): boolean {
+  const heldAt = inFlight.get(messageId);
+  if (heldAt !== undefined && now - heldAt < CLAIM_TTL_MS) return false;
+  inFlight.set(messageId, now);
+  return true;
+}
 
 streamRoutes.get('/:conversationId/:messageId', async (c) => {
   const user = c.get('user');
@@ -43,39 +83,59 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
     throw new AppError('not_found', 'Agent not configured', 404);
   }
 
+  // Claim the message BEFORE looking for an answer. Reading the database first
+  // is the obvious order and it is wrong: a request that finds no answer yet
+  // can be descheduled long enough for the request holding the claim to finish,
+  // insert and release, after which it sees a free slot and buys a second
+  // completion. That race is the ordinary one — a reload arriving as the turn
+  // lands.
+  const claimed = claimTurn(messageId, Date.now());
+
+  const [existing] = await db
+    .select({ id: messages.id, content: messages.content })
+    .from(messages)
+    .where(eq(messages.in_reply_to, messageId))
+    .limit(1);
+
+  // Answered already: replay it. This is the reconnect after a finished turn,
+  // and it must not leave the reader looking at an empty bubble.
+  if (existing) {
+    if (claimed) inFlight.delete(messageId);
+    return sseEvents(c, [
+      { event: 'token', data: { text: existing.content ?? '' } },
+      { event: 'done', data: { message_id: existing.id } },
+    ]);
+  }
+
+  // Someone else is generating it. Say so rather than starting a second turn —
+  // the answer reaches every open client over the WS broadcast below, so
+  // declining costs the reader nothing.
+  if (!claimed) {
+    return sseEvents(c, [{ event: 'error', data: { message: 'already_generating' } }]);
+  }
+
   return streamSSE(c, async (stream) => {
     try {
       const modelConfig = agent.model_config_json as Record<string, unknown> | null;
-      const providerName = (modelConfig?.provider as string) ?? 'anthropic';
-      const model = (modelConfig?.model as string) || undefined;
       const systemPrompt = (modelConfig?.system_prompt as string) ?? DEFAULT_SYSTEM_PROMPT;
 
       const llmKeys = await getUserLlmKeys(user.sub);
-      const apiKey = await decryptUserKey(llmKeys, providerName, env.ENCRYPTION_KEY);
-
-      const provider = createProvider(providerName, apiKey);
-      if (!provider) {
+      const resolved = await resolveAgentModel(modelConfig, llmKeys, env.ENCRYPTION_KEY);
+      if (!resolved.ok) {
+        // A machine code, not a sentence: the gateway has no locale context, and
+        // the reader distinguishes "you have not chosen a model yet" from "the
+        // provider you chose has no key" — different fixes, different screens.
         await stream.writeSSE({
           event: 'error',
-          data: JSON.stringify({ message: 'No LLM provider configured' }),
+          data: JSON.stringify({ message: resolved.error }),
         });
         return;
       }
+      const { provider, model } = resolved.value;
 
-      // Load up to 20 messages before this one as conversation history.
-      // Moderator-hidden messages are excluded so they don't flow into the LLM context.
-      const historyRows = await db
-        .select()
-        .from(messages)
-        .where(
-          and(
-            eq(messages.conversation_id, conversationId),
-            lt(messages.id, messageId),
-            eq(messages.moderation_status, 'visible'),
-          ),
-        )
-        .orderBy(asc(messages.created_at))
-        .limit(20);
+      // Moderator-hidden messages stay out of the model's context; see
+      // historyBefore for why the window is taken newest-first and reversed.
+      const historyRows = await historyBefore(conversationId, messageId, HISTORY_WINDOW);
 
       const history: LLMMessage[] = historyRows.map((m) => ({
         role: m.sender_type === 'user' ? 'user' : 'assistant',
@@ -163,6 +223,11 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
       // otherwise-clean log made provider misconfiguration invisible to operators.
       console.error(`Stream turn failed for user ${user.sub}: ${message}`);
       await stream.writeSSE({ event: 'error', data: JSON.stringify({ message }) });
+    } finally {
+      // Released on failure too, or one dropped turn would wedge that message
+      // permanently: no reply row exists to replay, and every retry would be
+      // turned away as already generating.
+      inFlight.delete(messageId);
     }
   });
 });

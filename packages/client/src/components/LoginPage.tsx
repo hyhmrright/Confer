@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router';
-import { FOCUS_RING } from '../lib/styles.js';
+import { DISABLED_FILLED, FOCUS_RING } from '../lib/styles.js';
 import { useAuthStore } from '../stores/auth.js';
 import { Loader } from './Icons.js';
 
@@ -37,24 +37,27 @@ export function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-dark-base">
-      {/* Subtle grid background */}
+      {/* Ruled ground — the faint blue lines of a correspondence pad. Horizontal
+          only: a full grid read as generic technical wallpaper, and this is the
+          one screen where the product should look like stationery. The colour
+          reads from the seal token rather than repeating a literal hex, which is
+          how the old value drifted off-palette and stayed there. */}
       <div
-        className="absolute inset-0 opacity-[0.03]"
+        className="absolute inset-0 opacity-[0.04]"
         style={{
-          backgroundImage:
-            'linear-gradient(#b06844 1px, transparent 1px), linear-gradient(90deg, #b06844 1px, transparent 1px)',
-          backgroundSize: '48px 48px',
+          backgroundImage: 'linear-gradient(var(--color-primary-400) 1px, transparent 1px)',
+          backgroundSize: '100% 32px',
         }}
       />
 
       <div className="relative w-full max-w-sm px-4">
-        {/* Logo */}
+        {/* Wordmark */}
         <div className="text-center mb-8">
-          <div className="w-12 h-12 rounded-xl bg-primary-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-primary-900/60">
-            <span className="text-white text-xl font-bold font-mono">C</span>
+          <div className="w-11 h-11 rounded-lg bg-primary-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-primary-900/60">
+            <span className="text-white text-lg font-bold font-mono">C</span>
           </div>
-          <h1 className="text-2xl font-bold text-ink-primary tracking-tight">Confer</h1>
-          <p className="text-sm text-ink-muted mt-1">{t('login.tagline')}</p>
+          <h1 className="font-display text-3xl text-ink-primary">Confer</h1>
+          <p className="text-sm text-ink-secondary mt-1.5">{t('login.tagline')}</p>
         </div>
 
         {/* Card */}
@@ -143,7 +146,7 @@ export function LoginPage() {
               type="submit"
               disabled={loading}
               className={`w-full py-2.5 bg-primary-600 text-white rounded-xl text-sm font-medium
-                hover:bg-primary-500 disabled:opacity-40 transition-colors flex items-center justify-center gap-2 mt-1 ${FOCUS_RING}`}
+                hover:bg-primary-500 ${DISABLED_FILLED} transition-colors flex items-center justify-center gap-2 mt-1 ${FOCUS_RING}`}
             >
               {loading && <Loader className="w-4 h-4 animate-spin" />}
               {loading

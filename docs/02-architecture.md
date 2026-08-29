@@ -219,7 +219,7 @@
 | 后端语言 | Bun + TypeScript | Go | MCP/A2A SDK 是 TS-first；全栈类型共享 |
 | Web 框架 | Hono | Elysia, Fastify | 轻、快、生态稳 |
 | 客户端 | Tauri 2.0 | Flutter, Electron | 单代码库 5 平台，Rust 安全，体积小 |
-| 主存储 | PostgreSQL 16 | MySQL | JSON 支持好，扩展性强，pgvector 可选 |
+| 主存储 | PostgreSQL 18 | MySQL | JSON 支持好，扩展性强，pgvector 可选 |
 | 消息总线 | NATS | Kafka, Redis Pub/Sub | 轻、持久化、精确订阅 |
 | 向量库 | Qdrant | Pinecone, pgvector | 自托管成熟、Rust 写的性能稳 |
 | 身份 | DID:web | DID:key, OAuth-only | 与 web 基建兼容，NANDA 推荐 |

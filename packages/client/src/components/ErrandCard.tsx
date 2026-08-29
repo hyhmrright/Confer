@@ -1,8 +1,11 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TranslationKey } from '../i18n/index.js';
+import { dateLocale } from '../i18n/index.js';
+import { DISABLED, DISABLED_FILLED, FOCUS_RING } from '../lib/styles.js';
 import type { ErrandCard as ErrandCardData } from '../stores/errands.js';
 import { useErrandsStore } from '../stores/errands.js';
+import { DecisionRecord } from './DecisionRecord.js';
 import { Shield } from './Icons.js';
 
 // Format integer cents as a currency amount (e.g. 21000 + USD -> "$210.00").
@@ -15,11 +18,30 @@ function formatCents(cents: number, currency: string): string {
   }
 }
 
-// Human countdown to expiry: whole minutes remaining (rounded to nearest, clamped
-// at 0) plus an expired flag once the deadline has passed.
-function expiryLabel(expiresAt: string): { minutes: number; expired: boolean } {
+// Countdown to expiry, in the largest unit that still reads as a number a person
+// would say. It used to return raw minutes and the caller printed `${minutes}m`,
+// so a card with two days on it announced "Expires in 2879m" — the comment above
+// it claimed to be a human countdown while doing arithmetic out loud.
+//
+// `Intl.NumberFormat` with `style: 'unit'` does the plural and the word order per
+// locale, so "1 day" / "2 days" / "2天" / "2日" all come out right without a key
+// per unit per language.
+function expiryLabel(expiresAt: string, locale: string): { text: string; expired: boolean } {
   const ms = new Date(expiresAt).getTime() - Date.now();
-  return { minutes: Math.max(0, Math.round(ms / 60000)), expired: ms <= 0 };
+  if (ms <= 0) return { text: '', expired: true };
+
+  const minutes = Math.round(ms / 60000);
+  const [value, unit] =
+    minutes >= 1440
+      ? ([Math.round(minutes / 1440), 'day'] as const)
+      : minutes >= 60
+        ? ([Math.round(minutes / 60), 'hour'] as const)
+        : ([minutes, 'minute'] as const);
+
+  return {
+    text: new Intl.NumberFormat(locale, { style: 'unit', unit, unitDisplay: 'long' }).format(value),
+    expired: false,
+  };
 }
 
 // i18n key for the post-decision confirmation label, by decision.
@@ -41,7 +63,7 @@ export function ErrandCard({ card }: { card: ErrandCardData }) {
   const [changing, setChanging] = useState(false);
   const [newPrice, setNewPrice] = useState('');
 
-  const { minutes, expired } = expiryLabel(card.expires_at);
+  const { text: expiresIn, expired } = expiryLabel(card.expires_at, dateLocale());
 
   const decide = async (decision: 'approve' | 'change_price' | 'reject', cents?: number) => {
     setDeciding(true);
@@ -63,16 +85,12 @@ export function ErrandCard({ card }: { card: ErrandCardData }) {
   };
 
   if (decided) {
-    const label = t(decidedLabelKey[decided] ?? 'errand.approved');
-    const color = decided === 'reject' ? 'text-red-400' : 'text-green-400';
     return (
-      <div className="rounded-lg border-2 border-dark-border bg-dark-card px-4 py-3 opacity-60">
-        <div className="flex items-center gap-2">
-          <Shield className="w-4 h-4 text-ink-muted" />
-          <span className="text-sm text-ink-secondary">{card.errand_title}</span>
-          <span className={`text-sm font-medium ml-auto ${color}`}>{label}</span>
-        </div>
-      </div>
+      <DecisionRecord
+        summary={card.errand_title}
+        outcome={t(decidedLabelKey[decided] ?? 'errand.approved')}
+        tone={decided === 'reject' ? 'refused' : 'accepted'}
+      />
     );
   }
 
@@ -83,9 +101,7 @@ export function ErrandCard({ card }: { card: ErrandCardData }) {
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-1">
             <span className="text-xs font-medium text-ink-secondary">{card.errand_title}</span>
-            <span
-              className={`text-xs ml-auto ${card.strictly_necessary ? 'text-ink-muted' : 'text-ink-muted/60'}`}
-            >
+            <span className="text-xs ml-auto shrink-0 text-ink-muted">
               {card.strictly_necessary ? t('errand.necessary') : t('errand.optional')}
             </span>
           </div>
@@ -109,7 +125,7 @@ export function ErrandCard({ card }: { card: ErrandCardData }) {
           )}
 
           <p className="mt-1 text-xs text-ink-muted">
-            {expired ? t('errand.expired') : t('errand.expiresIn', { time: `${minutes}m` })}
+            {expired ? t('errand.expired') : t('errand.expiresIn', { time: expiresIn })}
           </p>
         </div>
       </div>
@@ -129,7 +145,7 @@ export function ErrandCard({ card }: { card: ErrandCardData }) {
             type="button"
             onClick={submitChangePrice}
             disabled={deciding || newPrice === ''}
-            className="px-3 py-1 text-xs rounded-md bg-yellow-600 text-white hover:bg-yellow-500 disabled:opacity-50"
+            className={`px-3 py-1 text-xs rounded-md bg-primary-600 text-white hover:bg-primary-500 ${DISABLED_FILLED} ${FOCUS_RING}`}
           >
             {t('errand.changePrice')}
           </button>
@@ -140,7 +156,7 @@ export function ErrandCard({ card }: { card: ErrandCardData }) {
             type="button"
             onClick={() => decide('approve')}
             disabled={deciding || expired}
-            className="px-3 py-1 text-xs rounded-md bg-green-600 text-white hover:bg-green-500 disabled:opacity-50"
+            className={`px-3 py-1 text-xs rounded-md border border-primary-600/50 text-primary-300 hover:bg-primary-600/15 ${DISABLED} ${FOCUS_RING}`}
           >
             {t('errand.approve')}
           </button>
@@ -148,7 +164,7 @@ export function ErrandCard({ card }: { card: ErrandCardData }) {
             type="button"
             onClick={() => setChanging(true)}
             disabled={deciding || expired}
-            className="px-3 py-1 text-xs rounded-md border border-yellow-800/40 text-yellow-400 hover:bg-yellow-900/20 disabled:opacity-50"
+            className={`px-3 py-1 text-xs rounded-md border border-dark-active text-ink-primary hover:bg-dark-hover ${DISABLED} ${FOCUS_RING}`}
           >
             {t('errand.changePrice')}
           </button>
@@ -156,7 +172,7 @@ export function ErrandCard({ card }: { card: ErrandCardData }) {
             type="button"
             onClick={() => decide('reject')}
             disabled={deciding || expired}
-            className="px-3 py-1 text-xs rounded-md border border-red-800/40 text-red-400 hover:bg-red-900/20 disabled:opacity-50"
+            className={`px-3 py-1 text-xs rounded-md border border-dark-active text-ink-primary hover:bg-dark-hover ${DISABLED} ${FOCUS_RING}`}
           >
             {t('errand.reject')}
           </button>

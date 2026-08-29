@@ -158,7 +158,7 @@ monorepo 構成、テストスタック、コーディング規約は **[`CONTRI
 
 - **バックエンド**：Bun + TypeScript + Hono
 - **クライアント**：Tauri 2.0 + React 19 + TypeScript + Tailwind
-- **データ**：PostgreSQL 16 + Redis + NATS + Qdrant + MinIO
+- **データ**：PostgreSQL 18 + Qdrant + MinIO
 - **プロトコル**：W3C DID、HTTP メッセージ署名（RFC 9421）、MCP、A2A、NANDA AgentFacts
 - **LLM**：BYOK（Claude · GPT · DeepSeek · Qwen · GLM · Ollama）
 

@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { FOCUS_RING } from '../lib/styles.js';
+import { DISABLED, FOCUS_RING } from '../lib/styles.js';
 
 // The footer control for the two lists the gateway now pages rather than
 // returning whole: contacts and knowledge-base documents. It renders nothing
@@ -25,7 +25,7 @@ export function LoadMore({
       type="button"
       onClick={onMore}
       disabled={busy}
-      className={`w-full py-3 text-xs text-ink-secondary hover:text-ink-primary hover:bg-dark-hover disabled:opacity-40 transition-colors ${FOCUS_RING}`}
+      className={`w-full py-3 text-xs text-ink-secondary hover:text-ink-primary hover:bg-dark-hover ${DISABLED} transition-colors ${FOCUS_RING}`}
     >
       {busy ? t('common.loading') : t('common.loadMore', { shown, total })}
     </button>

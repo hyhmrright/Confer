@@ -17,8 +17,8 @@ One command starts the whole platform:
 | `client` | built from `infra/client.Dockerfile` | Web UI + nginx reverse proxy (the only port exposed) |
 | `gateway` | built from `infra/gateway.Dockerfile` | Hono API, A2A endpoints, WebSocket |
 | `migrate` | one-shot | runs Drizzle migrations, then exits |
-| `postgres` | `postgres:16-alpine` | primary datastore |
-| `qdrant` | `qdrant/qdrant:v1.12.0` | vector search for the RAG knowledge base |
+| `postgres` | `postgres:18-alpine` | primary datastore |
+| `qdrant` | `qdrant/qdrant:v1.19.0` | vector search for the RAG knowledge base |
 | `minio` | `minio/minio` | S3-compatible file storage |
 
 nginx (inside `client`) serves the SPA on port **80** and reverse-proxies
@@ -130,6 +130,14 @@ docker compose -f docker-compose.prod.yml up -d
 git pull
 docker compose -f docker-compose.prod.yml up -d --build   # migrate re-runs automatically
 ```
+
+> **Instances created before 2026-08-29 need one migration first.** The stack moved
+> to PostgreSQL 18 and Qdrant 1.19, and neither reads storage the older version
+> wrote. Nothing is lost and both failures are loud — postgres refuses to start and
+> says why, qdrant panics on load — but the move needs a dump and restore. The
+> procedure is in
+> [the Chinese guide](../09-deployment.md#upgrading-an-instance-created-before-2026-08-29);
+> `npx confer-cli` checks for it before starting anything and prints the same steps.
 
 ### Resetting (wipes all data)
 

@@ -64,16 +64,35 @@ describe('PermissionCard', () => {
     expect(screen.getByText(/did:web:example\.com/)).toBeDefined();
     unmount();
 
-    render(<PermissionCard request={{ ...request, peer_name: null, peer_did: null }} />);
-    expect(screen.getByText('An agent is requesting: send_message')).toBeDefined();
+    // An action the client has no label for — the branch that has to keep
+    // working when a newer gateway invents one.
+    render(
+      <PermissionCard
+        request={{ ...request, action: 'reticulate_splines', peer_name: null, peer_did: null }}
+      />,
+    );
+    expect(screen.getByText('An agent is requesting: reticulate_splines')).toBeDefined();
+  });
+
+  // The actions agent-runtime names by hand used to fall through to the generic
+  // branch, so the L3 ones — money, signatures — reached the owner as a raw
+  // identifier on the one screen where understanding the request is the point.
+  test('names a known action in prose rather than printing its identifier', async () => {
+    await changeLanguage('en');
+    render(<PermissionCard request={{ ...request, action: 'sign_contract' }} />);
+    expect(screen.getByText('Alice is asking to sign a contract on your behalf')).toBeDefined();
+    expect(screen.queryByText(/sign_contract/)).toBeNull();
   });
 
   test('deciding posts the decision and swaps the card into its decided state', async () => {
     post.mockResolvedValueOnce({});
     const onDecided = mock(() => {});
+    await changeLanguage('en');
     render(<PermissionCard request={request} onDecided={onDecided} />);
 
-    fireEvent.click(screen.getAllByRole('button')[1] as HTMLElement); // allow_always
+    // By name, not by index: the order of these three is a design decision that
+    // has already changed once, and a positional selector silently retargets.
+    fireEvent.click(screen.getByRole('button', { name: 'Always allow' }));
 
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
     expect(post).toHaveBeenCalledWith('/permissions/req-1/decide', {
@@ -86,9 +105,10 @@ describe('PermissionCard', () => {
 
   test('a failed decision keeps the controls and surfaces an error', async () => {
     post.mockRejectedValueOnce(new Error('boom'));
+    await changeLanguage('en');
     render(<PermissionCard request={request} />);
 
-    fireEvent.click(screen.getAllByRole('button')[2] as HTMLElement); // deny
+    fireEvent.click(screen.getByRole('button', { name: 'Deny' }));
 
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
     // Still decidable — a network failure must not look like a decision.

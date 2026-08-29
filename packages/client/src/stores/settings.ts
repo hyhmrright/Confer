@@ -25,12 +25,30 @@ interface AgentConfig {
 interface AgentPatch {
   name?: string;
   description?: string;
+  is_public?: boolean;
   model_config_json?: ModelConfig;
 }
 
 interface LlmKeyEntry {
   provider: string;
   configured: boolean;
+}
+
+/**
+ * Why a provider's model list came back empty. The gateway distinguishes these
+ * so the settings UI can tell the owner what to do about it — an empty list on
+ * its own reads as "this provider has no models", which was never true.
+ */
+export type ModelListError = 'no_key' | 'unsupported' | 'unauthorized' | 'unreachable';
+
+export interface ModelList {
+  models: string[];
+  error?: ModelListError;
+}
+
+interface ModelListResponse {
+  models?: { id: string }[];
+  error?: ModelListError;
 }
 
 interface SettingsState {
@@ -47,7 +65,7 @@ interface SettingsState {
   loadLlmKeys: () => Promise<void>;
   saveLlmKey: (provider: string, apiKey: string) => Promise<void>;
   removeLlmKey: (provider: string) => Promise<void>;
-  fetchModels: (provider: string) => Promise<{ value: string; label: string }[]>;
+  fetchModels: (provider: string) => Promise<ModelList>;
   clearMessages: () => void;
 }
 
@@ -139,12 +157,12 @@ export const useSettingsStore = create<SettingsState>((set) => ({
 
   fetchModels: async (provider) => {
     try {
-      const data = await api.get<{ models: { id: string }[] }>(
-        `/agents/me/llm-keys/${provider}/models`,
-      );
-      return (data.models ?? []).map((m) => ({ value: m.id, label: m.id }));
+      const data = await api.get<ModelListResponse>(`/agents/me/llm-keys/${provider}/models`);
+      return { models: (data.models ?? []).map((m) => m.id), error: data.error };
     } catch {
-      return [];
+      // The gateway itself is unreachable, which is a different failure from
+      // the vendor being unreachable but reads the same to the owner.
+      return { models: [], error: 'unreachable' };
     }
   },
 

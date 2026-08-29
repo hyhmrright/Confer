@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { dateLocale, type TranslationKey } from '../i18n/index.js';
-import { FOCUS_RING } from '../lib/styles.js';
+import { DISABLED, FOCUS_RING } from '../lib/styles.js';
 import {
   type AdminAgent,
   type AdminConversation,
@@ -82,7 +82,7 @@ function RowAction({
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className={`text-xs px-2 py-1 rounded-md ${toneClass} hover:bg-dark-hover disabled:opacity-40`}
+      className={`text-xs px-2 py-1 rounded-md ${toneClass} hover:bg-dark-hover ${DISABLED}`}
     >
       {children}
     </button>
@@ -220,7 +220,7 @@ function Pager({
 }) {
   const { t } = useTranslation();
   const lastPage = Math.max(1, Math.ceil(total / pageSize));
-  const btn = `text-xs px-3 py-1.5 rounded-md text-ink-secondary hover:bg-dark-hover disabled:opacity-40 ${FOCUS_RING}`;
+  const btn = `text-xs px-3 py-1.5 rounded-md text-ink-secondary hover:bg-dark-hover ${DISABLED} ${FOCUS_RING}`;
 
   return (
     <div className="flex items-center justify-between pt-2">
@@ -599,7 +599,7 @@ function GlobalConfig() {
             type="button"
             disabled={saving || instanceName.trim().length === 0}
             onClick={saveInstanceName}
-            className="text-xs px-4 py-2 rounded-lg bg-primary-600/15 text-primary-400 hover:bg-primary-600/25 disabled:opacity-40"
+            className={`text-xs px-4 py-2 rounded-lg bg-primary-600/15 text-primary-400 hover:bg-primary-600/25 ${DISABLED}`}
           >
             {t('admin.configSave')}
           </button>

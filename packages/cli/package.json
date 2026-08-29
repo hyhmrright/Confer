@@ -27,7 +27,7 @@
     "node": ">=18"
   },
   "scripts": {
-    "build": "bun build ./src/index.ts --target=node --outfile=./dist/confer.mjs && cp ../../docker-compose.ghcr.yml ./dist/docker-compose.ghcr.yml",
+    "build": "bun build ./src/index.ts --target=node --outfile=./dist/confer.mjs && cp ../../docker-compose.ghcr.yml ../../docker-compose.tls.yml ./dist/",
     "prepack": "bun run build",
     "test": "bun test"
   }

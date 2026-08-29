@@ -1,10 +1,11 @@
-import { assertPublicHostname, resolveDID, SsrfBlockedError } from '@confer/identity';
+import { assertPublicHostname, SsrfBlockedError } from '@confer/identity';
 import { AppError, contactLookupSchema, newId, policyOverridesSchema } from '@confer/shared';
 import { and, count, desc, eq, like } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { getDb } from '../db/connection.js';
 import { agents, peerAgents, peerContacts } from '../db/schema.js';
+import { resolveDidDocument } from '../lib/did-resolution.js';
 import { parseLimit, parseOffset } from '../lib/pagination.js';
 import { type PeerAgentRow, upsertPeerAgent } from '../lib/peer-agent.js';
 import { selfA2AEndpoint } from '../lib/public-identity.js';
@@ -307,7 +308,7 @@ function lookupByDomain(value: string): Promise<LookupResult> {
 
 function lookupByDid(value: string): Promise<LookupResult> {
   return safeLookup(async () => {
-    const result = await withTimeout(resolveDID(value), LOOKUP_TIMEOUT_MS);
+    const result = await withTimeout(resolveDidDocument(value), LOOKUP_TIMEOUT_MS);
     if (!result.ok) {
       return { candidates: [], error: result.error };
     }

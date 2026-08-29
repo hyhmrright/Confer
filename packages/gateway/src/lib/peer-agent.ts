@@ -26,13 +26,19 @@ export async function upsertPeerAgent(input: UpsertPeerAgentInput): Promise<Peer
   const agentFacts = (input.agentFacts ?? {}) as Record<string, unknown>;
 
   const updateSet: Record<string, unknown> = {
-    endpoint: input.endpoint,
     agent_facts_json: agentFacts,
     fetched_at: new Date(),
     updated_at: new Date(),
   };
   if (input.name !== undefined) updateSet.name = input.name;
   if (input.description !== undefined) updateSet.description = input.description;
+  // An empty endpoint means "could not work out where this peer lives", never
+  // "this peer has no endpoint" — inbound A2A passes whatever DID resolution
+  // returned, and that is '' whenever it failed. Writing it would erase the
+  // endpoint contact discovery had already stored, so the peer would be
+  // reachable exactly until it first spoke to us, and every reply after that
+  // would be dropped with "No endpoint known for peer".
+  if (input.endpoint) updateSet.endpoint = input.endpoint;
 
   const [row] = await db
     .insert(peerAgents)
