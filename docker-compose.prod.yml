@@ -59,6 +59,13 @@ services:
       context: .
       dockerfile: infra/gateway.Dockerfile
     restart: unless-stopped
+    # A local model runtime (Ollama, LM Studio) listens on the owner's own
+    # machine, and the gateway is what dials it — both to chat and to list the
+    # models the settings UI offers. Docker Desktop resolves this name on its
+    # own; Linux does not, and without the mapping the owner's only usable
+    # address would be a LAN IP that changes.
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
     depends_on:
       postgres:
         condition: service_healthy

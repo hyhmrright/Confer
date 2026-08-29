@@ -1,51 +1,60 @@
-import { useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
+import type { ModelListError } from '../stores/settings.js';
 import { useSettingsStore } from '../stores/settings.js';
 
-interface ModelOption {
-  value: string;
-  label: string;
-}
-
 export interface ProviderModelFetch {
-  dynamicModels: ModelOption[];
-  loadingModels: boolean;
-  // Fetch the available models for a provider into `dynamicModels`. Ollama is
-  // probed directly on its local HTTP endpoint; everything else goes through the
-  // settings store (which proxies to the gateway). Best-effort: clears the list
-  // on any failure. Pass an empty provider to reset.
-  fetchForProvider: (provider: string) => Promise<void>;
-  reset: () => void;
+  models: string[];
+  loading: boolean;
+  /** Set when the list came back empty; names which failure it was. */
+  error: ModelListError | null;
+  /**
+   * Load a provider's available models from the vendor, via the gateway. Pass
+   * an empty provider to reset.
+   *
+   * Ollama used to be special-cased here and probed straight from the browser
+   * at a hardcoded `http://localhost:11434`. That reached a different machine
+   * than the one the agent chats with (the gateway runs in a container, where
+   * the owner's address is `host.docker.internal`), it ignored whatever address
+   * the owner had actually configured, and the browser's own CORS rules blocked
+   * it in the deployed build anyway. It now takes the same path as every other
+   * provider, so the list can only succeed where a chat would.
+   */
+  load: (provider: string) => Promise<void>;
 }
 
 export function useProviderModelFetch(): ProviderModelFetch {
   const fetchModels = useSettingsStore((s) => s.fetchModels);
-  const [dynamicModels, setDynamicModels] = useState<ModelOption[]>([]);
-  const [loadingModels, setLoadingModels] = useState(false);
+  const [models, setModels] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<ModelListError | null>(null);
 
-  const fetchForProvider = async (provider: string) => {
-    setDynamicModels([]);
-    if (!provider) return;
+  // Each call takes a ticket and only the newest one may write. Switching
+  // providers twice in quick succession leaves two requests in flight against
+  // different vendors, and they return in whatever order the network decides —
+  // without this, the slower one wins and the field ends up offering another
+  // vendor's models. The same applies to a double-click on Refresh.
+  const latestRequest = useRef(0);
 
-    setLoadingModels(true);
-    try {
-      if (provider === 'ollama') {
-        const resp = await fetch('http://localhost:11434/api/tags');
-        const data = (await resp.json()) as { models?: { name: string }[] };
-        setDynamicModels((data.models ?? []).map((m) => ({ value: m.name, label: m.name })));
-      } else {
-        setDynamicModels(await fetchModels(provider));
+  // Stable so callers can drive it from an effect without re-running on render.
+  const load = useCallback(
+    async (provider: string) => {
+      const ticket = ++latestRequest.current;
+      setModels([]);
+      setError(null);
+      if (!provider) return;
+
+      setLoading(true);
+      try {
+        const result = await fetchModels(provider);
+        if (ticket !== latestRequest.current) return;
+        setModels(result.models);
+        setError(result.error ?? null);
+      } finally {
+        if (ticket === latestRequest.current) setLoading(false);
       }
-    } catch {
-      setDynamicModels([]);
-    } finally {
-      setLoadingModels(false);
-    }
-  };
+    },
+    [fetchModels],
+  );
 
-  return {
-    dynamicModels,
-    loadingModels,
-    fetchForProvider,
-    reset: () => setDynamicModels([]),
-  };
+  return { models, loading, error, load };
 }

@@ -1,7 +1,10 @@
 export type { AgentContext } from './engine/agent-loop.js';
 export { runAgentLoop, streamAgentLoop } from './engine/agent-loop.js';
 export { AnthropicProvider } from './llm/anthropic.js';
-export { createDeepSeekProvider, OpenAICompatibleProvider } from './llm/openai-compatible.js';
+export {
+  createOpenAICompatibleProvider,
+  OpenAICompatibleProvider,
+} from './llm/openai-compatible.js';
 export type {
   LLMChatOptions,
   LLMMessage,

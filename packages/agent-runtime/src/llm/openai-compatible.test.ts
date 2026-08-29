@@ -1,14 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { lastBody, mockFetch, resetFetchCalls, restoreFetch } from '../test/fetch-mock.js';
-import {
-  createDeepSeekProvider,
-  createGlmProvider,
-  createOllamaProvider,
-  createOpenAICompatibleProvider,
-  createOpenAIProvider,
-  createQwenProvider,
-  OpenAICompatibleProvider,
-} from './openai-compatible.js';
+import { createOpenAICompatibleProvider, OpenAICompatibleProvider } from './openai-compatible.js';
 import type { LLMMessage, LLMStreamEvent } from './provider.js';
 
 function chatResponse(opts: { content?: string; finish_reason?: string }): Response {
@@ -105,48 +97,12 @@ describe('chat finish_reason mapping', () => {
   });
 });
 
-describe('named factories', () => {
-  test('createDeepSeekProvider', () => {
-    const p = createDeepSeekProvider('k');
-    expect(p.name).toBe('deepseek');
-    expect((p as unknown as { baseUrl: string }).baseUrl).toBe('https://api.deepseek.com');
-    expect((p as unknown as { defaultModel: string }).defaultModel).toBe('deepseek-chat');
-  });
-
-  test('createOpenAIProvider', () => {
-    const p = createOpenAIProvider('k');
-    expect(p.name).toBe('openai');
-    expect((p as unknown as { baseUrl: string }).baseUrl).toBe('https://api.openai.com');
-    expect((p as unknown as { defaultModel: string }).defaultModel).toBe('gpt-4o');
-  });
-
-  test('createQwenProvider', () => {
-    const p = createQwenProvider('k');
-    expect(p.name).toBe('qwen');
-    expect((p as unknown as { baseUrl: string }).baseUrl).toBe(
-      'https://dashscope.aliyuncs.com/compatible-mode',
-    );
-    expect((p as unknown as { defaultModel: string }).defaultModel).toBe('qwen-plus');
-  });
-
-  test('createGlmProvider uses /chat/completions path', () => {
-    const p = createGlmProvider('k');
-    expect(p.name).toBe('glm');
-    expect((p as unknown as { baseUrl: string }).baseUrl).toBe(
-      'https://open.bigmodel.cn/api/paas/v4',
-    );
-    expect((p as unknown as { defaultModel: string }).defaultModel).toBe('glm-4-flash');
-    expect((p as unknown as { completionsPath: string }).completionsPath).toBe('/chat/completions');
-  });
-
-  test('createOllamaProvider defaults to localhost', () => {
-    const p = createOllamaProvider();
-    expect(p.name).toBe('ollama');
-    expect((p as unknown as { baseUrl: string }).baseUrl).toBe('http://localhost:11434');
-    expect((p as unknown as { defaultModel: string }).defaultModel).toBe('llama3');
-  });
-
-  test('createOpenAICompatibleProvider applies defaults and overrides', () => {
+// The per-vendor factories that used to live here are gone: base URLs, paths
+// and default models now come from the shared catalogue, and `createProvider`
+// in registry.test.ts covers reading them. Only the escape hatch for an
+// uncatalogued endpoint is still this file's to test.
+describe('createOpenAICompatibleProvider', () => {
+  test('applies defaults and overrides', () => {
     const def = createOpenAICompatibleProvider('custom', 'k');
     expect(def.name).toBe('custom');
     expect((def as unknown as { baseUrl: string }).baseUrl).toBe('https://api.openai.com');
