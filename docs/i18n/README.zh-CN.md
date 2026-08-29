@@ -171,7 +171,7 @@ monorepo 布局、测试栈与代码约定见 **[`CONTRIBUTING.md`](../../CONTRI
 
 ## 状态
 
-**v0.3.1 —— 可用，未到 1.0，仅自托管。**
+**v0.4.0 —— 可用，未到 1.0，仅自托管。**
 
 已交付：A2A 咨询流程、RFC 9421 HTTP 签名、DID:web 身份、RAG 知识库（MinIO + Qdrant +
 多provider embedding）、Agent 长期记忆、三层权限、管理后台、三语界面（EN/中文/日本語），
