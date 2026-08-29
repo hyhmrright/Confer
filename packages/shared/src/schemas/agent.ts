@@ -1,7 +1,13 @@
 import { z } from 'zod';
+import { LLM_PROVIDER_IDS } from '../llm/catalog.js';
 
 export const modelChoiceSchema = z.object({
-  provider: z.enum(['openai', 'anthropic', 'deepseek', 'qwen', 'ollama']),
+  // Asked of the catalogue rather than listed here. This used to spell out five
+  // vendors and had fallen thirteen behind — the same drift, and for the same
+  // reason, as the `llmKeysSchema` deleted from user.ts. Written as a refine
+  // instead of an enum because `LLM_PROVIDER_IDS` is a derived array, not a
+  // literal tuple; it is the same check `routes/users.ts` runs on the live path.
+  provider: z.string().refine((id) => LLM_PROVIDER_IDS.includes(id), 'Unknown provider'),
   model: z.string(),
   temperature: z.number().min(0).max(2).optional(),
 });
