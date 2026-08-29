@@ -91,6 +91,10 @@ beforeEach(async () => {
 // Seed the user's own agent. `policies` defaults to {} (empty config → `allow`
 // for ordinary L2 questions). Pass `{ default: 'ask_user' }` (or an explicit
 // rule) to exercise the offline-answer hold gate. Returns the agent id.
+//
+// The model config is written because the settings UI writes it: an agent with
+// none has nothing to answer with, and used to be quietly pointed at a
+// hardcoded 'anthropic' instead. These fixtures were relying on that.
 async function seedTargetAgent(
   did: string,
   policies: Record<string, unknown> = {},
@@ -98,7 +102,13 @@ async function seedTargetAgent(
   const agentId = newId();
   await getDb()
     .insert(agents)
-    .values({ id: agentId, user_id: user.id, did, policies_json: policies });
+    .values({
+      id: agentId,
+      user_id: user.id,
+      did,
+      policies_json: policies,
+      model_config_json: { provider: 'anthropic' },
+    });
   return agentId;
 }
 

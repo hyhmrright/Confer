@@ -100,6 +100,11 @@ export async function searchQdrantCollection(
   return data.result;
 }
 
+// `wait=true` for the same reason the upsert above has it: Qdrant applies a
+// write asynchronously by default and answers `acknowledged` straight away, so
+// a deleted memory or document stayed searchable for a moment after its API
+// call returned 200 — and the tests that assert it is gone failed whenever the
+// collection was big enough for the write to lag.
 export async function deleteQdrantPoints(name: string, filter: unknown): Promise<void> {
-  await qdrantRequest('POST', `/collections/${name}/points/delete`, { filter });
+  await qdrantRequest('POST', `/collections/${name}/points/delete?wait=true`, { filter });
 }

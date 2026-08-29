@@ -5,7 +5,7 @@ import { eq } from 'drizzle-orm';
 import { loadOwnerSigningKey } from '../a2a/signing.js';
 import { app } from '../app.js';
 import { getDb } from '../db/connection.js';
-import { agents, peerAgents, peerContacts, users } from '../db/schema.js';
+import { agents, conversations, messages, peerAgents, peerContacts, users } from '../db/schema.js';
 import { mockFetch, post, put, resetDb } from '../test/helpers.js';
 import { resolveDidDocument } from './did-resolution.js';
 import { upsertPeerAgent } from './peer-agent.js';
@@ -239,6 +239,112 @@ describe('same-instance A2A', () => {
     expect(res.status).not.toBe(401);
   });
 
+  // A thread id of the asker's own choosing, in their numbering, meaningless
+  // to the receiver — which is the whole point of the tests that use it.
+  const PEER_THREAD = 'alice-thread-000000000000000000000001';
+
+  /** Alice and Bob, with Alice a contact of Bob's so her questions are answered. */
+  async function connectedPair(opts: { model: boolean }) {
+    const alice = await register('alice');
+    const bob = await register('bob');
+
+    const alicePeer = await upsertPeerAgent({ did: alice.agentDid, endpoint: selfA2AEndpoint() });
+    if (!alicePeer) throw new Error('expected a peer row');
+    await getDb()
+      .insert(peerContacts)
+      .values({ id: newId(), user_id: bob.userId, peer_id: alicePeer.id });
+
+    if (opts.model) {
+      await put('/api/v1/agents/me/llm-keys', {
+        token: bob.token,
+        body: { provider: 'openai', api_key: 'sk-test-llm' },
+      });
+      await getDb()
+        .update(agents)
+        .set({ model_config_json: { provider: 'openai', model: 'gpt-4.1-mini' } })
+        .where(eq(agents.user_id, bob.userId));
+    }
+
+    return { alice, bob };
+  }
+
+  interface A2ATraffic {
+    /** Message bodies Bob's gateway sent back to Alice's endpoint. */
+    outbound: Array<Record<string, unknown>>;
+    /** Each completion request's raw body, in order, for asserting on history. */
+    prompts: string[];
+  }
+
+  /** Stub the model and Alice's inbox, recording what Bob's side sends. */
+  function captureA2ATraffic(reply = 'Thursday works.'): A2ATraffic {
+    const traffic: A2ATraffic = { outbound: [], prompts: [] };
+    restoreFetch = mockFetch((url, init, input) => {
+      if (url.includes('/embeddings')) {
+        const v = new Array(1536).fill(0);
+        v[0] = 1;
+        return Response.json({ data: [{ embedding: v, index: 0 }] });
+      }
+      if (url.includes('/chat/completions')) {
+        traffic.prompts.push(String(init?.body ?? ''));
+        return new Response(
+          `data: {"choices":[{"delta":{"content":${JSON.stringify(reply)}}}]}\n\ndata: [DONE]\n\n`,
+          { status: 200, headers: { 'content-type': 'text/event-stream' } },
+        );
+      }
+      if (url.includes('/a2a/v1/messages')) {
+        // The signed Request carries the body, so read it from there.
+        void (input as Request)
+          .clone()
+          .json()
+          .then((b) => traffic.outbound.push(b as Record<string, unknown>));
+        return Response.json(
+          { message_id: newId(), thread_id: PEER_THREAD, stream_url: '' },
+          {
+            status: 201,
+          },
+        );
+      }
+      return undefined;
+    });
+    return traffic;
+  }
+
+  /** Send one signed question from Alice to Bob's agent in the given thread. */
+  async function ask(
+    alice: Registered,
+    bob: Registered,
+    threadId: string,
+    content: string,
+  ): Promise<void> {
+    const key = await loadOwnerSigningKey(alice.userId);
+    if (!key.ok) throw new Error(`alice cannot sign: ${key.error}`);
+
+    const signed = await signRequest(
+      new Request('http://localhost/a2a/v1/messages', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          from: alice.agentDid,
+          to: bob.agentDid,
+          thread_id: threadId,
+          message: { type: 'question', content },
+        }),
+      }),
+      await importPrivateKey(JSON.parse(key.value.privateKeyJwk) as JsonWebKey),
+      key.value.keyId,
+    );
+    expect((await app.request(signed)).status).toBeLessThan(300);
+  }
+
+  // The turn is spawned off the request, so every assertion about what Bob sent
+  // has to wait for it rather than sleeping a fixed amount.
+  async function waitForOutbound(traffic: A2ATraffic, count: number): Promise<void> {
+    for (let i = 0; i < 200 && traffic.outbound.length < count; i++) {
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    expect(traffic.outbound).toHaveLength(count);
+  }
+
   test('still 404s for a DID belonging to nobody here', async () => {
     const alice = await register('alice');
     const key = await loadOwnerSigningKey(alice.userId);
@@ -394,6 +500,61 @@ describe('same-instance A2A', () => {
 
     expect(outbound).toHaveLength(1);
     expect(outbound[0]?.thread_id).toBe(ALICE_THREAD);
+  });
+
+  // Thread ids are per-side, so an inbound one names nothing here — and the
+  // receiver treated "not one of mine" as "no thread at all", opening a fresh
+  // conversation for every message. A follow-up never sat with the question it
+  // followed, the owner's list filled with one-line threads, and the agent had
+  // no history to answer from.
+  test('a second question in the same peer thread joins the first', async () => {
+    const { alice, bob } = await connectedPair({ model: true });
+    const seen = captureA2ATraffic();
+
+    await ask(alice, bob, PEER_THREAD, 'Are you free on Thursday?');
+    await waitForOutbound(seen, 1);
+    await ask(alice, bob, PEER_THREAD, 'And Friday?');
+    await waitForOutbound(seen, 2);
+
+    const threads = await getDb()
+      .select({ id: conversations.id })
+      .from(conversations)
+      .where(eq(conversations.created_by, bob.userId));
+    expect(threads).toHaveLength(1);
+
+    // Both questions and both answers, in the one thread.
+    const inThread = await getDb()
+      .select({ id: messages.id })
+      .from(messages)
+      .where(eq(messages.conversation_id, threads[0]?.id ?? ''));
+    expect(inThread).toHaveLength(4);
+
+    // And the agent actually saw the earlier turn: history is what a shared
+    // thread is FOR, so counting rows alone would pass on a thread nobody reads.
+    expect(seen.prompts[1]).toContain('Are you free on Thursday?');
+  });
+
+  // An agent with nothing configured used to dial a hardcoded 'anthropic', get
+  // a 401, log it and stop. Nothing went back to the asker, whose consult then
+  // long-polled to its deadline and reported `pending` — forever, on every
+  // retry, with no way to tell "still thinking" from "never coming".
+  test('an agent with no model tells the asker instead of going quiet', async () => {
+    const { alice, bob } = await connectedPair({ model: false });
+    const seen = captureA2ATraffic();
+
+    await ask(alice, bob, PEER_THREAD, 'Are you free on Thursday?');
+    await waitForOutbound(seen, 1);
+
+    const notice = seen.outbound[0] as {
+      thread_id?: string;
+      message?: { type?: string; content?: string; context?: { error?: string } };
+    };
+    expect(notice.message?.type).toBe('notification');
+    expect(notice.message?.context?.error).toBe('no_model_configured');
+    // Addressed the same way an answer is, or it lands outside the thread the
+    // asker is watching and the silence is unchanged.
+    expect(notice.thread_id).toBe(PEER_THREAD);
+    expect(notice.message?.content).toBeTruthy();
   });
 
   test('still rejects a forged signature from a local identity', async () => {

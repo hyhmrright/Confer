@@ -265,6 +265,8 @@ export const en: Resources = {
     statusThinking: 'Thinking...',
     statusCallingTool: 'Calling {{tool}}...',
     statusFailed: 'That turn did not finish. Try again.',
+    statusNoModel: 'No model chosen yet. Pick a provider and model in Settings → Agent.',
+    statusNoKey: 'That provider has no API key yet. Add one in Settings → Models.',
     fileTruncated: '[content truncated]',
     fileReadError: 'Could not read that file. Please choose a text file.',
   },

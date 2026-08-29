@@ -10,6 +10,9 @@ export interface OutboundA2AMessage {
     type: 'question' | 'answer' | 'notification';
     content: string;
     language?: string;
+    // Machine-readable detail alongside the prose. A failure notice puts its
+    // code here so the receiving side can act on it without parsing English.
+    context?: Record<string, unknown>;
   };
 }
 

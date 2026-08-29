@@ -258,6 +258,8 @@ export const zh = {
     statusThinking: '正在思考...',
     statusCallingTool: '正在调用 {{tool}}...',
     statusFailed: '这一轮没有完成，请重试。',
+    statusNoModel: '还没有选择模型。到「设置 → Agent」里选一个服务商和模型。',
+    statusNoKey: '这个服务商还没有 API Key。到「设置 → 模型」里填上。',
     fileTruncated: '[内容已截断]',
     fileReadError: '无法读取该文件，请选择文本文件。',
   },

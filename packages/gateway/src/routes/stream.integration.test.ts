@@ -119,6 +119,40 @@ describe('GET /stream tool execution', () => {
 
   afterEach(() => restoreFetch?.());
 
+  // An agent with nothing configured used to be pointed at a hardcoded
+  // 'anthropic' and dialled with whatever key happened to be around — so the
+  // reader was told their turn failed with a 401 from a vendor they may never
+  // have heard of, instead of that they have not picked a model yet.
+  test.each([
+    [{}, 'no_model_configured'],
+    [{ provider: 'openai' }, 'no_key_for_provider'],
+  ])('reports %o as a configuration problem, without calling a model', async (config, code) => {
+    const convId = await seedConversation(user.id);
+    const msgId = await seedMessage(convId, user.id);
+    await seedParticipant(convId, user.id);
+    await seedAgent(user.id, config);
+
+    let calls = 0;
+    restoreFetch = mockFetch((url) => {
+      if (url.includes('/embeddings')) return undefined;
+      calls++;
+      return new Response('{}', { status: 401 });
+    });
+
+    const res = await get(`/api/v1/stream/${convId}/${msgId}`, { token: user.token });
+    const events = parseSSE(await res.text());
+
+    const error = events.find((e) => e.event === 'error');
+    if (!error) throw new Error('expected an error event in the stream');
+    expect(JSON.parse(error.data).message).toBe(code);
+    expect(calls).toBe(0);
+
+    // And nothing was written: a turn that never ran must stay replayable.
+    expect(
+      await getDb().select().from(messages).where(eq(messages.in_reply_to, msgId)),
+    ).toHaveLength(0);
+  });
+
   test('tool_result event carries the tool output, not the tool name', async () => {
     const convId = await seedConversation(user.id);
     const msgId = await seedMessage(convId, user.id);

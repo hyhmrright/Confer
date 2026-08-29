@@ -36,6 +36,28 @@ interface Conversation {
 // Matches the gateway's cap for this endpoint's default; one "load older" step.
 const MESSAGE_PAGE_SIZE = 50;
 
+// The stream's error events carry a machine code, never a sentence — the
+// gateway has no locale context, so the wording is chosen here.
+const STREAM_ERROR_TEXT = {
+  no_model_configured: 'message.statusNoModel',
+  // A provider the catalogue no longer carries is still a choice to be made in
+  // the same place — "try again" would be the one useless thing to say.
+  unknown_provider: 'message.statusNoModel',
+  no_key_for_provider: 'message.statusNoKey',
+} as const;
+
+/**
+ * What to show the reader for a stream error, or null when there is nothing to
+ * say. `already_generating` is not a failure: another tab, or the request from
+ * before a reload, is producing this very answer and it arrives over the
+ * WebSocket. A misconfiguration names its own fix; anything else is generic.
+ */
+function streamErrorText(code: string): string | null {
+  if (code === 'already_generating') return null;
+  const key = STREAM_ERROR_TEXT[code as keyof typeof STREAM_ERROR_TEXT];
+  return key ? i18n.t(key) : i18n.t('message.statusFailed');
+}
+
 interface MessagePage {
   messages: Array<Message & { citations_json?: unknown }>;
 }
@@ -305,11 +327,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 streaming: false,
                 streamContent: '',
                 streamCitations: [],
-                // `already_generating` is not a failure: another tab or the
-                // request before a reload is producing this very answer, and it
-                // arrives over the WebSocket. Anything else did fail.
-                agentStatus:
-                  event.message === 'already_generating' ? null : i18n.t('message.statusFailed'),
+                agentStatus: streamErrorText(event.message),
               });
               return;
             }

@@ -1,10 +1,10 @@
-import { createHash } from 'node:crypto';
 import { AppError, consultRequestSchema, newId } from '@confer/shared';
 import { and, asc, eq, gt, or } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { deliverConsult } from '../a2a/consult.js';
 import { getDb } from '../db/connection.js';
 import { conversationParticipants, conversations, messages } from '../db/schema.js';
+import { derivedId } from '../lib/derived-id.js';
 import { assertIsContact, assertOwnsConversation } from '../lib/tenant.js';
 import { authMiddleware } from '../middleware/auth.js';
 import type { AppEnv } from '../types.js';
@@ -14,29 +14,12 @@ consultRoutes.use('/*', authMiddleware);
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
-
-// Deterministic 26-char (ULID-shaped) conversation id for a (user, peer) pair.
-// Making the id derivable means concurrent first-consults collide on the
-// primary key instead of racing to create two duplicate threads.
-function consultConversationId(userId: string, peerId: string): string {
-  const hash = createHash('sha256').update(`consult:${userId}:${peerId}`).digest();
-  let n = 0n;
-  for (let i = 0; i < 16; i++) n = (n << 8n) | BigInt(hash[i] ?? 0);
-  let out = '';
-  for (let i = 0; i < 26; i++) {
-    out = CROCKFORD[Number(n & 31n)] + out;
-    n >>= 5n;
-  }
-  return out;
-}
-
 // Return the consult conversation for this (user, peer), creating it on first
 // use. The conversation id is deterministic and the insert is conflict-safe, so
 // concurrent callers converge on one thread (the loser's insert is a no-op).
 async function getOrCreateConsultConversation(userId: string, peerId: string): Promise<string> {
   const db = getDb();
-  const convId = consultConversationId(userId, peerId);
+  const convId = derivedId('consult', userId, peerId);
 
   // Atomic so a conversation row can never persist without its participants:
   // the creator inserts both or neither. Concurrent callers conflict on the

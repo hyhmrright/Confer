@@ -1,5 +1,4 @@
 import type { LLMMessage } from '@confer/agent-runtime';
-import { createProvider } from '@confer/agent-runtime';
 import { AppError, newId } from '@confer/shared';
 import { and, desc, eq, lt } from 'drizzle-orm';
 import { type Context, Hono } from 'hono';
@@ -7,7 +6,8 @@ import { streamSSE } from 'hono/streaming';
 import { getDb } from '../db/connection.js';
 import { agents, messages } from '../db/schema.js';
 import { getEnv } from '../env.js';
-import { decryptUserKey, getUserLlmKeys, resolveAgentCapabilities } from '../lib/llm-keys.js';
+import { resolveAgentModel } from '../lib/agent-model.js';
+import { getUserLlmKeys, resolveAgentCapabilities } from '../lib/llm-keys.js';
 import { assertIsConversationParticipant } from '../lib/tenant.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { runAgentTurn } from '../orchestration/agent-orchestrator.js';
@@ -116,21 +116,21 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
   return streamSSE(c, async (stream) => {
     try {
       const modelConfig = agent.model_config_json as Record<string, unknown> | null;
-      const providerName = (modelConfig?.provider as string) ?? 'anthropic';
-      const model = (modelConfig?.model as string) || undefined;
       const systemPrompt = (modelConfig?.system_prompt as string) ?? DEFAULT_SYSTEM_PROMPT;
 
       const llmKeys = await getUserLlmKeys(user.sub);
-      const apiKey = await decryptUserKey(llmKeys, providerName, env.ENCRYPTION_KEY);
-
-      const provider = createProvider(providerName, apiKey);
-      if (!provider) {
+      const resolved = await resolveAgentModel(modelConfig, llmKeys, env.ENCRYPTION_KEY);
+      if (!resolved.ok) {
+        // A machine code, not a sentence: the gateway has no locale context, and
+        // the reader distinguishes "you have not chosen a model yet" from "the
+        // provider you chose has no key" — different fixes, different screens.
         await stream.writeSSE({
           event: 'error',
-          data: JSON.stringify({ message: 'No LLM provider configured' }),
+          data: JSON.stringify({ message: resolved.error }),
         });
         return;
       }
+      const { provider, model } = resolved.value;
 
       // The last HISTORY_WINDOW messages before this one, oldest-first for the
       // model. Ordering ascending and taking the first 20 — which is what this

@@ -131,11 +131,18 @@ conversationRoutes.delete('/:id', async (c) => {
   // creator — a mere participant must not be able to destroy a shared thread.
   await assertOwnsConversation(user.sub, convId);
 
-  await db
-    .delete(conversationParticipants)
-    .where(eq(conversationParticipants.conversation_id, convId));
-  await db.delete(messages).where(eq(messages.conversation_id, convId));
-  await db.delete(conversations).where(eq(conversations.id, convId));
+  // One transaction, because these three used to be three statements and a
+  // crash between them left the conversation row standing with no participants
+  // — a thread nobody can read and nobody can be added back to. An inbound A2A
+  // conversation id is derived from the peer's thread id, so that dead row
+  // would be found again by the peer's next message and quietly collect it.
+  await db.transaction(async (tx) => {
+    await tx
+      .delete(conversationParticipants)
+      .where(eq(conversationParticipants.conversation_id, convId));
+    await tx.delete(messages).where(eq(messages.conversation_id, convId));
+    await tx.delete(conversations).where(eq(conversations.id, convId));
+  });
 
   return c.json({ ok: true });
 });
