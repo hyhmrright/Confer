@@ -1,5 +1,5 @@
 import { AppError, consultRequestSchema, newId } from '@confer/shared';
-import { and, asc, eq, gt, or } from 'drizzle-orm';
+import { and, asc, eq, gt } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { deliverConsult } from '../a2a/consult.js';
 import { getDb } from '../db/connection.js';
@@ -124,22 +124,25 @@ consultRoutes.get('/:conversationId/reply', async (c) => {
   const rawWait = Number(c.req.query('wait') ?? '25');
   const waitMs = (Number.isFinite(rawWait) ? Math.min(Math.max(rawWait, 0), 55) : 0) * 1000;
 
-  // Cursor over (created_at, id) so same-timestamp ties can't drop or duplicate
-  // a reply. `after` is the user's question id; an unknown id is a client bug,
-  // not "return the oldest reply" — reject it rather than misattribute.
+  // The cursor is the id alone. `newId` is monotonic, so an id IS the order —
+  // whereas this used to lead on created_at, which comes back from the driver
+  // as a millisecond JS Date after the column stored microseconds. Compared
+  // against another row that truncation reads as "later than", so a reply
+  // written just BEFORE the question could be handed back as its answer.
+  //
+  // `after` is the user's question id; an unknown one is a client bug, not
+  // "return the oldest reply" — reject it rather than misattribute.
   const afterId = c.req.query('after');
-  let afterTs = new Date(0);
   let afterCursorId = '';
   if (afterId) {
     // Scope the cursor lookup to this conversation: a message id from another
     // thread must not silently set the cursor.
     const [m] = await db
-      .select()
+      .select({ id: messages.id })
       .from(messages)
       .where(and(eq(messages.id, afterId), eq(messages.conversation_id, convId)))
       .limit(1);
     if (!m) throw new AppError('unknown_cursor', 'after message not found in this thread', 400);
-    afterTs = m.created_at;
     afterCursorId = m.id;
   }
 
@@ -159,12 +162,7 @@ consultRoutes.get('/:conversationId/reply', async (c) => {
   // No peer participant => nothing can answer this thread; don't poll.
   if (!peerId) return c.json({ status: 'pending' });
 
-  const cursor = afterCursorId
-    ? or(
-        gt(messages.created_at, afterTs),
-        and(eq(messages.created_at, afterTs), gt(messages.id, afterCursorId)),
-      )
-    : gt(messages.created_at, afterTs);
+  const cursor = afterCursorId ? gt(messages.id, afterCursorId) : undefined;
 
   const deadline = Date.now() + waitMs;
   for (;;) {
@@ -179,7 +177,7 @@ consultRoutes.get('/:conversationId/reply', async (c) => {
           cursor,
         ),
       )
-      .orderBy(asc(messages.created_at), asc(messages.id))
+      .orderBy(asc(messages.id))
       .limit(1);
 
     if (reply) return c.json({ status: 'answered', message: reply });
@@ -198,7 +196,7 @@ consultRoutes.get('/:conversationId', async (c) => {
     .select()
     .from(messages)
     .where(eq(messages.conversation_id, convId))
-    .orderBy(asc(messages.created_at))
+    .orderBy(asc(messages.id))
     .limit(200);
 
   return c.json({ conversation_id: convId, messages: rows });

@@ -194,6 +194,43 @@ describe('consult', () => {
     expect((await res.json()).status).toBe('pending');
   });
 
+  // The cursor used to lead on created_at, and the driver hands that back as a
+  // millisecond JS Date after the column stored microseconds — so a reply from
+  // the same millisecond as the question read as "later than" it whichever
+  // order they were actually written in. The reply here is timestamped after
+  // the question but minted before it, which is what that truncation looks
+  // like from the query's side.
+  test('a peer reply that predates the question is not returned as its answer', async () => {
+    await seedOwnAgent();
+    const peerId = await seedPeerContact();
+    mockOutbound();
+    const sent = await post(`${CONSULT}/${peerId}`, { token: user.token, body: { question: 'q' } });
+    const { conversation_id, message_id } = await sent.json();
+
+    const [question] = await getDb()
+      .select({ created_at: messages.created_at })
+      .from(messages)
+      .where(eq(messages.id, message_id))
+      .limit(1);
+
+    await getDb()
+      .insert(messages)
+      .values({
+        // Sorts before the question's id, so it was minted before it.
+        id: `0${'0'.repeat(25)}`,
+        conversation_id,
+        sender_type: 'peer_agent',
+        sender_id: peerId,
+        content: 'answer to something else',
+        created_at: new Date((question?.created_at.getTime() ?? 0) + 500),
+      });
+
+    const res = await get(`${CONSULT}/${conversation_id}/reply?after=${message_id}&wait=1`, {
+      token: user.token,
+    });
+    expect((await res.json()).status).toBe('pending');
+  });
+
   test('peer answer via inbound /a2a/v1/messages is correlated and retrievable', async () => {
     await seedOwnAgent();
     const peerId = await seedPeerContact();
