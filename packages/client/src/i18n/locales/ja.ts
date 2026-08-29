@@ -92,6 +92,9 @@ export const ja: Resources = {
       '{{provider}} はモデル一覧を公開していません。モデル名を直接入力してください。',
     agentModelNotListed:
       '{{provider}} の一覧に「{{model}}」がありません。提供終了の可能性があります。別のものを選んでください。',
+    agentIsPublic: 'このエージェントをインスタンス一覧に掲載する',
+    agentIsPublicHint:
+      '他のインスタンスから名前で検索したり、このドメインを閲覧して見つけられるようになります。DID はオンオフに関わらず常に利用できます。',
     agentSystemPrompt: 'システムプロンプト',
     agentSystemPromptPlaceholder: 'エージェントの動作や役割をカスタマイズ...',
     keysIntro:
@@ -202,7 +205,7 @@ export const ja: Resources = {
     emptyHint: 'エージェントを追加すると、あなたのエージェントが代理でやり取りできます。',
     unnamed: '名称未設定',
     dialogTitle: '連絡先を追加',
-    domainPlaceholder: 'ドメインを入力（例: acme.com）',
+    lookupPlaceholder: 'エージェント DID を貼り付け、またはドメインを入力',
     search: '検索',
     notFound: 'エージェントが見つかりません',
     unnamedAgent: '名称未設定のエージェント',
@@ -263,6 +266,7 @@ export const ja: Resources = {
     uploadFile: 'ファイルをアップロード',
     statusThinking: '考え中...',
     statusCallingTool: '{{tool}} を呼び出し中...',
+    statusFailed: 'この応答は完了しませんでした。もう一度お試しください。',
     fileTruncated: '[内容が切り詰められました]',
     fileReadError: 'このファイルを読み取れませんでした。テキストファイルを選択してください。',
   },

@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { clearDIDCache, importPrivateKey, signRequest } from '@confer/identity';
+import { newId } from '@confer/shared';
 import { eq } from 'drizzle-orm';
 import { loadOwnerSigningKey } from '../a2a/signing.js';
 import { app } from '../app.js';
 import { getDb } from '../db/connection.js';
-import { agents, peerAgents, users } from '../db/schema.js';
-import { mockFetch, post, resetDb } from '../test/helpers.js';
+import { agents, peerAgents, peerContacts, users } from '../db/schema.js';
+import { mockFetch, post, put, resetDb } from '../test/helpers.js';
 import { resolveDidDocument } from './did-resolution.js';
 import { upsertPeerAgent } from './peer-agent.js';
 import { instanceDid, selfA2AEndpoint } from './public-identity.js';
@@ -27,6 +28,7 @@ interface Registered {
   did: string;
   userId: string;
   agentDid: string;
+  token: string;
 }
 
 async function register(username: string): Promise<Registered> {
@@ -34,6 +36,7 @@ async function register(username: string): Promise<Registered> {
     body: { username, password: 'correct-horse-battery', device_id: `dev-${username}` },
   });
   expect(res.status).toBe(201);
+  const { access_token: token } = (await res.json()) as { access_token: string };
 
   const [user] = await getDb()
     .select({ id: users.id, did: users.did })
@@ -49,7 +52,7 @@ async function register(username: string): Promise<Registered> {
     .limit(1);
   if (!agent) throw new Error(`register did not create an agent for ${username}`);
 
-  return { username, did: user.did, userId: user.id, agentDid: agent.did };
+  return { username, did: user.did, userId: user.id, agentDid: agent.did, token };
 }
 
 let restoreFetch: (() => void) | undefined;
@@ -201,6 +204,196 @@ describe('same-instance A2A', () => {
       .where(eq(peerAgents.did, did))
       .limit(1);
     expect(peer?.endpoint).toBe('https://peer.example/a2a/v1');
+  });
+
+  // Two DIDs name the same agent: the `<user>:agent` one that public discovery
+  // lists, and the owner's, which is the only one with a resolvable document
+  // and the one the app shows behind a copy button. Delivery matched the first
+  // only, so a contact added from a pasted DID connected, verified, and then
+  // failed with "Target agent not found".
+  test("accepts a message addressed to the owner's DID, not just the agent's", async () => {
+    const alice = await register('alice');
+    const bob = await register('bob');
+
+    const key = await loadOwnerSigningKey(alice.userId);
+    expect(key.ok).toBe(true);
+    if (!key.ok) return;
+
+    const signed = await signRequest(
+      new Request('http://localhost/a2a/v1/messages', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          from: alice.agentDid,
+          to: bob.did, // the published, resolvable identifier
+          message: { type: 'question', content: 'Reachable?' },
+        }),
+      }),
+      await importPrivateKey(JSON.parse(key.value.privateKeyJwk) as JsonWebKey),
+      key.value.keyId,
+    );
+
+    forbidNetwork();
+    const res = await app.request(signed);
+    expect(res.status).not.toBe(404);
+    expect(res.status).not.toBe(401);
+  });
+
+  test('still 404s for a DID belonging to nobody here', async () => {
+    const alice = await register('alice');
+    const key = await loadOwnerSigningKey(alice.userId);
+    expect(key.ok).toBe(true);
+    if (!key.ok) return;
+
+    const signed = await signRequest(
+      new Request('http://localhost/a2a/v1/messages', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          from: alice.agentDid,
+          to: `${instanceDid()}:agents:nobody`,
+          message: { type: 'question', content: 'Anyone?' },
+        }),
+      }),
+      await importPrivateKey(JSON.parse(key.value.privateKeyJwk) as JsonWebKey),
+      key.value.keyId,
+    );
+
+    forbidNetwork();
+    expect((await app.request(signed)).status).toBe(404);
+  });
+
+  // A peer added by its resolvable (owner) DID then speaks as its AGENT DID.
+  // Keyed on `from` alone that looked like a different, unconnected peer — so
+  // the answer to your own question came back as a connection request from a
+  // stranger and sat in the permission inbox.
+  test('recognises a contact added by the DID that actually resolves', async () => {
+    const alice = await register('alice');
+    const bob = await register('bob');
+
+    // Bob adds Alice the only way the UI allows: by the DID she can copy.
+    const peer = await upsertPeerAgent({ did: alice.did, endpoint: selfA2AEndpoint() });
+    if (!peer) throw new Error('expected a peer row');
+    await getDb().insert(peerContacts).values({
+      id: newId(),
+      user_id: bob.userId,
+      peer_id: peer.id,
+    });
+
+    const key = await loadOwnerSigningKey(alice.userId);
+    expect(key.ok).toBe(true);
+    if (!key.ok) return;
+
+    const signed = await signRequest(
+      new Request('http://localhost/a2a/v1/messages', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          from: alice.agentDid, // …but speaks as her agent
+          to: bob.agentDid,
+          message: { type: 'answer', content: 'Thursday works.' },
+        }),
+      }),
+      await importPrivateKey(JSON.parse(key.value.privateKeyJwk) as JsonWebKey),
+      key.value.keyId,
+    );
+
+    forbidNetwork();
+    const res = await app.request(signed);
+
+    // 202 is "pending_connection" — the failure this covers. A connected peer
+    // gets its message accepted.
+    expect(res.status).not.toBe(202);
+    expect(res.status).toBeLessThan(300);
+  });
+
+  // A thread id names a conversation on the machine that created it, and
+  // `resolveOrCreateThread` refuses one the caller does not own — correctly,
+  // that is a tenant boundary. So a reply must be addressed with the thread id
+  // the ASKER sent. Replying with our own filed the answer under a brand new
+  // conversation on their side while they went on polling the one they made:
+  // every consult sat at "pending" forever with a good answer on both machines.
+  test("a reply is addressed with the asker's thread id, not ours", async () => {
+    const alice = await register('alice');
+    const bob = await register('bob');
+
+    // Alice is a contact of Bob's, so her question is answered rather than held.
+    const alicePeer = await upsertPeerAgent({
+      did: alice.agentDid,
+      endpoint: selfA2AEndpoint(),
+    });
+    if (!alicePeer) throw new Error('expected a peer row');
+    await getDb()
+      .insert(peerContacts)
+      .values({ id: newId(), user_id: bob.userId, peer_id: alicePeer.id });
+
+    await put('/api/v1/agents/me/llm-keys', {
+      token: bob.token,
+      body: { provider: 'openai', api_key: 'sk-test-llm' },
+    });
+    await getDb()
+      .update(agents)
+      .set({ model_config_json: { provider: 'openai', model: 'gpt-4.1-mini' } })
+      .where(eq(agents.user_id, bob.userId));
+
+    const ALICE_THREAD = 'alice-thread-01M0000000000000000000000';
+    const outbound: Array<Record<string, unknown>> = [];
+    restoreFetch = mockFetch((url, _init, input) => {
+      if (url.includes('/embeddings')) {
+        const v = new Array(1536).fill(0);
+        v[0] = 1;
+        return Response.json({ data: [{ embedding: v, index: 0 }] });
+      }
+      if (url.includes('/chat/completions')) {
+        return new Response(
+          'data: {"choices":[{"delta":{"content":"Thursday."}}]}\n\ndata: [DONE]\n\n',
+          { status: 200, headers: { 'content-type': 'text/event-stream' } },
+        );
+      }
+      // The reply Bob's gateway sends back to Alice's advertised endpoint.
+      if (url.includes('/a2a/v1/messages')) {
+        // The signed Request carries the body, so read it from there.
+        void (input as Request)
+          .clone()
+          .json()
+          .then((b) => outbound.push(b as Record<string, unknown>));
+        return Response.json(
+          { message_id: 'r1', thread_id: ALICE_THREAD, stream_url: '' },
+          {
+            status: 201,
+          },
+        );
+      }
+      return undefined;
+    });
+
+    const key = await loadOwnerSigningKey(alice.userId);
+    expect(key.ok).toBe(true);
+    if (!key.ok) return;
+
+    const signed = await signRequest(
+      new Request('http://localhost/a2a/v1/messages', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          from: alice.agentDid,
+          to: bob.agentDid,
+          thread_id: ALICE_THREAD,
+          message: { type: 'question', content: 'Are you free on Thursday?' },
+        }),
+      }),
+      await importPrivateKey(JSON.parse(key.value.privateKeyJwk) as JsonWebKey),
+      key.value.keyId,
+    );
+    expect((await app.request(signed)).status).toBeLessThan(300);
+
+    // The turn is spawned off the request, so wait for the reply to go out.
+    for (let i = 0; i < 100 && outbound.length === 0; i++) {
+      await new Promise((r) => setTimeout(r, 20));
+    }
+
+    expect(outbound).toHaveLength(1);
+    expect(outbound[0]?.thread_id).toBe(ALICE_THREAD);
   });
 
   test('still rejects a forged signature from a local identity', async () => {

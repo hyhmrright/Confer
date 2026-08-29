@@ -295,6 +295,25 @@ export const useChatStore = create<ChatState>((set, get) => ({
               set({ agentStatus: null });
             }
 
+            // The reader keys off the payload, not the `event:` line it skips,
+            // and only the error event carries `message`. Without this branch
+            // the loop ends having collected nothing and the tail call below
+            // committed an empty reply under a made-up id — a blank bubble
+            // presented as the agent's answer.
+            if (event.message) {
+              set({
+                streaming: false,
+                streamContent: '',
+                streamCitations: [],
+                // `already_generating` is not a failure: another tab or the
+                // request before a reload is producing this very answer, and it
+                // arrives over the WebSocket. Anything else did fail.
+                agentStatus:
+                  event.message === 'already_generating' ? null : i18n.t('message.statusFailed'),
+              });
+              return;
+            }
+
             if (event.finish_reason || event.message_id) {
               finalizeAgent(event.message_id);
             }

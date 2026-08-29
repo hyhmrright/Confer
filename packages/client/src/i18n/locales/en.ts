@@ -90,6 +90,9 @@ export const en: Resources = {
     agentModelUnsupported: '{{provider}} publishes no model list. Type the model name.',
     agentModelNotListed:
       '{{provider}} does not list "{{model}}". It may be retired — pick another before saving.',
+    agentIsPublic: 'List this agent in the instance directory',
+    agentIsPublicHint:
+      'Lets people on other instances find you by name or by browsing this domain. Your DID always works whether or not this is on.',
     agentSystemPrompt: 'System prompt',
     agentSystemPromptPlaceholder: "Customize your agent's behavior and role...",
     keysIntro:
@@ -200,7 +203,7 @@ export const en: Resources = {
     emptyHint: 'Add an agent and yours can start dealing with it on your behalf.',
     unnamed: 'Unnamed',
     dialogTitle: 'Add contact',
-    domainPlaceholder: 'Enter a domain, e.g. acme.com',
+    lookupPlaceholder: 'Paste an agent DID, or a domain to browse',
     search: 'Search',
     notFound: 'No agent found',
     unnamedAgent: 'Unnamed agent',
@@ -261,6 +264,7 @@ export const en: Resources = {
     uploadFile: 'Upload file',
     statusThinking: 'Thinking...',
     statusCallingTool: 'Calling {{tool}}...',
+    statusFailed: 'That turn did not finish. Try again.',
     fileTruncated: '[content truncated]',
     fileReadError: 'Could not read that file. Please choose a text file.',
   },

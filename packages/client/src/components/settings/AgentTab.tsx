@@ -93,6 +93,7 @@ export function AgentTab() {
   const [provider, setProvider] = useState('');
   const [model, setModel] = useState('');
   const [systemPrompt, setSystemPrompt] = useState('');
+  const [isPublic, setIsPublic] = useState(false);
   const {
     models,
     loading: loadingModels,
@@ -117,6 +118,7 @@ export function AgentTab() {
     if (agent) {
       setName(agent.name ?? '');
       setDescription(agent.description ?? '');
+      setIsPublic(agent.is_public ?? false);
       const cfg = agent.model_config_json ?? {};
       setProvider(cfg.provider ?? '');
       setModel(cfg.model ?? '');
@@ -141,6 +143,7 @@ export function AgentTab() {
     updateAgent({
       name: name || undefined,
       description: description || undefined,
+      is_public: isPublic,
       model_config_json: {
         provider: provider || undefined,
         model: model || undefined,
@@ -234,6 +237,26 @@ export function AgentTab() {
           />
         </div>
       )}
+      {/* Nothing in the app could turn this on, so it sat at its `false` default
+          for every account ever created — and both ways of finding a peer read
+          it. `/.well-known/agents.json` returned an empty list on every
+          instance, and searching by name matched nobody, which made adding a
+          contact impossible and everything downstream of it unreachable. */}
+      <div className="flex items-start gap-3 rounded-xl border border-dark-border p-3">
+        <input
+          id="agent-is-public"
+          type="checkbox"
+          checked={isPublic}
+          onChange={(e) => setIsPublic(e.target.checked)}
+          className={`mt-0.5 h-4 w-4 shrink-0 accent-primary-600 ${FOCUS_RING}`}
+        />
+        <div className="min-w-0">
+          <label htmlFor="agent-is-public" className="text-sm text-ink-primary">
+            {t('settings.agentIsPublic')}
+          </label>
+          <p className="mt-1 text-xs text-ink-muted">{t('settings.agentIsPublicHint')}</p>
+        </div>
+      </div>
       <div>
         <FieldLabel htmlFor="agent-system-prompt">{t('settings.agentSystemPrompt')}</FieldLabel>
         <textarea

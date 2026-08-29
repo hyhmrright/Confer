@@ -1,5 +1,6 @@
 import { importPrivateKey, signRequest } from '@confer/identity';
 import { err, ok, type Result } from '@confer/shared';
+import { dialableEndpoint } from '../lib/public-identity.js';
 
 export interface OutboundA2AMessage {
   from: string;
@@ -26,7 +27,10 @@ export async function sendA2AMessage(
 ): Promise<Result<OutboundResult, string>> {
   try {
     const body = JSON.stringify(message);
-    const url = `${endpoint}/messages`;
+    // Resolved before signing, not after: the signature covers `@authority`,
+    // and the verifier rebuilds that from the request it actually received. A
+    // rewrite applied afterwards would sign one authority and deliver another.
+    const url = dialableEndpoint(`${endpoint}/messages`);
 
     const baseRequest = new Request(url, {
       method: 'POST',

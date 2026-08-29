@@ -25,6 +25,7 @@ interface AgentConfig {
 interface AgentPatch {
   name?: string;
   description?: string;
+  is_public?: boolean;
   model_config_json?: ModelConfig;
 }
 
