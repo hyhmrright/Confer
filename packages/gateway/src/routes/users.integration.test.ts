@@ -70,6 +70,48 @@ describe('users /me', () => {
     }
   });
 
+  // `email` and `phone` are unique across accounts. Taking one someone else
+  // holds answered 500 — an internal error for an ordinary thing to try. Drive
+  // it through the route rather than asserting on a hand-made error object:
+  // the first attempt at this read `error.code` directly and found nothing,
+  // because Drizzle wraps the driver's error and the code is one `cause` down.
+  test('reports an email another account already holds as 409', async () => {
+    const other = await seedUser();
+    await patch('/api/v1/users/me', {
+      token: other.token,
+      body: { email: 'shared@example.com' },
+    });
+
+    const res = await patch('/api/v1/users/me', {
+      token: user.token,
+      body: { email: 'shared@example.com' },
+    });
+
+    expect(res.status).toBe(409);
+    expect((await res.json()).error.code).toBe('email_taken');
+  });
+
+  test('reports a phone another account already holds as 409', async () => {
+    const other = await seedUser();
+    await patch('/api/v1/users/me', { token: other.token, body: { phone: '13800000000' } });
+
+    const res = await patch('/api/v1/users/me', {
+      token: user.token,
+      body: { phone: '13800000000' },
+    });
+
+    expect(res.status).toBe(409);
+    expect((await res.json()).error.code).toBe('phone_taken');
+  });
+
+  test('an address nobody holds is still accepted', async () => {
+    const res = await patch('/api/v1/users/me', {
+      token: user.token,
+      body: { email: 'free@example.com' },
+    });
+    expect(res.status).toBe(200);
+  });
+
   test('still ignores fields outside the allow-list', async () => {
     await patch('/api/v1/users/me', {
       token: user.token,

@@ -24,22 +24,58 @@ export interface WsData {
 // `lib/nonce-cache.ts` and `middleware/rate-limit.ts`) — see docs/02-architecture.md.
 const connectionsByUser = new Map<string, Set<ServerWebSocket<WsData>>>();
 
+// The same sockets, indexed the way a broadcast asks for them. Delivering a
+// message used to walk every socket of every connected user and ask each one
+// whether it cared — work proportional to everyone online, on the hot path of
+// every message and every keystroke of every typing indicator. A thread with
+// two people in it should cost two sends.
+//
+// Two structures holding the same sockets can drift, so nothing outside
+// `subscribe`/`unsubscribe`/`forget` touches either: they are the only writers,
+// and they always write both.
+const socketsByConversation = new Map<string, Set<ServerWebSocket<WsData>>>();
+
 // Cap concurrent sockets per user (docs/05-api.md: "单用户最多 10 个并发连接").
 const MAX_CONNECTIONS_PER_USER = 10;
+
+function subscribe(ws: ServerWebSocket<WsData>, conversationId: string): void {
+  ws.data.subscriptions.add(conversationId);
+  let set = socketsByConversation.get(conversationId);
+  if (!set) {
+    set = new Set();
+    socketsByConversation.set(conversationId, set);
+  }
+  set.add(ws);
+}
+
+function unsubscribe(ws: ServerWebSocket<WsData>, conversationId: string): void {
+  ws.data.subscriptions.delete(conversationId);
+  const set = socketsByConversation.get(conversationId);
+  if (!set) return;
+  set.delete(ws);
+  // Drop the empty set: a conversation nobody is watching must not leave an
+  // entry behind, or the index grows once per conversation ever opened.
+  if (set.size === 0) socketsByConversation.delete(conversationId);
+}
+
+/** Drop a closing socket from every conversation it was watching. */
+function forget(ws: ServerWebSocket<WsData>): void {
+  for (const conversationId of [...ws.data.subscriptions]) {
+    unsubscribe(ws, conversationId);
+  }
+}
 
 export function broadcastToConversation(
   conversationId: string,
   message: WsServerMessage,
   exclude?: string,
 ): void {
+  const subscribers = socketsByConversation.get(conversationId);
+  if (!subscribers) return;
   const payload = JSON.stringify(message);
-  for (const [userId, connections] of connectionsByUser) {
-    if (userId === exclude) continue;
-    for (const ws of connections) {
-      if (ws.data.subscriptions.has(conversationId)) {
-        ws.send(payload);
-      }
-    }
+  for (const ws of subscribers) {
+    if (ws.data.user.sub === exclude) continue;
+    ws.send(payload);
   }
 }
 
@@ -193,7 +229,7 @@ export const websocket = {
         break;
 
       case 'unsubscribe.conversation':
-        ws.data.subscriptions.delete(msg.data.conversation_id);
+        unsubscribe(ws, msg.data.conversation_id);
         break;
 
       case 'typing.start':
@@ -227,6 +263,7 @@ export const websocket = {
 
   close(ws: ServerWebSocket<WsData>) {
     const userId = ws.data.user.sub;
+    forget(ws);
     const set = connectionsByUser.get(userId);
     if (set) {
       set.delete(ws);
@@ -281,7 +318,7 @@ async function authorizeSubscription(
     }
   }
 
-  ws.data.subscriptions.add(conversationId);
+  subscribe(ws, conversationId);
 }
 
 async function handleReadAck(userId: string, conversationId: string): Promise<void> {

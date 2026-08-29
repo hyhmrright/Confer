@@ -83,7 +83,7 @@ interface ChatState {
   loadConversations: () => Promise<void>;
   selectConversation: (id: string) => Promise<void>;
   loadOlderMessages: () => Promise<void>;
-  createConversation: (peerId?: string, name?: string) => Promise<string>;
+  createConversation: (name?: string) => Promise<string>;
   deleteConversation: (id: string) => Promise<void>;
   sendMessage: (content: string) => Promise<void>;
   addMessage: (msg: Message) => void;
@@ -182,7 +182,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  createConversation: async (peerId, name) => {
+  // `name` only. This also sent `peer_id`, which `POST /conversations` has
+  // never read — the endpoint creates a thread between you and your own agent,
+  // and there is no field on it for a peer. Sending it made the call look like
+  // it opened a thread with that contact; it never did. Reaching a peer goes
+  // through the consult routes, which derive their own thread per (user, peer).
+  createConversation: async (name) => {
     const autoName =
       name ??
       new Date().toLocaleString(dateLocale(), {
@@ -191,9 +196,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
         hour: '2-digit',
         minute: '2-digit',
       });
-    const body: Record<string, unknown> = { type: 'direct_user_agent', name: autoName };
-    if (peerId) body.peer_id = peerId;
-    const data = await api.post<{ conversation: Conversation }>('/conversations', body);
+    const data = await api.post<{ conversation: Conversation }>('/conversations', {
+      type: 'direct_user_agent',
+      name: autoName,
+    });
     set((s) => ({ conversations: [data.conversation, ...s.conversations] }));
     return data.conversation.id;
   },

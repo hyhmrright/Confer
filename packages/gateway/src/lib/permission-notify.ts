@@ -2,9 +2,11 @@ import type { PermissionRequestEvent, WsServerMessage } from '@confer/shared';
 import { sendToUser } from '../ws/handler.js';
 
 // Leaf module (imports only ws/handler + shared types) so the `permission.request`
-// payload builder and its real-time push can be reused by both `permissions.ts`
-// (the `/pending` list) and `a2a.ts` (the insert sites) without risking an
-// `a2a ↔ permissions` import cycle.
+// payload builder and its real-time push can be reused by both `routes/permissions.ts`
+// (the `/pending` list) and the inbound A2A gates (the insert sites) without
+// risking an `a2a ↔ permissions` import cycle. It sat in `routes/` for that
+// reason while being no route at all; here it is reachable from `a2a/` too,
+// which is where the insert sites now live.
 
 // The permission row fields the inbox needs, as read from the DB (with the
 // `peerAgents` join). `scope_json` is `unknown` because it is a JSONB column;

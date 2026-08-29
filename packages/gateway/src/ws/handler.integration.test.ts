@@ -3,9 +3,21 @@ import { newId } from '@confer/shared';
 import type { Server } from 'bun';
 import { eq } from 'drizzle-orm';
 import { getDb } from '../db/connection.js';
-import { peerAgents, peerContacts, sessions, users } from '../db/schema.js';
+import {
+  conversationParticipants,
+  conversations,
+  peerAgents,
+  peerContacts,
+  sessions,
+  users,
+} from '../db/schema.js';
 import { mintToken, resetDb, type SeededUser, seedUser } from '../test/helpers.js';
-import { disconnectUser, getPresenceAudience, websocket } from './handler.js';
+import {
+  broadcastToConversation,
+  disconnectUser,
+  getPresenceAudience,
+  websocket,
+} from './handler.js';
 
 let user: SeededUser;
 
@@ -87,13 +99,19 @@ describe('websocket.upgrade authentication', () => {
 // A stand-in for Bun's ServerWebSocket carrying just what the handler touches:
 // the per-socket data, `send`, and a `close` that behaves like a real one by
 // running the close handler.
-function fakeSocket(subscriptions: string[], seeded: SeededUser) {
+//
+// It deliberately starts with NO subscriptions. Handing it a pre-filled set
+// would fill `ws.data.subscriptions` while leaving the broadcast index empty,
+// and a socket that half-exists is exactly the state the index is supposed to
+// make impossible — a fixture doing it would be testing a state production
+// cannot reach. Subscribe through `subscribeTo` instead.
+function fakeSocket(seeded: SeededUser) {
   const sent: string[] = [];
   const state = { closed: false };
   const ws = {
     data: {
       user: { sub: seeded.id, username: seeded.username, sid: seeded.sessionId },
-      subscriptions: new Set(subscriptions),
+      subscriptions: new Set<string>(),
     },
     send: (payload: string) => sent.push(payload),
     close: () => {
@@ -103,6 +121,105 @@ function fakeSocket(subscriptions: string[], seeded: SeededUser) {
   };
   return { sent, state, ws };
 }
+
+// A conversation `ownerId` is a participant of, which is what the subscribe
+// gate checks.
+async function seedConversation(ownerId: string): Promise<string> {
+  const convId = newId();
+  const db = getDb();
+  await db
+    .insert(conversations)
+    .values({ id: convId, type: 'direct_user_agent', created_by: ownerId });
+  await db.insert(conversationParticipants).values({
+    id: newId(),
+    conversation_id: convId,
+    participant_type: 'user',
+    user_id: ownerId,
+    role: 'owner',
+  });
+  return convId;
+}
+
+// Subscribe the way a client does — over the socket — and wait for the gate to
+// let it through. `websocket.message` dispatches the authorization without
+// awaiting it (it is a sync handler), so the frame alone proves nothing.
+async function subscribeTo(
+  ws: { data: { subscriptions: Set<string> } },
+  conversationId: string,
+): Promise<void> {
+  websocket.message(
+    ws as never,
+    JSON.stringify({ type: 'subscribe.conversation', data: { conversation_id: conversationId } }),
+  );
+  for (let i = 0; i < 100 && !ws.data.subscriptions.has(conversationId); i++) {
+    await new Promise((r) => setTimeout(r, 10));
+  }
+}
+
+describe('conversation subscription', () => {
+  test('admits a participant', async () => {
+    const convId = await seedConversation(user.id);
+    const socket = fakeSocket(user);
+
+    await subscribeTo(socket.ws, convId);
+
+    expect(socket.ws.data.subscriptions.has(convId)).toBe(true);
+  });
+
+  // `subscriptions` is the sole gate `broadcastToConversation` consults, so an
+  // unchecked subscribe would hand any authenticated user the message stream of
+  // any conversation whose id they learn.
+  test('refuses someone who is neither participant nor creator', async () => {
+    const convId = await seedConversation(user.id);
+    const outsider = await seedUser();
+    const socket = fakeSocket(outsider);
+
+    await subscribeTo(socket.ws, convId);
+
+    expect(socket.ws.data.subscriptions.has(convId)).toBe(false);
+    expect(socket.sent.some((m) => m.includes('Not a participant'))).toBe(true);
+  });
+
+  // Broadcasts are served from an index of sockets per conversation rather than
+  // by walking everyone online and asking. Two structures holding the same
+  // sockets can drift, and drift here means a socket that unsubscribed — or
+  // closed — keeps receiving. These two are the check that they don't.
+  test('unsubscribing stops the broadcast', async () => {
+    const convId = await seedConversation(user.id);
+    const other = await seedUser();
+    await getDb().insert(conversationParticipants).values({
+      id: newId(),
+      conversation_id: convId,
+      participant_type: 'user',
+      user_id: other.id,
+      role: 'member',
+    });
+    const listener = fakeSocket(other);
+    websocket.open(listener.ws as never);
+    await subscribeTo(listener.ws, convId);
+
+    websocket.message(
+      listener.ws as never,
+      JSON.stringify({ type: 'unsubscribe.conversation', data: { conversation_id: convId } }),
+    );
+    broadcastToConversation(convId, { type: 'message.new', data: { id: 'm1' } } as never);
+    websocket.close(listener.ws as never);
+
+    expect(listener.sent).toHaveLength(0);
+  });
+
+  test('closing stops the broadcast', async () => {
+    const convId = await seedConversation(user.id);
+    const listener = fakeSocket(user);
+    websocket.open(listener.ws as never);
+    await subscribeTo(listener.ws, convId);
+    websocket.close(listener.ws as never);
+
+    broadcastToConversation(convId, { type: 'message.new', data: { id: 'm1' } } as never);
+
+    expect(listener.sent).toHaveLength(0);
+  });
+});
 
 // Subscribing is gated; sending a typing event was not. A conversation id was
 // the only thing needed to inject "X is typing…" — under your own username —
@@ -114,12 +231,22 @@ describe('typing events', () => {
   // The broadcast excludes the sender's own user, so the listener has to be
   // someone else for either case to prove anything.
   test('reaches a subscriber of the same conversation', async () => {
-    const convId = newId();
+    const convId = await seedConversation(user.id);
     const other = await seedUser();
-    const sender = fakeSocket([convId], user);
-    const listener = fakeSocket([convId], other);
+    await getDb().insert(conversationParticipants).values({
+      id: newId(),
+      conversation_id: convId,
+      participant_type: 'user',
+      user_id: other.id,
+      role: 'member',
+    });
 
+    const sender = fakeSocket(user);
+    const listener = fakeSocket(other);
     websocket.open(listener.ws as never);
+    await subscribeTo(sender.ws, convId);
+    await subscribeTo(listener.ws, convId);
+
     websocket.message(sender.ws as never, typingFrame(convId));
     websocket.close(listener.ws as never);
 
@@ -127,12 +254,22 @@ describe('typing events', () => {
   });
 
   test('is dropped when the sender has not subscribed to that conversation', async () => {
-    const convId = newId();
+    const convId = await seedConversation(user.id);
     const other = await seedUser();
-    const outsider = fakeSocket([], user);
-    const listener = fakeSocket([convId], other);
+    await getDb().insert(conversationParticipants).values({
+      id: newId(),
+      conversation_id: convId,
+      participant_type: 'user',
+      user_id: other.id,
+      role: 'member',
+    });
 
+    const outsider = fakeSocket(user);
+    const listener = fakeSocket(other);
     websocket.open(listener.ws as never);
+    await subscribeTo(listener.ws, convId);
+
+    // The sender never subscribed — it is only claiming a conversation id.
     websocket.message(outsider.ws as never, typingFrame(convId));
     websocket.close(listener.ws as never);
 
@@ -146,9 +283,9 @@ describe('typing events', () => {
 describe('disconnectUser', () => {
   test('closes every socket the user holds and leaves others alone', async () => {
     const other = await seedUser();
-    const first = fakeSocket([], user);
-    const second = fakeSocket([], user);
-    const bystander = fakeSocket([], other);
+    const first = fakeSocket(user);
+    const second = fakeSocket(user);
+    const bystander = fakeSocket(other);
 
     websocket.open(first.ws as never);
     websocket.open(second.ws as never);

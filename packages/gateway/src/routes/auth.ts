@@ -15,6 +15,7 @@ import { getDb } from '../db/connection.js';
 import { agents, keypairs, sessions, users } from '../db/schema.js';
 import { getEnv } from '../env.js';
 import { getConfigValue } from '../lib/app-config.js';
+import { uniqueViolation } from '../lib/db-errors.js';
 import { userDid } from '../lib/public-identity.js';
 import { authMiddleware, TOKEN_TYPE } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rate-limit.js';
@@ -99,6 +100,10 @@ authRoutes.post('/register', rateLimit(3, 3600_000), async (c) => {
   const did = userDid(body.username);
   const passwordHash = await hashPassword(body.password);
 
+  // The select above narrows the username race but cannot close it — the row it
+  // does not find can be inserted before this one lands — and it says nothing
+  // about `email`, which is unique too. The constraint is what actually decides,
+  // so a violation is translated here rather than surfacing as a 500.
   const [user] = await db
     .insert(users)
     .values({
@@ -109,7 +114,17 @@ authRoutes.post('/register', rateLimit(3, 3600_000), async (c) => {
       did,
       password_hash: passwordHash,
     })
-    .returning();
+    .returning()
+    .catch((error) => {
+      const constraint = uniqueViolation(error);
+      if (constraint === 'users_username_unique' || constraint === 'users_did_unique') {
+        throw new AppError('username_taken', 'Username is already taken', 409);
+      }
+      if (constraint === 'users_email_unique') {
+        throw new AppError('email_taken', 'That email is already in use', 409);
+      }
+      throw error;
+    });
 
   if (!user) {
     throw new AppError('user_creation_failed', 'Failed to create user', 500);

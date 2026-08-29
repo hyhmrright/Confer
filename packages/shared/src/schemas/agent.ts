@@ -41,26 +41,19 @@ export const updateAgentRequestSchema = z.object({
   is_public: z.boolean().optional(),
 });
 
-// AgentFacts policy advertisement shape. NOTE: intentionally distinct from the
-// agent-runtime engine's runtime PolicyRule ({ action, peer_did?, decision }),
-// which is what `agents.policies_json` is actually evaluated against. These two
-// vocabularies (effect/ask here vs decision/ask_user there) must be reconciled
-// before any code feeds one into the other — see agent-runtime policy/engine.ts.
-export const policyRuleSchema = z.object({
-  peer: z.string().optional(),
-  action: z.enum(['read', 'ask', 'share', 'commit']),
-  pattern: z.string().optional(),
-  effect: z.enum(['allow', 'deny', 'ask']),
-});
-
-export const policyConfigSchema = z.object({
-  default: z.enum(['auto', 'ask', 'deny']).default('ask'),
-  rules: z.array(policyRuleSchema).default([]),
-});
-
-// `agentSchema` and `capabilitySchema` stood here, mirroring the `agents` table
-// row and the capability objects inside it. Nothing imported either, and
-// `agentSchema` embedded the role-based model config described above — so it
-// documented a row shape the database does not have. The gateway reads that
-// table through Drizzle, which derives the row type from `db/schema.ts`; a
-// hand-written second opinion about the same columns can only drift from it.
+// Three more schemas stood here and are gone, all for the same reason: nothing
+// imported them, and each described a shape the product does not have.
+//
+// `agentSchema` + `capabilitySchema` mirrored the `agents` table row. The
+// gateway reads that table through Drizzle, which derives the row type from
+// `db/schema.ts`; a hand-written second opinion about the same columns can only
+// drift from it, and this one had — it embedded the role-based model config
+// replaced above.
+//
+// `policyConfigSchema` + `policyRuleSchema` described an AgentFacts policy
+// ADVERTISEMENT — `{ peer, action, pattern, effect }` — carrying a standing
+// warning that it must never be fed into the runtime policy shape
+// (`{ action, peer_did?, decision }` in agent-runtime) without reconciling the
+// two vocabularies. But `/a2a/v1/agent-facts/:did` publishes no policies at
+// all, so the advertisement has never existed and the hazard it warned about
+// could not arise. One vocabulary is left, in the package that evaluates it.

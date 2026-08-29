@@ -15,6 +15,7 @@ import { z } from 'zod';
 import { getDb } from '../db/connection.js';
 import { agents, users } from '../db/schema.js';
 import { getEnv } from '../env.js';
+import { uniqueViolation } from '../lib/db-errors.js';
 import { getUserLlmKeys } from '../lib/llm-keys.js';
 import { authMiddleware } from '../middleware/auth.js';
 import type { AppEnv } from '../types.js';
@@ -91,13 +92,27 @@ userRoutes.patch('/me', async (c) => {
   // `status` are no more reachable than before.
   const updates = updateProfileRequestSchema.parse(await c.req.json());
 
-  await db
-    .update(users)
-    .set({ ...updates, updated_at: new Date() })
-    .where(eq(users.id, user.sub));
+  try {
+    await db
+      .update(users)
+      .set({ ...updates, updated_at: new Date() })
+      .where(eq(users.id, user.sub));
+  } catch (error) {
+    // `email` and `phone` are unique across accounts, and taking one someone
+    // else holds is an ordinary thing for a caller to try — two people sharing
+    // a mailbox, or your own second account. It answered 500.
+    const taken = TAKEN_BY_CONSTRAINT[uniqueViolation(error) ?? ''];
+    if (!taken) throw error;
+    throw new AppError(taken, `That ${taken.replace('_taken', '')} is already in use`, 409);
+  }
 
   return c.json({ ok: true });
 });
+
+const TAKEN_BY_CONSTRAINT: Record<string, string> = {
+  users_email_unique: 'email_taken',
+  users_phone_unique: 'phone_taken',
+};
 
 export const agentRoutes = new Hono<AppEnv>();
 

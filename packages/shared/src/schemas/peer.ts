@@ -38,10 +38,10 @@ export const contactLookupSchema = z.object({
 // Runtime per-contact policy override stored in `peer_contacts.policy_overrides_json`.
 // This is the body shape for `POST /contacts/{id}/policies`. It mirrors the
 // agent-runtime `PolicyConfig` vocabulary ({ default, rules:[{ action, peer_did?,
-// decision }] }) — NOT the AgentFacts advertisement shape in `agent.ts`
-// (`policyConfigSchema`), which deliberately stays separate per its do-not-bridge
-// note. `default`/`rules` are both optional so an empty `{}` is a valid no-op
-// override (equivalent to "use the agent-level default").
+// decision }] }), which since the AgentFacts advertisement shape was deleted from
+// `agent.ts` is the only policy vocabulary there is. `default`/`rules` are both
+// optional so an empty `{}` is a valid no-op override (equivalent to "use the
+// agent-level default").
 export const policyOverridesSchema = z.object({
   default: z.enum(['allow', 'ask_user', 'deny']).optional(),
   rules: z

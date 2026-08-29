@@ -1,12 +1,12 @@
 import { AppError, decidePermissionRequestSchema, newId } from '@confer/shared';
 import { and, desc, eq, isNull, ne, or } from 'drizzle-orm';
 import { Hono } from 'hono';
+import { resumeHeldA2AQuestion } from '../a2a/answer.js';
 import { getDb } from '../db/connection.js';
 import { peerAgents, peerContacts, permissions } from '../db/schema.js';
+import { toPermissionRequestEvent } from '../lib/permission-notify.js';
 import { authMiddleware } from '../middleware/auth.js';
 import type { AppEnv } from '../types.js';
-import { resumeHeldA2AQuestion } from './a2a.js';
-import { toPermissionRequestEvent } from './permission-notify.js';
 
 export const permissionRoutes = new Hono<AppEnv>();
 

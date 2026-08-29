@@ -54,6 +54,19 @@ describe('POST /auth/register', () => {
     expect((await res.json()).error.code).toBe('username_taken');
   });
 
+  // `email` is unique too, and nothing checked it before the insert — only
+  // `username` had a pre-select. The constraint refused it either way; what was
+  // wrong was calling the refusal an internal error.
+  test('rejects an email another account already holds with 409', async () => {
+    await post(REGISTER, registerBody({ username: 'first', email: 'shared@example.com' }));
+    const res = await post(
+      REGISTER,
+      registerBody({ username: 'second', email: 'shared@example.com' }),
+    );
+    expect(res.status).toBe(409);
+    expect((await res.json()).error.code).toBe('email_taken');
+  });
+
   test('rejects invalid input with 400', async () => {
     const res = await post(REGISTER, { username: 'ab', password: 'short' });
     expect(res.status).toBe(400);
