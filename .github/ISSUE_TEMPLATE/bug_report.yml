@@ -51,7 +51,7 @@ body:
     attributes:
       label: Version
       description: Release tag or commit SHA.
-      placeholder: v0.3.1
+      placeholder: v0.4.0
     validations:
       required: true
 
