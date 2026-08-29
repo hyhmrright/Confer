@@ -70,9 +70,4 @@ export const decideCardSchema = z
     path: ['new_price_cents'],
   });
 
-export type ErrandStatus = z.infer<typeof errandStatusSchema>;
-export type ErrandCardKind = z.infer<typeof errandCardKindSchema>;
 export type CardDecision = z.infer<typeof cardDecisionSchema>;
-export type CreateErrandRequest = z.infer<typeof createErrandSchema>;
-export type PushCardRequest = z.infer<typeof pushCardSchema>;
-export type DecideCardRequest = z.infer<typeof decideCardSchema>;

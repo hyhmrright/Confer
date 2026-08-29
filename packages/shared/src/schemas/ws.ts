@@ -39,7 +39,6 @@ export const wsServerMessageTypeSchema = z.enum([
   'conversation.updated',
 ]);
 
-export type WsClientMessage = z.infer<typeof wsClientMessageSchema>;
 export type WsServerMessageType = z.infer<typeof wsServerMessageTypeSchema>;
 
 export interface WsServerMessage<T = unknown> {

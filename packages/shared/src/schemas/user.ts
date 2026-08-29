@@ -77,8 +77,3 @@ export const loginRequestSchema = z.object({
 });
 
 export type User = z.infer<typeof userSchema>;
-export type UserPreferences = z.infer<typeof userPreferencesSchema>;
-export type LLMKeys = z.infer<typeof llmKeysSchema>;
-export type EncryptedKey = z.infer<typeof encryptedKeySchema>;
-export type RegisterRequest = z.infer<typeof registerRequestSchema>;
-export type LoginRequest = z.infer<typeof loginRequestSchema>;

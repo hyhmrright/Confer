@@ -55,7 +55,5 @@ export const agentSchema = z.object({
 
 export type Agent = z.infer<typeof agentSchema>;
 export type ModelConfig = z.infer<typeof modelConfigSchema>;
-export type ModelChoice = z.infer<typeof modelChoiceSchema>;
 export type PolicyConfig = z.infer<typeof policyConfigSchema>;
 export type PolicyRule = z.infer<typeof policyRuleSchema>;
-export type Capability = z.infer<typeof capabilitySchema>;

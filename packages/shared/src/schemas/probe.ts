@@ -29,6 +29,3 @@ export const fillProbeRequestSchema = z.object({
   // Audit flag to exclude founder dual-account self-tests from success counts.
   is_founder_test: z.boolean().optional(),
 });
-
-export type AskPersonRequest = z.infer<typeof askPersonRequestSchema>;
-export type FillProbeRequest = z.infer<typeof fillProbeRequestSchema>;

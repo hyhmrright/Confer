@@ -5,17 +5,12 @@ import { z } from 'zod';
 export const userRoleSchema = z.enum(['member', 'admin']);
 export const userStatusSchema = z.enum(['active', 'disabled']);
 
-export type UserRole = z.infer<typeof userRoleSchema>;
-export type UserStatus = z.infer<typeof userStatusSchema>;
-
 // Query params for the paginated admin user list. `q` matches username.
 export const adminUserListQuerySchema = z.object({
   q: z.string().max(64).optional(),
   page: z.coerce.number().int().min(1).default(1),
   page_size: z.coerce.number().int().min(1).max(100).default(20),
 });
-
-export type AdminUserListQuery = z.infer<typeof adminUserListQuerySchema>;
 
 // Body for PATCH /admin/users/:id. Either field may be supplied; at least one
 // must be present (enforced by the handler). `role` toggles admin/member,
@@ -30,32 +25,26 @@ export const adminUpdateUserSchema = z
     message: 'At least one of role or status is required',
   });
 
-export type AdminUpdateUser = z.infer<typeof adminUpdateUserSchema>;
-
 // --- 3b: content moderation -------------------------------------------------
 
 // Agent moderation lifecycle. 'suspended' soft-removes an agent from public
 // discovery (read-path filtering only — AgentFacts/DID untouched).
 export const agentStatusSchema = z.enum(['active', 'suspended']);
-export type AgentStatus = z.infer<typeof agentStatusSchema>;
 
 // Conversation/message admin visibility. 'hidden' filters from non-admin reads.
 export const moderationStatusSchema = z.enum(['visible', 'hidden']);
-export type ModerationStatus = z.infer<typeof moderationStatusSchema>;
 
 // Shared pagination query for admin list endpoints (agents, conversations).
 export const adminListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   page_size: z.coerce.number().int().min(1).max(100).default(20),
 });
-export type AdminListQuery = z.infer<typeof adminListQuerySchema>;
 
 // Body for PATCH /admin/agents/:id — suspend or restore an agent.
 export const adminUpdateAgentSchema = z.object({
   status: agentStatusSchema,
   reason: z.string().max(500).optional(),
 });
-export type AdminUpdateAgent = z.infer<typeof adminUpdateAgentSchema>;
 
 // Body for PATCH /admin/conversations/:id and PATCH /admin/messages/:id —
 // hide or restore content.
@@ -63,7 +52,6 @@ export const adminModerateSchema = z.object({
   moderation_status: moderationStatusSchema,
   reason: z.string().max(500).optional(),
 });
-export type AdminModerate = z.infer<typeof adminModerateSchema>;
 
 // --- 3c: global config ------------------------------------------------------
 
@@ -83,4 +71,3 @@ export const adminUpdateConfigSchema = z
   .refine((v) => v.registration_open !== undefined || v.instance_name !== undefined, {
     message: 'At least one config field is required',
   });
-export type AdminUpdateConfig = z.infer<typeof adminUpdateConfigSchema>;
