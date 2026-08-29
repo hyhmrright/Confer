@@ -630,6 +630,47 @@ describe('A2A signed message (real Ed25519, mocked DID resolution)', () => {
     expect((perms[0]?.scope_json as { kind?: string })?.kind).toBe('a2a_question');
   });
 
+  // `hold` gates the auto-reply, and only a question has one to gate. An
+  // answer or notification arriving under the same policy has to take the
+  // ordinary accepted path — nothing is withheld, because nothing would have
+  // been said.
+  test('an ask_user policy holds only questions — an inbound answer is accepted (201)', async () => {
+    const targetDid = 'did:web:localhost:agents:hold-nonquestion';
+    await seedTargetAgent(targetDid, { default: 'ask_user' });
+    await connectPeer('did:web:localhost');
+    const privateKey = await signingKeyResolvedViaDid();
+
+    const res = await app.request(
+      await signRequest(
+        new Request(MESSAGES, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            from: 'did:web:localhost',
+            to: targetDid,
+            message: { type: 'answer', content: 'Our SLA is 24 hours.' },
+          }),
+        }),
+        privateKey,
+        KEY_ID,
+      ),
+    );
+
+    expect(res.status).toBe(201);
+
+    // Nothing was held for owner review...
+    const perms = await getDb()
+      .select()
+      .from(permissions)
+      .where(and(eq(permissions.user_id, user.id), eq(permissions.action, 'ask')));
+    expect(perms).toHaveLength(0);
+
+    // ...and the peer's message is the only one: no reply was generated.
+    const msgs = await getDb().select().from(messages);
+    expect(msgs).toHaveLength(1);
+    expect(msgs[0]?.sender_type).toBe('peer_agent');
+  });
+
   test('a peer with an empty override is answered immediately, identical to no override (201)', async () => {
     const targetDid = 'did:web:localhost:agents:perpeer-empty';
     await seedTargetAgent(targetDid); // agent default allow

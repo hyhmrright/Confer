@@ -26,10 +26,6 @@ const connectionsByUser = new Map<string, Set<ServerWebSocket<WsData>>>();
 // Cap concurrent sockets per user (docs/05-api.md: "单用户最多 10 个并发连接").
 const MAX_CONNECTIONS_PER_USER = 10;
 
-export function getWsConnections(userId: string): Set<ServerWebSocket<WsData>> {
-  return connectionsByUser.get(userId) ?? new Set();
-}
-
 export function broadcastToConversation(
   conversationId: string,
   message: WsServerMessage,

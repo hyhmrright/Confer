@@ -44,19 +44,24 @@ export class AnthropicProvider implements LLMProvider {
     this.baseUrl = baseUrl;
   }
 
-  async chat(messages: LLMMessage[], options?: LLMChatOptions): Promise<LLMResponse> {
-    const model = options?.model ?? 'claude-sonnet-4-20250514';
+  // The fields both entry points always send. Note the asymmetry in what each
+  // adds on top: `chat` sends `temperature` and no `tools`, `stream` the
+  // reverse. That predates this helper and is left as it was.
+  private baseBody(messages: LLMMessage[], options?: LLMChatOptions): Record<string, unknown> {
     const systemMessage = messages.find((m) => m.role === 'system');
-
     const body: Record<string, unknown> = {
-      model,
+      model: options?.model ?? 'claude-sonnet-4-20250514',
       max_tokens: options?.max_tokens ?? 4096,
       messages: toAnthropicMessages(messages),
     };
     if (systemMessage) body.system = systemMessage.content;
-    if (options?.temperature !== undefined) body.temperature = options.temperature;
+    return body;
+  }
 
-    const response = await fetch(`${this.baseUrl}/v1/messages`, {
+  // One endpoint, one set of headers — the API version in particular has to stay
+  // the same for both calls, so it is written once.
+  private post(body: Record<string, unknown>): Promise<Response> {
+    return fetch(`${this.baseUrl}/v1/messages`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -65,6 +70,13 @@ export class AnthropicProvider implements LLMProvider {
       },
       body: JSON.stringify(body),
     });
+  }
+
+  async chat(messages: LLMMessage[], options?: LLMChatOptions): Promise<LLMResponse> {
+    const body = this.baseBody(messages, options);
+    if (options?.temperature !== undefined) body.temperature = options.temperature;
+
+    const response = await this.post(body);
 
     if (!response.ok) {
       const text = await response.text();
@@ -90,16 +102,8 @@ export class AnthropicProvider implements LLMProvider {
   }
 
   async *stream(messages: LLMMessage[], options?: LLMChatOptions): AsyncIterable<LLMStreamEvent> {
-    const model = options?.model ?? 'claude-sonnet-4-20250514';
-    const systemMessage = messages.find((m) => m.role === 'system');
-
-    const body: Record<string, unknown> = {
-      model,
-      max_tokens: options?.max_tokens ?? 4096,
-      stream: true,
-      messages: toAnthropicMessages(messages),
-    };
-    if (systemMessage) body.system = systemMessage.content;
+    const body = this.baseBody(messages, options);
+    body.stream = true;
     if (options?.tools?.length) {
       body.tools = options.tools.map((t) => ({
         name: t.name,
@@ -108,15 +112,7 @@ export class AnthropicProvider implements LLMProvider {
       }));
     }
 
-    const response = await fetch(`${this.baseUrl}/v1/messages`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': this.apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify(body),
-    });
+    const response = await this.post(body);
 
     if (!response.ok || !response.body) {
       throw new Error(`Anthropic stream error: ${response.status}`);

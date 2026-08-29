@@ -5,31 +5,11 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { dateLocale } from '../i18n/index.js';
 import { useAuthStore } from '../stores/auth.js';
+import type { Message } from '../stores/chat.js';
 import { useContactsStore } from '../stores/contacts.js';
 import { CitationCapsule } from './CitationCapsule.js';
 import { MessageEntry } from './MessageEntry.js';
 import { PermissionCard } from './PermissionCard.js';
-
-interface Citation {
-  source: string;
-  url?: string;
-  page?: number;
-  passage?: string;
-  trust_level?: string;
-}
-
-interface Message {
-  id: string;
-  conversation_id: string;
-  sender_type: string;
-  sender_id: string;
-  content: string | null;
-  content_type: string;
-  citations?: Citation[];
-  created_at: string;
-  in_reply_to?: string;
-  content_json?: unknown;
-}
 
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString(dateLocale(), { hour: '2-digit', minute: '2-digit' });

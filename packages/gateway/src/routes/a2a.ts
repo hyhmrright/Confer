@@ -551,34 +551,25 @@ a2aRoutes.post('/messages', verifyA2ASignature, async (c) => {
   // pending `ask` permission and return without spawning the agent loop. Only a
   // question can be held — an answer/notification never auto-replies anyway, so
   // there is nothing to gate.
-  if (admission === 'hold') {
-    if (body.message.type === 'question') {
-      await holdA2AQuestion({
-        userId: targetAgent.user_id,
-        agentId: targetAgent.id,
-        peer,
-        senderDid: body.from,
-        conversationId: convId,
-        peerThreadId: body.thread_id,
-        inboundMessageId: msgId,
-        content: body.message.content,
-      });
-      return c.json({ status: 'pending_approval', message_id: msgId }, 202);
-    }
-    return c.json(
-      {
-        message_id: msgId,
-        thread_id: body.thread_id ?? convId,
-        stream_url: `/a2a/v1/stream/${msgId}`,
-      },
-      201,
-    );
+  if (admission === 'hold' && body.message.type === 'question') {
+    await holdA2AQuestion({
+      userId: targetAgent.user_id,
+      agentId: targetAgent.id,
+      peer,
+      senderDid: body.from,
+      conversationId: convId,
+      peerThreadId: body.thread_id,
+      inboundMessageId: msgId,
+      content: body.message.content,
+    });
+    return c.json({ status: 'pending_approval', message_id: msgId }, 202);
   }
 
-  // `allow`: only an inbound question triggers our local auto-reply loop. An
-  // answer or notification (e.g. a peer responding to one of our outgoing
-  // consults) is stored and broadcast above but must NOT spawn another reply —
-  // otherwise two agents would ping-pong forever.
+  // Only an inbound question triggers our local auto-reply loop. An answer or
+  // notification (e.g. a peer responding to one of our outgoing consults) is
+  // stored and broadcast above but must NOT spawn another reply — otherwise two
+  // agents would ping-pong forever. A held question returned above, so a
+  // question reaching here is one the policy admitted.
   if (body.message.type === 'question') {
     setImmediate(async () => {
       try {

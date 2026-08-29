@@ -44,6 +44,16 @@ export const userSchema = z.object({
   deleted_at: z.coerce.date().optional(),
 });
 
+// Register and login both open a session, so both describe the device it
+// belongs to the same way.
+const deviceInfoSchema = z
+  .object({
+    platform: z.string().optional(),
+    model: z.string().optional(),
+    os: z.string().optional(),
+  })
+  .optional();
+
 export const registerRequestSchema = z.object({
   username: z
     .string()
@@ -56,26 +66,14 @@ export const registerRequestSchema = z.object({
   // Register now creates a backing session (mirroring login) so its tokens can
   // be revoked/rotated, which requires the device the session belongs to.
   device_id: z.string().max(64),
-  device_info: z
-    .object({
-      platform: z.string().optional(),
-      model: z.string().optional(),
-      os: z.string().optional(),
-    })
-    .optional(),
+  device_info: deviceInfoSchema,
 });
 
 export const loginRequestSchema = z.object({
   username: z.string(),
   password: z.string(),
   device_id: z.string().max(64),
-  device_info: z
-    .object({
-      platform: z.string().optional(),
-      model: z.string().optional(),
-      os: z.string().optional(),
-    })
-    .optional(),
+  device_info: deviceInfoSchema,
 });
 
 export type User = z.infer<typeof userSchema>;

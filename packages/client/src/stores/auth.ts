@@ -35,6 +35,34 @@ interface AuthResponse {
   user: User;
 }
 
+// Login and register differ only in endpoint, payload and the wording to fall
+// back on when the server sends no message. Everything after the call — the two
+// token setters, the localStorage copy restoreSession() reads back, and the
+// state write — has to stay identical between them, so it is written once.
+async function authenticate(
+  set: (partial: Partial<AuthState>) => void,
+  path: string,
+  payload: Record<string, unknown>,
+  failureMessage: string,
+): Promise<void> {
+  set({ loading: true, error: null });
+  try {
+    const data = await api.post<AuthResponse>(path, { ...payload, device_id: getDeviceId() });
+    setToken(data.access_token);
+    setRefreshToken(data.refresh_token);
+    localStorage.setItem('confer_auth', JSON.stringify(data));
+    set({
+      user: data.user,
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token,
+      loading: false,
+    });
+  } catch (e) {
+    set({ loading: false, error: captureError(e, failureMessage) });
+    throw e;
+  }
+}
+
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   accessToken: null,
@@ -42,52 +70,16 @@ export const useAuthStore = create<AuthState>((set) => ({
   loading: false,
   error: null,
 
-  login: async (username, password) => {
-    set({ loading: true, error: null });
-    try {
-      const data = await api.post<AuthResponse>('/auth/login', {
-        username,
-        password,
-        device_id: getDeviceId(),
-      });
-      setToken(data.access_token);
-      setRefreshToken(data.refresh_token);
-      localStorage.setItem('confer_auth', JSON.stringify(data));
-      set({
-        user: data.user,
-        accessToken: data.access_token,
-        refreshToken: data.refresh_token,
-        loading: false,
-      });
-    } catch (e) {
-      set({ loading: false, error: captureError(e, 'Login failed') });
-      throw e;
-    }
-  },
+  login: (username, password) =>
+    authenticate(set, '/auth/login', { username, password }, 'Login failed'),
 
-  register: async (username, password, displayName) => {
-    set({ loading: true, error: null });
-    try {
-      const data = await api.post<AuthResponse>('/auth/register', {
-        username,
-        password,
-        display_name: displayName,
-        device_id: getDeviceId(),
-      });
-      setToken(data.access_token);
-      setRefreshToken(data.refresh_token);
-      localStorage.setItem('confer_auth', JSON.stringify(data));
-      set({
-        user: data.user,
-        accessToken: data.access_token,
-        refreshToken: data.refresh_token,
-        loading: false,
-      });
-    } catch (e) {
-      set({ loading: false, error: captureError(e, 'Registration failed') });
-      throw e;
-    }
-  },
+  register: (username, password, displayName) =>
+    authenticate(
+      set,
+      '/auth/register',
+      { username, password, display_name: displayName },
+      'Registration failed',
+    ),
 
   logout: () => {
     setToken(null);
