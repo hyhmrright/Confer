@@ -288,6 +288,17 @@ peer.unknown:
 
 新建会话时，**主人与 peer 同时**写入 `conversation_participants`。主人那条参与者行是会话列表和逐会话读取闸门的依据，缺了它主人就看不到自己 Agent 正在应答的线程。
 
+`thread_id` 因此是**每一侧各自的**会话 id，两边不相同。由此得出两条不可省的规则：
+
+- **回复必须回显提问方发来的 `thread_id`，不是自己的。** 上面第 2 条会（正确地）拒绝一条不属于自己的线程，所以带着我方会话 id 回去的答复，会被对端归进一条全新会话；提问方仍在轮询自己创建的那条，于是 `/api/v1/consult/{id}/reply` 永远停在 `pending`，而两台机器上都躺着一个完好的答案。
+- **`messages.thread_root` 写本地会话 id，绝不写 peer 给的原值。** 该列是 `char(26)`，为我们自己的 ULID 而设：存外来值既会指向一条我们可能并不拥有的会话，也让任何 peer 能用一个超过 26 字符的 `thread_id` 把这个端点打成 500。入站 `thread_id` 另有长度上限校验。
+
+### 寻址：两个 DID 都指向同一个 Agent
+
+`to` 同时接受 **Agent DID**（`did:web:<host>:agents:<user>:agent`，公开目录 `/.well-known/agents.json` 列出的就是它）和**主人 DID**（`did:web:<host>:agents:<user>`）。后者是唯一能被解析出 DID 文档的标识，也是客户端展示给用户复制的那一个——只认前者会让「粘贴 DID 加好友」得到一个连得上、验得过、却 404 的联系人。
+
+同理，判定发件 peer 是否已连接时，`from`（Agent DID）与**验签得到的签名者 DID**（主人 DID）都要认：`peer_agents` 按 DID 建行，联系人存的是哪一个取决于当初用什么方式添加，只认 `from` 会让对端的回复变成一条「陌生人的连接请求」。
+
 ### Pending inbox（离线代答）
 
 主人离线时收到**已连接** peer 的问题，由 policy engine 决定（`evaluatePolicy`，action=`ask`，L2）：
