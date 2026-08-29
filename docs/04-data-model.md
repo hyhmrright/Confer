@@ -63,12 +63,13 @@ interface UserPreferences {
   privacy: { allow_offline_response: boolean };
 }
 
-interface LLMKeys {
-  openai?: EncryptedKey;
-  anthropic?: EncryptedKey;
-  deepseek?: EncryptedKey;
-  qwen?: EncryptedKey;
-}
+// 键是 `shared/src/llm/catalog.ts` 里的厂商 id（目前 18 家），外加工具类
+// provider（`tavily`）。这里刻意不列举厂商：列过一次，然后就停在 openai /
+// anthropic / deepseek / qwen 四家再没跟上过。厂商只在 catalog 里出现一次。
+//
+// 值是 AES-256-GCM 密文（`ENCRYPTION_KEY`），只在网关内解密使用，
+// 任何情况下都不下发给客户端。
+type LLMKeys = Record<string, EncryptedKey>;
 ```
 
 ### agents
@@ -126,8 +127,8 @@ interface ModelConfig {
 }
 
 interface ModelChoice {
-  provider: 'openai' | 'anthropic' | 'deepseek' | 'qwen' | 'ollama';
-  model: string;
+  provider: string; // catalog.ts 里的厂商 id，同样不在这里列举
+  model: string;    // 由厂商自己的 /models 返回，不本地维护
   temperature?: number;
 }
 

@@ -1,48 +1,27 @@
 import { z } from 'zod';
 
-export const userPreferencesSchema = z.object({
-  language: z.string().default('zh'),
-  timezone: z.string().default('Asia/Shanghai'),
-  notification: z
-    .object({
-      push: z.boolean().default(true),
-      email: z.boolean().default(false),
-    })
-    .prefault({}),
-  privacy: z
-    .object({
-      allow_offline_response: z.boolean().default(true),
-    })
-    .prefault({}),
-});
+// This file once also carried `userSchema`, and under it `llmKeysSchema` with
+// one optional field per vendor: openai, anthropic, deepseek, qwen. Nothing
+// imported any of it, which is exactly why it was still naming four vendors
+// while `llm/catalog.ts` had grown to eighteen — a second copy of a list that
+// nothing validates against drifts silently and forever.
+//
+// It is deleted rather than pointed at the catalogue, because pointing it at
+// the catalogue would still be wrong: the column it claimed to describe
+// (`users.llm_keys_json`) also holds the `tavily` search key, so an accurate
+// key type is LLM_PROVIDER_IDS *plus* the tool providers — which is precisely
+// the union `routes/users.ts` already builds and validates against on the live
+// path. Restating it here would have made a third copy while fixing the second.
 
-export const encryptedKeySchema = z.object({
-  ciphertext: z.string(),
-  iv: z.string(),
-  tag: z.string(),
-});
-
-export const llmKeysSchema = z.object({
-  openai: encryptedKeySchema.optional(),
-  anthropic: encryptedKeySchema.optional(),
-  deepseek: encryptedKeySchema.optional(),
-  qwen: encryptedKeySchema.optional(),
-});
-
-export const userSchema = z.object({
-  id: z.string().length(26),
-  username: z.string().min(1).max(64),
-  email: z.string().email().optional(),
-  phone: z.string().max(32).optional(),
-  display_name: z.string().max(128).optional(),
-  avatar_url: z.string().url().optional(),
-  did: z.string(),
-  preferences: userPreferencesSchema.prefault({}),
-  llm_keys: llmKeysSchema.default({}),
-  created_at: z.coerce.date(),
-  updated_at: z.coerce.date(),
-  deleted_at: z.coerce.date().optional(),
-});
+// Register and login both open a session, so both describe the device it
+// belongs to the same way.
+const deviceInfoSchema = z
+  .object({
+    platform: z.string().optional(),
+    model: z.string().optional(),
+    os: z.string().optional(),
+  })
+  .optional();
 
 export const registerRequestSchema = z.object({
   username: z
@@ -56,31 +35,12 @@ export const registerRequestSchema = z.object({
   // Register now creates a backing session (mirroring login) so its tokens can
   // be revoked/rotated, which requires the device the session belongs to.
   device_id: z.string().max(64),
-  device_info: z
-    .object({
-      platform: z.string().optional(),
-      model: z.string().optional(),
-      os: z.string().optional(),
-    })
-    .optional(),
+  device_info: deviceInfoSchema,
 });
 
 export const loginRequestSchema = z.object({
   username: z.string(),
   password: z.string(),
   device_id: z.string().max(64),
-  device_info: z
-    .object({
-      platform: z.string().optional(),
-      model: z.string().optional(),
-      os: z.string().optional(),
-    })
-    .optional(),
+  device_info: deviceInfoSchema,
 });
-
-export type User = z.infer<typeof userSchema>;
-export type UserPreferences = z.infer<typeof userPreferencesSchema>;
-export type LLMKeys = z.infer<typeof llmKeysSchema>;
-export type EncryptedKey = z.infer<typeof encryptedKeySchema>;
-export type RegisterRequest = z.infer<typeof registerRequestSchema>;
-export type LoginRequest = z.infer<typeof loginRequestSchema>;

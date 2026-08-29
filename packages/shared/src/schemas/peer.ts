@@ -56,6 +56,4 @@ export const policyOverridesSchema = z.object({
 });
 
 export type PeerAgent = z.infer<typeof peerAgentSchema>;
-export type PeerContact = z.infer<typeof peerContactSchema>;
-export type ContactLookup = z.infer<typeof contactLookupSchema>;
 export type PolicyOverrides = z.infer<typeof policyOverridesSchema>;

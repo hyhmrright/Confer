@@ -62,7 +62,13 @@ export function AddContactDialog() {
             disabled={searching || !query.trim()}
             className={`px-4 py-2.5 bg-primary-600 text-white rounded-xl text-sm hover:bg-primary-700 ${DISABLED_FILLED} transition-colors flex items-center gap-1.5 ${FOCUS_RING}`}
           >
-            {searching ? <Loader className="w-3.5 h-3.5" /> : <Search className="w-3.5 h-3.5" />}
+            {/* `animate-spin` is spelled out because a caller's className
+                replaces the icon's own — without it this spinner sits still. */}
+            {searching ? (
+              <Loader className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Search className="w-3.5 h-3.5" />
+            )}
             {t('contacts.search')}
           </button>
         </form>

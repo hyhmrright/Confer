@@ -1,15 +1,8 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TranslationKey } from '../i18n/index.js';
+import type { Citation } from '../stores/chat.js';
 import { BookOpen, ChevronDown, ChevronRight, ExternalLink } from './Icons.js';
-
-interface Citation {
-  source: string;
-  url?: string;
-  page?: number;
-  passage?: string;
-  trust_level?: string;
-}
 
 const trustBadge: Record<string, { labelKey: TranslationKey; color: string }> = {
   authoritative: {

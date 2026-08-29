@@ -49,22 +49,33 @@ export class OpenAICompatibleProvider implements LLMProvider {
     return model;
   }
 
-  async chat(messages: LLMMessage[], options?: LLMChatOptions): Promise<LLMResponse> {
-    const model = this.resolveModel(options);
+  // The fields both entry points always send. Note the asymmetry in what each
+  // adds on top: only `stream` sends `tools`. That predates this helper and is
+  // left as it was.
+  private baseBody(messages: LLMMessage[], options?: LLMChatOptions): Record<string, unknown> {
+    return {
+      model: this.resolveModel(options),
+      messages: messages.map(toOpenAIMessage),
+      temperature: options?.temperature,
+      max_tokens: options?.max_tokens ?? 4096,
+    };
+  }
 
-    const response = await fetch(`${this.baseUrl}${this.completionsPath}`, {
+  // One address, one set of headers. The vendor's path is configurable, so the
+  // two calls must not each build it.
+  private post(body: Record<string, unknown>): Promise<Response> {
+    return fetch(`${this.baseUrl}${this.completionsPath}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${this.apiKey}`,
       },
-      body: JSON.stringify({
-        model,
-        messages: messages.map(toOpenAIMessage),
-        temperature: options?.temperature,
-        max_tokens: options?.max_tokens ?? 4096,
-      }),
+      body: JSON.stringify(body),
     });
+  }
+
+  async chat(messages: LLMMessage[], options?: LLMChatOptions): Promise<LLMResponse> {
+    const response = await this.post(this.baseBody(messages, options));
 
     if (!response.ok) {
       const text = await response.text();
@@ -92,15 +103,8 @@ export class OpenAICompatibleProvider implements LLMProvider {
   }
 
   async *stream(messages: LLMMessage[], options?: LLMChatOptions): AsyncIterable<LLMStreamEvent> {
-    const model = this.resolveModel(options);
-
-    const body: Record<string, unknown> = {
-      model,
-      messages: messages.map(toOpenAIMessage),
-      temperature: options?.temperature,
-      max_tokens: options?.max_tokens ?? 4096,
-      stream: true,
-    };
+    const body = this.baseBody(messages, options);
+    body.stream = true;
     if (options?.tools?.length) {
       body.tools = options.tools.map((t) => ({
         type: 'function',
@@ -109,14 +113,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
       body.tool_choice = 'auto';
     }
 
-    const response = await fetch(`${this.baseUrl}${this.completionsPath}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.apiKey}`,
-      },
-      body: JSON.stringify(body),
-    });
+    const response = await this.post(body);
 
     if (!response.ok || !response.body) {
       throw new Error(`${this.name} stream error: ${response.status}`);

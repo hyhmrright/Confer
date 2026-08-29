@@ -4,7 +4,10 @@ import { api, getToken } from '../lib/api.js';
 import { prependNew } from '../lib/list.js';
 import { useAuthStore } from './auth.js';
 
-interface Citation {
+// Exported because the components that render a thread need the same two
+// shapes, and each had been re-declaring them verbatim — `Citation` in three
+// files, `Message` in two. The store is what fills them, so it owns them.
+export interface Citation {
   source: string;
   url?: string;
   page?: number;
@@ -12,7 +15,7 @@ interface Citation {
   trust_level?: string;
 }
 
-interface Message {
+export interface Message {
   id: string;
   conversation_id: string;
   sender_type: string;

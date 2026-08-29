@@ -33,6 +33,4 @@ export const conversationParticipantSchema = z.object({
   notification: z.enum(['all', 'mentions', 'none']).default('all'),
 });
 
-export type ConversationType = z.infer<typeof conversationTypeSchema>;
 export type Conversation = z.infer<typeof conversationSchema>;
-export type ConversationParticipant = z.infer<typeof conversationParticipantSchema>;

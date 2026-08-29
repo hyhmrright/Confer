@@ -12,6 +12,3 @@ export const projectFactsWriteSchema = z.object({
 export const projectDecisionsWriteSchema = z.object({
   decisions_md: z.string().min(1),
 });
-
-export type ProjectFactsWrite = z.infer<typeof projectFactsWriteSchema>;
-export type ProjectDecisionsWrite = z.infer<typeof projectDecisionsWriteSchema>;

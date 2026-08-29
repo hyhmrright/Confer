@@ -62,5 +62,3 @@ export const consultRequestSchema = z.object({
 
 export type Message = z.infer<typeof messageSchema>;
 export type Citation = z.infer<typeof citationSchema>;
-export type SendMessageRequest = z.infer<typeof sendMessageRequestSchema>;
-export type ConsultRequest = z.infer<typeof consultRequestSchema>;

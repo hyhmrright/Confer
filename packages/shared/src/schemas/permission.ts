@@ -55,5 +55,4 @@ export const permissionRequestEventSchema = z.object({
 
 export type Permission = z.infer<typeof permissionSchema>;
 export type PermissionLevel = z.infer<typeof permissionLevelSchema>;
-export type DecidePermissionRequest = z.infer<typeof decidePermissionRequestSchema>;
 export type PermissionRequestEvent = z.infer<typeof permissionRequestEventSchema>;
