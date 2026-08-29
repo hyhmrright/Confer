@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FOCUS_RING } from '../lib/styles.js';
+import { DISABLED_FILLED, FOCUS_RING } from '../lib/styles.js';
 import { useContactsStore } from '../stores/contacts.js';
 import { Bot, Loader, Search } from './Icons.js';
 import { Modal } from './Modal.js';
@@ -60,7 +60,7 @@ export function AddContactDialog() {
           <button
             type="submit"
             disabled={searching || !domain.trim()}
-            className={`px-4 py-2.5 bg-primary-600 text-white rounded-xl text-sm hover:bg-primary-700 disabled:opacity-50 transition-colors flex items-center gap-1.5 ${FOCUS_RING}`}
+            className={`px-4 py-2.5 bg-primary-600 text-white rounded-xl text-sm hover:bg-primary-700 ${DISABLED_FILLED} transition-colors flex items-center gap-1.5 ${FOCUS_RING}`}
           >
             {searching ? <Loader className="w-3.5 h-3.5" /> : <Search className="w-3.5 h-3.5" />}
             {t('contacts.search')}
@@ -104,7 +104,7 @@ export function AddContactDialog() {
                   type="button"
                   onClick={() => addContact(agent.id)}
                   disabled={loading}
-                  className={`px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors shrink-0 ${FOCUS_RING}`}
+                  className={`px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 ${DISABLED_FILLED} transition-colors shrink-0 ${FOCUS_RING}`}
                 >
                   {t('contacts.add')}
                 </button>

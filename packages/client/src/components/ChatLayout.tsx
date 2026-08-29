@@ -98,7 +98,7 @@ function NavRail({
             key={id}
             onClick={() => setTab(id)}
             title={t(labelKey)}
-            className={`relative w-9 h-9 flex items-center justify-center rounded-lg transition-all duration-150 group
+            className={`relative w-9 h-9 flex items-center justify-center rounded-lg transition-all duration-150 group ${FOCUS_RING}
               ${
                 active
                   ? 'bg-primary-600/15 text-primary-400'
@@ -124,7 +124,7 @@ function NavRail({
           type="button"
           onClick={onAdmin}
           title={t('nav.admin')}
-          className="w-9 h-9 flex items-center justify-center rounded-lg text-ink-muted hover:text-ink-secondary hover:bg-dark-hover transition-colors"
+          className={`w-9 h-9 flex items-center justify-center rounded-lg text-ink-muted hover:text-ink-secondary hover:bg-dark-hover transition-colors ${FOCUS_RING}`}
         >
           <Shield className="w-[18px] h-[18px]" />
         </button>
@@ -135,7 +135,7 @@ function NavRail({
         type="button"
         onClick={onSettings}
         title={t('nav.settings')}
-        className="w-9 h-9 flex items-center justify-center rounded-lg text-ink-muted hover:text-ink-secondary hover:bg-dark-hover transition-colors"
+        className={`w-9 h-9 flex items-center justify-center rounded-lg text-ink-muted hover:text-ink-secondary hover:bg-dark-hover transition-colors ${FOCUS_RING}`}
       >
         <Settings className="w-[18px] h-[18px]" />
       </button>

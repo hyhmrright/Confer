@@ -375,7 +375,10 @@
 }
 .markdown-content th {
   font-family: var(--font-mono);
-  font-size: 10px;
+  /* 11px to match `eyebrow`. Column headings are how a reader navigates the
+     table, and at 10px the CJK ones — which uppercase does nothing for — were
+     the smallest type in the product. */
+  font-size: 11px;
   font-weight: 500;
   letter-spacing: 0.09em;
   text-transform: uppercase;

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useFileAttachment } from '../hooks/useFileAttachment.js';
-import { FOCUS_RING } from '../lib/styles.js';
+import { DISABLED, DISABLED_FILLED, FOCUS_RING } from '../lib/styles.js';
 import { useChatStore } from '../stores/chat.js';
 import { Bot, Paperclip, Send, X } from './Icons.js';
 import { LoadingDots } from './LoadingDots.js';
@@ -132,7 +132,7 @@ export function MessageView() {
               type="button"
               onClick={loadOlderMessages}
               disabled={loadingOlder}
-              className={`w-full py-2 eyebrow text-ink-muted hover:text-ink-secondary hover:bg-dark-hover rounded-lg disabled:opacity-40 transition-colors ${FOCUS_RING}`}
+              className={`w-full py-2 eyebrow text-ink-muted hover:text-ink-secondary hover:bg-dark-hover rounded-lg ${DISABLED} transition-colors ${FOCUS_RING}`}
             >
               {loadingOlder ? t('common.loading') : t('message.loadOlder')}
             </button>
@@ -195,7 +195,7 @@ export function MessageView() {
               type="button"
               onClick={openFilePicker}
               disabled={sending || streaming}
-              className="p-2 text-ink-muted hover:text-primary-400 hover:bg-primary-600/10 rounded-lg disabled:opacity-30 transition-colors shrink-0"
+              className={`p-2 text-ink-muted hover:text-primary-400 hover:bg-primary-600/10 rounded-lg ${DISABLED} transition-colors shrink-0`}
               title={t('message.uploadFile')}
             >
               <Paperclip className="w-4 h-4" />
@@ -218,8 +218,8 @@ export function MessageView() {
               type="button"
               onClick={handleSend}
               disabled={!canSend}
-              className="p-2 rounded-lg bg-primary-600 text-white hover:bg-primary-500
-                disabled:opacity-25 disabled:cursor-not-allowed transition-all shrink-0"
+              className={`p-2 rounded-lg bg-primary-600 text-white hover:bg-primary-500
+                ${DISABLED_FILLED} disabled:cursor-not-allowed transition-all shrink-0`}
             >
               <Send className="w-4 h-4" />
             </button>

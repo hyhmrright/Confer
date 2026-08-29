@@ -61,12 +61,16 @@ export function ProfileTab() {
 
       <div>
         <FieldLabel htmlFor="profile-username">{t('settings.profileUsername')}</FieldLabel>
+        {/* Not editable, but very much meant to be read — it is who you are on
+            this instance. `opacity-60` over ink-muted put it at 3.09:1, which is
+            how you make a fact illegible in order to say "you cannot change
+            this"; the hint line underneath already says that in words. */}
         <input
           id="profile-username"
           type="text"
           value={user?.username ?? ''}
           disabled
-          className="w-full px-3 py-2 bg-dark-base border border-dark-border rounded-lg text-sm text-ink-muted font-mono opacity-60"
+          className="w-full px-3 py-2 bg-dark-base border border-dark-border rounded-lg text-sm text-ink-secondary font-mono"
         />
         <p className="text-[11px] text-ink-muted mt-1">{t('settings.profileUsernameHint')}</p>
       </div>

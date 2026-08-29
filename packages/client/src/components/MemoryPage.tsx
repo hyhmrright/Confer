@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { dateLocale } from '../i18n/index.js';
-import { FOCUS_RING, INPUT_CLS } from '../lib/styles.js';
+import { DISABLED_FILLED, FOCUS_RING, INPUT_CLS } from '../lib/styles.js';
 import { useMemoriesStore } from '../stores/memories.js';
 import { EmptyState } from './EmptyState.js';
 import { Plus, Search, Trash } from './Icons.js';
@@ -104,8 +104,8 @@ export function MemoryPage() {
               type="button"
               onClick={handleCreate}
               disabled={saving || !newTitle.trim() || !newContent.trim()}
-              className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg
-                hover:bg-primary-500 disabled:opacity-40 transition-colors"
+              className={`px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg
+                hover:bg-primary-500 ${DISABLED_FILLED} transition-colors`}
             >
               {saving ? t('common.saving') : t('common.save')}
             </button>
@@ -165,7 +165,7 @@ export function MemoryPage() {
                       ))}
                     </div>
                   )}
-                  <p className="text-[10px] text-ink-muted mt-1.5 font-mono">
+                  <p className="eyebrow text-ink-muted mt-1.5">
                     {new Date(mem.updated_at).toLocaleString(dateLocale(), {
                       month: 'short',
                       day: 'numeric',

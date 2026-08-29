@@ -60,7 +60,7 @@ export function CitationCapsule({ citations }: { citations: Citation[] }) {
                         {cite.source}
                       </span>
                       {cite.page != null && (
-                        <span className="text-[10px] text-ink-muted font-mono shrink-0">
+                        <span className="text-[11px] text-ink-muted font-mono shrink-0">
                           p.{cite.page}
                         </span>
                       )}

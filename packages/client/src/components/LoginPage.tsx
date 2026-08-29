@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router';
-import { FOCUS_RING } from '../lib/styles.js';
+import { DISABLED_FILLED, FOCUS_RING } from '../lib/styles.js';
 import { useAuthStore } from '../stores/auth.js';
 import { Loader } from './Icons.js';
 
@@ -146,7 +146,7 @@ export function LoginPage() {
               type="submit"
               disabled={loading}
               className={`w-full py-2.5 bg-primary-600 text-white rounded-xl text-sm font-medium
-                hover:bg-primary-500 disabled:opacity-40 transition-colors flex items-center justify-center gap-2 mt-1 ${FOCUS_RING}`}
+                hover:bg-primary-500 ${DISABLED_FILLED} transition-colors flex items-center justify-center gap-2 mt-1 ${FOCUS_RING}`}
             >
               {loading && <Loader className="w-4 h-4 animate-spin" />}
               {loading

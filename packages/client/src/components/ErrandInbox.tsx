@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { DISABLED_FILLED } from '../lib/styles.js';
 import { useErrandsStore } from '../stores/errands.js';
 import { ErrandCard } from './ErrandCard.js';
 import { Plus } from './Icons.js';
@@ -44,6 +45,12 @@ export function ErrandInbox() {
 
   return (
     <div className={`${ANCHOR} w-80 max-w-[calc(100vw-2rem)] space-y-2`}>
+      {/* The stack floats over the app with nothing saying what it is. The label
+          for it already existed in all three locales and had simply never been
+          rendered. */}
+      {pendingCards.length > 0 && (
+        <p className="eyebrow text-ink-muted px-1">{t('errand.inboxTitle')}</p>
+      )}
       {pendingCards.map((card) => (
         <ErrandCard key={card.id} card={card} />
       ))}
@@ -66,7 +73,7 @@ export function ErrandInbox() {
               type="button"
               onClick={submit}
               disabled={creating || title.trim() === ''}
-              className="px-3 py-1 text-xs rounded-md bg-primary-600 text-white hover:bg-primary-500 disabled:opacity-50"
+              className={`px-3 py-1 text-xs rounded-md bg-primary-600 text-white hover:bg-primary-500 ${DISABLED_FILLED}`}
             >
               {creating ? t('errand.creating') : t('errand.create')}
             </button>

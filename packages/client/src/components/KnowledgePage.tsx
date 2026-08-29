@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import i18n from '../i18n/index.js';
-import { INPUT_CLS } from '../lib/styles.js';
+import { DISABLED, DISABLED_FILLED, INPUT_CLS } from '../lib/styles.js';
 import { type KnowledgeDocument, useKbStore } from '../stores/knowledge-base.js';
 import { EmptyState } from './EmptyState.js';
 import { ChevronDown, Plus, Trash } from './Icons.js';
@@ -122,7 +122,7 @@ function KbCard({ kbId }: { kbId: string }) {
           <div className="min-w-0">
             <p className="text-xs font-medium text-ink-primary truncate">{kb.name}</p>
             {kb.description && (
-              <p className="text-[10px] text-ink-muted mt-0.5 truncate">{kb.description}</p>
+              <p className="text-[11px] text-ink-muted mt-0.5 truncate">{kb.description}</p>
             )}
           </div>
         </button>
@@ -131,8 +131,8 @@ function KbCard({ kbId }: { kbId: string }) {
             type="button"
             onClick={() => fileRef.current?.click()}
             disabled={uploading}
-            className="text-[11px] px-2 py-0.5 rounded-md bg-primary-600/15 text-primary-400
-              border border-primary-600/20 hover:bg-primary-600/25 disabled:opacity-40 transition-all"
+            className={`text-[11px] px-2 py-0.5 rounded-md bg-primary-600/15 text-primary-400
+              border border-primary-600/20 hover:bg-primary-600/25 ${DISABLED} transition-all`}
           >
             {uploading ? t('knowledge.uploading') : t('knowledge.upload')}
           </button>
@@ -158,9 +158,9 @@ function KbCard({ kbId }: { kbId: string }) {
       {expanded && (
         <div className="px-3 pb-2.5 flex flex-col gap-1.5 border-t border-dark-border pt-2">
           {!docs ? (
-            <p className="text-[10px] text-ink-muted py-1 text-center">{t('common.loading')}</p>
+            <p className="text-[11px] text-ink-muted py-1 text-center">{t('common.loading')}</p>
           ) : docs.length === 0 ? (
-            <p className="text-[10px] text-ink-muted py-1 text-center">
+            <p className="text-[11px] text-ink-muted py-1 text-center">
               {t('knowledge.docsEmpty')}
             </p>
           ) : (
@@ -261,8 +261,8 @@ export function KnowledgePage() {
               type="button"
               onClick={handleCreate}
               disabled={!name.trim() || saving}
-              className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg
-                hover:bg-primary-500 disabled:opacity-40 transition-colors"
+              className={`px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg
+                hover:bg-primary-500 ${DISABLED_FILLED} transition-colors`}
             >
               {saving ? t('common.creating') : t('common.create')}
             </button>

@@ -44,9 +44,9 @@ export function ConversationsPanel({ onNavigate }: { onNavigate?: () => void }) 
         <button
           type="button"
           onClick={handleNew}
-          className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md
+          className={`flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md
             bg-primary-600/15 text-primary-400 border border-primary-600/20
-            hover:bg-primary-600/25 hover:border-primary-600/35 transition-all"
+            hover:bg-primary-600/25 hover:border-primary-600/35 transition-all ${FOCUS_RING}`}
         >
           <Plus className="w-3 h-3" />
           {t('conversations.new')}
@@ -109,7 +109,7 @@ export function ConversationsPanel({ onNavigate }: { onNavigate?: () => void }) 
                     >
                       {conv.name ?? t('conversations.untitled', { id: conv.id.slice(0, 6) })}
                     </p>
-                    <p className="text-[10px] text-ink-muted mt-0.5 font-mono">
+                    <p className="eyebrow text-ink-muted mt-0.5">
                       {new Date(conv.updated_at).toLocaleString(dateLocale(), {
                         month: 'short',
                         day: 'numeric',

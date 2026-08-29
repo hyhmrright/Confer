@@ -20,3 +20,21 @@ export const INPUT_CLS = `w-full px-3 py-2 bg-dark-input border border-dark-bord
 export const INPUT_FIELD_CLS = `w-full px-3 py-2 bg-dark-input border border-dark-border rounded-lg text-sm text-ink-primary placeholder:text-ink-muted ${FOCUS_RING} transition-colors`;
 
 export const SELECT_FIELD_CLS = `w-full px-3 py-2 bg-dark-input border border-dark-border rounded-lg text-sm text-ink-primary ${FOCUS_RING} transition-colors appearance-none`;
+
+// Disabled state.
+//
+// The codebase expressed it as `disabled:opacity-{25,30,40,50}` in 24 places —
+// four different values, none of them chosen. Measured, `opacity-40` puts
+// ink-secondary at 2.24:1 against the page and `opacity-25` puts the composer's
+// send arrow at 1.57:1: the control does not read as unavailable, it reads as
+// absent, and on the admin tables the pagination simply vanished. Disabled
+// controls are exempt from the 4.5:1 text rule, but "exempt from a rule" is not
+// a reason to make a control invisible.
+//
+// Two treatments, because opacity cannot serve both: an outline or ghost control
+// fades to a level that still clears 3:1, and a filled one drops its fill
+// instead — a solid button dimmed to 55% still reads as a button you may press.
+export const DISABLED = 'disabled:opacity-55 disabled:cursor-not-allowed';
+
+export const DISABLED_FILLED =
+  'disabled:bg-dark-active disabled:text-ink-muted disabled:shadow-none disabled:cursor-not-allowed';

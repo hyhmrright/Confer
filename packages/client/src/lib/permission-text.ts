@@ -1,5 +1,26 @@
 import type { PermissionRequestEvent } from '@confer/shared';
 import type { TFunction } from 'i18next';
+import type { TranslationKey } from '../i18n/index.js';
+
+// The actions `classifyPermissionLevel` in @confer/agent-runtime names by hand,
+// plus `send_message`. Without these the generic branch below put the raw
+// identifier into the sentence — so the L3 requests, the ones with money and
+// signatures behind them, read as "X is requesting: sign_contract" on the single
+// screen where the owner has to understand what they are agreeing to.
+//
+// Deliberately not exhaustive: `action` is an open string and the generic branch
+// still has to carry whatever a newer gateway invents.
+const ACTION_LABEL: Record<string, TranslationKey> = {
+  read_own: 'permission.actionReadOwn',
+  cite_own_docs: 'permission.actionCiteOwnDocs',
+  query: 'permission.actionQuery',
+  accept_invite: 'permission.actionAcceptInvite',
+  payment: 'permission.actionPayment',
+  sign_contract: 'permission.actionSignContract',
+  delete: 'permission.actionDelete',
+  transfer: 'permission.actionTransfer',
+  send_message: 'permission.actionSendMessage',
+};
 
 // Render the sentence shown on a permission card, in the reader's language.
 //
@@ -36,6 +57,9 @@ export function describePermission(
       ? t('permission.descAskWith', { who, question: content })
       : t('permission.descAsk', { who });
   }
+
+  const label = ACTION_LABEL[request.action];
+  if (label) return t('permission.descAction', { who, what: t(label) });
 
   return t('permission.descGeneric', { who, action: request.action });
 }

@@ -68,9 +68,7 @@ export function AccountMenu({
             )}
             {user?.did && (
               <div className="mt-2">
-                <p className="text-[10px] uppercase tracking-wider text-ink-muted font-mono">
-                  {t('nav.did')}
-                </p>
+                <p className="eyebrow text-ink-muted">{t('nav.did')}</p>
                 <p className="text-xs text-ink-secondary font-mono truncate" title={user.did}>
                   {user.did}
                 </p>

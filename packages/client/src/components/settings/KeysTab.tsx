@@ -76,8 +76,12 @@ export function KeysTab() {
               keyValue={keyValue}
               badge={
                 <>
+                  {/* Neutral, not blue. This says the provider can also do
+                      embeddings — a capability, not a status — and blue is the
+                      one hue with no meaning anywhere else in the palette, so
+                      it read as a state the reader had to decode. */}
                   {provider.supportsEmbedding && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-900/30 text-blue-400 border border-blue-800/30">
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-dark-border text-ink-secondary border border-dark-active">
                       {t('settings.keysSupportsKb')}
                     </span>
                   )}
