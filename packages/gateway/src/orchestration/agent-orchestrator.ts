@@ -11,7 +11,7 @@ import {
   knowledgeBaseToolDefinition,
   searchKnowledgeBase,
 } from '../tools/knowledge-base.js';
-import { recallMemories } from '../tools/memory.js';
+import { type MemoryRecall, recallMemories } from '../tools/memory.js';
 import { tavilySearch, tavilyToolDefinition } from '../tools/tavily.js';
 
 // Shared agent orchestration core for both the web chat (streaming) and inbound
@@ -76,6 +76,11 @@ interface ToolExecContext {
   embeddingProvider: EmbeddingProvider;
   tavilyApiKey: string;
   citations: KbCitation[];
+  // Names of the tools the model asked for this turn, in order — attempts, not
+  // successes, since the question it answers is whether the model reached for
+  // the tool at all. An accumulator like `citations`: the loop fills it, the
+  // caller reads it.
+  toolsUsed: string[];
   emit?: AgentTurnEmit;
 }
 
@@ -162,6 +167,7 @@ async function runAgentWithTools(
     ];
 
     for (const tc of pendingToolCalls) {
+      ctx.toolsUsed.push(tc.name);
       await ctx.emit?.onTool?.(tc.name);
 
       const result = await executeToolCall(tc, ctx);
@@ -175,16 +181,58 @@ async function runAgentWithTools(
   return fullContent;
 }
 
+/**
+ * One line per turn saying what the turn was actually grounded in.
+ *
+ * Two things here have no other way to be noticed. Recall returning nothing has
+ * three causes that all present as an empty prompt fragment — nothing stored,
+ * nothing above the score floor, or rows that were never indexed — and the last
+ * one hid for months. And the KB instruction *mandates* a search before
+ * answering, yet a model that ignores it produces a fluent answer from its own
+ * priors that reads exactly like a grounded one.
+ *
+ * Counts and scores only: memory text and message content are PII and stay out.
+ */
+function recallState(embeddingKey: string, recall: MemoryRecall | undefined): string {
+  if (!embeddingKey) return 'off';
+  if (!recall) return 'failed';
+  if (recall.hits.length === 0) return '0';
+  return `${recall.hits.length}@${(recall.hits[0]?.score ?? 0).toFixed(2)}`;
+}
+
+function kbState(hasKb: boolean, toolsUsed: string[]): string {
+  if (!hasKb) return 'none';
+  return toolsUsed.includes('search_knowledge_base') ? 'searched' : 'unsearched';
+}
+
+function logTurnGrounding(
+  opts: RunAgentTurnOptions,
+  recall: MemoryRecall | undefined,
+  toolsUsed: string[],
+  citations: KbCitation[],
+): void {
+  console.log(
+    `agent turn user=${opts.userId}` +
+      ` recall=${recallState(opts.embeddingKey, recall)}` +
+      ` kb=${kbState(opts.hasKb, toolsUsed)}` +
+      // `kb=searched` says the model obeyed the instruction, not that anything
+      // came back: a search that matched nothing, or one that threw and was
+      // handed to the model as error text, both still count as searched.
+      ` cites=${citations.length}` +
+      ` tools=${toolsUsed.length}`,
+  );
+}
+
 // Run one agent turn: recall durable memories, layer the KB instruction +
 // memory fragment onto the base system prompt, offer the resolved tools, and
 // drive the tool loop. Memory recall is best-effort — a failure is logged
 // (userId only, never message content) and the turn proceeds without it.
 export async function runAgentTurn(opts: RunAgentTurnOptions): Promise<RunAgentTurnResult> {
-  let memoryFragment = '';
+  let recall: MemoryRecall | undefined;
   if (opts.embeddingKey) {
     try {
       await ensureMemoryCollection();
-      memoryFragment = await recallMemories(
+      recall = await recallMemories(
         opts.userMessage,
         opts.userId,
         opts.embeddingKey,
@@ -196,7 +244,7 @@ export async function runAgentTurn(opts: RunAgentTurnOptions): Promise<RunAgentT
   }
 
   const effectiveSystemPrompt =
-    buildSystemPrompt(opts.systemPromptBase, opts.hasKb) + memoryFragment;
+    buildSystemPrompt(opts.systemPromptBase, opts.hasKb) + (recall?.fragment ?? '');
   const tools = buildToolDefinitions(opts.tavilyApiKey, opts.hasKb);
 
   const initialMessages: LLMMessage[] = [
@@ -206,6 +254,7 @@ export async function runAgentTurn(opts: RunAgentTurnOptions): Promise<RunAgentT
   ];
 
   const citations: KbCitation[] = [];
+  const toolsUsed: string[] = [];
   const content = await runAgentWithTools(
     opts.provider,
     initialMessages,
@@ -216,9 +265,12 @@ export async function runAgentTurn(opts: RunAgentTurnOptions): Promise<RunAgentT
       embeddingProvider: opts.embeddingProvider,
       tavilyApiKey: opts.tavilyApiKey,
       citations,
+      toolsUsed,
       emit: opts.emit,
     },
   );
+
+  logTurnGrounding(opts, recall, toolsUsed, citations);
 
   return { content, citations };
 }

@@ -233,6 +233,8 @@ export const ja: Resources = {
     pinned: 'ピン留め',
     auto: '自動',
     autoTitle: '会話から自動的に記憶',
+    a2a: '外部',
+    a2aTitle: '外部 Agent からの質問で覚えたもので、あなたの発言ではありません',
     pin: 'ピン留め',
     unpin: 'ピン留め解除',
     delete: '削除',

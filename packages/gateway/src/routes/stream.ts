@@ -213,6 +213,7 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
           embeddingKey,
           embeddingProvider,
           recentTurns,
+          source: 'auto',
         }).catch((err) => {
           console.error(`Memory extraction failed for user ${user.sub}:`, err);
         });

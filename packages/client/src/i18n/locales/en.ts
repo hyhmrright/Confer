@@ -231,6 +231,8 @@ export const en: Resources = {
     pinned: 'Pinned',
     auto: 'Auto',
     autoTitle: 'Remembered automatically from a conversation',
+    a2a: 'External',
+    a2aTitle: 'Learned from an external Agent’s question, not from something you said',
     pin: 'Pin',
     unpin: 'Unpin',
     delete: 'Delete',

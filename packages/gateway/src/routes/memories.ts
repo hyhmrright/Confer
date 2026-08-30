@@ -7,7 +7,7 @@ import { agentMemories } from '../db/schema.js';
 import { getEnv } from '../env.js';
 import { type EmbeddingProvider, embedTexts } from '../lib/embedding.js';
 import { getUserLlmKeys, resolveEmbeddingKey } from '../lib/llm-keys.js';
-import { deleteMemory, upsertMemory } from '../lib/memory-store.js';
+import { asMemorySource, deleteMemory, upsertMemory } from '../lib/memory-store.js';
 import { authMiddleware } from '../middleware/auth.js';
 import type { AppEnv } from '../types.js';
 
@@ -84,7 +84,14 @@ memoriesRoutes.post('/', async (c) => {
     .returning();
 
   try {
-    await upsertMemory({ memoryId, userId: user.sub, text: body.content, vector, provider });
+    await upsertMemory({
+      memoryId,
+      userId: user.sub,
+      text: body.content,
+      vector,
+      provider,
+      source: 'manual',
+    });
   } catch (err) {
     // Undo the row rather than keep an unrecallable one. The reverse orphan (a
     // vector with no row) would be worse: recall reads its text from the
@@ -108,11 +115,24 @@ memoriesRoutes.patch('/:id', async (c) => {
   // update then fails the request errors and they retry, whereas the reverse
   // order fails silently on an otherwise successful edit.
   if (body.content !== undefined) {
-    const [existing] = await db.select({ id: agentMemories.id }).from(agentMemories).where(owned);
+    const [existing] = await db
+      .select({ id: agentMemories.id, source: agentMemories.source })
+      .from(agentMemories)
+      .where(owned);
     if (!existing) throw new AppError('not_found', 'Memory not found', 404);
 
     const { vector, provider } = await embedMemory(user.sub, body.content);
-    await upsertMemory({ memoryId: id, userId: user.sub, text: body.content, vector, provider });
+    // Carry the row's own source across: an edit rewrites the payload wholesale,
+    // and stamping 'manual' here would relabel an auto- or peer-derived memory
+    // in Qdrant while the row it mirrors still says otherwise.
+    await upsertMemory({
+      memoryId: id,
+      userId: user.sub,
+      text: body.content,
+      vector,
+      provider,
+      source: asMemorySource(existing.source) ?? 'manual',
+    });
   }
 
   const [row] = await db

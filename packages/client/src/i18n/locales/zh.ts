@@ -224,6 +224,8 @@ export const zh = {
     pinned: '置顶',
     auto: '自动',
     autoTitle: '对话中自动记住',
+    a2a: '外部',
+    a2aTitle: '来自外部 Agent 的提问，不是你自己说的',
     pin: '置顶',
     unpin: '取消置顶',
     delete: '删除',

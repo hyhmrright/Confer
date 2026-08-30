@@ -71,6 +71,7 @@ describe('memory orchestration', () => {
         embeddingKey: KEY,
         embeddingProvider: 'openai',
         recentTurns: 'user: ...\nagent: ...',
+        source: 'auto',
       });
     } finally {
       restore();
@@ -87,8 +88,9 @@ describe('memory orchestration', () => {
     try {
       // Query shares the 'TypeScript' topic → collides with the stored fact's
       // vector (cosine 1.0), clearing the 0.3 recall floor.
-      const hits = await recallMemories('TypeScript 有什么技巧', user.id, KEY, 'openai');
-      expect(hits).toContain('用户偏好 TypeScript');
+      const recall = await recallMemories('TypeScript 有什么技巧', user.id, KEY, 'openai');
+      expect(recall.fragment).toContain('用户偏好 TypeScript');
+      expect(recall.hits.length).toBe(1);
     } finally {
       restore2();
     }
@@ -104,6 +106,7 @@ describe('memory orchestration', () => {
           embeddingKey: KEY,
           embeddingProvider: 'openai',
           recentTurns: 'x',
+          source: 'auto',
         });
       } finally {
         restore();
@@ -118,11 +121,12 @@ describe('memory orchestration', () => {
     expect(rows.length).toBe(1);
   });
 
-  test('recallMemories returns empty string when nothing matches', async () => {
+  test('recallMemories returns an empty fragment and no hits when nothing matches', async () => {
     const restore = mockEmbedding();
     try {
       const out = await recallMemories('完全不相关的查询', user.id, KEY, 'openai');
-      expect(out).toBe('');
+      expect(out.fragment).toBe('');
+      expect(out.hits.length).toBe(0);
     } finally {
       restore();
     }
@@ -137,6 +141,7 @@ describe('memory orchestration', () => {
         embeddingKey: KEY,
         embeddingProvider: 'openai',
         recentTurns: 'x',
+        source: 'auto',
       });
     } finally {
       restore();
@@ -146,6 +151,64 @@ describe('memory orchestration', () => {
       .from(agentMemories)
       .where(eq(agentMemories.user_id, user.id));
     expect(rows.length).toBe(1);
+  });
+
+  // A connected peer's questions are distilled into the owner's memory by the
+  // same extractor as their own chats. Recorded and recalled identically, "the
+  // peer wants our Q3 numbers" comes back to the owner as a fact about
+  // themselves — and there is nothing on the memory to review it by afterwards.
+  test('facts learned from an inbound peer question are stored and recalled as a2a', async () => {
+    const restore = mockEmbedding();
+    try {
+      await extractAndStore({
+        userId: user.id,
+        provider: factProvider(['对方想了解我们的 TypeScript 迁移进度']),
+        embeddingKey: KEY,
+        embeddingProvider: 'openai',
+        recentTurns: 'peer：...\n本agent：...',
+        source: 'a2a',
+      });
+    } finally {
+      restore();
+    }
+
+    const rows = await getDb()
+      .select()
+      .from(agentMemories)
+      .where(eq(agentMemories.user_id, user.id));
+    expect(rows.length).toBe(1);
+    expect(rows[0]?.source).toBe('a2a');
+
+    const restore2 = mockEmbedding();
+    try {
+      // The origin has to survive into Qdrant, not just the Postgres row:
+      // recall reads the vector payload and never touches the row.
+      const out = await recallMemories('TypeScript 迁移', user.id, KEY, 'openai');
+      expect(out.fragment).toContain(
+        '（来自外部 Agent 的提问）对方想了解我们的 TypeScript 迁移进度',
+      );
+    } finally {
+      restore2();
+    }
+  });
+
+  test('recallMemories leaves the owner-derived memories unlabelled', async () => {
+    const restore = mockEmbedding();
+    try {
+      await extractAndStore({
+        userId: user.id,
+        provider: factProvider(['用户偏好 TypeScript']),
+        embeddingKey: KEY,
+        embeddingProvider: 'openai',
+        recentTurns: 'x',
+        source: 'auto',
+      });
+      const out = await recallMemories('TypeScript', user.id, KEY, 'openai');
+      expect(out.fragment).toContain('- 用户偏好 TypeScript');
+      expect(out.fragment).not.toContain('外部 Agent');
+    } finally {
+      restore();
+    }
   });
 
   test('recallMemories scopes to the user', async () => {
@@ -159,9 +222,11 @@ describe('memory orchestration', () => {
         embeddingKey: KEY,
         embeddingProvider: 'openai',
         recentTurns: 'x',
+        source: 'auto',
       });
       const out = await recallMemories('别人的秘密', user.id, KEY, 'openai');
-      expect(out).toBe('');
+      expect(out.fragment).toBe('');
+      expect(out.hits.length).toBe(0);
     } finally {
       restore();
     }
