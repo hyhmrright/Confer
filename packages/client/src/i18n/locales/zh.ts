@@ -247,7 +247,7 @@ export const zh = {
     sharedTitle: '外部 Agent 提问时，你的 Agent 可以引用这个知识库来回答。点击改回仅自己。',
     uploading: '上传中…',
     deleteConfirm: '删除知识库「{{name}}」？此操作不可恢复。',
-    docsEmpty: '暂无文档，点击"上传"导入 .txt / .md / .pdf',
+    docsEmpty: '暂无文档，点击"上传"导入 .txt / .md / .pdf / .docx / .xlsx',
     chunkCount: '{{count}}块',
     statusReady: '就绪',
     statusProcessing: '处理中',

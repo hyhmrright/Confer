@@ -256,7 +256,7 @@ export const en: Resources = {
       'Your Agent may cite this base when answering an external Agent. Click to make it private again.',
     uploading: 'Uploading…',
     deleteConfirm: 'Delete knowledge base "{{name}}"? This cannot be undone.',
-    docsEmpty: 'No documents yet. Tap "Upload" to import .txt / .md / .pdf',
+    docsEmpty: 'No documents yet. Tap "Upload" to import .txt / .md / .pdf / .docx / .xlsx',
     chunkCount: '{{count}} chunks',
     statusReady: 'Ready',
     statusProcessing: 'Processing',

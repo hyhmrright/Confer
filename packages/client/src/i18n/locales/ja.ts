@@ -258,7 +258,8 @@ export const ja: Resources = {
       '外部 Agent の質問に答えるとき、あなたの Agent はこのナレッジベースを引用できます。クリックで自分のみに戻します。',
     uploading: 'アップロード中…',
     deleteConfirm: 'ナレッジベース「{{name}}」を削除しますか？この操作は元に戻せません。',
-    docsEmpty: 'ドキュメントはまだありません。「アップロード」で .txt / .md / .pdf を取り込めます',
+    docsEmpty:
+      'ドキュメントはまだありません。「アップロード」で .txt / .md / .pdf / .docx / .xlsx を取り込めます',
     chunkCount: '{{count}} チャンク',
     statusReady: '準備完了',
     statusProcessing: '処理中',
