@@ -7,6 +7,8 @@
  *   bun run eval:rag --k 10          # score at a different retrieval depth
  *   bun run eval:rag --rerank        # recall RECALL_DEPTH, then rerank down to k
  *   bun run eval:rag --user alice    # use that account's own configured embedding key
+ *   bun run eval:rag --skip-ingest   # reuse the corpus already indexed
+ *   bun run eval:rag --no-cross-lingual  # disable the cross-lingual slots (A/B)
  *
  * Ingests this repository's `docs/` into an isolated evaluation namespace in
  * Qdrant, runs every golden-set query through the same `searchChunks` the
@@ -40,8 +42,9 @@ import {
   searchChunks,
   upsertChunks,
 } from '../lib/qdrant.js';
-import { BATCH_SIZE, RECALL_DEPTH } from '../lib/rag-config.js';
+import { BATCH_SIZE, CROSS_LINGUAL_SLOTS, RECALL_DEPTH } from '../lib/rag-config.js';
 import { rerankCandidates } from '../lib/rerank.js';
+import { detectLang } from '../lib/text-lang.js';
 import { type CaseKind, CORPUS_FILES, DOC_LANG, GOLDEN_SET } from './golden-set.js';
 import {
   aggregate,
@@ -142,7 +145,9 @@ async function ingestCorpus(key: string, provider: EmbeddingProvider): Promise<n
       process.exit(1);
     }
 
-    const chunks = chunkText(await file.text(), newId(), filename, EVAL_KB_ID, EVAL_USER_ID);
+    const body = await file.text();
+    const lang = detectLang(body);
+    const chunks = chunkText(body, newId(), filename, EVAL_KB_ID, EVAL_USER_ID);
 
     for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
       const batch = chunks.slice(i, i + BATCH_SIZE);
@@ -156,6 +161,7 @@ async function ingestCorpus(key: string, provider: EmbeddingProvider): Promise<n
         kb_name: EVAL_KB_NAME,
         vector: vectors[index] as number[],
         provider,
+        lang,
       }));
       await upsertChunks(points);
       total += points.length;
@@ -207,6 +213,15 @@ async function runCases(
       depth,
       provider,
       0.3,
+      // Mirrors searchKnowledgeBase. Without this the eval would score a
+      // retriever the product does not run, which is the one thing an eval
+      // must never do. `--no-cross-lingual` turns the slots off so the two can
+      // be compared on the SAME indexed corpus — comparing across two ingests
+      // would confound the change with whatever else moved.
+      {
+        queryLang: detectLang(testCase.query),
+        slots: process.argv.includes('--no-cross-lingual') ? 0 : CROSS_LINGUAL_SLOTS,
+      },
     );
 
     const ordered = reranker
@@ -310,9 +325,18 @@ async function compare(current: Record<string, EvalSummary>, baselinePath: strin
 
 const { key, provider } = await resolveKey();
 
-console.log(`Ingesting corpus (${provider})…`);
-const chunkCount = await ingestCorpus(key, provider);
-console.log(`Ingested ${chunkCount} chunks from ${CORPUS_FILES.length} documents.`);
+// Re-embedding an unchanged corpus to compare two `--k` values is the same
+// work twice, and against a hosted provider it dominates the run — the queries
+// are 30 calls, the corpus is 147 chunks. Skipping is only correct while the
+// documents have not changed, hence opt-in rather than automatic.
+if (process.argv.includes('--skip-ingest')) {
+  await ensureCollection();
+  console.log('Reusing the corpus already indexed (--skip-ingest).');
+} else {
+  console.log(`Ingesting corpus (${provider})…`);
+  const chunkCount = await ingestCorpus(key, provider);
+  console.log(`Ingested ${chunkCount} chunks from ${CORPUS_FILES.length} documents.`);
+}
 
 const k = Number(readFlag('--k') ?? EVAL_K);
 const reranker = resolveReranker();

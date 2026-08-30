@@ -1,8 +1,9 @@
 import type { LLMProvider } from '@confer/agent-runtime';
 import { type EmbeddingProvider, embedTexts } from '../lib/embedding.js';
 import { type SearchResult, searchChunks } from '../lib/qdrant.js';
-import { RECALL_DEPTH, RERANK_TO } from '../lib/rag-config.js';
+import { CROSS_LINGUAL_SLOTS, RECALL_DEPTH, RERANK_TO } from '../lib/rag-config.js';
 import { rerankCandidates } from '../lib/rerank.js';
+import { detectLang } from '../lib/text-lang.js';
 
 export interface KbCitation {
   kb_name: string;
@@ -41,7 +42,13 @@ export async function searchKnowledgeBase(
 
   // Filter to the current provider's points (+ legacy untagged) and drop
   // low-similarity noise so cross-provider near-random hits stay out of context.
-  const results: SearchResult[] = await searchChunks(vector, userId, kbIds, limit, provider, 0.3);
+  // Documents in another language score systematically lower than the query's
+  // own, so in a mixed-language knowledge base they never reach the top-k at
+  // all. The slots are additive and cost one extra vector query.
+  const results: SearchResult[] = await searchChunks(vector, userId, kbIds, limit, provider, 0.3, {
+    queryLang: detectLang(query),
+    slots: CROSS_LINGUAL_SLOTS,
+  });
 
   if (results.length === 0) {
     return { text: '知识库中未找到相关内容。', citations: [] };

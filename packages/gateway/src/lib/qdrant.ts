@@ -16,6 +16,8 @@ export function toUUID(id: string): string {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
 }
 
+import type { TextLang } from './text-lang.js';
+
 export interface KnowledgeChunk {
   chunk_id: string;
   kb_id: string;
@@ -27,6 +29,8 @@ export interface KnowledgeChunk {
   chunk_index: number;
   vector: number[];
   provider: EmbeddingProvider;
+  /** Dominant language of the source document, for the cross-lingual slots in `searchChunks`. */
+  lang: TextLang;
 }
 
 export interface SearchResult {
@@ -58,9 +62,31 @@ export async function upsertChunks(chunks: KnowledgeChunk[]): Promise<void> {
       chunk_index: c.chunk_index,
       embedding_provider: c.provider,
       embedding_model: providerModel(c.provider),
+      lang: c.lang,
     },
   }));
   await upsertQdrantPoints(COLLECTION, points);
+}
+
+/**
+ * Reserve result slots for documents in a language other than the query's.
+ *
+ * Cross-language similarity is systematically lower than same-language
+ * similarity, so in a mixed-language knowledge base the documents in the
+ * query's own language crowd out everything else — measured on the eval corpus,
+ * Chinese questions whose answer lived in the one English document ranked 7th,
+ * 15th and 19th, i.e. always just outside a top-5. Raising the depth to 20 does
+ * fix recall (40% → 100%) but drags precision from 43% to 18%, and pays that on
+ * every search including the single-language ones that never needed it.
+ *
+ * Giving the other languages their own small allowance costs one extra vector
+ * query — no model call, no re-embedding — and leaves the main ranking alone.
+ */
+export interface CrossLingualSlots {
+  /** The language the query is written in; documents in other languages get the slots. */
+  queryLang: TextLang;
+  /** How many extra results to reserve. */
+  slots: number;
 }
 
 export async function searchChunks(
@@ -70,6 +96,7 @@ export async function searchChunks(
   topK = 5,
   provider?: EmbeddingProvider,
   scoreThreshold?: number,
+  crossLingual?: CrossLingualSlots,
 ): Promise<SearchResult[]> {
   const mustFilters: unknown[] = [{ key: 'user_id', match: { value: userId } }];
   if (kbIds && kbIds.length > 0) {
@@ -77,12 +104,46 @@ export async function searchChunks(
   }
   if (provider) mustFilters.push(providerMatchFilter(provider));
 
-  const result = await searchQdrantCollection(COLLECTION, vector, topK, {
+  const primary = await searchQdrantCollection(COLLECTION, vector, topK, {
     filter: { must: mustFilters },
     scoreThreshold,
   });
 
-  return result.map((r) => ({
+  const results = primary.map(toSearchResult);
+  if (!crossLingual || crossLingual.slots <= 0) return results;
+
+  // The same filters plus a language constraint — never a fresh filter list.
+  // This query returns document text to a caller, so every tenant and scope
+  // condition the primary search enforces has to hold here identically.
+  const otherLangs = OTHER_LANGS[crossLingual.queryLang];
+  const supplementary = await searchQdrantCollection(COLLECTION, vector, crossLingual.slots, {
+    filter: { must: [...mustFilters, { key: 'lang', match: { any: otherLangs } }] },
+    scoreThreshold,
+  });
+
+  // Points written before `lang` existed carry none, so they match no language
+  // and simply do not appear here. That is the right degradation: their
+  // language is unknown, and they already competed in the primary search.
+  const seen = new Set(results.map((r) => r.chunk_id));
+  for (const point of supplementary) {
+    if (seen.has(point.id as string)) continue;
+    results.push(toSearchResult(point));
+  }
+  return results;
+}
+
+const OTHER_LANGS: Record<TextLang, TextLang[]> = {
+  zh: ['en', 'ja'],
+  ja: ['en', 'zh'],
+  en: ['zh', 'ja'],
+};
+
+function toSearchResult(r: {
+  id: unknown;
+  score: number;
+  payload: Record<string, unknown>;
+}): SearchResult {
+  return {
     chunk_id: r.id as string,
     kb_id: r.payload.kb_id as string,
     kb_name: r.payload.kb_name as string,
@@ -90,7 +151,7 @@ export async function searchChunks(
     doc_name: r.payload.doc_name as string,
     text: r.payload.text as string,
     score: r.score,
-  }));
+  };
 }
 
 export async function deleteByDocId(docId: string): Promise<void> {

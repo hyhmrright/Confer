@@ -73,12 +73,12 @@ here.** Swapping it moved overall recall 20 points and nDCG 0.205 — more than
 depth, reranking, or hybrid could offer, and it costs a configuration change
 rather than a subsystem. Measure this first, before building anything.
 
-**Cross-lingual is the last real weakness, and it is the one that survives.**
+**Cross-lingual was the last real weakness — now fixed, see below.**
 The corpus's only English document (`09-deployment.md` — 2 CJK characters in
 19,320) is unreachable from a Chinese question under `nomic-embed-text` at *any*
 depth: a depth-50 probe puts it past rank 50, while same-language misses sit at
 rank 7–16 with a score gap of ~0.07. GLM lifts it to 40%, which is the
-difference between broken and merely weak, but 3 of 5 still miss.
+difference between broken and merely weak, but 3 of 5 still missed.
 
 This is not an artifact of the corpus. Confer ships in three languages, owners'
 knowledge bases are mixed by nature, and `ollama` is deliberately last in
@@ -86,6 +86,38 @@ knowledge bases are mixed by nature, and `ollama` is deliberately last in
 so the all-local configuration is exactly the one that cannot retrieve across
 languages, and it fails silently: search returns *something*, never the right
 document.
+
+## Cross-lingual slots
+
+`searchChunks` reserves `CROSS_LINGUAL_SLOTS` extra results for documents whose
+language differs from the query's (`lib/text-lang.ts` decides both, by script).
+It is a second vector query with the same filters plus a language constraint —
+no model call, no re-embedding, roughly a few milliseconds.
+
+A/B on the **same indexed corpus** (`--no-cross-lingual` toggles it), GLM, k=5:
+
+| bucket | slots off | slots on |
+|---|---|---|
+| cross-lang recall | 40.0% | **100.0%** |
+| cross-lang nDCG | 0.200 | **0.441** |
+| same-lang recall | 100.0% | 100.0% |
+| same-lang nDCG | 0.926 | **0.926** |
+| overall recall | 90.0% | **100.0%** |
+| overall precision | 43.1% | 35.4% |
+| overall nDCG | 0.805 | **0.845** |
+| misses | 3 | **0** |
+
+Two things this buys over the obvious alternative of raising `k`. Depth 20
+reaches the same 100% recall but at 17.6% precision — half of what the slots
+cost — and it pays that on every search, including the single-language ones
+that never had the problem. And the same-language numbers here are *identical*
+with the slots on: the extra results are appended, never interleaved, so
+nothing about the primary ranking changes.
+
+Points indexed before `lang` existed carry none and match no language, so they
+never occupy a slot — they simply keep competing in the primary search, which
+is the correct degradation. Existing knowledge bases pick the behaviour up as
+documents are re-indexed; nothing needs migrating.
 
 ## Retrieval depth
 

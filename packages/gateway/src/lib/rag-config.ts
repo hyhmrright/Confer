@@ -43,6 +43,17 @@ export const RECALL_DEPTH = 20;
 export const RERANK_TO = 5;
 
 /**
+ * Extra result slots reserved for documents whose language differs from the query's.
+ *
+ * Measured on the eval corpus: with no allowance, Chinese questions whose
+ * answer lives in the corpus's one English document rank 7th, 15th and 19th —
+ * cross-lingual recall 40%. Raising `topK` to 20 fixes recall but costs
+ * precision on every search, including the single-language ones that never had
+ * the problem. Three slots buys the same recall for one extra vector query.
+ */
+export const CROSS_LINGUAL_SLOTS = 3;
+
+/**
  * Timeout for the reranking call.
  *
  * Sits between a question and its answer, so it must fail fast: the ranking it

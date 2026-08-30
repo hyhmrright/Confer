@@ -13,6 +13,7 @@ import { getUserLlmKeys, resolveEmbeddingKey } from '../lib/llm-keys.js';
 import { parseLimit, parseOffset } from '../lib/pagination.js';
 import { deleteByDocId, deleteByKbId, ensureCollection, upsertChunks } from '../lib/qdrant.js';
 import { getObject, putObject, removeObject } from '../lib/storage.js';
+import { detectLang } from '../lib/text-lang.js';
 import { authMiddleware } from '../middleware/auth.js';
 import type { AppEnv } from '../types.js';
 
@@ -356,7 +357,11 @@ async function ingestDocument(job: IngestJob): Promise<void> {
     apiKey,
     provider,
   );
-  const points = chunks.map((c, i) => ({ ...c, vector: vectors[i] as number[], provider }));
+  // Detected once over the whole document rather than per chunk: a single
+  // chunk can be all code or all identifiers and read as English inside a
+  // Chinese document.
+  const lang = detectLang(text);
+  const points = chunks.map((c, i) => ({ ...c, vector: vectors[i] as number[], provider, lang }));
   await upsertChunks(points);
 
   await db

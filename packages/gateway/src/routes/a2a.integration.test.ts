@@ -25,6 +25,7 @@ import { getEnv } from '../env.js';
 import { ensureMemoryCollection } from '../lib/memory-store.js';
 import { clearNonceCache } from '../lib/nonce-cache.js';
 import { ensureCollection, upsertChunks } from '../lib/qdrant.js';
+import { detectLang } from '../lib/text-lang.js';
 import {
   get,
   headers,
@@ -805,6 +806,7 @@ describe('A2A agent reply with KB tool calls + citations', () => {
         chunk_index: 0,
         vector: fixedVector(),
         provider: 'openai',
+        lang: detectLang(text),
       },
     ]);
     return docName;
