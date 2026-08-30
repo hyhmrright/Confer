@@ -29,8 +29,30 @@ function isSupported(lng: string): lng is SupportedLanguage {
   return (SUPPORTED_LANGUAGES as readonly string[]).includes(lng);
 }
 
+/**
+ * The language a code actually maps to, region stripped.
+ *
+ * Every place that indexes by language must go through this. `i18n.language`
+ * keeps whatever the detector found, region and all, and a real browser reports
+ * `zh-CN` or `ja-JP` — never a bare `zh`. Matching the raw value against
+ * SUPPORTED_LANGUAGES therefore fails for almost every genuine visitor and
+ * quietly answers `en`, which is a plausible-looking wrong answer rather than an
+ * error: a first-time Chinese visitor was served the English bundle, the
+ * settings dropdown showed English as their choice, and their dates came out
+ * US-formatted. Only someone who had already used the switcher was right, since
+ * that writes a bare code back to localStorage.
+ *
+ * i18next itself does this normalisation — `load: 'languageOnly'` is why
+ * `i18n.languages` reads `['zh', 'en']` while `i18n.language` reads `zh-CN`. We
+ * need the same answer on our side of the boundary.
+ */
+export function resolveLanguage(lng: string): SupportedLanguage {
+  const base = lng.split('-')[0] ?? '';
+  return isSupported(base) ? base : 'en';
+}
+
 async function loadResources(lng: string): Promise<void> {
-  const key = isSupported(lng) ? lng : 'en';
+  const key = resolveLanguage(lng);
   if (i18n.hasResourceBundle(key, 'translation')) return;
   i18n.addResourceBundle(key, 'translation', await LOADERS[key]());
 }
@@ -84,9 +106,10 @@ const DATE_LOCALES: Record<SupportedLanguage, string> = {
 };
 
 // BCP-47 locale string for date/time formatting, derived from the active UI
-// language. Falls back to en-US for any unexpected i18n.language value.
+// language. Goes through resolveLanguage because i18n.language carries a region
+// the table is not keyed by.
 export function dateLocale(): string {
-  return DATE_LOCALES[i18n.language as SupportedLanguage] ?? 'en-US';
+  return DATE_LOCALES[resolveLanguage(i18n.language)];
 }
 
 // The served index.html can only carry one static `lang`, so it is wrong for

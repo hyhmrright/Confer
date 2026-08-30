@@ -1,14 +1,11 @@
 import { useTranslation } from 'react-i18next';
-import { changeLanguage, SUPPORTED_LANGUAGES, type SupportedLanguage } from '../i18n/index.js';
+import {
+  changeLanguage,
+  resolveLanguage,
+  SUPPORTED_LANGUAGES,
+  type SupportedLanguage,
+} from '../i18n/index.js';
 import { SELECT_FIELD_CLS } from '../lib/styles.js';
-
-function isSupported(lng: string): lng is SupportedLanguage {
-  return (SUPPORTED_LANGUAGES as readonly string[]).includes(lng);
-}
-
-function current(lng: string): SupportedLanguage {
-  return isSupported(lng) ? lng : 'en';
-}
 
 // Full select used on the settings page. `id` lets the caller's FieldLabel bind
 // to the select, which is the only way the label reaches assistive tech.
@@ -18,7 +15,7 @@ export function LanguageSwitcher({ id }: { id?: string }) {
   return (
     <select
       id={id}
-      value={current(i18n.language)}
+      value={resolveLanguage(i18n.language)}
       onChange={(e) => void changeLanguage(e.target.value)}
       className={SELECT_FIELD_CLS}
     >
@@ -41,7 +38,7 @@ const SHORT_LABEL: Record<SupportedLanguage, string> = {
 // supported language.
 export function LanguageSwitcherCompact() {
   const { t, i18n } = useTranslation();
-  const active = current(i18n.language);
+  const active = resolveLanguage(i18n.language);
 
   const cycle = () => {
     const idx = SUPPORTED_LANGUAGES.indexOf(active);
