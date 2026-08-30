@@ -40,11 +40,13 @@ const envSchema = z.object({
     .transform((v) => v === 'true')
     .prefault('false'),
   // Rerank knowledge-base hits with the agent's own model: retrieve
-  // RECALL_DEPTH, then narrow to RERANK_TO. Off by default, and the default is
-  // the honest one — measurement showed the recall headroom is real (84% → 100%
-  // at depth 20 on the eval corpus) but did NOT show that an arbitrary chat
-  // model can exploit it. A local 27B took 15-28s per call and returned the
-  // input order unchanged; at 20 candidates it gave up and returned [].
+  // RECALL_DEPTH, then narrow to RERANK_TO. Off by default, and measurement
+  // has now undercut it twice over. A local 27B took 15-28s per call and did
+  // not actually rerank — it echoed the input order back, and at 20 candidates
+  // returned []. More decisively, the recall headroom that justified it is an
+  // artifact of a weak embedding model: under nomic-embed-text same-language
+  // recall goes 84% → 100% between depth 5 and 20, but under GLM it is already
+  // 100% at depth 5, so there is no ranking problem left to fix.
   // Before enabling, run `bun run eval:rag --rerank` against the model you
   // actually serve. It costs an extra model call per knowledge-base search.
   // prefault, not default: same reason as MINIO_USE_SSL.

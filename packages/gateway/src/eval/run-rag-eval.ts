@@ -6,6 +6,7 @@
  *   bun run eval:rag --baseline b.json  # compare against an earlier run
  *   bun run eval:rag --k 10          # score at a different retrieval depth
  *   bun run eval:rag --rerank        # recall RECALL_DEPTH, then rerank down to k
+ *   bun run eval:rag --user alice    # use that account's own configured embedding key
  *
  * Ingests this repository's `docs/` into an isolated evaluation namespace in
  * Qdrant, runs every golden-set query through the same `searchChunks` the
@@ -25,8 +26,13 @@
 
 import { createProvider } from '@confer/agent-runtime';
 import { newId } from '@confer/shared';
+import { eq } from 'drizzle-orm';
+import { getDb } from '../db/connection.js';
+import { users } from '../db/schema.js';
+import { getEnv } from '../env.js';
 import { chunkText } from '../lib/chunker.js';
 import { type EmbeddingProvider, embedTexts } from '../lib/embedding.js';
+import { getUserLlmKeys, resolveEmbeddingKey } from '../lib/llm-keys.js';
 import {
   deleteByKbId,
   ensureCollection,
@@ -76,12 +82,40 @@ function readFlag(name: string): string | undefined {
  * Production reads an owner's encrypted key; an evaluation has no owner, and
  * requiring one would mean seeding a user to measure a retriever.
  */
-function resolveKey(): { key: string; provider: EmbeddingProvider } {
+async function resolveKey(): Promise<{ key: string; provider: EmbeddingProvider }> {
+  // `--user <username>` scores the retriever with the credential that account
+  // actually runs on, picked by the same EMBEDDING_PROVIDER_PRIORITY the
+  // product uses. Preferred over an env var when the question is "how does MY
+  // instance retrieve": it needs no secret on the command line, where it would
+  // land in shell history and in the process list.
+  const username = readFlag('--user');
+  if (username) {
+    const [row] = await getDb()
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.username, username))
+      .limit(1);
+    if (!row) {
+      console.error(`No such user: ${username}`);
+      process.exit(1);
+    }
+    const resolved = await resolveEmbeddingKey(
+      await getUserLlmKeys(row.id),
+      getEnv().ENCRYPTION_KEY,
+    );
+    if (!resolved) {
+      console.error(`User ${username} has no usable embedding key configured.`);
+      process.exit(1);
+    }
+    return { key: resolved.apiKey, provider: resolved.provider };
+  }
+
   const provider = (process.env.EVAL_EMBEDDING_PROVIDER ?? 'openai') as EmbeddingProvider;
   const key = process.env.EVAL_EMBEDDING_KEY ?? process.env.OPENAI_API_KEY ?? '';
   if (!key) {
     console.error(
-      'No embedding credential. Set EVAL_EMBEDDING_KEY (or OPENAI_API_KEY).\n' +
+      "No embedding credential. Pass --user <username> to use an account's own key,\n" +
+        'or set EVAL_EMBEDDING_KEY (or OPENAI_API_KEY).\n' +
         'For a local runtime set EVAL_EMBEDDING_PROVIDER=ollama and put its base URL in EVAL_EMBEDDING_KEY —\n' +
         'that slot carries an address rather than a secret for providers where the key IS the address.',
     );
@@ -274,7 +308,7 @@ async function compare(current: Record<string, EvalSummary>, baselinePath: strin
   }
 }
 
-const { key, provider } = resolveKey();
+const { key, provider } = await resolveKey();
 
 console.log(`Ingesting corpus (${provider})…`);
 const chunkCount = await ingestCorpus(key, provider);

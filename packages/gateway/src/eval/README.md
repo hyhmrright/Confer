@@ -45,47 +45,52 @@ Buckets are the point. Report them separately, never just the aggregate:
   between the two languages, and no reranker can promote a document that
   retrieval never surfaced at any depth.
 
-## Baseline: ollama / nomic-embed-text
+## Baselines: the embedding model dominates everything else
 
-`baselines/ollama-nomic-embed-text.json`, 2026-08-30:
+Same corpus, same code, same `k=5`. Only the embedding provider differs
+(`baselines/*.json`, 2026-08-30):
 
-| bucket | n | recall | nDCG | miss |
-|---|---|---|---|---|
-| semantic | 12 | 33.3% | 0.292 | 8 |
-| lexical | 12 | 100.0% | 0.874 | 0 |
-| mixed | 6 | 83.3% | 0.667 | 1 |
-| same-lang | 25 | 84.0% | 0.720 | 4 |
-| **cross-lang** | **5** | **0.0%** | **0.000** | **5** |
-| overall | 30 | 70.0% | 0.600 | 9 |
+| bucket | ollama / nomic-embed-text | glm | Δ recall |
+|---|---|---|---|
+| semantic | 33.3% | **75.0%** | +41.7pt |
+| lexical | 100.0% | 100.0% | — |
+| mixed | 83.3% | **100.0%** | +16.7pt |
+| same-lang | 84.0% | **100.0%** (0 misses) | +16.0pt |
+| cross-lang | **0.0%** | **40.0%** | +40.0pt |
+| **overall** | 70.0% (nDCG 0.600) | **90.0%** (nDCG 0.805) | +20.0pt |
 
-Two findings, and both inverted an assumption that had been made from reading
-the code rather than measuring it.
+Three findings, and the first two inverted assumptions that had been made from
+reading the code rather than measuring it.
 
-**Lexical retrieval is not the problem — it is perfect.** The plan had been to
-add hybrid search (BM25 + RRF) because dense retrieval is known to blur exact
-identifiers. On this corpus it scores 100%, so hybrid search would have been
-work spent on the one bucket with nothing wrong with it.
+**Lexical retrieval was never the problem — it is perfect on both.** The plan
+had been to add hybrid search (BM25 + RRF), because dense retrieval is known to
+blur exact identifiers. It scores 100% on this corpus with either model, so
+hybrid search would have been work spent on the one bucket with nothing wrong
+with it.
 
-**Cross-lingual retrieval is total failure, not degradation.** Five Chinese
-questions whose answers live in the corpus's one English document
-(`09-deployment.md`, 2 CJK characters in 19,320): none retrieved, at any rank. A
-depth-50 probe puts the right document past rank 50, while same-language misses
-sit at rank 7–16 with a score gap of ~0.07 — those are recoverable by deeper
-recall plus a reranker, and this is not.
+**Choosing the embedding model outranks every retrieval technique available
+here.** Swapping it moved overall recall 20 points and nDCG 0.205 — more than
+depth, reranking, or hybrid could offer, and it costs a configuration change
+rather than a subsystem. Measure this first, before building anything.
 
-This matters beyond the eval corpus. Confer ships in three languages, owners'
-knowledge bases are mixed by nature, and `ollama` is the last entry in
-`EMBEDDING_PROVIDER_PRIORITY` precisely so that a purely local install still has
-embeddings. So the default local configuration cannot retrieve across languages
-at all, and it fails silently — the search returns *something*, just never the
-right document.
+**Cross-lingual is the last real weakness, and it is the one that survives.**
+The corpus's only English document (`09-deployment.md` — 2 CJK characters in
+19,320) is unreachable from a Chinese question under `nomic-embed-text` at *any*
+depth: a depth-50 probe puts it past rank 50, while same-language misses sit at
+rank 7–16 with a score gap of ~0.07. GLM lifts it to 40%, which is the
+difference between broken and merely weak, but 3 of 5 still miss.
 
-Re-run with a hosted multilingual model before concluding anything about them;
-this baseline describes `nomic-embed-text`, not the product's ceiling.
+This is not an artifact of the corpus. Confer ships in three languages, owners'
+knowledge bases are mixed by nature, and `ollama` is deliberately last in
+`EMBEDDING_PROVIDER_PRIORITY` so a purely local install still has embeddings —
+so the all-local configuration is exactly the one that cannot retrieve across
+languages, and it fails silently: search returns *something*, never the right
+document.
 
 ## Retrieval depth
 
-Same corpus, same embedding, varying only `k`:
+Under `nomic-embed-text`, varying only `k` (GLM needs none of this — it already
+finds everything same-language at `k=5`):
 
 | k | same-lang recall | same-lang misses | precision |
 |---|---|---|---|
@@ -130,3 +135,10 @@ default would have been asserting an improvement rather than showing one.
 What the fallback path did demonstrate is that it works: 30 consecutive timeouts
 produced scores identical to the baseline, which is what "reranking is never
 load-bearing" is supposed to mean.
+
+The GLM run then removed the premise as well. Reranking exists to fix a ranking
+problem, and under GLM there is no ranking problem left to fix: same-language
+recall is already 100% at `k=5`, with precision at 49.7% rather than the 29.5%
+that made retrieving 20 look attractive. On a competent embedding model the
+recall headroom this was built for does not exist. Keep it off unless your own
+eval run shows the headroom on *your* corpus and *your* model.
