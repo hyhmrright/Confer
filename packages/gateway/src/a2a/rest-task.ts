@@ -210,12 +210,22 @@ function describeOne(
  * task: a task in `WORKING` can only leave that state by acquiring a reply (a
  * held one is already interrupted and returned before any wait begins), and
  * `loadTask` costs three queries — twice a second for up to a minute.
+ *
+ * A reply is the same thing here as in `describeTasks`, moderation included.
+ * The two disagreeing would mean waking the wait on a reply the task cannot
+ * report, handing the caller a `WORKING` task as though the deadline had passed.
  */
 export async function hasReply(taskId: string): Promise<boolean> {
   const [row] = await getDb()
     .select({ id: messages.id })
     .from(messages)
-    .where(and(eq(messages.in_reply_to, taskId), isNull(messages.deleted_at)))
+    .where(
+      and(
+        eq(messages.in_reply_to, taskId),
+        isNull(messages.deleted_at),
+        eq(messages.moderation_status, 'visible'),
+      ),
+    )
     .limit(1);
   return row !== undefined;
 }

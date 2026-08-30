@@ -111,7 +111,10 @@ export function textFromParts(parts: A2APart[]): Result<string, string> {
   const chunks: string[] = [];
   for (const part of parts) {
     if (typeof part.text !== 'string') {
-      return { ok: false, error: unsupportedPartDescription(part) };
+      return {
+        ok: false,
+        error: `unsupported part (${partKind(part)}); only text parts are accepted`,
+      };
     }
     if (part.mediaType && !part.mediaType.startsWith('text/')) {
       return {
@@ -127,10 +130,7 @@ export function textFromParts(parts: A2APart[]): Result<string, string> {
   return { ok: true, value: text };
 }
 
-function unsupportedPartDescription(part: A2APart): string {
-  return `unsupported part (${partKind(part)}); only text parts are accepted`;
-}
-
+/** What a non-text part was carrying, so the refusal names it instead of just refusing. */
 function partKind(part: A2APart): string {
   if (part.raw !== undefined) return 'file content';
   if (part.url !== undefined) return 'file URL';

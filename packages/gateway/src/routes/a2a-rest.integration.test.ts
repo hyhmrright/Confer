@@ -741,4 +741,54 @@ describe('task state machine', () => {
     expect(task.status.state).toBe('TASK_STATE_WORKING');
     expect(JSON.stringify(task)).not.toContain('moderated away');
   });
+
+  test('filters a listing by state, and still counts the whole scope', async () => {
+    await seedAgent();
+    const peerId = await connectPeer();
+    const working = await seedInbound(peerId);
+    const answered = await seedInbound(peerId);
+    await getDb().insert(messages).values({
+      id: newId(),
+      conversation_id: answered.convId,
+      sender_type: 'own_agent',
+      sender_id: newId(),
+      content_type: 'text',
+      content: 'yes',
+      in_reply_to: answered.taskId,
+      via: 'a2a',
+    });
+
+    const done = await (await call('GET', '/tasks?status=TASK_STATE_COMPLETED')).json();
+    expect(done.tasks.map((t: { id: string }) => t.id)).toEqual([answered.taskId]);
+    // A state is derived from other rows, so it cannot be a SQL predicate and
+    // the filter runs after the page is read. `totalSize` therefore counts the
+    // caller's tasks in scope BEFORE the filter — a client that reads it as
+    // "matches" will page past the end.
+    expect(done.totalSize).toBe(2);
+
+    const inFlight = await (await call('GET', '/tasks?status=TASK_STATE_WORKING')).json();
+    expect(inFlight.tasks.map((t: { id: string }) => t.id)).toEqual([working.taskId]);
+  });
+
+  test('a state this agent never enters lists empty rather than failing', async () => {
+    // `TASK_STATES` carries every state the spec defines, not the subset this
+    // agent emits, precisely so that asking about one of the others is an empty
+    // page and not a validation error.
+    await seedAgent();
+    await seedInbound(await connectPeer());
+
+    const response = await call('GET', '/tasks?status=TASK_STATE_CANCELED');
+    expect(response.status).toBe(200);
+    expect((await response.json()).tasks).toHaveLength(0);
+  });
+
+  test('ignores a status that is not a task state at all', async () => {
+    // Unparseable query parameters are absent, not errors (§11.5) — the same
+    // rule `historyLength` and `pageSize` follow.
+    await seedAgent();
+    const { taskId } = await seedInbound(await connectPeer());
+
+    const listed = await (await call('GET', '/tasks?status=not-a-state')).json();
+    expect(listed.tasks.map((t: { id: string }) => t.id)).toEqual([taskId]);
+  });
 });
