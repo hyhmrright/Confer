@@ -249,6 +249,13 @@ export const ja: Resources = {
     empty: 'ナレッジベースはまだありません',
     emptyHint: '文書をアップロードすると、エージェントが回答で引用できます。',
     upload: 'アップロード',
+    private: '自分のみ',
+    privateTitle:
+      '外部 Agent の質問ではこのナレッジベースを検索できません。クリックで公開に切り替えます。',
+    shared: '外部に公開',
+    shareFailed: '切り替えが反映されませんでした。もう一度お試しください。',
+    sharedTitle:
+      '外部 Agent の質問に答えるとき、あなたの Agent はこのナレッジベースを引用できます。クリックで自分のみに戻します。',
     uploading: 'アップロード中…',
     deleteConfirm: 'ナレッジベース「{{name}}」を削除しますか？この操作は元に戻せません。',
     docsEmpty: 'ドキュメントはまだありません。「アップロード」で .txt / .md / .pdf を取り込めます',

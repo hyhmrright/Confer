@@ -46,6 +46,15 @@ export interface RunAgentTurnOptions {
   // Empty string when no Tavily key resolves: web_search is then not offered.
   tavilyApiKey: string;
   hasKb: boolean;
+  // The only knowledge bases this turn may search. Undefined means no limit
+  // (the owner asking their own agent); an array is a hard ceiling, and an
+  // empty one admits nothing.
+  kbScope?: string[];
+  // False on an inbound A2A turn: the owner's long-term memory never rides in
+  // a prompt whose answer leaves the instance. Required, not optional-with-a-
+  // default, for the same reason `audience` is: the permissive value must never
+  // be what a caller lands on by saying nothing.
+  recallMemory: boolean;
   emit?: AgentTurnEmit;
 }
 
@@ -75,6 +84,7 @@ interface ToolExecContext {
   embeddingKey: string;
   embeddingProvider: EmbeddingProvider;
   tavilyApiKey: string;
+  kbScope?: string[];
   citations: KbCitation[];
   // Names of the tools the model asked for this turn, in order — attempts, not
   // successes, since the question it answers is whether the model reached for
@@ -82,6 +92,32 @@ interface ToolExecContext {
   // caller reads it.
   toolsUsed: string[];
   emit?: AgentTurnEmit;
+}
+
+// Matches no kb_id, so the filtered search returns nothing. A real id is 26
+// chars; this is deliberately not one.
+const SEARCH_NOTHING = '-';
+
+/**
+ * Resolve the knowledge bases one `search_knowledge_base` call may read.
+ *
+ * `scope` is the ceiling and `requested` is the model's preference, so the
+ * answer is their intersection. Two shapes need care, both because
+ * `searchChunks` reads an absent list as "search everything":
+ *
+ *  - no scope → the model's request stands, including `undefined` for all;
+ *  - a scope with nothing left after intersecting → `SEARCH_NOTHING`, a
+ *    sentinel id, rather than `undefined`, which would search every knowledge
+ *    base the owner has. A model that names only forbidden ids must come back
+ *    empty-handed, not privileged.
+ */
+export function narrowKbIds(
+  requested: string[] | undefined,
+  scope: string[] | undefined,
+): string[] | undefined {
+  if (!scope) return requested;
+  const allowed = requested ? requested.filter((id) => scope.includes(id)) : scope;
+  return allowed.length > 0 ? allowed : [SEARCH_NOTHING];
 }
 
 // Execute a single tool call and return its textual result. Knowledge-base
@@ -103,7 +139,11 @@ async function executeToolCall(
         args.query,
         ctx.userId,
         ctx.embeddingKey,
-        args.kb_ids,
+        // `kb_ids` is not in the tool schema, but the model can put it in the
+        // arguments anyway and this passes them straight through — so a scope
+        // enforced by omitting the parameter would be no scope at all. Narrow,
+        // never widen: within a scope the model may still choose a subset.
+        narrowKbIds(args.kb_ids, ctx.kbScope),
         ctx.embeddingProvider,
       );
       ctx.citations.push(...kbResult.citations);
@@ -193,8 +233,11 @@ async function runAgentWithTools(
  *
  * Counts and scores only: memory text and message content are PII and stay out.
  */
-function recallState(embeddingKey: string, recall: MemoryRecall | undefined): string {
-  if (!embeddingKey) return 'off';
+function recallState(opts: RunAgentTurnOptions, recall: MemoryRecall | undefined): string {
+  // `withheld` is a peer-audience turn, `off` is a missing embedding key. Worth
+  // separating: one is a deliberate boundary, the other is a misconfiguration.
+  if (!opts.recallMemory) return 'withheld';
+  if (!opts.embeddingKey) return 'off';
   if (!recall) return 'failed';
   if (recall.hits.length === 0) return '0';
   return `${recall.hits.length}@${(recall.hits[0]?.score ?? 0).toFixed(2)}`;
@@ -213,7 +256,7 @@ function logTurnGrounding(
 ): void {
   console.log(
     `agent turn user=${opts.userId}` +
-      ` recall=${recallState(opts.embeddingKey, recall)}` +
+      ` recall=${recallState(opts, recall)}` +
       ` kb=${kbState(opts.hasKb, toolsUsed)}` +
       // `kb=searched` says the model obeyed the instruction, not that anything
       // came back: a search that matched nothing, or one that threw and was
@@ -229,7 +272,7 @@ function logTurnGrounding(
 // (userId only, never message content) and the turn proceeds without it.
 export async function runAgentTurn(opts: RunAgentTurnOptions): Promise<RunAgentTurnResult> {
   let recall: MemoryRecall | undefined;
-  if (opts.embeddingKey) {
+  if (opts.embeddingKey && opts.recallMemory) {
     try {
       await ensureMemoryCollection();
       recall = await recallMemories(
@@ -264,6 +307,7 @@ export async function runAgentTurn(opts: RunAgentTurnOptions): Promise<RunAgentT
       embeddingKey: opts.embeddingKey,
       embeddingProvider: opts.embeddingProvider,
       tavilyApiKey: opts.tavilyApiKey,
+      kbScope: opts.kbScope,
       citations,
       toolsUsed,
       emit: opts.emit,

@@ -25,6 +25,16 @@ const createKbSchema = z.object({
   description: z.string().optional(),
 });
 
+// `shared_with_peers` is settable only here, never at creation: a knowledge
+// base starts private and becomes shareable as a deliberate second act.
+const updateKbSchema = z
+  .object({
+    name: z.string().min(1).max(255),
+    description: z.string(),
+    shared_with_peers: z.boolean(),
+  })
+  .partial();
+
 async function getEmbeddingConfig(
   userId: string,
 ): Promise<{ apiKey: string; provider: EmbeddingProvider }> {
@@ -131,6 +141,27 @@ knowledgeBasesRoutes.post('/', async (c) => {
     .returning();
 
   return c.json({ knowledge_base: row }, 201);
+});
+
+// The only writer of `shared_with_peers`. Without it the column would be a
+// default nobody can change, which is a dead feature rather than a setting:
+// every knowledge base would stay invisible to peers forever, and the answer
+// to "why can't my agent cite our wiki to a partner" would be unreachable.
+knowledgeBasesRoutes.patch('/:kbId', async (c) => {
+  const user = c.get('user');
+  const db = getDb();
+  const kbId = c.req.param('kbId');
+
+  await requireKb(kbId, user.sub);
+  const body = updateKbSchema.parse(await c.req.json());
+
+  const [row] = await db
+    .update(knowledgeBases)
+    .set({ ...body, updated_at: new Date() })
+    .where(and(eq(knowledgeBases.id, kbId), eq(knowledgeBases.user_id, user.sub)))
+    .returning();
+
+  return c.json({ knowledge_base: row });
 });
 
 knowledgeBasesRoutes.delete('/:kbId', async (c) => {

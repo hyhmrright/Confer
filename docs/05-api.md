@@ -217,6 +217,7 @@ PUT    /api/v1/projects/{project_id}/peers/{peer_id}/decisions    # ✅ 已实�
 ```
 GET    /api/v1/knowledge-bases                                  # 列出我的知识库
 POST   /api/v1/knowledge-bases                                  # 新建
+PATCH  /api/v1/knowledge-bases/{kb_id}                          # 改名/描述，以及是否对外部 Agent 开放
 DELETE /api/v1/knowledge-bases/{kb_id}                          # 连同其全部文档与向量一并删除
 
 GET    /api/v1/knowledge-bases/{kb_id}/documents                # 分页：?limit=&offset=
@@ -225,7 +226,13 @@ DELETE /api/v1/knowledge-bases/{kb_id}/documents/{doc_id}
 POST   /api/v1/knowledge-bases/{kb_id}/documents/{doc_id}/retry # 重新入库
 ```
 
-`POST /knowledge-bases` 的 body 是 `{ name, description? }`（`name` 1–255 字符），返回 `201` + `{ knowledge_base }`。`GET /knowledge-bases` 返回 `{ knowledge_bases }`，**不分页**：一个用户的知识库是手工建的，数量有界。
+`POST /knowledge-bases` 的 body 是 `{ name, description? }`（`name` 1–255 字符），返回 `201` + `{ knowledge_base }`。
+
+`PATCH /knowledge-bases/{kb_id}` 的 body 是 `{ name?, description?, shared_with_peers? }`，返回 `{ knowledge_base }`。**`shared_with_peers` 只能在这里改，建库时不接受**：知识库一律以「仅自己」诞生，对外开放是第二个有意为之的动作。
+
+`shared_with_peers` 决定的是**入站 A2A 提问能不能搜到这个库**，默认 `false`。owner 自己在网页里对话时不受它影响，永远搜得到全部。这个边界必须落在检索的作用域上、而不是提示词里：对端的问题和 owner 的指令一样只是模型眼里的文本，「让 Agent 自己判断该不该说」根本不构成边界。同理，入站 A2A 提问**不召回任何长期记忆**——长期记忆是从 owner 自己的对话里蒸馏出来的，没有任何一条被标记为可以离开本实例。
+
+`GET /knowledge-bases` 返回 `{ knowledge_bases }`，**不分页**：一个用户的知识库是手工建的，数量有界。
 
 `GET /{kb_id}/documents` 返回 `{ documents, total }`。`limit` 默认 50、上限 100，`offset` 默认 0；按 `id`（ULID）倒序，即最新在前——排序唯一且确定，offset 窗口才不会漏行或重行。`total` 是全量计数而非本页条数。无法解析的 `limit`/`offset` 取默认值而非报错。这是本节唯一会无界增长的列表，因为知识库正是上传目标。
 

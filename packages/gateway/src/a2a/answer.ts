@@ -139,12 +139,12 @@ export async function processA2AMessage(params: ProcessA2AMessageParams): Promis
   const { provider, model } = resolved.value;
 
   // Tools, recall, and extraction all spend the budget of the agent's owner —
-  // never the requesting peer's.
-  const { embeddingKey, embeddingProvider, tavilyApiKey, hasKb } = await resolveAgentCapabilities(
-    targetAgent.user_id,
-    llmKeys,
-    env,
-  );
+  // never the requesting peer's. `'peer'` additionally bounds what the turn can
+  // reach: only knowledge bases the owner marked shareable, and no long-term
+  // memory. The reply goes back over the wire, and the peer's question reaches
+  // the model as ordinary text, so the limit cannot live in the prompt.
+  const { embeddingKey, embeddingProvider, tavilyApiKey, hasKb, kbScope, recallMemory } =
+    await resolveAgentCapabilities(targetAgent.user_id, llmKeys, env, 'peer');
 
   const history = await loadA2AHistory(conversationId, inboundMessageId);
 
@@ -162,6 +162,8 @@ export async function processA2AMessage(params: ProcessA2AMessageParams): Promis
     embeddingProvider,
     tavilyApiKey,
     hasKb,
+    kbScope,
+    recallMemory,
   }).catch((error) => {
     console.error(`Agent turn failed for agent ${targetAgent.id}:`, error);
     return null;

@@ -71,6 +71,13 @@
       "when": 1781019719844,
       "tag": "0009_high_micromax",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1788059354263,
+      "tag": "0010_late_wolverine",
+      "breakpoints": true
     }
   ]
 }
