@@ -53,6 +53,12 @@ export async function buildSignatureBase(
       case '@path':
         value = url.pathname;
         break;
+      case '@query':
+        // RFC 9421 §2.2.7: the query INCLUDING its leading `?`, and a bare `?`
+        // when there is none — so a signature that covers @query also pins the
+        // absence of a query, not just its contents.
+        value = url.search || '?';
+        break;
       case '@target-uri':
         value = url.href;
         break;
@@ -89,6 +95,7 @@ export async function verifyRequestSignature(
   }
   const { components, created, alg, paramsValue } = parsed.value;
   const covered = new Set(components);
+  const url = new URL(request.url);
 
   // Finding B (carried from the draft-cavage format onto RFC 9421 component
   // identifiers): a signature is only meaningful if it covers the request's
@@ -107,6 +114,15 @@ export async function verifyRequestSignature(
   }
   if (!covered.has('date')) {
     return err('Signature must cover date');
+  }
+  // @path stops at the query string, so a signature that omits @query leaves
+  // every query parameter unsigned and rewritable in flight. That was harmless
+  // while no A2A endpoint took one; the REST binding's `GET /tasks` filters and
+  // pages entirely through them. Required only when the request actually
+  // carries a query, mirroring the content-digest rule below, so a peer signing
+  // the query-less endpoints stays interoperable.
+  if (url.search && !covered.has('@query') && !covered.has('@target-uri')) {
+    return err('Signature must cover @query for a request with a query string');
   }
   const body = await request.clone().text();
   if (body.length > 0 && !covered.has('content-digest')) {
@@ -183,11 +199,14 @@ export async function signRequest(
   }
 
   // Cover @method, @authority + @path (the scheme-independent request target),
-  // then date. Content-Digest is added only when there is a body — a body-less
-  // GET that declared content-digest would be rejected at verification. No Host
-  // header is set: @authority is derived from the URL. (No query on the current
-  // A2A endpoints; add @query if a query-bearing endpoint is introduced.)
+  // then date. @query and Content-Digest are each added only when the request
+  // actually has one: a body-less GET declaring content-digest, or a query-less
+  // request declaring @query, would be signing a component the verifier cannot
+  // find. No Host header is set: @authority is derived from the URL.
   const components = ['@method', '@authority', '@path'];
+  if (new URL(request.url).search) {
+    components.push('@query');
+  }
   const body = await request.clone().text();
   if (body) {
     newHeaders.set('content-digest', await computeDigest(body));
@@ -205,6 +224,12 @@ export async function signRequest(
   const paramsValue = serializeSignatureParams(components, {
     keyid: keyId,
     created,
+    // `created` has second granularity, so two identical requests inside one
+    // second used to sign to the same bytes and the receiver's replay cache
+    // refused the second as an attack. The nonce makes every request distinct
+    // while leaving a true replay — the same bytes resent — exactly as
+    // detectable, since that is still a byte-identical signature.
+    nonce: crypto.randomUUID(),
     alg: SIGNATURE_ALG,
   });
 

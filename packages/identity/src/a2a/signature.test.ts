@@ -312,3 +312,107 @@ describe('verifyRequestSignature freshness and alg', () => {
     });
   });
 });
+
+describe('query-string coverage', () => {
+  const QUERY_URL = 'https://agent.example.com/a2a/v1/tasks?contextId=abc&pageSize=2';
+
+  test('@query serializes with its leading question mark', async () => {
+    const base = await buildSignatureBase(new Request(QUERY_URL), ['@query'], '()');
+    expect(base.ok).toBe(true);
+    if (base.ok) expect(base.value).toContain('"@query": ?contextId=abc&pageSize=2');
+  });
+
+  test('@query on a query-less URL is a bare `?`, pinning its absence', async () => {
+    const base = await buildSignatureBase(new Request(ENDPOINT), ['@query'], '()');
+    expect(base.ok).toBe(true);
+    if (base.ok) expect(base.value).toContain('"@query": ?');
+  });
+
+  test('the signer covers @query when the URL has one', async () => {
+    const { privateKey } = await generateEd25519KeyPair();
+    const signed = await signRequest(new Request(QUERY_URL), privateKey, KEY_ID);
+    expect(signed.headers.get('signature-input')).toContain('"@query"');
+  });
+
+  test('the signer omits @query when there is nothing to cover', async () => {
+    // Declaring a component the verifier cannot resolve would fail at the far
+    // end, and every query-less endpoint predates this.
+    const { privateKey } = await generateEd25519KeyPair();
+    const signed = await signRequest(jsonRequest({ a: 1 }), privateKey, KEY_ID);
+    expect(signed.headers.get('signature-input')).not.toContain('"@query"');
+  });
+
+  test('a signature over a query-bearing request that omits @query is rejected', async () => {
+    // The attack this closes: @path stops at the `?`, so an uncovered query can
+    // be rewritten in flight — swapping `contextId` for someone else's, or
+    // inflating `pageSize` — on a signature that still verifies.
+    const { privateKey, publicKey } = await generateEd25519KeyPair();
+    const request = await craftSignedRequest(
+      privateKey,
+      ['@method', '@authority', '@path', 'date'],
+      { method: 'GET', url: QUERY_URL },
+    );
+
+    const result = await verifyRequestSignature(request, publicKey);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toContain('@query');
+  });
+
+  test('tampering with a covered query invalidates the signature', async () => {
+    const { privateKey, publicKey } = await generateEd25519KeyPair();
+    const signed = await signRequest(new Request(QUERY_URL), privateKey, KEY_ID);
+
+    const tampered = new Request(`${QUERY_URL}&pageSize=100`, {
+      method: signed.method,
+      headers: signed.headers,
+    });
+    expect((await verifyRequestSignature(tampered, publicKey)).ok).toBe(false);
+
+    // The untampered original still verifies, so the failure above is the edit
+    // and not the reconstruction.
+    expect((await verifyRequestSignature(signed, publicKey)).ok).toBe(true);
+  });
+
+  test('a query-less request still verifies without @query', async () => {
+    const { privateKey, publicKey } = await generateEd25519KeyPair();
+    const signed = await signRequest(jsonRequest({ hello: 'world' }), privateKey, KEY_ID);
+    expect((await verifyRequestSignature(signed, publicKey)).ok).toBe(true);
+  });
+});
+
+describe('per-request nonce', () => {
+  test('two identical requests signed together produce different signatures', async () => {
+    // `created` has second granularity. Without a nonce these two sign to the
+    // same bytes, and the receiver's replay cache — which keys on the signature
+    // — rejects the second as an attack. A client polling a task, or retrying
+    // anything at all, got a 401 saying its credentials were bad.
+    const { privateKey, publicKey } = await generateEd25519KeyPair();
+    const url = 'https://agent.example.com/a2a/v1/tasks/01ABC';
+
+    const first = await signRequest(new Request(url), privateKey, KEY_ID);
+    const second = await signRequest(new Request(url), privateKey, KEY_ID);
+
+    expect(first.headers.get('signature')).not.toBe(second.headers.get('signature'));
+    expect((await verifyRequestSignature(first, publicKey)).ok).toBe(true);
+    expect((await verifyRequestSignature(second, publicKey)).ok).toBe(true);
+  });
+
+  test('the nonce is inside the signed parameters, not merely a header', async () => {
+    // If it were not covered, an attacker could vary it freely to bypass the
+    // replay cache — the exact defect the byte-sequence canonicalization above
+    // closes for the signature value itself.
+    const { privateKey, publicKey } = await generateEd25519KeyPair();
+    const signed = await signRequest(jsonRequest({ a: 1 }), privateKey, KEY_ID);
+    const sigInput = signed.headers.get('signature-input') ?? '';
+    expect(sigInput).toContain('nonce="');
+
+    const swapped = new Headers(signed.headers);
+    swapped.set('signature-input', sigInput.replace(/nonce="[^"]*"/, 'nonce="attacker-chosen"'));
+    const tampered = new Request(signed.url, {
+      method: signed.method,
+      headers: swapped,
+      body: await signed.clone().text(),
+    });
+    expect((await verifyRequestSignature(tampered, publicKey)).ok).toBe(false);
+  });
+});
