@@ -39,6 +39,19 @@ const envSchema = z.object({
     .string()
     .transform((v) => v === 'true')
     .prefault('false'),
+  // Rerank knowledge-base hits with the agent's own model: retrieve
+  // RECALL_DEPTH, then narrow to RERANK_TO. Off by default, and the default is
+  // the honest one — measurement showed the recall headroom is real (84% → 100%
+  // at depth 20 on the eval corpus) but did NOT show that an arbitrary chat
+  // model can exploit it. A local 27B took 15-28s per call and returned the
+  // input order unchanged; at 20 candidates it gave up and returned [].
+  // Before enabling, run `bun run eval:rag --rerank` against the model you
+  // actually serve. It costs an extra model call per knowledge-base search.
+  // prefault, not default: same reason as MINIO_USE_SSL.
+  RERANK_ENABLED: z
+    .string()
+    .transform((v) => v === 'true')
+    .prefault('false'),
   MINIO_ACCESS_KEY: z.string().default('confer'),
   MINIO_SECRET_KEY: z.string().default('confer-secret'),
   MINIO_BUCKET: z.string().default('knowledge-docs'),

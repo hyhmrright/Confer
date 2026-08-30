@@ -82,3 +82,51 @@ right document.
 
 Re-run with a hosted multilingual model before concluding anything about them;
 this baseline describes `nomic-embed-text`, not the product's ceiling.
+
+## Retrieval depth
+
+Same corpus, same embedding, varying only `k`:
+
+| k | same-lang recall | same-lang misses | precision |
+|---|---|---|---|
+| 5 | 84.0% | 4 | 29.5% |
+| 10 | 88.0% | 3 | 18.6% |
+| 20 | **100.0%** | **0** | 14.9% |
+
+Every same-language answer is already being retrieved by depth 20 — the four
+misses at depth 5 sit at ranks 7, 11, 12 and 16, with a similarity gap of about
+0.07 from the wrong document above them. That is a ranking problem, and the
+textbook fix is to recall wide and rerank down. Cross-lingual stays at 0.0% at
+every depth, which is the same result from a different angle: a reranker cannot
+promote what retrieval never surfaced.
+
+## Reranking: implemented, off by default
+
+`lib/rerank.ts` does this — recall `RECALL_DEPTH`, rerank to `RERANK_TO` with
+the agent's own model — behind `RERANK_ENABLED`, which defaults to **false**.
+Enable it only after running `bun run eval:rag --rerank` against the model you
+actually serve:
+
+```bash
+EVAL_RERANK_PROVIDER=ollama EVAL_RERANK_KEY=http://localhost:11434 \
+EVAL_RERANK_MODEL=<model> bun run eval:rag --rerank
+```
+
+The default is off because measurement did not support turning it on. Against a
+local 27B (`qwen3.8:27b-mlx`):
+
+| candidates | latency | reply |
+|---|---|---|
+| 5 | 28.2s | `[1, 2, 3, 4, 5]` — input order, unchanged |
+| 10 | 15.7s | `[1,2,…,10]` — input order, unchanged |
+| 20 | 19.5s | `[]` — gave up |
+
+Two failures at once: far past any interactive budget (the timeout is 8s, so all
+30 queries fell back to vector order and scored identically to the baseline),
+and no actual reranking — the model echoed the numbering back. A capable hosted
+model may well do better; that has not been measured here, and shipping it on by
+default would have been asserting an improvement rather than showing one.
+
+What the fallback path did demonstrate is that it works: 30 consecutive timeouts
+produced scores identical to the baseline, which is what "reranking is never
+load-bearing" is supposed to mean.

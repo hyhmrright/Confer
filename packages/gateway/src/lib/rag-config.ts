@@ -24,6 +24,34 @@ export const QDRANT_REQUEST_TIMEOUT_MS = 30_000;
 export const QDRANT_HEALTHCHECK_TIMEOUT_MS = 10_000;
 
 /**
+ * How many chunks the vector search retrieves before reranking.
+ *
+ * Measured, not guessed (`src/eval/README.md`): on the eval corpus,
+ * same-language recall is 84% at depth 5 and 100% at depth 20 — every right
+ * answer was already being found, ranked 7th to 16th. Depth 10 only reaches
+ * 88%, so 20 is where the recall ceiling actually is here.
+ */
+export const RECALL_DEPTH = 20;
+
+/**
+ * How many chunks survive reranking and reach the model.
+ *
+ * Unchanged from what the retriever used to return directly, so reranking
+ * changes which passages reach the prompt without changing how many — the
+ * context budget and the citation count stay where they were.
+ */
+export const RERANK_TO = 5;
+
+/**
+ * Timeout for the reranking call.
+ *
+ * Sits between a question and its answer, so it must fail fast: the ranking it
+ * produces is an improvement the turn can do without, and no LLM call in this
+ * codebase has a timeout of its own.
+ */
+export const RERANK_TIMEOUT_MS = 8_000;
+
+/**
  * Ceiling on the text one document may contribute to the pipeline.
  *
  * The upload route caps the *compressed* upload at 10 MB, which says nothing

@@ -4,10 +4,12 @@ import type {
   LLMProvider,
   LLMToolDefinition,
 } from '@confer/agent-runtime';
+import { getEnv } from '../env.js';
 import type { EmbeddingProvider } from '../lib/embedding.js';
 import { ensureMemoryCollection } from '../lib/memory-store.js';
 import {
   type KbCitation,
+  type KbRerank,
   knowledgeBaseToolDefinition,
   searchKnowledgeBase,
 } from '../tools/knowledge-base.js';
@@ -85,6 +87,10 @@ interface ToolExecContext {
   embeddingProvider: EmbeddingProvider;
   tavilyApiKey: string;
   kbScope?: string[];
+  // The turn's own model, reused to rerank knowledge-base hits. Passing it
+  // rather than reaching for a provider inside `tools/` keeps the dependency
+  // pointing the one way it is allowed to.
+  rerank?: KbRerank;
   citations: KbCitation[];
   // Names of the tools the model asked for this turn, in order — attempts, not
   // successes, since the question it answers is whether the model reached for
@@ -145,6 +151,7 @@ async function executeToolCall(
         // never widen: within a scope the model may still choose a subset.
         narrowKbIds(args.kb_ids, ctx.kbScope),
         ctx.embeddingProvider,
+        ctx.rerank,
       );
       ctx.citations.push(...kbResult.citations);
       for (const cite of kbResult.citations) {
@@ -308,6 +315,10 @@ export async function runAgentTurn(opts: RunAgentTurnOptions): Promise<RunAgentT
       embeddingProvider: opts.embeddingProvider,
       tavilyApiKey: opts.tavilyApiKey,
       kbScope: opts.kbScope,
+      // Off unless the operator turned it on: it spends an extra model call
+      // per search, and the measurement that justified the recall headroom did
+      // not establish that any given chat model can exploit it. See env.ts.
+      rerank: getEnv().RERANK_ENABLED ? { provider: opts.provider, model: opts.model } : undefined,
       citations,
       toolsUsed,
       emit: opts.emit,

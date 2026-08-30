@@ -4,6 +4,8 @@
  *   bun run eval:rag                 # score the current retriever
  *   bun run eval:rag --json out.json # also write machine-readable results
  *   bun run eval:rag --baseline b.json  # compare against an earlier run
+ *   bun run eval:rag --k 10          # score at a different retrieval depth
+ *   bun run eval:rag --rerank        # recall RECALL_DEPTH, then rerank down to k
  *
  * Ingests this repository's `docs/` into an isolated evaluation namespace in
  * Qdrant, runs every golden-set query through the same `searchChunks` the
@@ -21,6 +23,7 @@
  * on this corpus is the only way to know.
  */
 
+import { createProvider } from '@confer/agent-runtime';
 import { newId } from '@confer/shared';
 import { chunkText } from '../lib/chunker.js';
 import { type EmbeddingProvider, embedTexts } from '../lib/embedding.js';
@@ -31,7 +34,8 @@ import {
   searchChunks,
   upsertChunks,
 } from '../lib/qdrant.js';
-import { BATCH_SIZE } from '../lib/rag-config.js';
+import { BATCH_SIZE, RECALL_DEPTH } from '../lib/rag-config.js';
+import { rerankCandidates } from '../lib/rerank.js';
 import { type CaseKind, CORPUS_FILES, DOC_LANG, GOLDEN_SET } from './golden-set.js';
 import {
   aggregate,
@@ -127,25 +131,66 @@ async function ingestCorpus(key: string, provider: EmbeddingProvider): Promise<n
   return total;
 }
 
-async function runCases(key: string, provider: EmbeddingProvider): Promise<CaseResult[]> {
+/**
+ * The reranking model, when `--rerank` is passed.
+ *
+ * Separate from the embedding credential: reranking needs a chat model, and on
+ * a local runtime those are different models behind the same address.
+ */
+function resolveReranker():
+  | { provider: ReturnType<typeof createProvider>; model?: string }
+  | undefined {
+  if (!process.argv.includes('--rerank')) return undefined;
+  const name = process.env.EVAL_RERANK_PROVIDER ?? 'ollama';
+  const credential = process.env.EVAL_RERANK_KEY ?? 'http://localhost:11434';
+  const provider = createProvider(name, credential);
+  if (!provider) {
+    console.error(`Unknown rerank provider: ${name}`);
+    process.exit(1);
+  }
+  return { provider, model: process.env.EVAL_RERANK_MODEL };
+}
+
+async function runCases(
+  key: string,
+  provider: EmbeddingProvider,
+  k: number,
+  reranker: ReturnType<typeof resolveReranker>,
+): Promise<CaseResult[]> {
   const results: CaseResult[] = [];
 
   for (const testCase of GOLDEN_SET) {
     const [vector] = await embedTexts([testCase.query], key, provider);
     // The same call the product makes, with the same limit and score floor, so
     // the numbers describe the shipped retriever and not a variant of it.
+    // Mirrors what `searchKnowledgeBase` does in production: retrieve wide only
+    // when something will narrow it again.
+    const depth = reranker ? RECALL_DEPTH : k;
     const hits = await searchChunks(
       vector as number[],
       EVAL_USER_ID,
       [EVAL_KB_ID],
-      EVAL_K,
+      depth,
       provider,
       0.3,
     );
 
+    const ordered = reranker
+      ? (
+          await rerankCandidates({
+            query: testCase.query,
+            candidates: hits.map((hit) => ({ text: hit.text })),
+            // biome-ignore lint/style/noNonNullAssertion: resolveReranker exits when it cannot build one
+            provider: reranker.provider!,
+            model: reranker.model,
+            topN: k,
+          })
+        ).map((index) => hits[index] as (typeof hits)[number])
+      : hits;
+
     // Chunks fold to documents, keeping rank order: relevance is annotated per
     // document, and two chunks of one file are one file.
-    const retrieved = [...new Set(hits.map((hit) => hit.doc_name))];
+    const retrieved = [...new Set(ordered.map((hit) => hit.doc_name))];
 
     results.push({
       id: testCase.id,
@@ -154,7 +199,7 @@ async function runCases(key: string, provider: EmbeddingProvider): Promise<CaseR
       query: testCase.query,
       expected: testCase.relevantDocs,
       retrieved,
-      score: scoreCase(testCase.relevantDocs, retrieved),
+      score: scoreCase(testCase.relevantDocs, retrieved, k),
     });
   }
   return results;
@@ -235,14 +280,20 @@ console.log(`Ingesting corpus (${provider})…`);
 const chunkCount = await ingestCorpus(key, provider);
 console.log(`Ingested ${chunkCount} chunks from ${CORPUS_FILES.length} documents.`);
 
-console.log(`\nRunning ${GOLDEN_SET.length} queries at k=${EVAL_K}…`);
-const results = await runCases(key, provider);
+const k = Number(readFlag('--k') ?? EVAL_K);
+const reranker = resolveReranker();
+console.log(
+  `\nRunning ${GOLDEN_SET.length} queries at k=${k}` +
+    (reranker ? ` (recall ${RECALL_DEPTH} → rerank ${k})` : '') +
+    '…',
+);
+const results = await runCases(key, provider, k, reranker);
 const summaries = summarize(results);
 report(results, summaries);
 
 const jsonPath = readFlag('--json');
 if (jsonPath) {
-  await Bun.write(jsonPath, `${JSON.stringify({ provider, summaries, results }, null, 2)}\n`);
+  await Bun.write(jsonPath, `${JSON.stringify({ provider, k, summaries, results }, null, 2)}\n`);
   console.log(`\n  Wrote ${jsonPath}`);
 }
 
