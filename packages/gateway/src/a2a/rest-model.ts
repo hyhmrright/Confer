@@ -128,15 +128,14 @@ export function textFromParts(parts: A2APart[]): Result<string, string> {
 }
 
 function unsupportedPartDescription(part: A2APart): string {
-  const kind =
-    part.raw !== undefined
-      ? 'file content'
-      : part.url !== undefined
-        ? 'file URL'
-        : part.data !== undefined
-          ? 'structured data'
-          : 'empty';
-  return `unsupported part (${kind}); only text parts are accepted`;
+  return `unsupported part (${partKind(part)}); only text parts are accepted`;
+}
+
+function partKind(part: A2APart): string {
+  if (part.raw !== undefined) return 'file content';
+  if (part.url !== undefined) return 'file URL';
+  if (part.data !== undefined) return 'structured data';
+  return 'empty';
 }
 
 export interface TaskSnapshot {

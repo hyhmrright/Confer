@@ -124,6 +124,7 @@ async function notifyPeerOfFailure(
   const { targetAgent, conversationId, inboundMessageId } = params;
   const noticeId = newId();
   const notice: SystemNotice = { kind: 'a2a_turn_failed', error: failure };
+  const prose = FAILURE_NOTICE[failure];
 
   await getDb().insert(messages).values({
     id: noticeId,
@@ -132,7 +133,7 @@ async function notifyPeerOfFailure(
     sender_id: targetAgent.id,
     sender_did: targetAgent.did,
     content_type: 'system_notice',
-    content: FAILURE_NOTICE[failure],
+    content: prose,
     content_json: notice,
     in_reply_to: inboundMessageId,
     via: 'a2a',
@@ -145,14 +146,14 @@ async function notifyPeerOfFailure(
       conversation_id: conversationId,
       sender_type: 'own_agent',
       sender_id: targetAgent.id,
-      content: FAILURE_NOTICE[failure],
+      content: prose,
       in_reply_to: inboundMessageId,
     },
   });
 
   await sendToPeer(params, {
     type: 'notification',
-    content: FAILURE_NOTICE[failure],
+    content: prose,
     context: { error: failure },
   });
 }

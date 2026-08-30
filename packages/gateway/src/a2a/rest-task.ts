@@ -271,10 +271,7 @@ export async function listTasks(options: ListTasksOptions): Promise<TaskPage> {
     .orderBy(desc(messages.id))
     .limit(pageSize + 1);
 
-  const [{ total } = { total: 0 }] = await db
-    .select({ total: count() })
-    .from(messages)
-    .where(scope);
+  const totals = await db.select({ total: count() }).from(messages).where(scope);
 
   const page = rows.slice(0, pageSize);
   const described = await describeTasks(page, historyLength);
@@ -286,6 +283,6 @@ export async function listTasks(options: ListTasksOptions): Promise<TaskPage> {
     // post-filter must still advance paging past everything it discarded.
     nextPageToken: rows.length > pageSize ? (page.at(-1)?.id ?? '') : '',
     pageSize,
-    totalSize: total,
+    totalSize: totals[0]?.total ?? 0,
   };
 }

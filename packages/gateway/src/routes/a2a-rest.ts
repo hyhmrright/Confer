@@ -19,7 +19,7 @@ import {
   findSolePublicAgent,
   isReachable,
 } from '../a2a/target-agent.js';
-import { verifyA2ASignature } from '../a2a/verify-signature.js';
+import { a2aSenderDid, verifyA2ASignature } from '../a2a/verify-signature.js';
 import { SIGNATURE_EXTENSION_URI } from '../lib/agent-card.js';
 
 /**
@@ -150,8 +150,9 @@ const requireSignature: MiddlewareHandler = async (c, next) => {
 
 const guards = [requireSignatureExtension, requireSupportedVersion, requireSignature] as const;
 
+/** The signer, non-optional: every route in this file sits behind `requireSignature`. */
 function callerDid(c: Context): string {
-  return (c.get('a2aSenderDid' as never) as string | undefined) ?? '';
+  return a2aSenderDid(c) ?? '';
 }
 
 // ---------------------------------------------------------------------------

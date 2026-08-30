@@ -1,11 +1,11 @@
-import { AppError } from '@confer/shared';
+import { AppError, systemNoticeSchema } from '@confer/shared';
 import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import { z } from 'zod';
 import { admitInboundMessage } from '../a2a/inbound.js';
 import { findAgentByDid, isReachable } from '../a2a/target-agent.js';
-import { verifyA2ASignature } from '../a2a/verify-signature.js';
+import { a2aSenderDid, verifyA2ASignature } from '../a2a/verify-signature.js';
 import { getDb } from '../db/connection.js';
 import { messages } from '../db/schema.js';
 import { isSenderAuthorized } from '../lib/a2a-admission.js';
@@ -41,7 +41,7 @@ a2aRoutes.post('/messages', verifyA2ASignature, async (c) => {
   // `from` must be the signing key's DID or a sub-identifier under it (e.g.
   // did:web:vendor.com signing for did:web:vendor.com:users:li). Otherwise a
   // peer with one valid key could forge connection requests under any identity.
-  const signerDid = c.get('a2aSenderDid' as never) as string | undefined;
+  const signerDid = a2aSenderDid(c);
   if (!isSenderAuthorized(signerDid, body.from)) {
     throw new AppError(
       'sender_mismatch',
@@ -98,7 +98,7 @@ a2aRoutes.get('/stream/:messageId', verifyA2ASignature, async (c) => {
   // signature proves who the caller is, but not that the message is theirs. A
   // message belonging to someone else reads as absent rather than forbidden, so
   // this cannot be used to probe which message ids exist.
-  const callerDid = c.get('a2aSenderDid' as never) as string | undefined;
+  const callerDid = a2aSenderDid(c);
   if (!inbound || inbound.sender_did !== callerDid) {
     throw new AppError('not_found', 'Message not found', 404);
   }
@@ -112,31 +112,21 @@ a2aRoutes.get('/stream/:messageId', verifyA2ASignature, async (c) => {
   // A turn that could not run writes a `system_notice` in reply rather than an
   // answer. It has to be reported as `failed`, not `done`: handing back the
   // reason for the failure as though it were the agent's answer is the same
-  // silence this endpoint used to produce, just harder to notice.
+  // silence this endpoint used to produce, just harder to notice. The reason
+  // rides along as a machine code, which is what the notice row stores.
   const failed = reply?.content_type === 'system_notice';
-  const errorCode =
-    failed && reply?.content_json && typeof reply.content_json === 'object'
-      ? ((reply.content_json as { error?: unknown }).error ?? null)
-      : null;
+  const error = failed ? systemNoticeSchema.safeParse(reply?.content_json).data?.error : undefined;
+  const outcome = { status: failed ? 'failed' : 'done', ...(error ? { error } : {}) };
 
   return streamSSE(c, async (stream) => {
     if (reply) {
       await stream.writeSSE({
         event: 'message',
-        data: JSON.stringify({
-          message_id: reply.id,
-          content: reply.content,
-          status: failed ? 'failed' : 'done',
-          ...(errorCode ? { error: errorCode } : {}),
-        }),
+        data: JSON.stringify({ message_id: reply.id, content: reply.content, ...outcome }),
       });
       await stream.writeSSE({
         event: 'done',
-        data: JSON.stringify({
-          message_id: reply.id,
-          status: failed ? 'failed' : 'done',
-          ...(errorCode ? { error: errorCode } : {}),
-        }),
+        data: JSON.stringify({ message_id: reply.id, ...outcome }),
       });
     } else {
       await stream.writeSSE({
