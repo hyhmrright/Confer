@@ -1,3 +1,4 @@
+import { assertNotLinkLocalHostname, SsrfBlockedError } from '@confer/identity';
 import type { EncryptedValue, LlmProviderSpec } from '@confer/shared';
 import {
   AppError,
@@ -49,6 +50,48 @@ function isHttpUrl(value: string): boolean {
     return ['http:', 'https:'].includes(new URL(value).protocol);
   } catch {
     return false;
+  }
+}
+
+/*
+  Refuse a local-runtime address that points at cloud metadata.
+
+  The gateway dials this address on the owner's behalf — to list models, to
+  chat, and to embed — which makes it an SSRF primitive by construction. The
+  usual answer, blocking private ranges, is the wrong one here: `localhost`,
+  `host.docker.internal` and a LAN address are exactly how a local runtime is
+  reached, and the settings screen recommends the second by name. So the guard
+  is narrowed to the one range that has no legitimate use and is worth the
+  attempt — 169.254.0.0/16, where every major cloud answers instance metadata to
+  anyone who can send it a packet, this instance's own credentials included.
+
+  Checked when the address is stored rather than when it is dialled, so the
+  owner is told at the point they can act on it. That leaves the value trusted
+  afterwards; a name that resolves elsewhere later is not covered, and closing
+  that would mean re-resolving on the connect path in three call sites. The
+  attacker this is worth defending against is a second account on someone's
+  instance, not one who also controls DNS.
+*/
+async function assertDialableBaseUrl(provider: string, apiKey: string): Promise<void> {
+  if (!llmProvider(provider)?.keyIsBaseUrl) return;
+
+  // Strip IPv6-literal brackets so the guard sees a bare address.
+  const hostname = new URL(apiKey).hostname.replace(/^\[|\]$/g, '');
+  try {
+    await assertNotLinkLocalHostname(hostname);
+  } catch (e) {
+    if (e instanceof SsrfBlockedError) {
+      // English prose, like the sibling refine above it and every other AppError
+      // here, which the settings screen renders verbatim; naming the range keeps
+      // it actionable for a reader who does not read English.
+      throw new AppError(
+        'invalid_base_url',
+        'That address is not allowed (169.254.0.0/16 is cloud metadata)',
+        400,
+      );
+    }
+    // A name that does not resolve is not a block. Store it and let the dial
+    // fail on its own, the same way a runtime that is merely switched off does.
   }
 }
 
@@ -166,6 +209,7 @@ agentRoutes.put('/me/llm-keys', async (c) => {
   const user = c.get('user');
   const db = getDb();
   const body = llmKeyBodySchema.parse(await c.req.json());
+  await assertDialableBaseUrl(body.provider, body.api_key);
 
   const secret = getEnv().ENCRYPTION_KEY;
   const result = await encrypt(body.api_key, secret);

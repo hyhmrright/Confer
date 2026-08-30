@@ -193,6 +193,30 @@ describe('document ingestion (real MinIO + Qdrant, mocked embeddings)', () => {
     expect(status).toBe('ready');
     expect(chunkCount).toBeGreaterThan(0);
   });
+
+  // The parser rejected these, but only from inside the async ingestion that
+  // starts after the response — by which point the bytes were in MinIO and the
+  // row was written. Any account could park 10 MB of anything per request that
+  // way, leaving nothing behind but a document stuck at `failed`.
+  test('refuses a file type it cannot read, before storing it', async () => {
+    const kbId = await createKb();
+
+    const form = new FormData();
+    form.append('file', new File(['<script>alert(1)</script>'], 'x.html', { type: 'text/html' }));
+    const res = await apiRequest(`${BASE}/${kbId}/documents`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${user.token}`, 'x-forwarded-for': 'kb-upload' },
+      body: form,
+    });
+
+    expect(res.status).toBe(400);
+    expect((await res.json()).error.code).toBe('unsupported_format');
+
+    // No row, which is also the only observable proof that nothing was stored:
+    // the storage key is derived from the document id this never minted.
+    const docs = await (await get(`${BASE}/${kbId}/documents`, { token: user.token })).json();
+    expect(docs.documents).toHaveLength(0);
+  });
 });
 
 describe('document retry (real MinIO + Qdrant, mocked embeddings)', () => {

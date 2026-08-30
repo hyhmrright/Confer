@@ -7,7 +7,7 @@ import { knowledgeBases, knowledgeDocuments } from '../db/schema.js';
 import { getEnv } from '../env.js';
 import { chunkText } from '../lib/chunker.js';
 import { ingestQueue } from '../lib/concurrency.js';
-import { guessContentType, parseDocument } from '../lib/doc-parser.js';
+import { guessContentType, isSupportedDocumentType, parseDocument } from '../lib/doc-parser.js';
 import { type EmbeddingProvider, embedTexts } from '../lib/embedding.js';
 import { getUserLlmKeys, resolveEmbeddingKey } from '../lib/llm-keys.js';
 import { parseLimit, parseOffset } from '../lib/pagination.js';
@@ -191,6 +191,13 @@ knowledgeBasesRoutes.post('/:kbId/documents', async (c) => {
   }
 
   const contentType = file.type || guessContentType(file.name);
+  // Ask before storing. Ingestion runs after the response is sent, so a type it
+  // cannot read was previously found only once the bytes were already in the
+  // bucket and the row already written.
+  if (!isSupportedDocumentType(contentType)) {
+    throw new AppError('unsupported_format', `Unsupported file type: ${contentType}`, 400);
+  }
+
   const buffer = await file.arrayBuffer();
 
   const docId = newId();

@@ -37,5 +37,23 @@ RUN apk add --no-cache nginx nginx-mod-http-brotli \
     && ln -sf /dev/stderr /var/log/nginx/error.log
 COPY --from=compress /dist /usr/share/nginx/html
 COPY infra/nginx.conf /etc/nginx/http.d/default.conf
+COPY infra/security-headers.conf /etc/nginx/security-headers.conf
+
+# Name the page's inline scripts in the CSP by hash, so script-src needs no
+# 'unsafe-inline'. The tokens are produced by the locale-preload Vite plugin,
+# which sees the page as it is built, so the two cannot drift.
+#
+# Both guards matter and they catch different things. `test -s` catches a
+# missing or empty file, where `$(cat)` would expand to nothing and sed would
+# quietly substitute an empty token list — a policy that blocks every inline
+# script with no sign anything went wrong. The `grep` catches a placeholder that
+# is no longer in the config, where sed matches nothing and whatever literal is
+# there now ships as the policy.
+RUN test -s /usr/share/nginx/html/csp-script-hashes.txt \
+    && sed -i "s|__CSP_SCRIPT_HASHES__|$(cat /usr/share/nginx/html/csp-script-hashes.txt)|" \
+        /etc/nginx/security-headers.conf \
+    && ! grep -q __CSP_SCRIPT_HASHES__ /etc/nginx/security-headers.conf \
+    && rm -f /usr/share/nginx/html/csp-script-hashes.txt*
+
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
