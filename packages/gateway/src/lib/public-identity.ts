@@ -23,6 +23,11 @@ export function selfA2AEndpoint(): string {
   return `${toSelfOrigin(getEnv().PUBLIC_HOST)}/a2a/v1`;
 }
 
+/** This instance's public origin, as peers reach it. */
+export function selfOrigin(): string {
+  return toSelfOrigin(getEnv().PUBLIC_HOST);
+}
+
 /**
  * Where to actually dial an advertised A2A endpoint from inside this process.
  *

@@ -415,8 +415,27 @@ GET    /a2a/v1/agent-facts/{agent_did}   # 公开 AgentFacts
 ```
 GET    /.well-known/did.json                # 主 DID document
 GET    /.well-known/agents.json             # 本实例所有公开 Agent 列表
+GET    /.well-known/agent-card.json         # A2A 标准 Agent Card（仅当实例只有一个公开 Agent）
 GET    /.well-known/openid-configuration    # 未来：OIDC 兼容（v2）
 ```
+
+## A2A 标准 Agent Card（互操作发现层）
+
+```
+GET    /agents/{username}/agent-card.json   # 该 Agent 的 A2A 标准 Card
+GET    /.well-known/agent-card.json         # 同上，仅当本实例只有一个公开 Agent
+```
+
+按 Linux Foundation **Agent2Agent v1.0** 的 `AgentCard`（字段取自 `a2aproject/A2A` 的 `specification/a2a.proto` @ v1.0.1，走 proto3 JSON 映射，故为 camelCase）。目的是让 A2A 生态**发现**本实例的 Agent —— 名字撞了但协议不通：对方的发现文档在 `/.well-known/agent-card.json`，本实例原本只有 `/.well-known/agents.json`。
+
+几个刻意的取舍：
+
+- **每个 Agent 一张 Card**，`supportedInterfaces[].tenant` = 用户名。spec 的 well-known 假设一个域名一个 Agent，而本实例是多租户；`tenant` 正是 spec 为「单个 A2A 端点后面多个 Agent」定义的路由选择器。`/.well-known/agent-card.json` 只在**恰好一个公开 Agent** 时作答（单人自托管场景），否则 404 并在错误信息里指向 `agents.json` —— 随便挑一个账号称之为「本域名的 Agent」是错的。
+- **`streaming: false`**。确实有流式端点，但那是 Confer 自己的形状，不是 spec 的 `SendStreamingMessage`。宣称一个标准客户端用不了的能力，比不宣称更糟。
+- **不声明 `securitySchemes`**。spec 那套是 API key / HTTP auth / OAuth2 / OIDC / mTLS，本端点一个都不收——它要的是请求签名。随便挑一个填上，等于告诉客户端可以用一种必然被拒的方式认证。真实要求改用**必需扩展**（`capabilities.extensions`，`uri` 为 RFC 9421 的地址，`required: true`）声明，这正是 spec 为此提供的机制。
+- Card 是**发现文档**，可见性与 `/.well-known/agents.json` 完全一致：非公开或已停用的 Agent 一律 404，否则这条路由就成了枚举主人没打算公开的账号的办法。
+
+**尚未对齐的部分**：消息端点仍是 Confer 自己的 REST 形状（`POST /a2a/v1/messages`），数据模型不是 spec 的 `Task`/`Message`/`Part`；认证仍只接受 RFC 9421 签名。所以标准客户端目前能**发现**本实例的 Agent 并读懂它要什么，但还不能直接调用。
 
 ## Webhooks（可选，v1.5+）
 
