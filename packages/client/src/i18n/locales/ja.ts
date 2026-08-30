@@ -277,6 +277,7 @@ export const ja: Resources = {
     thinking: '考え中',
     composerPlaceholder: 'エージェントへの指示を書く…',
     uploadFile: 'ファイルをアップロード',
+    a2aTurnFailed: '相手のエージェントの質問に回答できませんでした。',
     statusThinking: '考え中...',
     statusCallingTool: '{{tool}} を呼び出し中...',
     statusFailed: 'この応答は完了しませんでした。もう一度お試しください。',

@@ -265,6 +265,7 @@ export const zh = {
     thinking: '思考中',
     composerPlaceholder: '给你的 Agent 写指示…',
     uploadFile: '上传文件',
+    a2aTurnFailed: '没能回答对方 Agent 的提问。',
     statusThinking: '正在思考...',
     statusCallingTool: '正在调用 {{tool}}...',
     statusFailed: '这一轮没有完成，请重试。',

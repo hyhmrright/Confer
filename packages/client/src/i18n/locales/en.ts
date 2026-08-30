@@ -274,6 +274,7 @@ export const en: Resources = {
     thinking: 'Thinking',
     composerPlaceholder: 'Write an instruction for your agent…',
     uploadFile: 'Upload file',
+    a2aTurnFailed: "Could not answer the peer agent's question.",
     statusThinking: 'Thinking...',
     statusCallingTool: 'Calling {{tool}}...',
     statusFailed: 'That turn did not finish. Try again.',

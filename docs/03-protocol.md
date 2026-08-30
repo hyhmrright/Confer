@@ -115,13 +115,22 @@ https://acme.com/.well-known/agents.json
 
 ### 协议层
 
-所有 A2A 通信走 HTTPS POST/GET，编码 JSON。
+所有 A2A 通信走 HTTPS POST/GET，编码 JSON。`/a2a/v1` 下并存两套绑定：
+
+- **Linux Foundation A2A v1.0 的 HTTP+JSON 绑定**（`routes/a2a-rest.ts`），路径就是 spec §11.3 的原样：`POST /message:send`、`GET /tasks/{id}` 等。Agent Card 宣称的是这一套，标准客户端调的也是这一套。详见 `docs/05-api.md`。
+- **Confer 自己的方言**（`routes/a2a.ts`），实例之间用，经 `/.well-known/agents.json` 发现。
+
+两者共用同一套闸门——签名验证、同意闸门、策略判定、线程归属——都在 `a2a/inbound.ts` 里，只有线格式不同。**按绑定各写一份闸门是跨租户线程注入那个 bug 被写出来四次的原因**，别再拆开。
 
 **关键：使用 HTTP Message Signatures（RFC 9421）而非 bearer token**。原因：
 
 - Bearer token 被截获即失效
-- HTTP signature 绑定到具体请求（method + path + body digest + 时间戳）
+- HTTP signature 绑定到具体请求（method + path + query + body digest + 时间戳）
 - 防重放：请求 `Date` 限定在 5 分钟时间窗口内，且每个已验证的签名会记入重放缓存（nonce），窗口内再次提交同一请求会被拒绝；签名验证即可确认发送方身份
+
+**签名覆盖的组件**是 `@method` `@authority` `@path`，加上按需出现的 `@query`（请求带查询串时）和 `content-digest`（请求带 body 时），再加 `date`。`@query` 不是可选的讲究：`@path` 到 `?` 就停了，REST 绑定的 `GET /tasks` 全靠查询参数筛选和翻页，不覆盖就等于让中间人随意改写它们而签名照样通过。签名参数里还带一个每请求随机的 `nonce`——`created` 只到秒，同一秒内两个相同请求会签出同样的字节，被对端的重放缓存当成攻击拒掉（轮询 task 或任何重试都会撞上）。真正的重放——原样重发同一批字节——照旧被抓，因为那仍是逐字节相同的签名。
+
+**这一层没有 spec 的 `securitySchemes`**：那套是 API key / HTTP auth / OAuth2 / OIDC / mTLS，一个都不是请求签名。真实要求以**必需扩展**声明在 Card 上，REST 绑定则按 §3.3.4 强制它：没声明该扩展的客户端收到 `ExtensionSupportRequiredError`，而不是一个不解释任何事的 401。
 
 ### 入站请求示例
 
@@ -306,6 +315,8 @@ peer.unknown:
 不这样做的后果不是「少一条提示」：失败只在应答方打一行日志，什么都不发出去，提问方的 `/api/v1/consult/{id}/reply` 就一直轮询到超时并返回 `pending`——每次重试都一样，**没有任何办法区分「还在想」和「永远不会来」**。
 
 跨实例的对端不共享我们的语言，所以判断依据是 `context.error` 这个码；`content` 只是兜底的人类可读文本。这与「服务端不生成用户文案」并不冲突：那条规则约束的是发给**本实例自己客户端**的文案。
+
+**同一条失败还要落库**，作为一条 `content_type: 'system_notice'` 的消息写进会话（`in_reply_to` 指向那条提问，`content_json` 带同一个原因码，客户端按 i18n 渲染句子）。只发出去不落库有三个后果，都实际存在过：主人在自己的 IM 里看到对方的提问后面什么都没有，永远不知道是自己没配模型；A2A REST 绑定的 task 停在 `WORKING` 而不是 `FAILED`，客户端轮询一个永不完成的东西；`GET /a2a/v1/stream/{id}` 一直返回 `pending`。有了这条 notice，三处同时变成可判定的终态。
 
 ### 寻址：两个 DID 都指向同一个 Agent
 

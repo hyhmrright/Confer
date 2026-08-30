@@ -1,19 +1,26 @@
 /**
  * A2A Agent Card (Linux Foundation Agent2Agent, protocol version 1.0).
  *
- * Confer implements its own A2A dialect — REST over `/a2a/v1/messages`, with
- * did:web identity and RFC 9421 HTTP Message Signatures. That predates the
- * standard reaching 1.0, and the names collided: the spec's discovery document
- * lives at `/.well-known/agent-card.json` while this instance publishes
+ * Confer predates the standard reaching 1.0 and grew its own A2A dialect, and
+ * the names collided: the spec's discovery document lives at
+ * `/.well-known/agent-card.json` while this instance publishes
  * `/.well-known/agents.json`, so an agent on either side could not find one on
- * the other. This module closes the discovery half of that gap by publishing a
- * conformant Card describing what is genuinely here.
+ * the other. This module publishes a conformant Card describing what is
+ * genuinely here.
  *
  * The shape is taken from `specification/a2a.proto` in a2aproject/A2A at
  * v1.0.1, serialized with the proto3 JSON mapping — which is why the fields are
  * camelCase (`supportedInterfaces`) while the proto declares snake_case.
  *
- * Two things are deliberately NOT claimed:
+ * What the Card advertises is the ONE interface a standard client can actually
+ * use: the HTTP+JSON binding in `routes/a2a-rest.ts`, whose paths are the
+ * spec's. Confer's own dialect is deliberately left out even though it is served
+ * at the same URL — §5.1 requires every binding an agent declares to be
+ * functionally equivalent, and the dialect has no task lifecycle. It is
+ * discovered through `/.well-known/agents.json` instead, which is Confer's own
+ * directory, and this Card stays free of a claim it cannot honour.
+ *
+ * Two capabilities are deliberately NOT claimed:
  *
  *   - `streaming: false`. There is a streaming endpoint, but it is Confer's own
  *     shape, not the spec's `SendStreamingMessage`. Advertising a capability a
@@ -23,7 +30,9 @@
  *     request signature. Claiming one of those would tell a client it can
  *     authenticate in a way that will in fact be rejected. The real requirement
  *     is stated as a *required extension* instead, which is the mechanism the
- *     spec provides for exactly this.
+ *     spec provides for exactly this, and `routes/a2a-rest.ts` enforces it the
+ *     way §3.3.4 requires: a client that does not declare the extension is
+ *     refused with `ExtensionSupportRequiredError` rather than a bare 401.
  */
 
 /** The protocol version this Card describes. */
@@ -37,7 +46,7 @@ const A2A_PROTOCOL_VERSION = '1.0';
  * has never seen Confer can paste it into a browser and learn what is being
  * asked of them.
  */
-const SIGNATURE_EXTENSION_URI = 'https://www.rfc-editor.org/rfc/rfc9421';
+export const SIGNATURE_EXTENSION_URI = 'https://www.rfc-editor.org/rfc/rfc9421';
 
 export interface AgentCardInput {
   /** The agent's own row. */
@@ -69,6 +78,7 @@ export interface AgentCard {
   capabilities: {
     streaming: boolean;
     pushNotifications: boolean;
+    extendedAgentCard: boolean;
     extensions: Array<{
       uri: string;
       description: string;
@@ -108,8 +118,9 @@ export function buildAgentCard(input: AgentCardInput): AgentCard {
     supportedInterfaces: [
       {
         url: a2aEndpoint,
-        // One of the three officially supported bindings. Confer speaks REST,
-        // not JSON-RPC or gRPC.
+        // One of the three officially supported bindings, and the one actually
+        // served at this URL: `POST {url}/message:send`, `GET {url}/tasks/{id}`
+        // and the rest of §11.3.
         protocolBinding: 'HTTP+JSON',
         protocolVersion: A2A_PROTOCOL_VERSION,
         tenant: username,
@@ -119,6 +130,7 @@ export function buildAgentCard(input: AgentCardInput): AgentCard {
     capabilities: {
       streaming: false,
       pushNotifications: false,
+      extendedAgentCard: false,
       extensions: [
         {
           uri: SIGNATURE_EXTENSION_URI,

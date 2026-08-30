@@ -98,3 +98,46 @@ describe('MessageBubble markdown rendering', () => {
     expect(screen.queryAllByRole('button')).toHaveLength(0);
   });
 });
+
+describe('agent-turn failure notice', () => {
+  const notice = {
+    ...base,
+    sender_type: 'own_agent',
+    content_type: 'system_notice',
+    // The English fallback the gateway writes for peers that are not our UI.
+    content: 'The agent you asked has no model configured yet.',
+  };
+
+  test('words the machine code instead of showing the gateway English', () => {
+    // The gateway has no locale context, so what it wrote is a fallback for
+    // non-UI readers. Rendering it here would put English in front of every
+    // zh/ja user — the exact boundary `permission.request` already respects.
+    render(
+      <MessageBubble
+        message={{
+          ...notice,
+          content_json: { kind: 'a2a_turn_failed', error: 'no_model_configured' },
+        }}
+      />,
+    );
+
+    expect(screen.queryByText(/no model configured yet/i)).toBeNull();
+    expect(screen.getByText(/设置|Settings|設定/)).toBeDefined();
+  });
+
+  test('falls back to a generic sentence for a code it does not know', () => {
+    // A newer gateway can add codes; an unknown one must still say something.
+    render(
+      <MessageBubble
+        message={{ ...notice, content_json: { kind: 'a2a_turn_failed', error: 'agent_error' } }}
+      />,
+    );
+    expect(screen.getByText(/没有完成|did not finish|完了しませんでした/)).toBeDefined();
+    expect(screen.queryByText(/no model configured yet/i)).toBeNull();
+  });
+
+  test('renders a malformed payload as an ordinary message rather than blank', () => {
+    render(<MessageBubble message={{ ...notice, content_json: { unexpected: true } }} />);
+    expect(screen.getByText(/no model configured yet/i)).toBeDefined();
+  });
+});

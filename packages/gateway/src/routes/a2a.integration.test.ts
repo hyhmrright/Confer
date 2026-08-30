@@ -1098,15 +1098,21 @@ describe('A2A reply stream authorization (IDOR)', () => {
     expect(await res.text()).toContain('the secret answer');
   });
 
-  test('rejects a different signed peer reading the reply (403)', async () => {
+  // 404 rather than 403 on purpose: a `forbidden` answer confirms the message
+  // id exists, which turns this endpoint into an oracle for enumerating them.
+  // The A2A spec makes the same demand of its own binding (§3.3.2 — servers
+  // MUST NOT reveal the existence of resources the client cannot access).
+  test('hides a message belonging to a different signed peer (404)', async () => {
     const { otherKey } = await servePeers();
     const messageId = await seedMessageWithReply();
 
     const signed = await signRequest(streamRequest(messageId), otherKey, OTHER_KEY);
     const res = await app.request(signed);
 
-    expect(res.status).toBe(403);
-    expect((await res.json()).error.code).toBe('forbidden');
+    expect(res.status).toBe(404);
+    const body = await res.json();
+    expect(body.error.code).toBe('not_found');
+    expect(JSON.stringify(body)).not.toContain('the secret answer');
   });
 });
 
@@ -1289,10 +1295,14 @@ describe('A2A thread scoping', () => {
     // It must land in a fresh thread of its own owner, never in the first one.
     expect(injected?.conversation_id).not.toBe(ownThread);
 
+    // Counted over PEER messages only. The agent has no model configured here,
+    // so each inbound question also gets a `system_notice` reply recording
+    // that — a row this assertion is not about, and one written asynchronously,
+    // so counting every row would make the test both wrong and flaky.
     const inOwnThread = await getDb()
       .select()
       .from(messages)
-      .where(eq(messages.conversation_id, ownThread));
+      .where(and(eq(messages.conversation_id, ownThread), eq(messages.sender_type, 'peer_agent')));
     expect(inOwnThread).toHaveLength(1);
   });
 
@@ -1330,7 +1340,10 @@ describe('A2A thread scoping', () => {
     expect(second.status).toBe(201);
     expect((await second.json()).thread_id).toBe(thread);
 
-    const rows = await getDb().select().from(messages).where(eq(messages.conversation_id, thread));
+    const rows = await getDb()
+      .select()
+      .from(messages)
+      .where(and(eq(messages.conversation_id, thread), eq(messages.sender_type, 'peer_agent')));
     expect(rows).toHaveLength(2);
   });
 });
