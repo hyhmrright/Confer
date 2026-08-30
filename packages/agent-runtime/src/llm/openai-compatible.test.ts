@@ -188,3 +188,98 @@ describe('stream', () => {
     await expect(collect(it)).rejects.toThrow(/test stream error: 500/);
   });
 });
+
+describe('stream token usage', () => {
+  async function collect(it: AsyncIterable<LLMStreamEvent>): Promise<LLMStreamEvent[]> {
+    const out: LLMStreamEvent[] = [];
+    for await (const ev of it) out.push(ev);
+    return out;
+  }
+
+  test('reads usage from the final chunk and carries it to done', async () => {
+    mockFetch(
+      () =>
+        new Response(
+          sseStream([
+            dataLine({ choices: [{ delta: { content: 'ok' } }] }),
+            // The usage chunk: an EMPTY choices array, which is why indexing
+            // into it has to be guarded.
+            dataLine({ choices: [], usage: { prompt_tokens: 900, completion_tokens: 31 } }),
+            'data: [DONE]',
+          ]),
+        ),
+    );
+
+    const events = await collect(
+      new OpenAICompatibleProvider('test', 'k', 'https://api.test', 'm').stream([
+        { role: 'user', content: 'hi' },
+      ]),
+    );
+
+    expect(events.at(-1)).toEqual({
+      type: 'done',
+      usage: { prompt_tokens: 900, completion_tokens: 31 },
+    });
+  });
+
+  test('survives a usage chunk that omits choices entirely', async () => {
+    // Some vendors send `{usage: …}` with no `choices` key at all. Reading
+    // `data.choices[0]` unguarded threw here, losing an answer already streamed
+    // in full to the reader.
+    mockFetch(
+      () =>
+        new Response(
+          sseStream([
+            dataLine({ choices: [{ delta: { content: 'ok' } }] }),
+            dataLine({ usage: { prompt_tokens: 5, completion_tokens: 6 } }),
+            'data: [DONE]',
+          ]),
+        ),
+    );
+
+    const events = await collect(
+      new OpenAICompatibleProvider('test', 'k', 'https://api.test', 'm').stream([
+        { role: 'user', content: 'hi' },
+      ]),
+    );
+
+    expect(events).toContainEqual({ type: 'token', text: 'ok' });
+    expect(events.at(-1)).toEqual({
+      type: 'done',
+      usage: { prompt_tokens: 5, completion_tokens: 6 },
+    });
+  });
+
+  test('never asks for usage, so a vendor that rejects unknown fields still works', async () => {
+    // `stream_options: {include_usage: true}` is what OpenAI wants, and a 400
+    // at any of the other seventeen catalogue entries. Which ones accept it is
+    // precisely the sort of per-vendor claim this codebase has been wrong about
+    // before, so it is never sent.
+    mockFetch(
+      () => new Response(sseStream([dataLine({ choices: [{ delta: {} }] }), 'data: [DONE]'])),
+    );
+    await collect(
+      new OpenAICompatibleProvider('test', 'k', 'https://api.test', 'm').stream([
+        { role: 'user', content: 'hi' },
+      ]),
+    );
+
+    expect(lastBody()).not.toHaveProperty('stream_options');
+  });
+
+  test('omits usage when the vendor reported none', async () => {
+    mockFetch(
+      () =>
+        new Response(
+          sseStream([dataLine({ choices: [{ delta: { content: 'ok' } }] }), 'data: [DONE]']),
+        ),
+    );
+
+    const events = await collect(
+      new OpenAICompatibleProvider('test', 'k', 'https://api.test', 'm').stream([
+        { role: 'user', content: 'hi' },
+      ]),
+    );
+    expect(events.at(-1)).toEqual({ type: 'done' });
+  });
+});

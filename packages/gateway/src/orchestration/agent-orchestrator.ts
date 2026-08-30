@@ -8,6 +8,7 @@ import { getEnv } from '../env.js';
 import type { EmbeddingProvider } from '../lib/embedding.js';
 import type { TurnAudience } from '../lib/llm-keys.js';
 import { ensureMemoryCollection } from '../lib/memory-store.js';
+import { recordAgentTurn } from '../lib/telemetry.js';
 import {
   listContacts,
   listContactsToolDefinition,
@@ -215,6 +216,7 @@ async function runAgentWithTools(
   initialMessages: LLMMessage[],
   llmOptions: LLMChatOptions,
   ctx: ToolExecContext,
+  spend: TurnSpend,
 ): Promise<string> {
   let agentMessages = initialMessages;
   let fullContent = '';
@@ -222,6 +224,7 @@ async function runAgentWithTools(
   for (let round = 0; round < 5; round++) {
     const pendingToolCalls: Array<{ id: string; name: string; arguments: string }> = [];
     let turnContent = '';
+    spend.rounds++;
 
     for await (const event of provider.stream(agentMessages, llmOptions)) {
       switch (event.type) {
@@ -234,6 +237,18 @@ async function runAgentWithTools(
           break;
         case 'tool_call':
           if (event.tool_call) pendingToolCalls.push(event.tool_call);
+          break;
+        case 'done':
+          // Summed across rounds, because a tool loop is several model calls
+          // and the owner pays for the prompt again on each one — the round
+          // count beside it is what makes a large number explicable.
+          if (event.usage) {
+            spend.usage = {
+              prompt_tokens: (spend.usage?.prompt_tokens ?? 0) + event.usage.prompt_tokens,
+              completion_tokens:
+                (spend.usage?.completion_tokens ?? 0) + event.usage.completion_tokens,
+            };
+          }
           break;
       }
     }
@@ -269,18 +284,12 @@ async function runAgentWithTools(
   return fullContent;
 }
 
-/**
- * One line per turn saying what the turn was actually grounded in.
- *
- * Two things here have no other way to be noticed. Recall returning nothing has
- * three causes that all present as an empty prompt fragment — nothing stored,
- * nothing above the score floor, or rows that were never indexed — and the last
- * one hid for months. And the KB instruction *mandates* a search before
- * answering, yet a model that ignores it produces a fluent answer from its own
- * priors that reads exactly like a grounded one.
- *
- * Counts and scores only: memory text and message content are PII and stay out.
- */
+/** What one turn spent, accumulated across the rounds of the tool loop. */
+interface TurnSpend {
+  rounds: number;
+  usage?: { prompt_tokens: number; completion_tokens: number };
+}
+
 function recallState(opts: RunAgentTurnOptions, recall: MemoryRecall | undefined): string {
   // `withheld` is a peer-audience turn, `off` is a missing embedding key. Worth
   // separating: one is a deliberate boundary, the other is a misconfiguration.
@@ -294,24 +303,6 @@ function recallState(opts: RunAgentTurnOptions, recall: MemoryRecall | undefined
 function kbState(hasKb: boolean, toolsUsed: string[]): string {
   if (!hasKb) return 'none';
   return toolsUsed.includes('search_knowledge_base') ? 'searched' : 'unsearched';
-}
-
-function logTurnGrounding(
-  opts: RunAgentTurnOptions,
-  recall: MemoryRecall | undefined,
-  toolsUsed: string[],
-  citations: KbCitation[],
-): void {
-  console.log(
-    `agent turn user=${opts.userId}` +
-      ` recall=${recallState(opts, recall)}` +
-      ` kb=${kbState(opts.hasKb, toolsUsed)}` +
-      // `kb=searched` says the model obeyed the instruction, not that anything
-      // came back: a search that matched nothing, or one that threw and was
-      // handed to the model as error text, both still count as searched.
-      ` cites=${citations.length}` +
-      ` tools=${toolsUsed.length}`,
-  );
 }
 
 // Run one agent turn: recall durable memories, layer the KB instruction +
@@ -346,28 +337,58 @@ export async function runAgentTurn(opts: RunAgentTurnOptions): Promise<RunAgentT
 
   const citations: KbCitation[] = [];
   const toolsUsed: string[] = [];
-  const content = await runAgentWithTools(
-    opts.provider,
-    initialMessages,
-    { tools, model: opts.model },
-    {
+  const spend: TurnSpend = { rounds: 0 };
+  const startedAt = Date.now();
+
+  const record = (error?: unknown): void =>
+    recordAgentTurn({
       userId: opts.userId,
-      embeddingKey: opts.embeddingKey,
-      embeddingProvider: opts.embeddingProvider,
-      tavilyApiKey: opts.tavilyApiKey,
-      kbScope: opts.kbScope,
       audience: opts.audience,
-      // Off unless the operator turned it on: it spends an extra model call
-      // per search, and the measurement that justified the recall headroom did
-      // not establish that any given chat model can exploit it. See env.ts.
-      rerank: getEnv().RERANK_ENABLED ? { provider: opts.provider, model: opts.model } : undefined,
-      citations,
-      toolsUsed,
-      emit: opts.emit,
-    },
-  );
+      provider: opts.provider.name,
+      model: opts.model,
+      durationMs: Date.now() - startedAt,
+      rounds: spend.rounds,
+      usage: spend.usage,
+      recall: recallState(opts, recall),
+      kb: kbState(opts.hasKb, toolsUsed),
+      citations: citations.length,
+      tools: toolsUsed.length,
+      errorType: error === undefined ? undefined : ((error as Error)?.constructor?.name ?? 'Error'),
+    });
 
-  logTurnGrounding(opts, recall, toolsUsed, citations);
+  // Recorded on the way out whether the turn succeeded or threw. A turn that
+  // fails after three tool rounds has still been paid for, and it is the one an
+  // owner most wants to find afterwards — logging only the successes would hide
+  // exactly the turns worth looking at.
+  try {
+    const content = await runAgentWithTools(
+      opts.provider,
+      initialMessages,
+      { tools, model: opts.model },
+      {
+        userId: opts.userId,
+        embeddingKey: opts.embeddingKey,
+        embeddingProvider: opts.embeddingProvider,
+        tavilyApiKey: opts.tavilyApiKey,
+        kbScope: opts.kbScope,
+        audience: opts.audience,
+        // Off unless the operator turned it on: it spends an extra model call
+        // per search, and the measurement that justified the recall headroom did
+        // not establish that any given chat model can exploit it. See env.ts.
+        rerank: getEnv().RERANK_ENABLED
+          ? { provider: opts.provider, model: opts.model }
+          : undefined,
+        citations,
+        toolsUsed,
+        emit: opts.emit,
+      },
+      spend,
+    );
 
-  return { content, citations };
+    record();
+    return { content, citations };
+  } catch (error) {
+    record(error);
+    throw error;
+  }
 }

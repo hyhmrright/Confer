@@ -262,3 +262,54 @@ describe('stream', () => {
     await expect(collect(it)).rejects.toThrow(/Anthropic stream error: 429/);
   });
 });
+
+describe('stream token usage', () => {
+  async function collect(it: AsyncIterable<LLMStreamEvent>): Promise<LLMStreamEvent[]> {
+    const out: LLMStreamEvent[] = [];
+    for await (const ev of it) out.push(ev);
+    return out;
+  }
+
+  test('carries usage to the done event, taking input and output from different frames', async () => {
+    // Anthropic splits it: input arrives on message_start before a single token
+    // has been generated, output on message_delta at the end. Reading only one
+    // of them reports half the cost.
+    mockFetch(
+      () =>
+        new Response(
+          sseStream([
+            { type: 'message_start', message: { usage: { input_tokens: 1200, output_tokens: 0 } } },
+            { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'ok' } },
+            { type: 'message_delta', delta: {}, usage: { output_tokens: 42 } },
+            { type: 'message_stop' },
+          ]),
+        ),
+    );
+
+    const events = await collect(
+      new AnthropicProvider('k').stream([{ role: 'user', content: 'hi' }]),
+    );
+    expect(events.at(-1)).toEqual({
+      type: 'done',
+      usage: { prompt_tokens: 1200, completion_tokens: 42 },
+    });
+  });
+
+  test('omits usage entirely when the stream reported none', async () => {
+    // Absent is not zero. A `usage: {0, 0}` here would read as a free turn.
+    mockFetch(
+      () =>
+        new Response(
+          sseStream([
+            { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'ok' } },
+            { type: 'message_stop' },
+          ]),
+        ),
+    );
+
+    const events = await collect(
+      new AnthropicProvider('k').stream([{ role: 'user', content: 'hi' }]),
+    );
+    expect(events.at(-1)).toEqual({ type: 'done' });
+  });
+});

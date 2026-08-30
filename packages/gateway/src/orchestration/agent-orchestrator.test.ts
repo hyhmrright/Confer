@@ -105,9 +105,46 @@ describe('runAgentTurn grounding', () => {
     });
 
     expect(result.content).toBe('答案');
-    expect(groundingLine()).toBe(
-      `agent turn user=${baseOpts.userId} recall=off kb=none cites=0 tools=0`,
+    const line = groundingLine();
+    expect(line).toContain(`user=${baseOpts.userId}`);
+    expect(line).toContain('recall=off');
+    expect(line).toContain('kb=none');
+    expect(line).toContain('cites=0');
+    expect(line).toContain('tools=0');
+  });
+
+  test('records what the turn cost beside what it was grounded in', async () => {
+    // One line, not two. A turn's cost and its grounding are read together —
+    // "this answer was expensive AND ungrounded" is the interesting case, and
+    // splitting them across two log lines is what makes it hard to see.
+    await runAgentTurn({
+      ...baseOpts,
+      provider: scriptedProvider([[toolCall('search_knowledge_base')], [token('根据文档…')]]),
+      hasKb: true,
+    });
+
+    const line = groundingLine();
+    expect(line).toContain('gen_ai.provider.name=scripted');
+    expect(line).toContain('rounds=2');
+    expect(line).toMatch(/duration_ms=\d+/);
+  });
+
+  test('records a turn that threw, then rethrows it', async () => {
+    // A turn that fails after two tool rounds has still been paid for, and it is
+    // the one an owner most wants to find afterwards.
+    const boom = {
+      name: 'scripted',
+      chat: () => Promise.reject(new Error('unused')),
+      // biome-ignore lint/correctness/useYield: the throw is the whole point.
+      async *stream(): AsyncIterable<never> {
+        throw new TypeError('provider exploded');
+      },
+    };
+
+    await expect(runAgentTurn({ ...baseOpts, provider: boom })).rejects.toThrow(
+      'provider exploded',
     );
+    expect(groundingLine()).toContain('error.type=TypeError');
   });
 
   // The instruction in the system prompt *mandates* a knowledge-base search

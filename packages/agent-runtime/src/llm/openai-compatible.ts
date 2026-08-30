@@ -121,6 +121,14 @@ export class OpenAICompatibleProvider implements LLMProvider {
 
     const pendingCalls = new Map<number, { id: string; name: string; arguments: string }>();
 
+    // Usage is read when the vendor volunteers it, and never asked for. OpenAI
+    // itself gates it behind `stream_options: {include_usage: true}`, but this
+    // one code path serves all eighteen entries in the catalogue and an unknown
+    // body field is a 400 at some of them — and which ones is exactly the kind
+    // of per-vendor claim this codebase got burned making before. A vendor that
+    // stays silent is reported as UNMEASURED rather than as zero tokens.
+    let usage: { prompt_tokens: number; completion_tokens: number } | undefined;
+
     for await (const payload of readSSEData(response.body)) {
       const chunk = payload.trim();
       if (chunk === '[DONE]') {
@@ -130,12 +138,22 @@ export class OpenAICompatibleProvider implements LLMProvider {
             tool_call: { id: tc.id, name: tc.name, arguments: tc.arguments },
           };
         }
-        yield { type: 'done' };
+        yield usage ? { type: 'done', usage } : { type: 'done' };
         return;
       }
 
       const data = JSON.parse(chunk) as Record<string, unknown>;
-      const choices = data.choices as Array<Record<string, unknown>>;
+      const reported = data.usage as Record<string, number> | null | undefined;
+      if (reported) {
+        usage = {
+          prompt_tokens: reported.prompt_tokens ?? 0,
+          completion_tokens: reported.completion_tokens ?? 0,
+        };
+      }
+      // The chunk carrying usage has an EMPTY choices array, and some vendors
+      // omit the field entirely on it — indexing into it unguarded would throw
+      // and take down a turn that had already produced its whole answer.
+      const choices = (data.choices as Array<Record<string, unknown>> | undefined) ?? [];
       const delta = choices[0]?.delta as Record<string, unknown> | undefined;
 
       if (delta?.content) {
