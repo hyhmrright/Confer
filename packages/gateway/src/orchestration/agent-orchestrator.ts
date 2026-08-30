@@ -6,7 +6,16 @@ import type {
 } from '@confer/agent-runtime';
 import { getEnv } from '../env.js';
 import type { EmbeddingProvider } from '../lib/embedding.js';
+import type { TurnAudience } from '../lib/llm-keys.js';
 import { ensureMemoryCollection } from '../lib/memory-store.js';
+import {
+  listContacts,
+  listContactsToolDefinition,
+  listKnowledgeBases,
+  listKnowledgeBasesToolDefinition,
+  searchMemory,
+  searchMemoryToolDefinition,
+} from '../tools/introspect.js';
 import {
   type KbCitation,
   type KbRerank,
@@ -57,6 +66,11 @@ export interface RunAgentTurnOptions {
   // default, for the same reason `audience` is: the permissive value must never
   // be what a caller lands on by saying nothing.
   recallMemory: boolean;
+  // Who the answer is going to. Required for the same reason `recallMemory` is:
+  // the permissive value is what a forgotten argument lands on, and this is the
+  // argument deciding whether a stranger's question can list the owner's
+  // contacts or search their long-term memory.
+  audience: TurnAudience;
   emit?: AgentTurnEmit;
 }
 
@@ -72,12 +86,21 @@ function buildSystemPrompt(base: string, hasKb: boolean): string {
   return [base, kbInstruction].filter(Boolean).join('\n');
 }
 
-// Assemble the tool set offered to the LLM: web search when a Tavily key
-// resolves, knowledge-base search when the user has at least one KB.
-function buildToolDefinitions(tavilyApiKey: string, hasKb: boolean): LLMToolDefinition[] {
+// Assemble the tool set offered to the LLM. Each entry is gated on the thing
+// that makes it work at all — a Tavily key, a knowledge base, an embedding key
+// — and the two that read owner-only data are gated on the audience as well.
+//
+// Offering a tool is NOT how access is enforced. A model can emit a call for a
+// name it was never given, and `executeToolCall` passes the arguments straight
+// through, so every owner-only branch re-checks the audience there. This
+// function decides what the model is *told about*; that one decides what runs.
+function buildToolDefinitions(opts: RunAgentTurnOptions): LLMToolDefinition[] {
+  const isOwner = opts.audience === 'owner';
   return [
-    ...(tavilyApiKey ? [tavilyToolDefinition] : []),
-    ...(hasKb ? [knowledgeBaseToolDefinition] : []),
+    ...(opts.tavilyApiKey ? [tavilyToolDefinition] : []),
+    ...(opts.hasKb ? [knowledgeBaseToolDefinition, listKnowledgeBasesToolDefinition] : []),
+    ...(isOwner && opts.embeddingKey ? [searchMemoryToolDefinition] : []),
+    ...(isOwner ? [listContactsToolDefinition] : []),
   ];
 }
 
@@ -87,6 +110,7 @@ interface ToolExecContext {
   embeddingProvider: EmbeddingProvider;
   tavilyApiKey: string;
   kbScope?: string[];
+  audience: TurnAudience;
   // The turn's own model, reused to rerank knowledge-base hits. Passing it
   // rather than reaching for a provider inside `tools/` keeps the dependency
   // pointing the one way it is allowed to.
@@ -158,6 +182,23 @@ async function executeToolCall(
         await ctx.emit?.onCitation?.(cite);
       }
       return kbResult.text;
+    }
+    if (tc.name === 'list_knowledge_bases') {
+      return await listKnowledgeBases(ctx.userId, ctx.kbScope);
+    }
+    // The two owner-only tools re-check the audience rather than trusting that
+    // they were never offered. A peer's question and the owner's instructions
+    // reach the model as the same kind of text, so a model can be talked into
+    // calling a name it was not given — and `executeToolCall` is the only place
+    // that decides whether the call actually runs.
+    if (tc.name === 'search_memory') {
+      if (ctx.audience !== 'owner') return `未知工具: ${tc.name}`;
+      const args = JSON.parse(tc.arguments) as { query: string };
+      return await searchMemory(args.query, ctx.userId, ctx.embeddingKey, ctx.embeddingProvider);
+    }
+    if (tc.name === 'list_contacts') {
+      if (ctx.audience !== 'owner') return `未知工具: ${tc.name}`;
+      return await listContacts(ctx.userId);
     }
     return `未知工具: ${tc.name}`;
   } catch (err) {
@@ -295,7 +336,7 @@ export async function runAgentTurn(opts: RunAgentTurnOptions): Promise<RunAgentT
 
   const effectiveSystemPrompt =
     buildSystemPrompt(opts.systemPromptBase, opts.hasKb) + (recall?.fragment ?? '');
-  const tools = buildToolDefinitions(opts.tavilyApiKey, opts.hasKb);
+  const tools = buildToolDefinitions(opts);
 
   const initialMessages: LLMMessage[] = [
     { role: 'system', content: effectiveSystemPrompt },
@@ -315,6 +356,7 @@ export async function runAgentTurn(opts: RunAgentTurnOptions): Promise<RunAgentT
       embeddingProvider: opts.embeddingProvider,
       tavilyApiKey: opts.tavilyApiKey,
       kbScope: opts.kbScope,
+      audience: opts.audience,
       // Off unless the operator turned it on: it spends an extra model call
       // per search, and the measurement that justified the recall headroom did
       // not establish that any given chat model can exploit it. See env.ts.

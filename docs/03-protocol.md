@@ -321,7 +321,14 @@ peer.unknown:
 - `ask_user`（主人显式设 `policies_json.default='ask_user'` 或 `{action:'ask',decision:'ask_user'}` 规则）→ **已实现**：入站提问仍存库 + 广播（主人能在 IM 看到），但**不自动回复**；落一条 `action='ask'` 待批权限到 pending inbox，`POST /a2a/v1/messages` 返回 `202 { "status": "pending_approval", "message_id" }`。主人在 `GET /permissions/pending` 看到该提问，`POST /permissions/{id}/decide` 判 `allow_*` 即触发 Agent 代答（写 `in_reply_to` 回复 + 出站投递），判 `deny` 则不答。peer 侧 `GET /a2a/v1/stream/{message_id}` 在批准前返回 `status:'pending'`，批准后返回答复。
 - `deny`（显式拒绝规则）→ `403 policy_denied`
 
-> **A2A 代答能力**：入站 A2A 应答与 web 聊天走**同一套共享编排**（`orchestration/agent-orchestrator.ts` 的 `runAgentTurn`）。Agent 代答时会用**主人**（非提问 peer）的密钥按需调用工具——`search_knowledge_base`（检索主人私有知识库）与 `web_search`（Tavily），并注入该主人的**长期记忆**召回；命中的知识库片段作为**引用**持久化到 `messages.citations_json`，答完后异步把本轮事实沉淀进长期记忆。主人未配 embedding/KB/tavily 密钥时优雅降级为纯 LLM 应答（不报错、无引用）。`allow` 与 `ask_user` 批准后的代答路径共用此编排。
+> **A2A 代答能力**：入站 A2A 应答与 web 聊天走**同一套共享编排**（`orchestration/agent-orchestrator.ts` 的 `runAgentTurn`），但**两者能力并不相同**。`runAgentTurn` 取一个必填的 `audience`（`'owner' | 'peer'`，必填而非默认——默认值会是宽松的那个），工具集与可触达的数据面都由它决定：
+>
+> - **owner 回合**（web 聊天）：`web_search`、`search_knowledge_base`（全部知识库）、`list_knowledge_bases`、`search_memory`、`list_contacts`，并自动注入长期记忆召回。
+> - **peer 回合**（入站 A2A 代答）：只有 `web_search`、`search_knowledge_base`、`list_knowledge_bases`，且检索范围**仅限**标记了 `shared_with_peers` 的知识库；**不召回长期记忆**，也不提供 `search_memory` 与 `list_contacts`——前者是主人私聊沉淀的事实，后者是主人的社交图谱，回答一个陌生人的问题都不需要它们。
+>
+> 边界靠**数据面**而非提示词：peer 的问题和主人的指令抵达模型时是同一种文本，所以「Agent 会拒绝透露」不成立，只有检索物理上够不到才成立。同理，**不提供某个工具不等于访问控制**——模型可以调用没给它的工具名，因此 owner-only 分支在 `executeToolCall` 里会再检查一次 audience。
+>
+> 两种回合都用**主人**（非提问 peer）的密钥。命中的知识库片段作为**引用**持久化到 `messages.citations_json`，答完后异步把本轮事实沉淀进长期记忆（peer 回合沉淀的行标记为 `a2a`，召回时会注明来源）。主人未配 embedding/KB/tavily 密钥时优雅降级为纯 LLM 应答（不报错、无引用）。`allow` 与 `ask_user` 批准后的代答路径共用此编排。
 
 > `ask='ask'` 的待批权限 `scope_json` 形如 `{ kind:'a2a_question', conversation_id, inbound_message_id, sender_did, peer_id, content }`，足以在批准时重建并恢复回答（按 `user_id`/`peer_id` 实时取 agent/peer，幂等：已有回复则跳过）。standing-policy 设置 UI、「编辑后回答」、push 通知仍为 backlog。
 

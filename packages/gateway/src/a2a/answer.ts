@@ -152,6 +152,9 @@ export async function processA2AMessage(params: ProcessA2AMessageParams): Promis
   // these ended the turn here with a log line and nothing on the wire, leaving
   // the asker to poll a question that would never be answered.
   const turn = await runAgentTurn({
+    // An inbound peer's question; same value passed to
+    // resolveAgentCapabilities above, and the two must not drift.
+    audience: 'peer',
     provider,
     systemPromptBase: targetAgent.description ?? 'You are a helpful AI agent.',
     model,

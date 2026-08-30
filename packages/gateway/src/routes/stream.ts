@@ -147,6 +147,9 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
 
       const { content: fullContent, citations } = await runAgentTurn({
         provider,
+        // The owner asking their own agent; same value passed to
+        // resolveAgentCapabilities above, and the two must not drift.
+        audience: 'owner',
         systemPromptBase: systemPrompt,
         model,
         history,

@@ -85,6 +85,15 @@ export const knowledgeBaseToolDefinition = {
     type: 'object',
     properties: {
       query: { type: 'string', description: '搜索查询词，用自然语言描述要查找的内容' },
+      // Declared so the model can aim, having seen the ids from
+      // list_knowledge_bases. It was always accepted — `executeToolCall` passed
+      // it through whether or not it appeared here — which is why the scope is
+      // enforced by `narrowKbIds` intersecting, and never by omitting this.
+      kb_ids: {
+        type: 'array',
+        items: { type: 'string' },
+        description: '可选：限定检索范围的知识库 id 列表，id 来自 list_knowledge_bases',
+      },
     },
     required: ['query'],
   },
