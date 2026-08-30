@@ -1,0 +1,1 @@
+ALTER TABLE "knowledge_bases" ADD COLUMN "shared_with_peers" boolean DEFAULT false NOT NULL;

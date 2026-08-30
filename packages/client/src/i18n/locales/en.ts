@@ -247,6 +247,13 @@ export const en: Resources = {
     empty: 'No knowledge bases yet',
     emptyHint: 'Upload documents and your agent can cite them in its answers.',
     upload: 'Upload',
+    private: 'Private',
+    privateTitle:
+      'An external Agent’s question cannot search this base. Click to make it shareable.',
+    shared: 'Shareable',
+    shareFailed: "That change didn't take. Try again.",
+    sharedTitle:
+      'Your Agent may cite this base when answering an external Agent. Click to make it private again.',
     uploading: 'Uploading…',
     deleteConfirm: 'Delete knowledge base "{{name}}"? This cannot be undone.',
     docsEmpty: 'No documents yet. Tap "Upload" to import .txt / .md / .pdf',

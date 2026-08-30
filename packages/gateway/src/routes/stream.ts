@@ -142,8 +142,8 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
         content: m.content ?? '',
       }));
 
-      const { embeddingKey, embeddingProvider, tavilyApiKey, hasKb } =
-        await resolveAgentCapabilities(user.sub, llmKeys, env);
+      const { embeddingKey, embeddingProvider, tavilyApiKey, hasKb, recallMemory } =
+        await resolveAgentCapabilities(user.sub, llmKeys, env, 'owner');
 
       const { content: fullContent, citations } = await runAgentTurn({
         provider,
@@ -156,6 +156,7 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
         embeddingProvider,
         tavilyApiKey,
         hasKb,
+        recallMemory,
         emit: {
           onToken: (text) => stream.writeSSE({ event: 'token', data: JSON.stringify({ text }) }),
           onTool: (tool) => stream.writeSSE({ event: 'tool', data: JSON.stringify({ tool }) }),

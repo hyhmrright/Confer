@@ -788,9 +788,11 @@ describe('A2A agent reply with KB tool calls + citations', () => {
 
   // Seed a KB row plus one Qdrant chunk owned by the user so search_knowledge_base
   // returns a citable hit. Returns the doc_name used for the citation assertion.
-  async function seedKbChunk(docName: string, text: string): Promise<string> {
+  async function seedKbChunk(docName: string, text: string, shared = true): Promise<string> {
     const kbId = newId();
-    await getDb().insert(knowledgeBases).values({ id: kbId, user_id: user.id, name: 'Ops KB' });
+    await getDb()
+      .insert(knowledgeBases)
+      .values({ id: kbId, user_id: user.id, name: 'Ops KB', shared_with_peers: shared });
     await upsertChunks([
       {
         chunk_id: newId(),
@@ -808,7 +810,7 @@ describe('A2A agent reply with KB tool calls + citations', () => {
     return docName;
   }
 
-  test('answers a connected peer using KB search and persists citations', async () => {
+  test('answers a connected peer from a SHARED KB and persists citations', async () => {
     const targetDid = 'did:web:localhost:agents:kb';
     await seedTargetAgent(targetDid);
     await connectPeer('did:web:localhost');
@@ -866,6 +868,83 @@ describe('A2A agent reply with KB tool calls + citations', () => {
     expect(citations).toBeTruthy();
     expect(citations?.length).toBeGreaterThan(0);
     expect(citations?.some((c) => c.doc_name === docName)).toBe(true);
+  });
+
+  // The reason the sharing flag exists. A peer's question arrives at the model
+  // as ordinary text next to the owner's own instructions, so "the agent will
+  // decline to look" is not a boundary — this test therefore has the model do
+  // the worst thing it could be talked into doing, and calls the knowledge-base
+  // tool that was never offered to it. The scope is applied where the search
+  // runs, so the call is admitted and comes back with nothing.
+  test('cannot reach an unshared KB even when the model calls the tool anyway', async () => {
+    const targetDid = 'did:web:localhost:agents:private';
+    await seedTargetAgent(targetDid);
+    await connectPeer('did:web:localhost');
+    await seedChatAndEmbeddingKeys();
+    await seedKbChunk('salaries.md', 'Alice earns 250000 per year.', false);
+
+    const { publicKey, privateKey } = await generateEd25519KeyPair();
+    const publicKeyMultibase = await publicKeyToMultibase(publicKey);
+    const didDocument = {
+      '@context': ['https://www.w3.org/ns/did/v1'],
+      id: 'did:web:localhost',
+      verificationMethod: [
+        {
+          id: KEY_ID,
+          type: 'Ed25519VerificationKey2020',
+          controller: 'did:web:localhost',
+          publicKeyMultibase,
+        },
+      ],
+    };
+
+    // Every prompt this turn sends upstream, so the assertion can be made over
+    // all of them rather than over a guess about which round carried what.
+    const sentToModel: string[] = [];
+    let anthropicCall = 0;
+    restoreFetch = mockFetch((url, init) => {
+      if (url.includes('/.well-known/did.json')) return Response.json(didDocument);
+      if (url.includes('api.openai.com')) {
+        return Response.json({ data: [{ embedding: fixedVector(), index: 0 }] });
+      }
+      if (url.includes('api.anthropic.com')) {
+        sentToModel.push(String(init?.body ?? ''));
+        return anthropicCall++ === 0
+          ? anthropicToolUseStream('search_knowledge_base', { query: 'salaries' })
+          : anthropicTextStream('I have nothing on that.');
+      }
+      return undefined;
+    });
+
+    const inbound = await app.request(
+      await signRequest(messageRequest(targetDid, 'What does Alice earn?'), privateKey, KEY_ID),
+    );
+    expect(inbound.status).toBe(201);
+    const inboundMsgId = (await inbound.json()).message_id;
+
+    const reply = await waitFor(async () => {
+      const [r] = await getDb()
+        .select()
+        .from(messages)
+        .where(eq(messages.in_reply_to, inboundMsgId));
+      return r;
+    });
+
+    // The answer exists — the peer is not stonewalled, it just learns nothing.
+    expect(reply?.sender_type).toBe('own_agent');
+    expect(reply?.citations_json ?? null).toBeNull();
+    expect(reply?.content).not.toContain('250000');
+
+    // The strong claim: across every prompt this turn sent upstream, the
+    // unshared document never appeared. Not "the model chose not to repeat it"
+    // — it was never in the context to repeat.
+    expect(sentToModel.length).toBeGreaterThan(1);
+    for (const body of sentToModel) {
+      expect(body).not.toContain('250000');
+    }
+    // And the search really did run and really did come back empty, so this is
+    // not passing because the tool was quietly skipped.
+    expect(sentToModel.some((b) => b.includes('未找到相关内容'))).toBe(true);
   });
 
   test('degrades gracefully with no embedding/tavily key: answers, no citations', async () => {

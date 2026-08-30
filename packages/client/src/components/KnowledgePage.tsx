@@ -83,10 +83,12 @@ function KbCard({ kbId }: { kbId: string }) {
   const uploadDocument = useKbStore((s) => s.uploadDocument);
   const deleteDocument = useKbStore((s) => s.deleteDocument);
   const deleteKb = useKbStore((s) => s.deleteKb);
+  const setKbShared = useKbStore((s) => s.setKbShared);
   const retryDocument = useKbStore((s) => s.retryDocument);
   const uploading = useKbStore((s) => s.uploading);
   const kb = kbs.find((k) => k.id === kbId);
   const [expanded, setExpanded] = useState(false);
+  const [shareError, setShareError] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   if (!kb) return null;
@@ -96,6 +98,19 @@ function KbCard({ kbId }: { kbId: string }) {
   const handleExpand = async () => {
     if (!expanded && !docs) await fetchDocuments(kbId);
     setExpanded((v) => !v);
+  };
+
+  // The store reverts its optimistic flip and rethrows. Something has to catch
+  // that: an async onClick handler that rejects is an unhandled rejection, and
+  // the chip would silently snap back with no explanation — the same shape that
+  // once left MemoryPage's form failing in silence.
+  const handleToggleShared = async () => {
+    setShareError(false);
+    try {
+      await setKbShared(kbId, !kb.shared_with_peers);
+    } catch {
+      setShareError(true);
+    }
   };
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -127,6 +142,25 @@ function KbCard({ kbId }: { kbId: string }) {
           </div>
         </button>
         <div className="flex items-center gap-1 ml-2 shrink-0">
+          {/* Reads as a state chip rather than a switch, because "off" is the
+              normal condition and should look unremarkable — it is being ON
+              that is worth noticing across a list of bases. */}
+          <button
+            type="button"
+            onClick={handleToggleShared}
+            title={
+              shareError
+                ? t('knowledge.shareFailed')
+                : t(kb.shared_with_peers ? 'knowledge.sharedTitle' : 'knowledge.privateTitle')
+            }
+            className={`text-[11px] px-2 py-0.5 rounded-md border transition-all ${
+              kb.shared_with_peers
+                ? 'bg-amber-400/10 text-amber-300/90 border-amber-400/20 hover:bg-amber-400/20'
+                : 'text-ink-muted border-dark-border hover:text-ink-secondary'
+            }`}
+          >
+            {t(kb.shared_with_peers ? 'knowledge.shared' : 'knowledge.private')}
+          </button>
           <button
             type="button"
             onClick={() => fileRef.current?.click()}

@@ -7,6 +7,8 @@ export interface KnowledgeBase {
   user_id: string;
   name: string;
   description: string | null;
+  // Whether an inbound question from an external Agent may search this base.
+  shared_with_peers: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -33,6 +35,7 @@ interface KbState {
   fetchKbs: () => Promise<void>;
   createKb: (name: string, description?: string) => Promise<void>;
   deleteKb: (kbId: string) => Promise<void>;
+  setKbShared: (kbId: string, shared: boolean) => Promise<void>;
   fetchDocuments: (kbId: string) => Promise<void>;
   loadMoreDocuments: (kbId: string) => Promise<void>;
   uploadDocument: (kbId: string, file: File) => Promise<void>;
@@ -97,6 +100,23 @@ export const useKbStore = create<KbState>((set, get) => ({
         Object.entries(s.documentsTotal).filter(([k]) => k !== kbId),
       ),
     }));
+  },
+
+  // Optimistic: the switch is the whole interaction, so waiting a round trip to
+  // move it reads as a dead control. A failure puts it back and rethrows, which
+  // is what the caller renders.
+  setKbShared: async (kbId, shared) => {
+    const apply = (value: boolean) =>
+      set((s) => ({
+        kbs: s.kbs.map((kb) => (kb.id === kbId ? { ...kb, shared_with_peers: value } : kb)),
+      }));
+    apply(shared);
+    try {
+      await api.patch(`/knowledge-bases/${kbId}`, { shared_with_peers: shared });
+    } catch (err) {
+      apply(!shared);
+      throw err;
+    }
   },
 
   fetchDocuments: async (kbId) => {

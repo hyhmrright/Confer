@@ -346,6 +346,12 @@ export const knowledgeBases = pgTable(
       .references(() => users.id),
     name: varchar('name', { length: 255 }).notNull(),
     description: text('description'),
+    // Whether an inbound A2A question may search this knowledge base. Default
+    // false: a peer's question is answered by someone else's agent, and prompt
+    // injection makes "the agent decides what to reveal" not a boundary at all.
+    // Bounding the searchable set is a boundary — nothing the peer writes can
+    // widen it.
+    shared_with_peers: boolean('shared_with_peers').notNull().default(false),
     created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
