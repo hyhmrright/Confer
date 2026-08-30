@@ -11,10 +11,33 @@ import { VECTOR_SIZE } from './rag-config.js';
 
 const COLLECTION = 'agent_memories_vec';
 
+const MEMORY_SOURCES = ['manual', 'auto', 'a2a'] as const;
+
+/**
+ * Where a durable memory came from. Stored on the Postgres row and mirrored
+ * into the Qdrant payload so recall can see it without a second query.
+ *
+ * `a2a` exists because an inbound peer question is distilled into the owner's
+ * memory exactly like their own conversations are, and the two must not read
+ * alike afterwards: a connected peer can otherwise write facts that resurface,
+ * unattributed, inside the owner's private chats.
+ */
+export type MemorySource = (typeof MEMORY_SOURCES)[number];
+
+// Both stores hold whatever was written into them — a Qdrant payload from an
+// older build that wrote no source at all, or a free-form varchar row. Anything
+// unrecognised reads as unknown rather than being asserted into the union.
+export function asMemorySource(value: unknown): MemorySource | undefined {
+  return MEMORY_SOURCES.find((source) => source === value);
+}
+
 export interface MemoryHit {
   memoryId: string;
   text: string;
   score: number;
+  // Undefined for points written before memories carried their origin. Recall
+  // treats an unknown origin the way it treated every memory back then.
+  source?: MemorySource;
 }
 
 export interface UpsertMemoryInput {
@@ -23,6 +46,7 @@ export interface UpsertMemoryInput {
   text: string;
   vector: number[];
   provider: EmbeddingProvider;
+  source: MemorySource;
 }
 
 export async function ensureMemoryCollection(): Promise<void> {
@@ -38,6 +62,7 @@ export async function upsertMemory(input: UpsertMemoryInput): Promise<void> {
         user_id: input.userId,
         memory_id: input.memoryId,
         text: input.text,
+        source: input.source,
         embedding_provider: input.provider,
         embedding_model: providerModel(input.provider),
       },
@@ -65,6 +90,7 @@ export async function searchMemories(
       memoryId: r.payload.memory_id as string,
       text: r.payload.text as string,
       score: r.score,
+      source: asMemorySource(r.payload.source),
     }));
 }
 

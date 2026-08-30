@@ -77,7 +77,14 @@ describe('memories', () => {
     await getDb()
       .insert(agentMemories)
       .values({ id, user_id: user.id, title: 'Fact', content: 'Fact', source: 'auto' });
-    await upsertMemory({ memoryId: id, userId: user.id, text: 'Fact', vector, provider: 'openai' });
+    await upsertMemory({
+      memoryId: id,
+      userId: user.id,
+      text: 'Fact',
+      vector,
+      provider: 'openai',
+      source: 'auto',
+    });
     expect(await searchMemories(vector, user.id, 5, 0.3)).toHaveLength(1);
 
     const removed = await del(`${BASE}/${id}`, { token: user.token });

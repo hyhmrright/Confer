@@ -4,7 +4,7 @@ import { getDb } from '../db/connection.js';
 import { agentMemories } from '../db/schema.js';
 import { type EmbeddingProvider, embedTexts } from '../lib/embedding.js';
 import { extractFacts } from '../lib/memory-extract.js';
-import { searchMemories, upsertMemory } from '../lib/memory-store.js';
+import { type MemoryHit, searchMemories, upsertMemory } from '../lib/memory-store.js';
 
 // Above this cosine similarity, a candidate fact is considered already known
 // and is skipped (Mem0's NOOP semantics).
@@ -21,6 +21,10 @@ export interface ExtractAndStoreInput {
   embeddingKey: string;
   embeddingProvider: EmbeddingProvider;
   recentTurns: string;
+  // Which conversation these turns came from. `auto` is the owner's own chat;
+  // `a2a` is an inbound peer question, whose facts are about the peer's inquiry
+  // rather than about the owner and must stay separable from it afterwards.
+  source: 'auto' | 'a2a';
 }
 
 // Extract durable facts from the latest turn and persist new ones to both
@@ -59,7 +63,7 @@ export async function extractAndStore(input: ExtractAndStoreInput): Promise<void
       user_id: input.userId,
       title: text.slice(0, 80),
       content: text,
-      source: 'auto',
+      source: input.source,
     });
     await upsertMemory({
       memoryId,
@@ -67,21 +71,34 @@ export async function extractAndStore(input: ExtractAndStoreInput): Promise<void
       text,
       vector,
       provider: input.embeddingProvider,
+      source: input.source,
     });
   }
 }
 
+export interface MemoryRecall {
+  /** System-prompt fragment, '' when nothing cleared the threshold. */
+  fragment: string;
+  /** The hits behind the fragment, so callers can report what recall did. */
+  hits: MemoryHit[];
+}
+
 // Recall the most relevant memories for the current user message and format
-// them as a system-prompt fragment. Returns '' when nothing relevant is found.
+// them as a system-prompt fragment.
+//
+// The hits come back alongside it because an empty fragment has three causes —
+// nothing stored, nothing above RECALL_MIN_SCORE, or an indexing gap that left
+// the rows unsearchable — and every one of them looked identical from the
+// caller's side. That last case ran undetected for months once already.
 export async function recallMemories(
   query: string,
   userId: string,
   embeddingKey: string,
   embeddingProvider: EmbeddingProvider,
-): Promise<string> {
+): Promise<MemoryRecall> {
   const vectors = await embedTexts([query], embeddingKey, embeddingProvider);
   const vector = vectors[0];
-  if (!vector) return '';
+  if (!vector) return { fragment: '', hits: [] };
   const hits = await searchMemories(
     vector,
     userId,
@@ -89,6 +106,12 @@ export async function recallMemories(
     RECALL_MIN_SCORE,
     embeddingProvider,
   );
-  if (hits.length === 0) return '';
-  return `\n关于该用户你已知道：\n${hits.map((h) => `- ${h.text}`).join('\n')}`;
+  if (hits.length === 0) return { fragment: '', hits };
+  // A fact distilled from a peer's question describes that inquiry, not the
+  // owner. Listed bare under "你已知道", "对方想了解我们的 Q3 数据" reads as
+  // something the owner wants — so the origin is stated where the model sees it.
+  const fragment = `\n关于该用户你已知道：\n${hits
+    .map((h) => (h.source === 'a2a' ? `- （来自外部 Agent 的提问）${h.text}` : `- ${h.text}`))
+    .join('\n')}`;
+  return { fragment, hits };
 }

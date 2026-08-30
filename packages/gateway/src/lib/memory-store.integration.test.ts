@@ -32,6 +32,7 @@ describe('memory-store', () => {
       text: '用户偏好 TypeScript',
       vector: vec(1),
       provider: 'openai',
+      source: 'manual',
     });
     const hits = await searchMemories(vec(1), userA, 5, 0.3);
     expect(hits.length).toBe(1);
@@ -47,6 +48,7 @@ describe('memory-store', () => {
       text: 'A 的记忆',
       vector: vec(2),
       provider: 'openai',
+      source: 'manual',
     });
     await upsertMemory({
       memoryId: '01HMEM00000000000000000003',
@@ -54,6 +56,7 @@ describe('memory-store', () => {
       text: 'B 的记忆',
       vector: vec(2),
       provider: 'openai',
+      source: 'manual',
     });
     const hitsB = await searchMemories(vec(2), userB, 5, 0.3);
     expect(hitsB.length).toBe(1);
@@ -67,6 +70,7 @@ describe('memory-store', () => {
       text: '不相关',
       vector: vec(10),
       provider: 'openai',
+      source: 'manual',
     });
     const hits = await searchMemories(vec(500), userA, 5, 0.3);
     expect(hits.length).toBe(0);
@@ -80,6 +84,7 @@ describe('memory-store', () => {
       text: '待删',
       vector: vec(7),
       provider: 'openai',
+      source: 'manual',
     });
     await deleteMemory(userA, id);
     const hits = await searchMemories(vec(7), userA, 5, 0.3);

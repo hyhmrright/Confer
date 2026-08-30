@@ -213,6 +213,7 @@ export async function processA2AMessage(params: ProcessA2AMessageParams): Promis
       embeddingKey,
       embeddingProvider,
       recentTurns,
+      source: 'a2a',
     }).catch((err) => {
       console.error(`Memory extraction failed for user ${targetAgent.user_id}:`, err);
     });

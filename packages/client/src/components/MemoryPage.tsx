@@ -171,6 +171,16 @@ export function MemoryPage() {
                         {t('memory.auto')}
                       </span>
                     )}
+                    {/* Warmer than the 'auto' chip on purpose: this one came in
+                        over A2A, so it is the one worth a second look. */}
+                    {mem.source === 'a2a' && (
+                      <span
+                        className="text-[10px] font-medium text-amber-300/90 bg-amber-400/10 px-1.5 py-0.5 rounded-sm border border-amber-400/20 shrink-0"
+                        title={t('memory.a2aTitle')}
+                      >
+                        {t('memory.a2a')}
+                      </span>
+                    )}
                     <h3 className="text-xs font-semibold text-ink-primary truncate">{mem.title}</h3>
                   </div>
                   <p className="text-[11px] text-ink-secondary mt-1 leading-relaxed whitespace-pre-wrap line-clamp-3">

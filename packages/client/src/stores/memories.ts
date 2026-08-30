@@ -8,7 +8,9 @@ export interface Memory {
   content: string;
   tags: string[];
   pinned: boolean;
-  source: 'auto' | 'manual';
+  // 'a2a': distilled from a question an external Agent asked, not from the
+  // owner's own conversation. Kept distinct so it can be reviewed on sight.
+  source: 'auto' | 'manual' | 'a2a';
   created_at: string;
   updated_at: string;
 }
