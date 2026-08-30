@@ -24,7 +24,21 @@ import { wellKnownRoutes } from './routes/well-known.js';
 // so tests can drive it via app.request() without side effects on import.
 export const app = new Hono();
 
-app.use('*', cors());
+// CORS is scoped to the four documents that exist to be read by strangers: the
+// two DID documents, the agent directory, and AgentFacts. They carry no
+// credentials and are public by design, so `*` is the right answer for them.
+//
+// It used to be `app.use('*', cors())` — every route, `/api/v1/*` included.
+// Nothing needs that: the web client is served by the same nginx and calls
+// `/api/v1` as a relative path, so it is same-origin, and peers and the MCP
+// server are not browsers and never consult CORS at all. What the wildcard did
+// add was permission for any page in a victim's browser to read this instance's
+// API responses — reachable in practice for a LAN or localhost install, where
+// the attacker's page runs inside the network boundary the instance relies on.
+for (const path of ['/.well-known/*', '/agents/*', '/a2a/v1/agent-facts/*']) {
+  app.use(path, cors());
+}
+
 if (process.env.NODE_ENV !== 'test') {
   app.use('*', logger());
 }

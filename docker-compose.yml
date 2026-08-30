@@ -1,8 +1,15 @@
 services:
+  # Every port below binds to 127.0.0.1 rather than 0.0.0.0. These are the dev
+  # stack's own datastores, reached only from this machine, and they carry the
+  # throwaway credentials written into this file — published on every interface
+  # they hand any device on the same café or office network an unauthenticated
+  # Postgres, an object store and a vector store. Docker publishes to 0.0.0.0 by
+  # default and, on Linux, writes the rule straight into the host firewall's
+  # NAT table, so a firewall that looks closed is not one.
   postgres:
     image: postgres:18-alpine
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     environment:
       POSTGRES_USER: confer
       POSTGRES_PASSWORD: confer
@@ -21,16 +28,16 @@ services:
   qdrant:
     image: qdrant/qdrant:v1.19.0
     ports:
-      - "6333:6333"
-      - "6334:6334"
+      - "127.0.0.1:6333:6333"
+      - "127.0.0.1:6334:6334"
     volumes:
       - qdrantdata:/qdrant/storage
 
   minio:
     image: minio/minio:latest
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
     environment:
       MINIO_ROOT_USER: confer
       MINIO_ROOT_PASSWORD: confer-secret

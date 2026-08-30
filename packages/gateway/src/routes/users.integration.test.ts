@@ -189,6 +189,50 @@ describe('agent LLM keys', () => {
     });
     expect(ok.status).toBe(200);
   });
+
+  // The gateway dials this address itself — to list models, to chat, to embed —
+  // so a stored value is an SSRF primitive aimed by whoever holds the account.
+  // Private ranges have to stay open (that is where a local runtime lives), but
+  // the metadata range never does: every major cloud answers it to anyone who
+  // can reach it, with this instance's own credentials.
+  test('refuses a local-runtime address in the cloud metadata range', async () => {
+    for (const api_key of [
+      'http://169.254.169.254',
+      'http://169.254.169.254/latest/meta-data/',
+      'http://[::ffff:169.254.169.254]:11434',
+    ]) {
+      const res = await put('/api/v1/agents/me/llm-keys', {
+        token: user.token,
+        body: { provider: 'ollama', api_key },
+      });
+      expect(res.status).toBe(400);
+    }
+
+    // Nothing was stored, so no later dial can pick it up either.
+    const listed = await get('/api/v1/agents/me/llm-keys', { token: user.token });
+    const { keys } = await listed.json();
+    expect(keys.find((k: { provider: string }) => k.provider === 'ollama').configured).toBe(false);
+  });
+
+  test('still accepts the loopback and LAN addresses a local runtime uses', async () => {
+    for (const api_key of ['http://127.0.0.1:11434', 'http://192.168.1.50:11434']) {
+      const res = await put('/api/v1/agents/me/llm-keys', {
+        token: user.token,
+        body: { provider: 'ollama', api_key },
+      });
+      expect(res.status).toBe(200);
+    }
+  });
+
+  // A hosted vendor's slot holds a credential, not an address, so it must not be
+  // resolved or rejected on the strength of what it happens to look like.
+  test('leaves a hosted provider key alone', async () => {
+    const res = await put('/api/v1/agents/me/llm-keys', {
+      token: user.token,
+      body: { provider: 'openai', api_key: 'http://169.254.169.254' },
+    });
+    expect(res.status).toBe(200);
+  });
 });
 
 /*

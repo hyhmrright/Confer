@@ -7,7 +7,7 @@ services:
   postgres:
     image: postgres:18-alpine
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     environment:
       POSTGRES_USER: confer
       POSTGRES_PASSWORD: confer
@@ -21,13 +21,13 @@ services:
   qdrant:
     image: qdrant/qdrant:v1.19.0
     ports:
-      - "6335:6333"
+      - "127.0.0.1:6335:6333"
 
   minio:
     image: minio/minio:latest
     ports:
-      - "9002:9000"
-      - "9003:9001"
+      - "127.0.0.1:9002:9000"
+      - "127.0.0.1:9003:9001"
     environment:
       MINIO_ROOT_USER: confer
       MINIO_ROOT_PASSWORD: confer-secret

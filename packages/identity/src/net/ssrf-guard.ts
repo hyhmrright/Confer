@@ -177,8 +177,59 @@ export async function assertPublicHostname(
   opts?: { allowLoopback?: boolean },
 ): Promise<string[]> {
   const allowLoopback = opts?.allowLoopback ?? false;
+  return assertAddresses(
+    hostname,
+    (address) => isBlockedIp(address) && !(allowLoopback && isLoopbackIp(address)),
+  );
+}
+
+// True for the link-local ranges: IPv4 169.254.0.0/16 and IPv6 fe80::/10.
+// 169.254.169.254 is the cloud instance-metadata address on AWS, GCP, Azure,
+// OCI, DigitalOcean and Alibaba alike, and `fd00:ec2::254` its AWS IPv6 twin —
+// the single highest-value SSRF target on any hosted deployment, since the
+// metadata service authenticates callers by nothing but their ability to reach
+// it. Nothing legitimate is ever addressed this way.
+function isLinkLocalIp(ip: string): boolean {
+  if (isIP(ip) === 4) {
+    const value = ipv4ToInt(ip);
+    return value !== null && inCidr(value, '169.254.0.0', 16);
+  }
+  const addr = ip.toLowerCase();
+  const groups = expandIpv6(addr);
+  if (!groups) return true; // unparseable but claims to be IPv6 → fail closed
+  const embedded = embeddedIpv4(groups);
+  if (embedded) {
+    const value = ipv4ToInt(embedded);
+    return value !== null && inCidr(value, '169.254.0.0', 16);
+  }
+  if (/^fe[89ab]/.test(addr)) return true; // fe80::/10
+  return groups[0] === 0xfd00 && groups[1] === 0x0ec2; // fd00:ec2::/32 (AWS IMDS over IPv6)
+}
+
+/**
+ * Reject a hostname that resolves to a link-local address, while leaving every
+ * other private range reachable.
+ *
+ * This is the gate for addresses the owner deliberately points us at — a local
+ * LLM runtime is the case that exists — where `assertPublicHostname` would be
+ * wrong: `host.docker.internal`, `localhost` and a LAN address are the
+ * documented ways to run Ollama, so blocking private ranges would block the
+ * feature rather than an attack. What stays blocked is the one range with no
+ * legitimate use, which is also the one worth reaching: cloud metadata.
+ */
+export function assertNotLinkLocalHostname(hostname: string): Promise<string[]> {
+  return assertAddresses(hostname, isLinkLocalIp);
+}
+
+// Resolve `hostname` to its addresses and throw SsrfBlockedError if `blocked`
+// rejects any of them. Shared by the two asserts above so they cannot disagree
+// about bracket notation or about which addresses a name actually has.
+async function assertAddresses(
+  hostname: string,
+  blocked: (address: string) => boolean,
+): Promise<string[]> {
   const reject = (address: string): void => {
-    if (isBlockedIp(address) && !(allowLoopback && isLoopbackIp(address))) {
+    if (blocked(address)) {
       throw new SsrfBlockedError(hostname, address);
     }
   };

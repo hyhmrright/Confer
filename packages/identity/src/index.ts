@@ -13,4 +13,9 @@ export {
 export type { DIDDocument, DidWebLocation } from './did/document.js';
 export { buildDIDDocument, didFromDomain, domainFromDid, parseDidWeb } from './did/document.js';
 export { clearDIDCache, resolveDID } from './did/resolver.js';
-export { assertPublicHostname, isBlockedIp, SsrfBlockedError } from './net/ssrf-guard.js';
+export {
+  assertNotLinkLocalHostname,
+  assertPublicHostname,
+  isBlockedIp,
+  SsrfBlockedError,
+} from './net/ssrf-guard.js';
