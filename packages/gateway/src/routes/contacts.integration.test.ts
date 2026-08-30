@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { newId } from '@confer/shared';
-import { eq } from 'drizzle-orm';
+import { eq, like } from 'drizzle-orm';
 import { getDb } from '../db/connection.js';
 import { agents, peerAgents } from '../db/schema.js';
 import {
@@ -162,6 +162,99 @@ describe('contacts', () => {
         .from(peerAgents)
         .where(eq(peerAgents.did, 'did:web:trusted-bank.com'));
       expect(poisoned).toHaveLength(0);
+    } finally {
+      restore();
+    }
+  });
+
+  // The length of this list is the remote instance's choice, and every entry we
+  // accept is a database write. Uncapped, one lookup against a hostile — or
+  // merely large — directory is as many inserts as they care to send.
+  test('caps how many agents one remote directory may contribute', async () => {
+    const restore = mockFetch((url) => {
+      if (url.includes('/.well-known/agents.json')) {
+        return Response.json({
+          agents: Array.from({ length: 100 }, (_, i) => ({
+            did: `did:web:flood.example.com:agents:a${i}`,
+            name: `Flood ${i}`,
+          })),
+        });
+      }
+      return undefined;
+    });
+    try {
+      const res = await post(`${BASE}/lookup`, {
+        token: user.token,
+        body: { method: 'domain', value: 'flood.example.com' },
+      });
+      const { candidates } = await res.json();
+      expect(candidates).toHaveLength(20);
+
+      // Not just trimmed on the way out — the writes never happened either.
+      const persisted = await getDb()
+        .select()
+        .from(peerAgents)
+        .where(like(peerAgents.did, 'did:web:flood.example.com%'));
+      expect(persisted).toHaveLength(20);
+    } finally {
+      restore();
+    }
+  });
+
+  // Capping the agents we persist guards the cheap resource. The body itself is
+  // the expensive one: `fetch` resolves on headers, so without a cap the gateway
+  // buffers whatever a host it does not trust decides to send — and it runs as a
+  // single process, so that is the whole instance.
+  test('refuses a directory larger than the read cap', async () => {
+    const restore = mockFetch((url) => {
+      if (url.includes('/.well-known/agents.json')) {
+        return Response.json({
+          agents: [{ did: 'did:web:huge.example.com', name: 'x'.repeat(600_000) }],
+        });
+      }
+      return undefined;
+    });
+    try {
+      const res = await post(`${BASE}/lookup`, {
+        token: user.token,
+        body: { method: 'domain', value: 'huge.example.com' },
+      });
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.candidates).toEqual([]);
+      expect(json.error).toBe('directory too large');
+
+      // Nothing from an over-sized body may be persisted, including the prefix
+      // that arrived before the limit was hit.
+      const persisted = await getDb()
+        .select()
+        .from(peerAgents)
+        .where(like(peerAgents.did, 'did:web:huge.example.com%'));
+      expect(persisted).toHaveLength(0);
+    } finally {
+      restore();
+    }
+  });
+
+  test('a DID listed twice yields one candidate, not two', async () => {
+    const restore = mockFetch((url) => {
+      if (url.includes('/.well-known/agents.json')) {
+        return Response.json({
+          agents: [
+            { did: 'did:web:dupe.example.com:agents:bot', name: 'Bot' },
+            { did: 'did:web:dupe.example.com:agents:bot', name: 'Bot again' },
+          ],
+        });
+      }
+      return undefined;
+    });
+    try {
+      const res = await post(`${BASE}/lookup`, {
+        token: user.token,
+        body: { method: 'domain', value: 'dupe.example.com' },
+      });
+      const { candidates } = await res.json();
+      expect(candidates).toHaveLength(1);
     } finally {
       restore();
     }
