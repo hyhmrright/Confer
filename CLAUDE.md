@@ -16,6 +16,7 @@ bun run db:generate          # generate Drizzle migration from schema changes
 bun run db:migrate           # run gateway DB migrations (apply generated files)
 bun run test:setup           # start isolated test stack + build test schema (run once before `bun run test`)
 bun run test:stack:down      # tear down the isolated test stack
+bun run eval:rag             # score retrieval against the golden set (needs a real embedding key; see packages/gateway/src/eval/README.md)
 ```
 
 ## Testing
