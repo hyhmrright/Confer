@@ -1,12 +1,7 @@
-// pdf-parse ships CJS only; use createRequire for Bun ESM compatibility
-import { createRequire } from 'node:module';
 import { AppError } from '@confer/shared';
+import { PDFParse } from 'pdf-parse';
 import { extractDocxText, extractXlsxText } from './office-parser.js';
 import { MAX_EXTRACTED_CHARS } from './rag-config.js';
-
-const pdfParse = createRequire(import.meta.url)('pdf-parse') as (
-  buf: Buffer,
-) => Promise<{ text: string }>;
 
 const DOCX_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -56,8 +51,30 @@ async function extract(buffer: ArrayBuffer, base: string): Promise<string> {
   if (base === DOCX_TYPE) return extractDocxText(buffer);
   if (base === XLSX_TYPE) return extractXlsxText(buffer);
 
-  const data = await pdfParse(Buffer.from(buffer));
-  return data.text;
+  return extractPdfText(buffer);
+}
+
+/**
+ * Text out of a PDF.
+ *
+ * pdf-parse 2.x exports a `PDFParse` class and no callable default; this called
+ * the package object as a function, so every PDF upload failed with "pdfParse is
+ * not a function" — in a background task, after the file was already stored, so
+ * the only symptom was a document stuck at `failed`. Nothing caught it because
+ * the only PDF assertion in the suite was `guessContentType('report.pdf')`,
+ * which tests the filename map and never reaches a parser.
+ *
+ * `destroy()` is in a `finally` because the parser holds the loaded document
+ * until it is called, and this runs in a background task in a process that
+ * stays up for weeks — a throwing parse must not be the one that keeps it.
+ */
+async function extractPdfText(buffer: ArrayBuffer): Promise<string> {
+  const parser = new PDFParse({ data: new Uint8Array(buffer) });
+  try {
+    return (await parser.getText()).text;
+  } finally {
+    await parser.destroy();
+  }
 }
 
 /**
