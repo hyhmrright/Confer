@@ -25,6 +25,7 @@
     "typescript": "^7.0.2"
   },
   "overrides": {
+    "@napi-rs/canvas": "0.1.80",
     "fast-uri": "^3.1.5",
     "zod": "^4.5.2",
     "ip-address": "^10.4.0",

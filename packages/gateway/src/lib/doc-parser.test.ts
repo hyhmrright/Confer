@@ -25,7 +25,20 @@ describe('guessContentType', () => {
   });
 });
 
+// A real PDF from a real producer, for the same reason `office-parser.test.ts`
+// carries a real .docx: the PDF branch shipped broken (pdf-parse 2.x exports a
+// class, and the code called the package object as a function) behind a suite
+// whose only PDF assertion was `guessContentType('report.pdf')` — a filename
+// map that never reaches a parser.
+const PDF_FIXTURE = new URL('../test/fixtures/sample.pdf', import.meta.url);
+
 describe('parseDocument', () => {
+  test('extracts text from a real PDF', async () => {
+    const text = await parseDocument(await Bun.file(PDF_FIXTURE).arrayBuffer(), 'application/pdf');
+    expect(text).toContain('Confer knowledge base ingestion probe');
+    expect(text).toContain('exercised');
+  });
+
   test('decodes plain text and markdown buffers', async () => {
     expect(await parseDocument(encode('hello world'), 'text/plain')).toBe('hello world');
     expect(await parseDocument(encode('# Title'), 'text/markdown')).toBe('# Title');
