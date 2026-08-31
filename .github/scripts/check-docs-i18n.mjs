@@ -134,6 +134,34 @@ for (const k of used) {
   if (!pageKeys.includes(k)) fail(`index.html: markup uses '${k}', which no dictionary defines`);
 }
 
+// ---- docs/<lang>/*.md : half-translated pages ------------------------------
+// The published English docs carried 653 Chinese characters across five files —
+// code-block comments, the annotations in an ASCII directory tree, the comment
+// on every line of the API endpoint listing. Each one reads as a finished
+// translation right up to the point where it stops being one, and none of it is
+// visible from a diff of the prose. A Han or kana character in a language that
+// does not use them is always a line that was skipped.
+const CJK = /[㐀-䶿一-鿿぀-ヿ＀-￯]/;
+const CJK_LANGUAGES = new Set(['zh', 'ja']);
+for (const lng of languages) {
+  if (CJK_LANGUAGES.has(lng)) continue;
+  const dir = `docs/${lng}`; // zh is the root, and it is skipped above anyway
+  for (const file of new Bun.Glob('*.md').scanSync(dir)) {
+    const lines = readFileSync(`${dir}/${file}`, 'utf8').split('\n');
+    const hits = lines.map((line, i) => [i + 1, line]).filter(([, line]) => CJK.test(line));
+    if (hits.length) {
+      const where = hits
+        .slice(0, 3)
+        .map(([n]) => n)
+        .join(', ');
+      fail(
+        `${dir}/${file}: ${hits.length} line(s) still in Chinese or Japanese ` +
+          `(line ${where}${hits.length > 3 ? ', …' : ''})`,
+      );
+    }
+  }
+}
+
 if (problems.length) {
   console.error(`docs i18n: ${problems.length} problem(s)`);
   for (const p of problems) console.error(`  ${p}`);

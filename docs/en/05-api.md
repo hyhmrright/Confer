@@ -68,19 +68,19 @@ PATCH  /api/v1/users/me
 GET    /api/v1/agents/me
 PATCH  /api/v1/agents/me
 PUT    /api/v1/agents/me/policies
-PUT    /api/v1/agents/me/llm-keys      # 加密存储 LLM API keys
+PUT    /api/v1/agents/me/llm-keys      # store LLM API keys, encrypted
 ```
 
 ### Contacts / Peer Agents
 
 ```
 GET    /api/v1/contacts                     # List contacts. Paging: ?limit=&offset=
-POST   /api/v1/contacts                     # 添加联系人
+POST   /api/v1/contacts                     # add a contact
 GET    /api/v1/contacts/{contact_id}
 DELETE /api/v1/contacts/{contact_id}
-PATCH  /api/v1/contacts/{contact_id}        # 修改 alias, tags, pinned 等
+PATCH  /api/v1/contacts/{contact_id}        # change alias, tags, pinned, and so on
 
-POST   /api/v1/contacts/lookup              # 按 DID / 域名 / username 查找
+POST   /api/v1/contacts/lookup              # look up by DID / domain / username
 ```
 
 `POST /api/v1/contacts/lookup` request:
@@ -99,26 +99,26 @@ Response: returns the list of candidate Agents found. lookup persists the discov
 > Adding a contact is **the receiving party granting the other side consent to "consume my Agent"**: only a peer who has been added as a contact can trigger my Agent to answer (consuming my LLM budget). An A2A message sent by an unconnected peer is held as a pending connection request — see "Connection consent gate" in `03-protocol.md`.
 
 ```
-POST   /api/v1/contacts/{contact_id}/policies   # 设置 standing policies
+POST   /api/v1/contacts/{contact_id}/policies   # set standing policies
 ```
 
 ### Conversations
 
 ```
-GET    /api/v1/conversations                       # 列出我的对话（首页用）
-POST   /api/v1/conversations                       # 创建新对话
+GET    /api/v1/conversations                       # list my conversations (used by the home screen)
+POST   /api/v1/conversations                       # create a conversation
 GET    /api/v1/conversations/{id}
 PATCH  /api/v1/conversations/{id}
 DELETE /api/v1/conversations/{id}
 
-GET    /api/v1/conversations/{id}/messages         # 分页：?before=&limit=
-POST   /api/v1/conversations/{id}/messages         # 发消息
-GET    /api/v1/conversations/{id}/messages/{msg_id}/stream    # SSE 流式接收 LLM 回复
+GET    /api/v1/conversations/{id}/messages         # paginated: ?before=&limit=
+POST   /api/v1/conversations/{id}/messages         # send a message
+GET    /api/v1/conversations/{id}/messages/{msg_id}/stream    # receive the LLM's reply as an SSE stream
 
-POST   /api/v1/conversations/{id}/participants     # 加入 participant
+POST   /api/v1/conversations/{id}/participants     # add a participant
 DELETE /api/v1/conversations/{id}/participants/{p_id}
 
-POST   /api/v1/conversations/{id}/read             # 标记已读
+POST   /api/v1/conversations/{id}/read             # mark as read
 ```
 
 `POST /api/v1/conversations/{id}/messages` request:
@@ -126,7 +126,7 @@ POST   /api/v1/conversations/{id}/read             # 标记已读
 ```json
 {
   "content_type": "text",
-  "content": "X100 寄存器 0x40 用什么功能码？",
+  "content": "Which function code do I use for X100 register 0x40?",
   "in_reply_to": null,
   "via": "web"
 }
@@ -145,9 +145,9 @@ Response:
 ### Permission management
 
 ```
-GET    /api/v1/permissions/pending               # 待处理的 L2/L3 请求
-POST   /api/v1/permissions/{id}/decide           # 批准/拒绝
-GET    /api/v1/permissions/history               # 历史记录
+GET    /api/v1/permissions/pending               # pending L2/L3 requests
+POST   /api/v1/permissions/{id}/decide           # approve or deny
+GET    /api/v1/permissions/history               # history
 ```
 
 `POST /api/v1/permissions/{id}/decide` request:
@@ -155,7 +155,7 @@ GET    /api/v1/permissions/history               # 历史记录
 ```json
 {
   "decision": "allow_always",       // allow_once | allow_always | deny | deny_always
-  "scope": "peer_action"            // 限定范围
+  "scope": "peer_action"            // what the grant covers
 }
 ```
 
@@ -164,7 +164,7 @@ Among pending requests, those with `action='connect'` are **connection requests*
 ### Project memory (related to Claude Code integration)
 
 ```
-GET    /api/v1/projects/{project_id}/peers              # 该项目下注册的 peer
+GET    /api/v1/projects/{project_id}/peers              # peers registered under this project
 POST   /api/v1/projects/{project_id}/peers
 GET    /api/v1/projects/{project_id}/peers/{peer_id}/facts
 PUT    /api/v1/projects/{project_id}/peers/{peer_id}/facts
@@ -211,7 +211,7 @@ Every endpoint is scoped to `user.sub`: reaching for someone else's kb or docume
 
 ```
 POST   /api/v1/attachments                       # multipart upload
-GET    /api/v1/attachments/{id}                  # 下载（302 redirect 到签名 URL）
+GET    /api/v1/attachments/{id}                  # download (302 redirect to a signed URL)
 DELETE /api/v1/attachments/{id}
 ```
 
@@ -234,25 +234,25 @@ All WS messages are JSON and include a `type` field:
 ### Client → server
 
 ```
-ping                          // 心跳
-subscribe.conversation        // 订阅某个对话
+ping                          // heartbeat
+subscribe.conversation        // subscribe to a conversation
 unsubscribe.conversation
 typing.start
 typing.stop
-read.ack                      // 已读确认
+read.ack                      // read receipt
 ```
 
 ### Server → client
 
 ```
 pong
-message.new                   // 新消息
+message.new                   // new message
 message.updated
 message.deleted
-typing.update                 // 谁在打字
-presence.update               // 联系人上下线
-permission.request            // 需要用户决定的权限请求
-agent.status                  // 我的 Agent 在做什么（"正在咨询 ABC Agent..."）
+typing.update                 // who is typing
+presence.update               // a contact came online or went offline
+permission.request            // a permission request the user has to decide
+agent.status                  // what my Agent is doing ("consulting the ABC Agent...")
 conversation.updated
 ```
 
@@ -268,10 +268,10 @@ conversation.updated
     "sender_id": "01HY...",
     "sender_did": "did:web:acme.com:agents:support",
     "content_type": "text",
-    "content": "用 0x03 Read Holding Registers...",
+    "content": "Use 0x03 Read Holding Registers...",
     "citations": [
       {
-        "source": "X100 通信手册 v3.2",
+        "source": "X100 communication manual v3.2",
         "page": 87,
         "url": "https://acme.com/manuals/x100-v3.2.pdf#page=87",
         "trust_level": "authoritative"
@@ -325,7 +325,7 @@ Event types:
 
 ```
 event: token
-data: {"text":"用 "}
+data: {"text":"Use "}
 
 event: token
 data: {"text":"0x03 "}
@@ -337,7 +337,7 @@ event: tool_result
 data: {"result":"..."}
 
 event: citation
-data: {"source":"X100 通信手册 v3.2","page":87}
+data: {"source":"X100 communication manual v3.2","page":87}
 
 event: done
 data: {"finish_reason":"stop","tokens_used":523}
@@ -348,10 +348,10 @@ data: {"finish_reason":"stop","tokens_used":523}
 See `docs/03-protocol.md` for details. This section lists endpoints only.
 
 ```
-POST   /a2a/v1/messages                  # 接收外部 Agent 消息
-GET    /a2a/v1/stream/{message_id}       # 流式拉回答（SSE）
-POST   /a2a/v1/threads                   # 开启对话 thread
-GET    /a2a/v1/agent-facts/{agent_did}   # 公开 AgentFacts
+POST   /a2a/v1/messages                  # receive a message from an external Agent
+GET    /a2a/v1/stream/{message_id}       # pull the answer as a stream (SSE)
+POST   /a2a/v1/threads                   # open a conversation thread
+GET    /a2a/v1/agent-facts/{agent_did}   # public AgentFacts
 ```
 
 All A2A endpoints require HTTP Message Signature verification.
@@ -359,9 +359,9 @@ All A2A endpoints require HTTP Message Signature verification.
 ## .well-known endpoints
 
 ```
-GET    /.well-known/did.json                # 主 DID document
-GET    /.well-known/agents.json             # 本实例所有公开 Agent 列表
-GET    /.well-known/openid-configuration    # 未来：OIDC 兼容（v2）
+GET    /.well-known/did.json                # the instance DID document
+GET    /.well-known/agents.json             # every public Agent on this instance
+GET    /.well-known/openid-configuration    # future: OIDC compatibility (v2)
 ```
 
 ## Webhooks (optional, v1.5+)
@@ -407,8 +407,8 @@ Lets a user (or an MCP server acting on the user's behalf) proactively send a qu
 Starts or continues a `type='consult'` conversation (one conversation is reused per peer), signs, and delivers a `message.type='question'`.
 
 ```jsonc
-// 请求体（consultRequestSchema）
-{ "question": "如何轮换密钥？", "code_context": "...可选代码...", "language": "zh" }
+// request body (consultRequestSchema)
+{ "question": "How do I rotate the key?", "code_context": "...optional code...", "language": "en" }
 ```
 
 | Response | Meaning |

@@ -136,18 +136,16 @@ See `docs/06-claude-code-plugin.md`.
 
 ### Single instance (individuals / small teams)
 
+The actual `docker-compose.prod.yml` (agent-runtime and identity are libraries
+inside the gateway, not services of their own):
+
 ```
-docker-compose.yml:
-  - gateway       (Bun 服务)
-  - agent-runtime (Bun 服务)
-  - conversation  (Bun 服务)
-  - identity      (Bun 服务)
+  - gateway   (Bun service, single replica — see the top of this document)
+  - client    (frontend served by nginx)
+  - migrate   (one-shot task)
   - postgres
-  - redis
-  - nats
   - qdrant
   - minio
-  - caddy / traefik  (反向代理 + TLS)
 ```
 
 Deployment: `npx confer-cli` for the published images, or

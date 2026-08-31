@@ -87,6 +87,14 @@
   </aside>
 
   <article class="doc">
+    {%- comment -%}
+      Which text is authoritative, stated on the page rather than assumed. These
+      are specs — a wire format, a schema, a deployment runbook — and a reader
+      implementing against a translation that has drifted from the original has
+      no way to know it from the page alone. Four of the nine already carry en
+      and ja translations weeks to months behind the Chinese.
+    {%- endcomment -%}
+    <p class="doc-canonical">{{ t.canonical }}</p>
     {{ content }}
     <div class="doc-foot">
       <a href="{{ '/' | relative_url }}">← {{ t.back }}</a>

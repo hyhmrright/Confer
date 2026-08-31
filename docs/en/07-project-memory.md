@@ -8,17 +8,17 @@ Under each project root:
 
 ```
 .claude/
-├── confer.toml                   # 项目配置（peers, trust levels）
+├── confer.toml                   # project configuration (peers, trust levels)
 └── peers/
     ├── abc-industries/
-    │   ├── facts.md              # 验证过的事实，结构化
-    │   ├── decisions.md          # 设计决策记录
-    │   ├── conversations/        # 完整对话历史
+    │   ├── facts.md              # verified facts, structured
+    │   ├── decisions.md          # a record of design decisions
+    │   ├── conversations/        # full conversation history
     │   │   ├── 2024-11-15-modbus-setup.md
     │   │   └── 2024-11-20-temp-calibration.md
-    │   ├── snippets/             # 代码片段
+    │   ├── snippets/             # code snippets
     │   │   └── read_temp.py
-    │   └── meta.json             # peer 元数据
+    │   └── meta.json             # peer metadata
     └── internal-sdk/
         ├── facts.md
         └── ...
@@ -70,8 +70,8 @@ A structured list of facts. **Every fact must carry a citation** — a "fact" wi
 - Function code: **0x03** (Read Holding Registers) — recommended
 - Byte order: big-endian (high byte first)
 - Default slave ID: **0x0A (10)** — not 1 as docs imply
-  - Source: X100 通信手册 v3.2 p.87
-  - Source: X100 安装指南 p.12 (slave ID note)
+  - Source: X100 communication manual v3.2 p.87
+  - Source: X100 installation guide p.12 (slave ID note)
   - Verified: 2024-11-15 via ask_peer
 
 ## Wiring (X100)
@@ -79,7 +79,7 @@ A structured list of facts. **Every fact must carry a citation** — a "fact" wi
 - Power: 24V DC ± 10%, max 500mA
 - RS-485 termination: 120Ω at both ends
 - Cable length max: 1200m at 9600 baud, 500m at 115200 baud
-  - Source: X100 安装手册 v3.2 p.45
+  - Source: X100 installation manual v3.2 p.45
   - Verified: 2024-11-15
 
 ## RTU mode timing
@@ -87,7 +87,7 @@ A structured list of facts. **Every fact must carry a citation** — a "fact" wi
 - Inter-character timeout: ≥ 1.5 character times
 - Inter-frame timeout: ≥ 3.5 character times
 - Recommended polling interval: 200ms or more
-  - Source: X100 通信手册 v3.2 p.103
+  - Source: X100 communication manual v3.2 p.103
   - Note: 100ms works but no CRC retry budget left
   - Verified: 2024-11-15
 ```
@@ -175,24 +175,24 @@ summary: |
 # Modbus setup conversation
 
 ## laowang
-要给 X100 做 Modbus 集成，4 路温度 + 4 路压力，需要轮询。
+I need a Modbus integration for the X100: 4 temperature channels + 4 pressure channels, polled.
 
 ## ABC Agent
-Modbus RTU 寄存器映射：
-- 0x40–0x47 温度（4 路）
-- 0x48–0x4F 压力（4 路）
-建议轮询周期 200ms，连续读用 0x03 功能码。
+Modbus RTU register map:
+- 0x40–0x47 temperature (4 channels)
+- 0x48–0x4F pressure (4 channels)
+A 200 ms polling interval is recommended; use function code 0x03 for consecutive reads.
 
-📎 Source: X100 通信手册 v3.2 p.87
+📎 Source: X100 communication manual v3.2 p.87
 
 ## laowang
-连续读会不会有性能问题？slave 设备会卡住吗？
+Is a consecutive read a performance problem? Will the slave device stall?
 
 ## ABC Agent
-连续读 8 个寄存器是单次请求，不会卡。但要注意 slave ID 默认是 0x0A (10)
-不是 1，旧版手册有误。
+Reading 8 consecutive registers is a single request, so it will not stall. Note that
+the slave ID defaults to 0x0A (10), not 1 — the older manual has this wrong.
 
-📎 Source: X100 安装指南 p.12, FAQ #4
+📎 Source: X100 installation guide p.12, FAQ #4
 ```
 
 ### File naming conventions
@@ -205,22 +205,22 @@ Modbus RTU 寄存器映射：
 ### Write path
 
 ```
-ask_peer 调用 →
-  Confer cloud 返回答案 →
-  MCP server 抽取结构化事实 →
-  追加到本地 facts.md（如果是新 fact）
-  追加完整对话到 conversations/
-  更新 meta.json
-  本地 commit hint：建议用户 git add .claude/peers/{slug}/
+ask_peer is called →
+  Confer cloud returns the answer →
+  the MCP server extracts a structured fact →
+  appends it to the local facts.md (if the fact is new)
+  appends the full conversation to conversations/
+  updates meta.json
+  local commit hint: suggest the user run git add .claude/peers/{slug}/
 ```
 
 ### Read path
 
 ```
-Claude Code session 启动 →
-  扫描 .claude/peers/*/ →
-  把每个 peer 的 facts.md 作为系统提示词的一部分喂给 Claude Code →
-  Claude Code 在写代码时自然引用这些事实
+a Claude Code session starts →
+  scans .claude/peers/*/ →
+  feeds each peer's facts.md to Claude Code as part of the system prompt →
+  Claude Code cites those facts naturally while writing code
 ```
 
 ### Conflict handling
@@ -234,8 +234,8 @@ For example:
 
 ```markdown
 - Default slave ID: ~~0x01 (1)~~ **0x0A (10)**
-  - Source: X100 通信手册 v3.2 p.12 (says 1)
-  - Source: X100 安装指南 p.12 (says 10) ← latest verification
+  - Source: X100 communication manual v3.2 p.12 (says 1)
+  - Source: X100 installation guide p.12 (says 10) ← latest verification
   - ⚠️ Conflict: Vendor's two docs disagree. Use 10 per latest verification.
   - Verified: 2024-11-15
 ```
@@ -245,8 +245,8 @@ For example:
 Optionally sync project memory to the Confer server (a user toggle, local-first by default):
 
 ```bash
-confer sync push    # 把本地 .claude/peers/ 上传
-confer sync pull    # 从服务端拉最新版本（团队协作场景）
+confer sync push    # upload the local .claude/peers/
+confer sync pull    # pull the latest version from the server (for team collaboration)
 ```
 
 The server stores it in the `project_memory` table (see `docs/04-data-model.md`).
@@ -262,7 +262,7 @@ When generating code, Claude Code automatically adds citation comments for facts
 
 ```python
 # X100 register map: 0x40-0x47 temperature, 4 channels, int16 signed
-# Source: X100 通信手册 v3.2 p.87 (verified 2024-11-15 via ABC Agent)
+# Source: X100 communication manual v3.2 p.87 (verified 2024-11-15 via ABC Agent)
 TEMP_REG_START = 0x40
 TEMP_REG_COUNT = 8
 

@@ -136,18 +136,16 @@
 
 ### 単一インスタンス（個人/小規模チーム）
 
+実際の `docker-compose.prod.yml`（agent-runtime と identity は gateway 内の
+ライブラリであり、独立したサービスではありません）:
+
 ```
-docker-compose.yml:
-  - gateway       (Bun 服务)
-  - agent-runtime (Bun 服务)
-  - conversation  (Bun 服务)
-  - identity      (Bun 服务)
+  - gateway   (Bun サービス、単一レプリカ — 本書冒頭を参照)
+  - client    (nginx が配信するフロントエンド)
+  - migrate   (一度きりのタスク)
   - postgres
-  - redis
-  - nats
   - qdrant
   - minio
-  - caddy / traefik  (反向代理 + TLS)
 ```
 
 デプロイ方法：公開済みイメージなら `npx confer-cli`、clone からビルドするなら `docker compose -f docker-compose.prod.yml up -d`。

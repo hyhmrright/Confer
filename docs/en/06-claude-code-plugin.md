@@ -19,13 +19,13 @@ Five design pillars (see the strategic insights in `docs/01-product.md` for deta
 > The `claude mcp add … @confer/mcp-server` + OAuth below is the **target vision**. For what actually ships in v0.1, see "Current implementation (v0.1)" at the end of this section — what's landed is the env-var-authenticated `confer-a2a` plugin.
 
 ```bash
-# 用户视角（愿景）
+# The user-facing view (the vision)
 claude mcp add confer npx -y @confer/mcp-server
 
-# 首次启动时引导 OAuth 绑定 Confer 账号
+# on first run, walk through OAuth to link a Confer account
 claude mcp config confer
-# 选择实例：cloud.confer.ai / 自建实例 URL
-# OAuth 跳转浏览器认证
+# choose an instance: cloud.confer.ai, or a self-hosted URL
+# OAuth hands off to the browser to authenticate
 ```
 
 Configuration file (edited by the user):
@@ -38,7 +38,7 @@ url    = "https://cloud.confer.ai"
 token  = "encrypted-by-keychain"
 
 [defaults]
-auto_consult = true               # 检测到关键词自动咨询
+auto_consult = true               # consult automatically when a keyword is detected
 review_mode  = "post-flight"      # never | pre-flight | post-flight | both
 language     = "zh"
 
@@ -58,14 +58,14 @@ trust     = "high"
 The OAuth + npx package in the vision has not yet landed. What's implemented is **one-click installation via the plugin marketplace**, with authentication via environment variables (the signing private key always stays in the gateway and is never delegated out):
 
 ```bash
-# 1. 加 marketplace 并安装 plugin（本仓库即 marketplace）
+# 1. add the marketplace and install the plugin (this repo is the marketplace)
 /plugin marketplace add hyhmrright/Confer
 /plugin install confer-a2a@confer
 
-# 2. 在 shell 导出账号（plugin 从环境读取，凭据不写入仓库）
+# 2. export the account in your shell (the plugin reads the environment; credentials never enter the repo)
 export CONFER_USERNAME=you
 export CONFER_PASSWORD=secret
-# 可选：export CONFER_GATEWAY_URL=http://localhost:3000  (默认值)
+# optional: export CONFER_GATEWAY_URL=http://localhost:3000  (the default)
 ```
 
 The plugin bundles a self-contained bundle (`plugins/confer-a2a/dist/server.mjs`, which runs under bare `node` with no need for the monorepo or `bun`), generated from `packages/mcp-a2a` via `bun run --filter @confer/mcp-a2a build:plugin`. It provides 9 tools (`list_agents` / `ask_agent` / `follow_up` / `ask_multiple` / `check_reply`, etc.); for details see `plugins/confer-a2a/README.md` and `packages/mcp-a2a/README.md`.
@@ -99,8 +99,8 @@ Returns:
 
 ```json
 {
-  "answer": "用 0x03 Read Holding Registers...",
-  "citations": [{"source": "X100 通信手册 v3.2", "page": 87}],
+  "answer": "Use 0x03 Read Holding Registers...",
+  "citations": [{"source": "X100 communication manual v3.2", "page": 87}],
   "thread_id": "thread_8f3a9c",
   "peer_did": "did:web:acme.com:agents:support",
   "latency_ms": 4231
@@ -267,9 +267,9 @@ After Claude Code calls the Confer MCP server, the server side provides hints to
 
 ```toml
 [auto_consult.triggers]
-keywords_match_authority = true        # 代码/对话中出现 peer.authority 关键词
-explicit_uncertainty     = true        # Claude Code 说 "I'm not sure" 时
-import_vendor_lib        = true        # 导入了某个供应商的 SDK
+keywords_match_authority = true        # a peer.authority keyword appears in the code or the conversation
+explicit_uncertainty     = true        # Claude Code says "I'm not sure"
+import_vendor_lib        = true        # a vendor's SDK has been imported
 ```
 
 How it works: the MCP server adds hints to the tool descriptions — for example, appending to the end of `ask_peer`'s description:
@@ -346,21 +346,21 @@ Local rate limiting in the MCP server:
 Supplementary tool commands the user runs in the shell:
 
 ```bash
-# 列出已注册 peer
+# list registered peers
 confer peer list
 
-# 添加 peer
+# add a peer
 confer peer add abc-industries --did did:web:acme.com:agents:support
-confer peer add abc-industries --domain acme.com    # 自动查 well-known
+confer peer add abc-industries --domain acme.com    # looks up well-known automatically
 
-# 查看项目记忆
+# inspect project memory
 confer memory show abc-industries
 confer memory show abc-industries --section facts
 
-# 直接命令行问
-confer ask abc-industries "X100 在 RTU 模式下电压范围？"
+# ask straight from the command line
+confer ask abc-industries "What is the X100's voltage range in RTU mode?"
 
-# 同步项目记忆到 Confer 服务端
+# sync project memory to the Confer server
 confer sync push
 confer sync pull
 ```
@@ -379,7 +379,7 @@ Main files:
 ```
 packages/mcp-server/
 ├── src/
-│   ├── index.ts              # MCP server 主入口
+│   ├── index.ts              # MCP server entry point
 │   ├── tools/
 │   │   ├── ask-peer.ts
 │   │   ├── list-peers.ts
@@ -391,8 +391,8 @@ packages/mcp-server/
 │   ├── prompts/
 │   ├── client.ts             # Confer API client
 │   ├── auth.ts               # OAuth flow
-│   ├── cache.ts              # SQLite 本地缓存
-│   └── config.ts             # 读 .claude/confer.toml
+│   ├── cache.ts              # local SQLite cache
+│   └── config.ts             # reads .claude/confer.toml
 └── package.json
 ```
 
