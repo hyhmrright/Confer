@@ -28,7 +28,7 @@ export function ErrandInbox() {
 
   // `bottom-24`, not `bottom-4`: the composer owns the bottom of the message
   // area, and at `bottom-4` this stack sat directly on top of the send button.
-  const ANCHOR = 'fixed bottom-24 right-4 z-40';
+  const ANCHOR = 'fixed bottom-24 end-4 z-40';
 
   if (pendingCards.length === 0 && !open) {
     return (

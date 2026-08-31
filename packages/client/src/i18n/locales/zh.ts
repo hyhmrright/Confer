@@ -26,6 +26,7 @@ export const zh = {
     en: 'English',
     zh: '简体中文',
     ja: '日本語',
+    ar: 'العربية',
   },
   login: {
     tagline: '你的 Agent，代表你与人交涉',

@@ -40,8 +40,16 @@ export function localePreload(): Plugin {
         const urls: Record<string, string> = {};
         for (const [fileName, chunk] of Object.entries(ctx.bundle ?? {})) {
           if (chunk.type !== 'chunk') continue;
-          const match = /\/src\/i18n\/locales\/(en|zh|ja)\.ts$/.exec(chunk.facadeModuleId ?? '');
-          if (match) urls[match[1]] = `${base}${fileName}`;
+          // Any file in the locales directory, rather than a list of language
+          // codes. The list used to be spelled out here, which made this the
+          // second place a new language had to be registered — and forgetting
+          // it is silent: the map simply lacks that language, `if(!u[l])` sends
+          // the visitor to the English chunk, and they pay for a wasted preload
+          // plus the serial round trip this plugin exists to remove. Adding
+          // Arabic hit exactly that. The warning below only fires when *no*
+          // locale matches, so it never covered a partial miss.
+          const match = /\/src\/i18n\/locales\/([a-z-]+)\.ts$/.exec(chunk.facadeModuleId ?? '');
+          if (match?.[1]) urls[match[1]] = `${base}${fileName}`;
         }
         if (Object.keys(urls).length === 0) {
           this.warn('no locale chunks found — the preload hint was not injected');

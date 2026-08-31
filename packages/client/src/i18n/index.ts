@@ -3,7 +3,7 @@ import LanguageDetector from 'i18next-browser-languagedetector';
 import { initReactI18next } from 'react-i18next';
 import type { Resources } from './locales/zh.js';
 
-export const SUPPORTED_LANGUAGES = ['en', 'zh', 'ja'] as const;
+export const SUPPORTED_LANGUAGES = ['en', 'zh', 'ja', 'ar'] as const;
 export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];
 
 // A statically-checked translation key (e.g. 'settings.title'). Use this to
@@ -23,6 +23,7 @@ const LOADERS: Record<SupportedLanguage, () => Promise<Resources>> = {
   en: () => import('./locales/en.js').then((m) => m.en),
   zh: () => import('./locales/zh.js').then((m) => m.zh),
   ja: () => import('./locales/ja.js').then((m) => m.ja),
+  ar: () => import('./locales/ar.js').then((m) => m.ar),
 };
 
 function isSupported(lng: string): lng is SupportedLanguage {
@@ -49,6 +50,22 @@ function isSupported(lng: string): lng is SupportedLanguage {
 export function resolveLanguage(lng: string): SupportedLanguage {
   const base = lng.split('-')[0] ?? '';
   return isSupported(base) ? base : 'en';
+}
+
+// Scripts that run right to left.
+//
+// Setting `dir` is the whole mechanism: every positional style in this app is
+// written in logical properties (`ms-`/`me-`, `ps-`/`pe-`, `start-`/`end-`,
+// `text-start`), which the browser mirrors on its own once the attribute is
+// there. Transforms are the one thing it cannot mirror, since CSS has no
+// logical translate — those are handled at their two call sites, both marked.
+const RTL_LANGUAGES: ReadonlySet<SupportedLanguage> = new Set(['ar']);
+
+// Goes through resolveLanguage for the same reason dateLocale does: a browser
+// sends `ar-EG`, and matching the raw code would leave every real Arabic
+// visitor in a left-to-right layout.
+export function languageDirection(lng: string): 'ltr' | 'rtl' {
+  return RTL_LANGUAGES.has(resolveLanguage(lng)) ? 'rtl' : 'ltr';
 }
 
 async function loadResources(lng: string): Promise<void> {
@@ -103,6 +120,7 @@ const DATE_LOCALES: Record<SupportedLanguage, string> = {
   en: 'en-US',
   zh: 'zh-CN',
   ja: 'ja-JP',
+  ar: 'ar',
 };
 
 // BCP-47 locale string for date/time formatting, derived from the active UI
@@ -113,11 +131,17 @@ export function dateLocale(): string {
 }
 
 // The served index.html can only carry one static `lang`, so it is wrong for
-// two of the three UI languages — and that attribute is what tells a screen
-// reader which voice to use. Keep it on the real language instead, reusing the
-// same BCP-47 tags the date formatter maps to.
+// every UI language but one — and that attribute is what tells a screen reader
+// which voice to use. Keep it on the real language instead, reusing the same
+// BCP-47 tags the date formatter maps to.
+//
+// `dir` rides along because it has the same trigger and the same failure mode
+// if it drifts: set from anywhere else, a language switch would leave the
+// attribute describing the previous language's script and mirror the entire
+// layout the wrong way.
 function syncDocumentLang() {
   document.documentElement.lang = dateLocale();
+  document.documentElement.dir = languageDirection(i18n.language);
 }
 i18n.on('languageChanged', syncDocumentLang);
 

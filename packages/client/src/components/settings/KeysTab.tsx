@@ -154,7 +154,7 @@ export function KeysTab() {
                 inputType="password"
                 inputPlaceholder={tool.placeholder}
                 keyValue={keyValue}
-                badge={configured ? <span className="ml-2">{configuredBadge}</span> : undefined}
+                badge={configured ? <span className="ms-2">{configuredBadge}</span> : undefined}
                 description={t(tool.descriptionKey)}
                 onEdit={() => handleEdit(tool.id)}
                 onRemove={() => removeLlmKey(tool.id)}

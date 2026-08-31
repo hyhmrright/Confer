@@ -79,13 +79,13 @@ export function MemoryPage() {
       {/* Search */}
       <div className="px-3 py-2 border-b border-dark-border shrink-0">
         <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-muted pointer-events-none" />
+          <Search className="absolute start-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-muted pointer-events-none" />
           <input
             name="memory-search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={t('memory.searchPlaceholder')}
-            className={`w-full pl-8 pr-3 py-1.5 bg-dark-input border border-dark-border text-ink-secondary
+            className={`w-full ps-8 pe-3 py-1.5 bg-dark-input border border-dark-border text-ink-secondary
               text-xs rounded-md placeholder:text-ink-muted ${FOCUS_RING} transition-colors`}
           />
         </div>

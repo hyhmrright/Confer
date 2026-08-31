@@ -46,7 +46,7 @@ export function AddContactDialog() {
       <div className="px-6 py-4">
         <form onSubmit={handleSearch} className="flex gap-2">
           <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-muted" />
+            <Search className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-muted" />
             <input
               type="text"
               name="contact-query"
@@ -54,7 +54,7 @@ export function AddContactDialog() {
               onChange={(e) => setQuery(e.target.value)}
               placeholder={t('contacts.lookupPlaceholder')}
               aria-label={t('contacts.lookupPlaceholder')}
-              className={`w-full pl-9 pr-3 py-2.5 bg-dark-input border border-dark-border rounded-xl text-sm text-ink-primary placeholder:text-ink-muted ${FOCUS_RING} transition-colors`}
+              className={`w-full ps-9 pe-3 py-2.5 bg-dark-input border border-dark-border rounded-xl text-sm text-ink-primary placeholder:text-ink-muted ${FOCUS_RING} transition-colors`}
             />
           </div>
           <button

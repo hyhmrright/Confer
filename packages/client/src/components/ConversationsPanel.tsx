@@ -56,13 +56,13 @@ export function ConversationsPanel({ onNavigate }: { onNavigate?: () => void }) 
       {/* Search */}
       <div className="px-3 py-2 border-b border-dark-border shrink-0">
         <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-muted pointer-events-none" />
+          <Search className="absolute start-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-muted pointer-events-none" />
           <input
             name="conversation-search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={t('conversations.searchPlaceholder')}
-            className={`w-full pl-8 pr-3 py-1.5 bg-dark-input text-ink-secondary text-xs rounded-md
+            className={`w-full ps-8 pe-3 py-1.5 bg-dark-input text-ink-secondary text-xs rounded-md
               border border-dark-border placeholder:text-ink-muted ${FOCUS_RING} transition-colors`}
           />
         </div>
@@ -87,12 +87,12 @@ export function ConversationsPanel({ onNavigate }: { onNavigate?: () => void }) 
                 onMouseLeave={() => setHoveredId(null)}
               >
                 {active && (
-                  <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[2px] h-7 bg-primary-500 rounded-r-full" />
+                  <span className="absolute start-0 top-1/2 -translate-y-1/2 w-[2px] h-7 bg-primary-500 rounded-e-full" />
                 )}
                 <button
                   type="button"
                   onClick={() => handleSelect(conv.id)}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-left cursor-pointer"
+                  className="w-full flex items-center gap-3 px-4 py-3 text-start cursor-pointer"
                 >
                   <div
                     className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-colors
@@ -123,7 +123,7 @@ export function ConversationsPanel({ onNavigate }: { onNavigate?: () => void }) 
                   <button
                     type="button"
                     onClick={() => deleteConversation(conv.id)}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded
+                    className="absolute end-2.5 top-1/2 -translate-y-1/2 p-1 rounded
                       text-ink-muted hover:text-red-400 hover:bg-red-900/20 transition-colors"
                     title={t('conversations.delete')}
                   >

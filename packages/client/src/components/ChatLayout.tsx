@@ -106,7 +106,7 @@ function NavRail({
               }`}
           >
             {active && (
-              <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[2px] h-5 bg-primary-500 rounded-r-full" />
+              <span className="absolute start-0 top-1/2 -translate-y-1/2 w-[2px] h-5 bg-primary-500 rounded-e-full" />
             )}
             <Icon className="w-[18px] h-[18px]" />
           </button>
@@ -283,7 +283,7 @@ export function ChatLayout() {
           aria-label={t('nav.openMenu')}
           aria-expanded={drawerShown}
           aria-controls="app-drawer"
-          className={`p-1.5 -ml-1 rounded-lg text-ink-secondary hover:text-ink-primary hover:bg-dark-hover transition-colors ${FOCUS_RING}`}
+          className={`p-1.5 -ms-1 rounded-lg text-ink-secondary hover:text-ink-primary hover:bg-dark-hover transition-colors ${FOCUS_RING}`}
         >
           <Menu className="w-5 h-5" />
         </button>
@@ -310,7 +310,7 @@ export function ChatLayout() {
         id="app-drawer"
         className={`md:contents ${
           drawerShown
-            ? 'fixed inset-y-0 left-0 z-40 flex animate-slide-in-left shadow-2xl shadow-black/50'
+            ? 'fixed inset-y-0 start-0 z-40 flex animate-slide-in-start shadow-2xl shadow-black/50'
             : 'hidden'
         }`}
       >

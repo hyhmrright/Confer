@@ -28,6 +28,7 @@ export const ja: Resources = {
     en: 'English',
     zh: '简体中文',
     ja: '日本語',
+    ar: 'العربية',
   },
   login: {
     tagline: 'あなたのエージェントが、あなたに代わって話す',

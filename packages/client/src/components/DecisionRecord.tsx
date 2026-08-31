@@ -29,7 +29,7 @@ export function DecisionRecord({
         <Shield className="w-4 h-4 shrink-0 text-ink-muted" />
         <span className="text-sm text-ink-secondary">{summary}</span>
         <span
-          className={`text-sm font-medium ml-auto shrink-0 ${
+          className={`text-sm font-medium ms-auto shrink-0 ${
             tone === 'accepted' ? 'text-green-400' : 'text-red-400'
           }`}
         >

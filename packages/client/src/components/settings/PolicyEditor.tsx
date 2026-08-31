@@ -61,7 +61,7 @@ export function PolicyEditor({
                 {rule.peer_did && (
                   <span className="font-mono text-ink-muted truncate">{rule.peer_did}</span>
                 )}
-                <span className="ml-auto text-ink-primary shrink-0">
+                <span className="ms-auto text-ink-primary shrink-0">
                   {t(POLICY_DECISION_LABEL_KEY[rule.decision])}
                 </span>
               </li>

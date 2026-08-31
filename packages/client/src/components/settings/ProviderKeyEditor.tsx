@@ -62,7 +62,7 @@ export function ProviderKeyEditor({
             </>
           )}
         </div>
-        <div className={`flex gap-3 ${description ? 'shrink-0 ml-3' : ''}`}>
+        <div className={`flex gap-3 ${description ? 'shrink-0 ms-3' : ''}`}>
           {!editing && (
             <button
               type="button"

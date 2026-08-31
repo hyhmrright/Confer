@@ -163,7 +163,7 @@ export function LoginPage() {
           <button
             type="button"
             onClick={() => setIsRegister(!isRegister)}
-            className="text-primary-400 hover:text-primary-300 font-medium ml-1 transition-colors"
+            className="text-primary-400 hover:text-primary-300 font-medium ms-1 transition-colors"
           >
             {isRegister ? t('login.goLogin') : t('login.register')}
           </button>

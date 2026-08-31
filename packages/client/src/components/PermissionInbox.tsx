@@ -14,7 +14,7 @@ export function PermissionInbox() {
   // 20rem plus the 1rem inset on each side overflows a 320px phone, so the
   // width caps at whatever the viewport leaves.
   return (
-    <div className="fixed top-4 right-4 z-40 w-80 max-w-[calc(100vw-2rem)] space-y-2">
+    <div className="fixed top-4 end-4 z-40 w-80 max-w-[calc(100vw-2rem)] space-y-2">
       {pending.map((req) => (
         <PermissionCard key={req.id} request={req} onDecided={() => removeRequest(req.id)} />
       ))}

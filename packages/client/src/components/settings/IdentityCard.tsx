@@ -35,7 +35,7 @@ export function IdentityCard({ did }: { did: string }) {
   };
 
   return (
-    <section className="rounded-lg border border-dark-border bg-dark-panel p-4 border-l-2 border-l-peer-600">
+    <section className="rounded-lg border border-dark-border bg-dark-panel p-4 border-s-2 border-s-peer-600">
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
           <h3 className="eyebrow text-peer-400">{t('settings.identityLabel')}</h3>

@@ -39,11 +39,11 @@ export function TabbedPage<Id extends string>({
         <button
           type="button"
           onClick={() => navigate('/')}
-          className="p-1.5 -ml-1 text-ink-muted hover:text-ink-secondary hover:bg-dark-hover rounded-lg transition-colors"
+          className="p-1.5 -ms-1 text-ink-muted hover:text-ink-secondary hover:bg-dark-hover rounded-lg transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
         </button>
-        <h1 className="font-semibold text-sm text-ink-primary ml-2">{title}</h1>
+        <h1 className="font-semibold text-sm text-ink-primary ms-2">{title}</h1>
       </header>
 
       {/* The rail is a column beside the content on a wide screen and a

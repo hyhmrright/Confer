@@ -98,7 +98,7 @@ export function MessageView() {
           {conversationName ?? t('message.title')}
         </h1>
         {streaming && (
-          <div className="ml-auto shrink-0 flex items-center gap-1.5 eyebrow text-primary-400">
+          <div className="ms-auto shrink-0 flex items-center gap-1.5 eyebrow text-primary-400">
             <span className="w-1.5 h-1.5 rounded-full bg-primary-400 animate-pulse" />
             {agentStatus ?? t('message.thinking')}
           </div>
@@ -175,7 +175,7 @@ export function MessageView() {
                 <button
                   type="button"
                   onClick={clearAttachment}
-                  className="shrink-0 hover:text-red-400 transition-colors ml-1"
+                  className="shrink-0 hover:text-red-400 transition-colors ms-1"
                 >
                   <X className="w-3 h-3" />
                 </button>
