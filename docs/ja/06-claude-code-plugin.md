@@ -68,7 +68,7 @@ export CONFER_PASSWORD=secret
 # 可选：export CONFER_GATEWAY_URL=http://localhost:3000  (默认值)
 ```
 
-plugin は自己完結型の bundle（`plugins/confer-a2a/dist/server.mjs`、素の `node` だけで動作し、monorepo も `bun` も不要）を同梱しており、`packages/mcp-a2a` から `bun run --filter @confer/mcp-a2a build:plugin` で生成される。9 個のツール（`list_agents` / `ask_agent` / `follow_up` / `ask_multiple` / `check_reply` など）を提供し、詳細は `plugins/confer-a2a/README.md` と `packages/mcp-a2a/README.md` を参照。
+plugin は自己完結型の bundle（`plugins/confer-a2a/dist/server.mjs`、素の `node` だけで動作し、monorepo も `bun` も不要）を同梱しており、`packages/mcp-a2a` から `bun run --filter @confer/mcp-a2a build:plugin` で生成される。15 個のツール（`list_agents` / `ask_agent` / `follow_up` / `ask_multiple` / `check_reply` など）を提供し、詳細は `plugins/confer-a2a/README.md` と `packages/mcp-a2a/README.md` を参照。
 
 リポジトリ内の開発者は plugin をインストールせず、ルートディレクトリの `.mcp.json`（ソースコードの `server.ts` を指す）または `claude mcp add` を直接使うこともできる。
 

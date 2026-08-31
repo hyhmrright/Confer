@@ -68,7 +68,7 @@ export CONFER_PASSWORD=secret
 # optional: export CONFER_GATEWAY_URL=http://localhost:3000  (the default)
 ```
 
-The plugin bundles a self-contained bundle (`plugins/confer-a2a/dist/server.mjs`, which runs under bare `node` with no need for the monorepo or `bun`), generated from `packages/mcp-a2a` via `bun run --filter @confer/mcp-a2a build:plugin`. It provides 9 tools (`list_agents` / `ask_agent` / `follow_up` / `ask_multiple` / `check_reply`, etc.); for details see `plugins/confer-a2a/README.md` and `packages/mcp-a2a/README.md`.
+The plugin bundles a self-contained bundle (`plugins/confer-a2a/dist/server.mjs`, which runs under bare `node` with no need for the monorepo or `bun`), generated from `packages/mcp-a2a` via `bun run --filter @confer/mcp-a2a build:plugin`. It provides 15 tools (`list_agents` / `ask_agent` / `follow_up` / `ask_multiple` / `check_reply`, etc.); for details see `plugins/confer-a2a/README.md` and `packages/mcp-a2a/README.md`.
 
 Developers working inside the repo can also skip installing the plugin and use the root-level `.mcp.json` (which points at the source `server.ts`) or `claude mcp add` directly.
 
