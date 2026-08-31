@@ -1,21 +1,21 @@
-# Confer — 数据模型
+# Confer — Модель данных
 
-PostgreSQL 表结构 + TypeScript 类型定义。所有 ID 用 ULID（时间排序，URL-safe）。
+Схема таблиц PostgreSQL и определения типов TypeScript. Все идентификаторы — ULID (упорядочены по времени, безопасны в URL).
 
-## 命名约定
+## Соглашения об именовании
 
-- 表名：小写下划线复数（`users`, `peer_agents`）
-- 字段名：小写下划线
-- 主键：`id`（ULID）
-- 外键：`{table}_id`
-- 时间戳：`created_at`、`updated_at`、`deleted_at`（soft delete）
-- JSON 字段：`*_json`
+- Имена таблиц: строчные буквы, подчёркивания, множественное число (`users`, `peer_agents`)
+- Имена полей: строчные буквы с подчёркиваниями
+- Первичный ключ: `id` (ULID)
+- Внешние ключи: `{table}_id`
+- Отметки времени: `created_at`, `updated_at`, `deleted_at` (мягкое удаление)
+- Поля JSON: `*_json`
 
-## 核心实体
+## Основные сущности
 
 ### users
 
-注册到这个实例的用户。
+Пользователи, зарегистрированные на этом экземпляре.
 
 ```sql
 CREATE TABLE users (
@@ -63,18 +63,20 @@ interface UserPreferences {
   privacy: { allow_offline_response: boolean };
 }
 
-// 键是 `shared/src/llm/catalog.ts` 里的厂商 id（目前 18 家），外加工具类
-// provider（`tavily`）。这里刻意不列举厂商：列过一次，然后就停在 openai /
-// anthropic / deepseek / qwen 四家再没跟上过。厂商只在 catalog 里出现一次。
+// Ключи — это идентификаторы поставщиков из `shared/src/llm/catalog.ts`
+// (сейчас их 18) плюс инструментальные поставщики (`tavily`). Здесь они
+// намеренно не перечислены: один раз перечислили, и список застыл на
+// openai / anthropic / deepseek / qwen и больше никогда не догонял.
+// Поставщик появляется ровно один раз — в каталоге.
 //
-// 值是 AES-256-GCM 密文（`ENCRYPTION_KEY`），只在网关内解密使用，
-// 任何情况下都不下发给客户端。
+// Значения зашифрованы AES-256-GCM (`ENCRYPTION_KEY`); расшифровываются
+// только внутри шлюза и ни при каких условиях не уходят клиенту.
 type LLMKeys = Record<string, EncryptedKey>;
 ```
 
 ### agents
 
-每个用户的 Agent 配置。一个用户当前只有一个主 Agent（v1），将来可支持多个。
+Настройки Агента каждого пользователя. Сейчас у пользователя один основной Агент (v1); в дальнейшем их может быть несколько.
 
 ```sql
 CREATE TABLE agents (
@@ -127,8 +129,8 @@ interface ModelConfig {
 }
 
 interface ModelChoice {
-  provider: string; // catalog.ts 里的厂商 id，同样不在这里列举
-  model: string;    // 由厂商自己的 /models 返回，不本地维护
+  provider: string; // идентификатор поставщика из catalog.ts — здесь он тоже не перечисляется
+  model: string;    // возвращается собственным /models поставщика, локально не ведётся
   temperature?: number;
 }
 
@@ -153,7 +155,7 @@ interface Capability {
 
 ### peer_agents
 
-我们已经知道的对方 Agent（联系人）。可以是本实例其他用户的 Agent，也可以是其他实例的。
+Чужие Агенты, которые нам уже известны (контакты). Это может быть Агент другого пользователя этого же экземпляра или Агент другого экземпляра.
 
 ```sql
 CREATE TABLE peer_agents (
@@ -183,7 +185,7 @@ CREATE INDEX idx_peers_did ON peer_agents (did);
 
 ### peer_contacts
 
-用户与对方 Agent 之间的关系（"我的联系人"）。
+Связь между пользователем и чужим Агентом («мои контакты»).
 
 ```sql
 CREATE TABLE peer_contacts (
@@ -208,7 +210,7 @@ CREATE INDEX idx_contacts_user ON peer_contacts (user_id);
 
 ### conversations
 
-对话。可以是 1对1（用户↔Agent、用户↔用户、Agent↔Agent）或群聊。
+Разговоры. Могут быть один на один (пользователь↔Агент, пользователь↔пользователь, Агент↔Агент) или групповыми.
 
 ```sql
 CREATE TABLE conversations (
@@ -229,7 +231,7 @@ CREATE INDEX idx_conversations_created_by ON conversations (created_by);
 
 ### conversation_participants
 
-参与方。用户和 Agent 都作为 participant 出现。
+Участники. И пользователи, и Агенты фигурируют здесь как участники.
 
 ```sql
 CREATE TABLE conversation_participants (
@@ -323,7 +325,7 @@ interface Citation {
 
 ### permissions
 
-L2 / L3 权限请求与决定的审计日志。
+Журнал аудита запросов и решений по разрешениям уровней L2 / L3.
 
 ```sql
 CREATE TABLE permissions (
@@ -355,7 +357,7 @@ CREATE INDEX idx_permissions_user_peer ON permissions (user_id, peer_id);
 
 ### project_memory
 
-`.claude/peers/` 的服务端镜像。详见 `docs/07-project-memory.md`。
+Серверное зеркало `.claude/peers/`. Подробнее — в `docs/07-project-memory.md`.
 
 ```sql
 CREATE TABLE project_memory (
@@ -379,7 +381,7 @@ CREATE INDEX idx_project_memory_user_project ON project_memory (user_id, project
 
 ### threads
 
-长话题的归档。当一组消息构成"被引用过的设计决策"时，标记为 thread 持久化。
+Архив длинных тем. Когда группа сообщений образует «проектное решение, на которое уже ссылались», она помечается как ветка и сохраняется.
 
 ```sql
 CREATE TABLE threads (
@@ -400,11 +402,11 @@ CREATE TABLE threads (
 CREATE INDEX idx_threads_conversation ON threads (conversation_id);
 ```
 
-## 辅助表
+## Вспомогательные таблицы
 
 ### sessions
 
-用户登录会话。
+Сессии входа пользователей.
 
 ```sql
 CREATE TABLE sessions (
@@ -441,7 +443,7 @@ CREATE TABLE attachments (
 
 ### audit_log
 
-A2A 流量和重要操作的审计。
+Аудит трафика A2A и важных операций.
 
 ```sql
 CREATE TABLE audit_log (
@@ -456,30 +458,31 @@ CREATE TABLE audit_log (
 CREATE INDEX idx_audit_user_created ON audit_log (user_id, created_at DESC);
 ```
 
-## Redis 键约定
+## Соглашения о ключах Redis
 
-> 下面两节是横向扩展时的目标设计。**Redis 与 NATS 目前既未部署也未接线**
-> （2026-08-07 已从 `docker-compose*.yml` 和 `env.ts` 移除）。上面的表结构是
-> 真实存在的，这两节不是——详见 `docs/02-architecture.md` 开头的说明。
+> Следующие два раздела — проект на случай горизонтального масштабирования.
+> **Redis и NATS сегодня не развёрнуты и никуда не подключены** (удалены из
+> `docker-compose*.yml` и `env.ts` 2026-08-07). Таблицы выше существуют, а эти
+> два раздела — нет; см. примечание в начале `docs/02-architecture.md`.
 
 ```
-session:{token_jti}                # session 数据，TTL = token exp
-presence:{user_id}                 # online status, SET 包含 active device_ids
-ratelimit:user:{user_id}:{route}   # 滑动窗口
-ratelimit:peer:{peer_domain}       # peer 限流
-did_cache:{did}                    # DID document，TTL 60s + ETag
-agent_facts:{did}                  # AgentFacts 缓存
-ws_conn:{user_id}                  # 用户的活跃 WS connection IDs
-typing:{conversation_id}           # 当前打字状态
-unread:{user_id}:{conversation_id} # 未读计数
+session:{token_jti}                # данные сессии, TTL = exp токена
+presence:{user_id}                 # статус «в сети»; SET содержит активные device_id
+ratelimit:user:{user_id}:{route}   # скользящее окно
+ratelimit:peer:{peer_domain}       # ограничение частоты по пиру
+did_cache:{did}                    # DID-документ, TTL 60 с + ETag
+agent_facts:{did}                  # кэш AgentFacts
+ws_conn:{user_id}                  # идентификаторы активных WS-соединений пользователя
+typing:{conversation_id}           # кто сейчас печатает
+unread:{user_id}:{conversation_id} # счётчик непрочитанного
 ```
 
 ## NATS subjects
 
 ```
-user.{user_id}.events              # 用户的所有事件（gateway 订阅做 fan-out）
-agent.{agent_id}.tasks             # Agent runtime 任务队列
-conversation.{conv_id}.messages    # 对话内消息广播
-a2a.outbound                       # 出站 A2A 请求队列
-a2a.inbound                        # 入站 A2A 请求队列
+user.{user_id}.events              # все события пользователя (шлюз подписывается и раздаёт их дальше)
+agent.{agent_id}.tasks             # очередь задач Agent runtime
+conversation.{conv_id}.messages    # рассылка сообщений внутри разговора
+a2a.outbound                       # очередь исходящих запросов A2A
+a2a.inbound                        # очередь входящих запросов A2A
 ```

@@ -1,21 +1,21 @@
-# Confer — 数据模型
+# Confer — Modelo de datos
 
-PostgreSQL 表结构 + TypeScript 类型定义。所有 ID 用 ULID（时间排序，URL-safe）。
+Esquema de tablas de PostgreSQL y definiciones de tipos de TypeScript. Todos los identificadores son ULID (ordenados por tiempo, seguros para URL).
 
-## 命名约定
+## Convenciones de nomenclatura
 
-- 表名：小写下划线复数（`users`, `peer_agents`）
-- 字段名：小写下划线
-- 主键：`id`（ULID）
-- 外键：`{table}_id`
-- 时间戳：`created_at`、`updated_at`、`deleted_at`（soft delete）
-- JSON 字段：`*_json`
+- Nombres de tabla: minúsculas, guiones bajos, en plural (`users`, `peer_agents`)
+- Nombres de campo: minúsculas con guiones bajos
+- Clave primaria: `id` (ULID)
+- Claves foráneas: `{table}_id`
+- Marcas de tiempo: `created_at`, `updated_at`, `deleted_at` (borrado lógico)
+- Campos JSON: `*_json`
 
-## 核心实体
+## Entidades principales
 
 ### users
 
-注册到这个实例的用户。
+Los usuarios registrados en esta instancia.
 
 ```sql
 CREATE TABLE users (
@@ -63,18 +63,20 @@ interface UserPreferences {
   privacy: { allow_offline_response: boolean };
 }
 
-// 键是 `shared/src/llm/catalog.ts` 里的厂商 id（目前 18 家），外加工具类
-// provider（`tavily`）。这里刻意不列举厂商：列过一次，然后就停在 openai /
-// anthropic / deepseek / qwen 四家再没跟上过。厂商只在 catalog 里出现一次。
+// Las claves son los identificadores de proveedor de `shared/src/llm/catalog.ts`
+// (hoy 18) más los proveedores de herramientas (`tavily`). Aquí no se enumeran a
+// propósito: se hizo una vez y la lista se quedó congelada en openai / anthropic /
+// deepseek / qwen y nunca volvió a ponerse al día. Un proveedor aparece una sola
+// vez, en el catálogo.
 //
-// 值是 AES-256-GCM 密文（`ENCRYPTION_KEY`），只在网关内解密使用，
-// 任何情况下都不下发给客户端。
+// Los valores son texto cifrado con AES-256-GCM (`ENCRYPTION_KEY`); solo se
+// descifran dentro de la pasarela y jamás se envían al cliente.
 type LLMKeys = Record<string, EncryptedKey>;
 ```
 
 ### agents
 
-每个用户的 Agent 配置。一个用户当前只有一个主 Agent（v1），将来可支持多个。
+La configuración del Agente de cada usuario. Por ahora un usuario tiene un único Agente principal (v1); más adelante podrán ser varios.
 
 ```sql
 CREATE TABLE agents (
@@ -127,8 +129,8 @@ interface ModelConfig {
 }
 
 interface ModelChoice {
-  provider: string; // catalog.ts 里的厂商 id，同样不在这里列举
-  model: string;    // 由厂商自己的 /models 返回，不本地维护
+  provider: string; // identificador de proveedor de catalog.ts; tampoco se enumeran aquí
+  model: string;    // lo devuelve el propio /models del proveedor; no se mantiene localmente
   temperature?: number;
 }
 
@@ -153,7 +155,7 @@ interface Capability {
 
 ### peer_agents
 
-我们已经知道的对方 Agent（联系人）。可以是本实例其他用户的 Agent，也可以是其他实例的。
+Los Agentes ajenos que ya conocemos (los contactos). Pueden pertenecer a otro usuario de esta instancia o a otra instancia.
 
 ```sql
 CREATE TABLE peer_agents (
@@ -183,7 +185,7 @@ CREATE INDEX idx_peers_did ON peer_agents (did);
 
 ### peer_contacts
 
-用户与对方 Agent 之间的关系（"我的联系人"）。
+La relación entre un usuario y un Agente ajeno («mis contactos»).
 
 ```sql
 CREATE TABLE peer_contacts (
@@ -208,7 +210,7 @@ CREATE INDEX idx_contacts_user ON peer_contacts (user_id);
 
 ### conversations
 
-对话。可以是 1对1（用户↔Agent、用户↔用户、Agent↔Agent）或群聊。
+Conversaciones. Pueden ser individuales (usuario↔Agente, usuario↔usuario, Agente↔Agente) o de grupo.
 
 ```sql
 CREATE TABLE conversations (
@@ -229,7 +231,7 @@ CREATE INDEX idx_conversations_created_by ON conversations (created_by);
 
 ### conversation_participants
 
-参与方。用户和 Agent 都作为 participant 出现。
+Los participantes. Tanto los usuarios como los Agentes aparecen como participantes.
 
 ```sql
 CREATE TABLE conversation_participants (
@@ -323,7 +325,7 @@ interface Citation {
 
 ### permissions
 
-L2 / L3 权限请求与决定的审计日志。
+Registro de auditoría de las solicitudes y decisiones de permisos L2 / L3.
 
 ```sql
 CREATE TABLE permissions (
@@ -355,7 +357,7 @@ CREATE INDEX idx_permissions_user_peer ON permissions (user_id, peer_id);
 
 ### project_memory
 
-`.claude/peers/` 的服务端镜像。详见 `docs/07-project-memory.md`。
+El espejo en el servidor de `.claude/peers/`. Véase `docs/07-project-memory.md`.
 
 ```sql
 CREATE TABLE project_memory (
@@ -379,7 +381,7 @@ CREATE INDEX idx_project_memory_user_project ON project_memory (user_id, project
 
 ### threads
 
-长话题的归档。当一组消息构成"被引用过的设计决策"时，标记为 thread 持久化。
+Archivo de los temas largos. Cuando un grupo de mensajes constituye «una decisión de diseño que se ha citado», se marca como hilo y se conserva.
 
 ```sql
 CREATE TABLE threads (
@@ -400,11 +402,11 @@ CREATE TABLE threads (
 CREATE INDEX idx_threads_conversation ON threads (conversation_id);
 ```
 
-## 辅助表
+## Tablas auxiliares
 
 ### sessions
 
-用户登录会话。
+Sesiones de inicio de sesión de los usuarios.
 
 ```sql
 CREATE TABLE sessions (
@@ -441,7 +443,7 @@ CREATE TABLE attachments (
 
 ### audit_log
 
-A2A 流量和重要操作的审计。
+Auditoría del tráfico A2A y de las operaciones importantes.
 
 ```sql
 CREATE TABLE audit_log (
@@ -456,30 +458,31 @@ CREATE TABLE audit_log (
 CREATE INDEX idx_audit_user_created ON audit_log (user_id, created_at DESC);
 ```
 
-## Redis 键约定
+## Convenciones de claves de Redis
 
-> 下面两节是横向扩展时的目标设计。**Redis 与 NATS 目前既未部署也未接线**
-> （2026-08-07 已从 `docker-compose*.yml` 和 `env.ts` 移除）。上面的表结构是
-> 真实存在的，这两节不是——详见 `docs/02-architecture.md` 开头的说明。
+> Las dos secciones siguientes son el diseño para escalar horizontalmente. **Redis y
+> NATS hoy no están ni desplegados ni conectados** (se retiraron de
+> `docker-compose*.yml` y de `env.ts` el 2026-08-07). Las tablas de arriba existen;
+> estas dos secciones no — véase la nota al principio de `docs/02-architecture.md`.
 
 ```
-session:{token_jti}                # session 数据，TTL = token exp
-presence:{user_id}                 # online status, SET 包含 active device_ids
-ratelimit:user:{user_id}:{route}   # 滑动窗口
-ratelimit:peer:{peer_domain}       # peer 限流
-did_cache:{did}                    # DID document，TTL 60s + ETag
-agent_facts:{did}                  # AgentFacts 缓存
-ws_conn:{user_id}                  # 用户的活跃 WS connection IDs
-typing:{conversation_id}           # 当前打字状态
-unread:{user_id}:{conversation_id} # 未读计数
+session:{token_jti}                # datos de sesión, TTL = exp del token
+presence:{user_id}                 # estado en línea; el SET contiene los device_id activos
+ratelimit:user:{user_id}:{route}   # ventana deslizante
+ratelimit:peer:{peer_domain}       # límite de tasa por peer
+did_cache:{did}                    # documento DID, TTL 60 s + ETag
+agent_facts:{did}                  # caché de AgentFacts
+ws_conn:{user_id}                  # identificadores de conexión WS activas del usuario
+typing:{conversation_id}           # quién está escribiendo ahora
+unread:{user_id}:{conversation_id} # recuento de no leídos
 ```
 
 ## NATS subjects
 
 ```
-user.{user_id}.events              # 用户的所有事件（gateway 订阅做 fan-out）
-agent.{agent_id}.tasks             # Agent runtime 任务队列
-conversation.{conv_id}.messages    # 对话内消息广播
-a2a.outbound                       # 出站 A2A 请求队列
-a2a.inbound                        # 入站 A2A 请求队列
+user.{user_id}.events              # todos los eventos del usuario (la pasarela se suscribe para hacer fan-out)
+agent.{agent_id}.tasks             # cola de tareas del Agent runtime
+conversation.{conv_id}.messages    # difusión de mensajes dentro de una conversación
+a2a.outbound                       # cola de peticiones A2A salientes
+a2a.inbound                        # cola de peticiones A2A entrantes
 ```

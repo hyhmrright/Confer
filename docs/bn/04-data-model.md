@@ -1,21 +1,21 @@
-# Confer — 数据模型
+# Confer — ডেটা মডেল
 
-PostgreSQL 表结构 + TypeScript 类型定义。所有 ID 用 ULID（时间排序，URL-safe）。
+PostgreSQL-এর টেবিল কাঠামো ও TypeScript-এর টাইপ সংজ্ঞা। সব ID হলো ULID (সময়ের ক্রমে সাজানো, URL-নিরাপদ)।
 
-## 命名约定
+## নামকরণের রীতি
 
-- 表名：小写下划线复数（`users`, `peer_agents`）
-- 字段名：小写下划线
-- 主键：`id`（ULID）
-- 外键：`{table}_id`
-- 时间戳：`created_at`、`updated_at`、`deleted_at`（soft delete）
-- JSON 字段：`*_json`
+- টেবিলের নাম: ছোট হাতের অক্ষর, আন্ডারস্কোর, বহুবচন (`users`, `peer_agents`)
+- ফিল্ডের নাম: ছোট হাতের অক্ষর ও আন্ডারস্কোর
+- প্রাইমারি কী: `id` (ULID)
+- ফরেন কী: `{table}_id`
+- টাইমস্ট্যাম্প: `created_at`, `updated_at`, `deleted_at` (সফট ডিলিট)
+- JSON ফিল্ড: `*_json`
 
-## 核心实体
+## মূল সত্তা
 
 ### users
 
-注册到这个实例的用户。
+এই ইনস্ট্যান্সে নিবন্ধিত ব্যবহারকারীরা।
 
 ```sql
 CREATE TABLE users (
@@ -63,18 +63,19 @@ interface UserPreferences {
   privacy: { allow_offline_response: boolean };
 }
 
-// 键是 `shared/src/llm/catalog.ts` 里的厂商 id（目前 18 家），外加工具类
-// provider（`tavily`）。这里刻意不列举厂商：列过一次，然后就停在 openai /
-// anthropic / deepseek / qwen 四家再没跟上过。厂商只在 catalog 里出现一次。
+// কী-গুলো হলো `shared/src/llm/catalog.ts`-এ থাকা সরবরাহকারীর id (এখন ১৮টি),
+// সঙ্গে টুল সরবরাহকারী (`tavily`)। এখানে ইচ্ছে করেই সেগুলো গোনা হয়নি: একবার
+// গোনা হয়েছিল, তারপর তালিকাটি openai / anthropic / deepseek / qwen-এ থেমে
+// গিয়ে আর কখনও হালনাগাদ হয়নি। সরবরাহকারী এক জায়গাতেই থাকে — ক্যাটালগে।
 //
-// 值是 AES-256-GCM 密文（`ENCRYPTION_KEY`），只在网关内解密使用，
-// 任何情况下都不下发给客户端。
+// মানগুলো AES-256-GCM দিয়ে এনক্রিপ্ট করা (`ENCRYPTION_KEY`); কেবল গেটওয়ের
+// ভিতরেই ডিক্রিপ্ট হয়, কোনো অবস্থাতেই ক্লায়েন্টে পাঠানো হয় না।
 type LLMKeys = Record<string, EncryptedKey>;
 ```
 
 ### agents
 
-每个用户的 Agent 配置。一个用户当前只有一个主 Agent（v1），将来可支持多个。
+প্রতিটি ব্যবহারকারীর Agent-এর বিন্যাস। এখন একজন ব্যবহারকারীর একটিই মূল Agent থাকে (v1); পরে একাধিক সম্ভব হবে।
 
 ```sql
 CREATE TABLE agents (
@@ -127,8 +128,8 @@ interface ModelConfig {
 }
 
 interface ModelChoice {
-  provider: string; // catalog.ts 里的厂商 id，同样不在这里列举
-  model: string;    // 由厂商自己的 /models 返回，不本地维护
+  provider: string; // catalog.ts-এর সরবরাহকারী id; এখানেও তালিকা দেওয়া হয়নি
+  model: string;    // সরবরাহকারীর নিজের /models থেকে আসে, স্থানীয়ভাবে রাখা হয় না
   temperature?: number;
 }
 
@@ -153,7 +154,7 @@ interface Capability {
 
 ### peer_agents
 
-我们已经知道的对方 Agent（联系人）。可以是本实例其他用户的 Agent，也可以是其他实例的。
+যেসব ভিন্ন Agent আমরা ইতিমধ্যে চিনি (পরিচিতজন)। তারা এই ইনস্ট্যান্সের অন্য ব্যবহারকারীর হতে পারে, কিংবা অন্য কোনো ইনস্ট্যান্সের।
 
 ```sql
 CREATE TABLE peer_agents (
@@ -183,7 +184,7 @@ CREATE INDEX idx_peers_did ON peer_agents (did);
 
 ### peer_contacts
 
-用户与对方 Agent 之间的关系（"我的联系人"）。
+একজন ব্যবহারকারী আর একটি ভিন্ন Agent-এর মধ্যেকার সম্পর্ক ("আমার পরিচিতজন")।
 
 ```sql
 CREATE TABLE peer_contacts (
@@ -208,7 +209,7 @@ CREATE INDEX idx_contacts_user ON peer_contacts (user_id);
 
 ### conversations
 
-对话。可以是 1对1（用户↔Agent、用户↔用户、Agent↔Agent）或群聊。
+কথোপকথন। এক-এক হতে পারে (ব্যবহারকারী↔Agent, ব্যবহারকারী↔ব্যবহারকারী, Agent↔Agent), কিংবা দলগত।
 
 ```sql
 CREATE TABLE conversations (
@@ -229,7 +230,7 @@ CREATE INDEX idx_conversations_created_by ON conversations (created_by);
 
 ### conversation_participants
 
-参与方。用户和 Agent 都作为 participant 出现。
+অংশগ্রহণকারীরা। ব্যবহারকারী ও Agent — দুজনেই এখানে অংশগ্রহণকারী হিসেবে আসে।
 
 ```sql
 CREATE TABLE conversation_participants (
@@ -323,7 +324,7 @@ interface Citation {
 
 ### permissions
 
-L2 / L3 权限请求与决定的审计日志。
+L2 / L3 অনুমতির অনুরোধ ও সিদ্ধান্তের নিরীক্ষা-নথি।
 
 ```sql
 CREATE TABLE permissions (
@@ -355,7 +356,7 @@ CREATE INDEX idx_permissions_user_peer ON permissions (user_id, peer_id);
 
 ### project_memory
 
-`.claude/peers/` 的服务端镜像。详见 `docs/07-project-memory.md`。
+`.claude/peers/`-এর সার্ভার-পাশের প্রতিরূপ। বিস্তারিত `docs/07-project-memory.md`-এ।
 
 ```sql
 CREATE TABLE project_memory (
@@ -379,7 +380,7 @@ CREATE INDEX idx_project_memory_user_project ON project_memory (user_id, project
 
 ### threads
 
-长话题的归档。当一组消息构成"被引用过的设计决策"时，标记为 thread 持久化。
+দীর্ঘ আলোচনার সংরক্ষণ। একগুচ্ছ বার্তা যখন "এমন একটি নকশা-সিদ্ধান্ত হয়ে ওঠে যার উল্লেখ করা হয়েছে", তখন সেটিকে থ্রেড হিসেবে চিহ্নিত করে রেখে দেওয়া হয়।
 
 ```sql
 CREATE TABLE threads (
@@ -400,11 +401,11 @@ CREATE TABLE threads (
 CREATE INDEX idx_threads_conversation ON threads (conversation_id);
 ```
 
-## 辅助表
+## সহায়ক টেবিল
 
 ### sessions
 
-用户登录会话。
+ব্যবহারকারীদের লগইন সেশন।
 
 ```sql
 CREATE TABLE sessions (
@@ -441,7 +442,7 @@ CREATE TABLE attachments (
 
 ### audit_log
 
-A2A 流量和重要操作的审计。
+A2A ট্র্যাফিক ও গুরুত্বপূর্ণ কাজের নিরীক্ষা।
 
 ```sql
 CREATE TABLE audit_log (
@@ -456,30 +457,31 @@ CREATE TABLE audit_log (
 CREATE INDEX idx_audit_user_created ON audit_log (user_id, created_at DESC);
 ```
 
-## Redis 键约定
+## Redis কী-এর রীতি
 
-> 下面两节是横向扩展时的目标设计。**Redis 与 NATS 目前既未部署也未接线**
-> （2026-08-07 已从 `docker-compose*.yml` 和 `env.ts` 移除）。上面的表结构是
-> 真实存在的，这两节不是——详见 `docs/02-architecture.md` 开头的说明。
+> নিচের দুটি অংশ অনুভূমিক সম্প্রসারণের জন্য ভাবা নকশা। **Redis আর NATS আজ
+> মোতায়েনও নেই, কোথাও যুক্তও নেই** (২০২৬-০৮-০৭-এ `docker-compose*.yml` ও
+> `env.ts` থেকে সরানো হয়েছে)। উপরের টেবিলগুলো সত্যি আছে; এই দুটি অংশ নেই —
+> দেখুন `docs/02-architecture.md`-এর শুরুর টীকা।
 
 ```
-session:{token_jti}                # session 数据，TTL = token exp
-presence:{user_id}                 # online status, SET 包含 active device_ids
-ratelimit:user:{user_id}:{route}   # 滑动窗口
-ratelimit:peer:{peer_domain}       # peer 限流
-did_cache:{did}                    # DID document，TTL 60s + ETag
-agent_facts:{did}                  # AgentFacts 缓存
-ws_conn:{user_id}                  # 用户的活跃 WS connection IDs
-typing:{conversation_id}           # 当前打字状态
-unread:{user_id}:{conversation_id} # 未读计数
+session:{token_jti}                # সেশনের তথ্য, TTL = টোকেনের exp
+presence:{user_id}                 # অনলাইন অবস্থা; SET-এ সক্রিয় device_id থাকে
+ratelimit:user:{user_id}:{route}   # স্লাইডিং উইন্ডো
+ratelimit:peer:{peer_domain}       # peer-ভিত্তিক হার-সীমা
+did_cache:{did}                    # DID নথি, TTL ৬০ সেকেন্ড + ETag
+agent_facts:{did}                  # AgentFacts-এর ক্যাশ
+ws_conn:{user_id}                  # ব্যবহারকারীর সক্রিয় WS সংযোগের ID
+typing:{conversation_id}           # এখন কে লিখছে
+unread:{user_id}:{conversation_id} # অপঠিতের গণনা
 ```
 
 ## NATS subjects
 
 ```
-user.{user_id}.events              # 用户的所有事件（gateway 订阅做 fan-out）
-agent.{agent_id}.tasks             # Agent runtime 任务队列
-conversation.{conv_id}.messages    # 对话内消息广播
-a2a.outbound                       # 出站 A2A 请求队列
-a2a.inbound                        # 入站 A2A 请求队列
+user.{user_id}.events              # ব্যবহারকারীর সব ঘটনা (গেটওয়ে সাবস্ক্রাইব করে fan-out করে)
+agent.{agent_id}.tasks             # Agent runtime-এর কাজের সারি
+conversation.{conv_id}.messages    # কথোপকথনের ভিতরে বার্তার সম্প্রচার
+a2a.outbound                       # বাইরে যাওয়া A2A অনুরোধের সারি
+a2a.inbound                        # ভিতরে আসা A2A অনুরোধের সারি
 ```

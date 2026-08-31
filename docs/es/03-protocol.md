@@ -378,7 +378,7 @@ Conectar con el NANDA Index o un registro público similar, con soporte para:
 
 ## Antispam
 
-- Limitación de tasa por dominio de peer y por minuto (contador en Redis).
+- Limitación de tasa por dominio de peer y por minuto (contador en memoria del proceso; la pasarela es de instancia única).
 - Los peers que no están en la lista blanca tienen baja prioridad por defecto.
 - El usuario puede bloquear un dominio de peer.
 - Puntuación de reputación (v2 en adelante): cuántas otras instancias lo han marcado como spam.

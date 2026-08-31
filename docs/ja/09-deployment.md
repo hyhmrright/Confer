@@ -122,7 +122,7 @@ docker compose -f docker-compose.prod.yml down -v          # -v also deletes the
 
 ```bash
 bun install
-docker compose up -d            # infra only — Postgres, Redis, NATS, Qdrant, MinIO (ports published on localhost)
+docker compose up -d            # infra only — Postgres, Qdrant, MinIO (ports published on localhost)
 bun run db:migrate
 bun run dev                      # gateway on :3000, client (Vite) on :1420
 ```

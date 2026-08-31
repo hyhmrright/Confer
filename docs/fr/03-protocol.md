@@ -378,7 +378,7 @@ Se brancher sur le NANDA Index ou un registre public équivalent, avec :
 
 ## Anti-spam
 
-- Limitation de débit par domaine de pair et par minute (compteur Redis).
+- Limitation de débit par domaine de pair et par minute (compteur en mémoire du processus ; la passerelle est mono-instance).
 - Les pairs hors liste blanche sont en basse priorité par défaut.
 - L'utilisateur peut bloquer un domaine de pair.
 - Score de réputation (v2 et au-delà) : combien d'autres instances l'ont signalé comme spam.

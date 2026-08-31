@@ -316,7 +316,7 @@ Integrate with the NANDA Index or a similar public registry, supporting:
 
 ## Anti-spam
 
-- Rate-limit each peer-domain per minute (Redis counter)
+- Rate-limit each peer-domain per minute (in-process counter; the gateway is single-instance)
 - Peers not on the allowlist default to low priority
 - The user can blocklist a peer-domain
 - Reputation scoring (v2+): how many other instances have flagged it as spam
