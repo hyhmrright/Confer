@@ -45,6 +45,13 @@ jobs:
             koalaman/shellcheck@sha256:bb596a0d169b85ddd81d8b6d3a2ff6d5baf5fca10b97f575ebc647c3dff62b3d \
             -x infra/*.sh .github/scripts/*.sh
 
+      # The docs site is plain Jekyll with no tests of its own, and it registers
+      # each language in four places that all degrade silently when one is
+      # missed — see the header of the script. Same placement reasoning as the
+      # two above: a step here, never a job of its own.
+      - name: Check docs i18n
+        run: bun .github/scripts/check-docs-i18n.mjs
+
       # The Tauri crate resolves its own dependency graph, and no other CI job
       # touches Rust — so a Cargo.toml edit merged without a regenerated
       # Cargo.lock stays invisible until a release build, which only runs on a

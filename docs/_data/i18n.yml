@@ -1,8 +1,21 @@
 # Chrome strings + design-doc nav, per language. Consumed by _layouts/default.html.
+#
 # Doc `file` names are shared across languages (same .html, different directory);
-# the layout prefixes them with the language directory (en/ , ja/ , or "" for zh).
+# the layout prefixes them with the language directory (en/ , ja/ , … or "" for zh).
+#
+# `label` is the language's own name for itself, and is deliberately identical in
+# every block — someone who cannot read the interface they are currently in has
+# to be able to find their own line. `short` is the one or two characters the
+# nav rail shows, in that language's own script for the same reason.
+#
+# Keys are ordered by total speakers, matching SUPPORTED_LANGUAGES in the client
+# (packages/client/src/i18n/index.ts). The layout reads this order, so adding a
+# language here is the only edit the docs chrome needs.
 en:
   htmllang: en
+  dir: ltr
+  label: English
+  short: EN
   home: Home
   deploy: Deployment
   docslabel: Design docs
@@ -22,6 +35,9 @@ en:
     - { file: 09-deployment.html, name: Deployment }
 zh:
   htmllang: zh-CN
+  dir: ltr
+  label: 简体中文
+  short: 中
   home: 首页
   deploy: 部署
   docslabel: 设计文档
@@ -39,8 +55,187 @@ zh:
     - { file: 07-project-memory.html, name: 项目记忆 }
     - { file: 08-mvp-backlog.html, name: MVP backlog }
     - { file: 09-deployment.html, name: 部署 }
+hi:
+  htmllang: hi
+  dir: ltr
+  label: हिन्दी
+  short: हि
+  home: होम
+  deploy: परिनियोजन
+  docslabel: डिज़ाइन दस्तावेज़
+  langlabel: भाषा
+  back: Confer पर वापस
+  footline: "A2A · DID:web · RFC 9421 · NANDA"
+  copyright: "© 2026 Confer — ओपन सोर्स।"
+  docs:
+    - { file: 01-product.html, name: उत्पाद }
+    - { file: 02-architecture.html, name: आर्किटेक्चर }
+    - { file: 03-protocol.html, name: प्रोटोकॉल }
+    - { file: 04-data-model.html, name: डेटा मॉडल }
+    - { file: 05-api.html, name: API }
+    - { file: 06-claude-code-plugin.html, name: Claude Code प्लगइन }
+    - { file: 07-project-memory.html, name: प्रोजेक्ट मेमोरी }
+    - { file: 08-mvp-backlog.html, name: MVP बैकलॉग }
+    - { file: 09-deployment.html, name: परिनियोजन }
+es:
+  htmllang: es
+  dir: ltr
+  label: Español
+  short: ES
+  home: Inicio
+  deploy: Despliegue
+  docslabel: Documentos de diseño
+  langlabel: Idioma
+  back: Volver a Confer
+  footline: "A2A · DID:web · RFC 9421 · NANDA"
+  copyright: "© 2026 Confer — código abierto."
+  docs:
+    - { file: 01-product.html, name: Producto }
+    - { file: 02-architecture.html, name: Arquitectura }
+    - { file: 03-protocol.html, name: Protocolo }
+    - { file: 04-data-model.html, name: Modelo de datos }
+    - { file: 05-api.html, name: API }
+    - { file: 06-claude-code-plugin.html, name: Plugin de Claude Code }
+    - { file: 07-project-memory.html, name: Memoria del proyecto }
+    - { file: 08-mvp-backlog.html, name: Backlog del MVP }
+    - { file: 09-deployment.html, name: Despliegue }
+ar:
+  htmllang: ar
+  dir: rtl
+  label: العربية
+  short: ع
+  home: الرئيسية
+  deploy: النشر
+  docslabel: وثائق التصميم
+  langlabel: اللغة
+  back: العودة إلى Confer
+  footline: "A2A · DID:web · RFC 9421 · NANDA"
+  copyright: "© 2026 Confer — مشروع مفتوح المصدر."
+  docs:
+    - { file: 01-product.html, name: المنتج }
+    - { file: 02-architecture.html, name: البنية }
+    - { file: 03-protocol.html, name: البروتوكول }
+    - { file: 04-data-model.html, name: نموذج البيانات }
+    - { file: 05-api.html, name: API }
+    - { file: 06-claude-code-plugin.html, name: إضافة Claude Code }
+    - { file: 07-project-memory.html, name: ذاكرة المشروع }
+    - { file: 08-mvp-backlog.html, name: قائمة مهام MVP }
+    - { file: 09-deployment.html, name: النشر }
+fr:
+  htmllang: fr
+  dir: ltr
+  label: Français
+  short: FR
+  home: Accueil
+  deploy: Déploiement
+  docslabel: Documents de conception
+  langlabel: Langue
+  back: Retour à Confer
+  footline: "A2A · DID:web · RFC 9421 · NANDA"
+  copyright: "© 2026 Confer — logiciel libre."
+  docs:
+    - { file: 01-product.html, name: Produit }
+    - { file: 02-architecture.html, name: Architecture }
+    - { file: 03-protocol.html, name: Protocole }
+    - { file: 04-data-model.html, name: Modèle de données }
+    - { file: 05-api.html, name: API }
+    - { file: 06-claude-code-plugin.html, name: Plugin Claude Code }
+    - { file: 07-project-memory.html, name: Mémoire de projet }
+    - { file: 08-mvp-backlog.html, name: Backlog MVP }
+    - { file: 09-deployment.html, name: Déploiement }
+bn:
+  htmllang: bn
+  dir: ltr
+  label: বাংলা
+  short: বা
+  home: হোম
+  deploy: স্থাপনা
+  docslabel: ডিজাইন ডকুমেন্ট
+  langlabel: ভাষা
+  back: Confer-এ ফিরে যান
+  footline: "A2A · DID:web · RFC 9421 · NANDA"
+  copyright: "© 2026 Confer — ওপেন সোর্স।"
+  docs:
+    - { file: 01-product.html, name: পণ্য }
+    - { file: 02-architecture.html, name: আর্কিটেকচার }
+    - { file: 03-protocol.html, name: প্রোটোকল }
+    - { file: 04-data-model.html, name: ডেটা মডেল }
+    - { file: 05-api.html, name: API }
+    - { file: 06-claude-code-plugin.html, name: Claude Code প্লাগইন }
+    - { file: 07-project-memory.html, name: প্রকল্প মেমরি }
+    - { file: 08-mvp-backlog.html, name: MVP ব্যাকলগ }
+    - { file: 09-deployment.html, name: স্থাপনা }
+pt:
+  htmllang: pt
+  dir: ltr
+  label: Português
+  short: PT
+  home: Início
+  deploy: Implantação
+  docslabel: Documentos de design
+  langlabel: Idioma
+  back: Voltar ao Confer
+  footline: "A2A · DID:web · RFC 9421 · NANDA"
+  copyright: "© 2026 Confer — código aberto."
+  docs:
+    - { file: 01-product.html, name: Produto }
+    - { file: 02-architecture.html, name: Arquitetura }
+    - { file: 03-protocol.html, name: Protocolo }
+    - { file: 04-data-model.html, name: Modelo de dados }
+    - { file: 05-api.html, name: API }
+    - { file: 06-claude-code-plugin.html, name: Plugin do Claude Code }
+    - { file: 07-project-memory.html, name: Memória do projeto }
+    - { file: 08-mvp-backlog.html, name: Backlog do MVP }
+    - { file: 09-deployment.html, name: Implantação }
+ru:
+  htmllang: ru
+  dir: ltr
+  label: Русский
+  short: РУ
+  home: Главная
+  deploy: Развёртывание
+  docslabel: Проектные документы
+  langlabel: Язык
+  back: Вернуться в Confer
+  footline: "A2A · DID:web · RFC 9421 · NANDA"
+  copyright: "© 2026 Confer — открытый исходный код."
+  docs:
+    - { file: 01-product.html, name: Продукт }
+    - { file: 02-architecture.html, name: Архитектура }
+    - { file: 03-protocol.html, name: Протокол }
+    - { file: 04-data-model.html, name: Модель данных }
+    - { file: 05-api.html, name: API }
+    - { file: 06-claude-code-plugin.html, name: Плагин Claude Code }
+    - { file: 07-project-memory.html, name: Память проекта }
+    - { file: 08-mvp-backlog.html, name: Бэклог MVP }
+    - { file: 09-deployment.html, name: Развёртывание }
+ur:
+  htmllang: ur
+  dir: rtl
+  label: اردو
+  short: اُر
+  home: ہوم
+  deploy: تعیناتی
+  docslabel: ڈیزائن دستاویزات
+  langlabel: زبان
+  back: Confer پر واپس
+  footline: "A2A · DID:web · RFC 9421 · NANDA"
+  copyright: "© 2026 Confer — اوپن سورس۔"
+  docs:
+    - { file: 01-product.html, name: پروڈکٹ }
+    - { file: 02-architecture.html, name: آرکیٹیکچر }
+    - { file: 03-protocol.html, name: پروٹوکول }
+    - { file: 04-data-model.html, name: ڈیٹا ماڈل }
+    - { file: 05-api.html, name: API }
+    - { file: 06-claude-code-plugin.html, name: Claude Code پلگ ان }
+    - { file: 07-project-memory.html, name: پروجیکٹ میموری }
+    - { file: 08-mvp-backlog.html, name: MVP بیک لاگ }
+    - { file: 09-deployment.html, name: تعیناتی }
 ja:
   htmllang: ja
+  dir: ltr
+  label: 日本語
+  short: あ
   home: ホーム
   deploy: デプロイ
   docslabel: 設計ドキュメント

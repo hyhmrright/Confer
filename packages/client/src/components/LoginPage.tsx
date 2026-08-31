@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router';
 import { DISABLED_FILLED, FOCUS_RING } from '../lib/styles.js';
 import { useAuthStore } from '../stores/auth.js';
 import { Loader } from './Icons.js';
+import { LanguageSwitcherCompact } from './LanguageSwitcher.js';
 
 export function LoginPage() {
   const { t } = useTranslation();
@@ -49,6 +50,15 @@ export function LoginPage() {
           backgroundSize: '100% 32px',
         }}
       />
+
+      {/* The switcher has to live on this screen, not only behind it. Both of
+          the app's other switchers are inside the authenticated shell, so a
+          visitor whose browser language is none of the eleven met an English
+          signup form with no way out of it — on the one screen that decides
+          whether they sign up at all. */}
+      <div className="absolute top-4 end-4 z-10">
+        <LanguageSwitcherCompact placement="block-end" />
+      </div>
 
       <div className="relative w-full max-w-sm px-4">
         {/* Wordmark */}

@@ -48,15 +48,27 @@ const SHORT_LABEL: Record<SupportedLanguage, string> = {
   ja: 'あ',
 };
 
+// Where the menu goes relative to its button. 'inline-end' is the NavRail, whose
+// button sits against the window edge with the whole app inline-end of it;
+// 'block-end' is the login page, where the button is in a top corner and the
+// space below is empty. Both are written in logical directions, so each one
+// mirrors with `dir` instead of needing an RTL twin.
+type Placement = 'inline-end' | 'block-end';
+
+const MENU_POSITION: Record<Placement, string> = {
+  'inline-end': 'start-full bottom-0 ms-2',
+  'block-end': 'end-0 top-full mt-2',
+};
+
 /**
- * Compact language picker for the NavRail.
+ * Compact language picker: a button showing the active language, opening a list.
  *
  * This used to be a button that cycled to the next language on each click,
  * which reads fine at three languages and breaks down past that: reaching your
  * own language could take ten clicks, each one repainting the whole app in a
  * language you cannot read on the way. It opens a list instead.
  */
-export function LanguageSwitcherCompact() {
+export function LanguageSwitcherCompact({ placement = 'inline-end' }: { placement?: Placement }) {
   const { t, i18n } = useTranslation();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -80,7 +92,7 @@ export function LanguageSwitcherCompact() {
       {open && (
         <div
           role="menu"
-          className="absolute start-full bottom-0 ms-2 w-40 rounded-lg bg-dark-panel border border-dark-border shadow-lg z-50 overflow-hidden"
+          className={`absolute ${MENU_POSITION[placement]} w-40 rounded-lg bg-dark-panel border border-dark-border shadow-lg z-50 overflow-hidden`}
         >
           {SUPPORTED_LANGUAGES.map((lng) => (
             <button

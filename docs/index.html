@@ -64,13 +64,33 @@
   .nav-right{display:flex; align-items:center; gap:26px}
   .nav-links{display:flex; gap:24px; font-family:var(--mono); font-size:13px; letter-spacing:.02em; color:var(--paper-dim)}
   .nav-links a{transition:color .2s} .nav-links a:hover{color:var(--paper)}
-  .lang{display:flex; border:1px solid var(--line); border-radius:999px; overflow:hidden; font-family:var(--mono); font-size:12px}
-  .lang button{
-    background:none; border:none; color:var(--paper-dim); padding:6px 12px; cursor:pointer;
-    letter-spacing:.04em; transition:all .2s; font-family:inherit;
+  /* Language disclosure. Was a row of three pills; eleven do not fit in a nav
+     bar, so it opens a list instead. `details` needs no script of its own —
+     applyLang() below only listens for clicks on the items. */
+  .lang{position:relative; font-family:var(--mono); font-size:12px}
+  .lang summary{
+    display:inline-flex; align-items:center; gap:5px; list-style:none;
+    border:1px solid var(--line); border-radius:999px; color:var(--paper-dim);
+    padding:6px 12px; cursor:pointer; letter-spacing:.04em; transition:color .2s, border-color .2s;
   }
-  .lang button:hover{color:var(--paper)}
-  .lang button.on{background:var(--amber); color:#1a1206; font-weight:600}
+  .lang summary::-webkit-details-marker{display:none}
+  .lang summary:hover, .lang[open] summary{color:var(--paper); border-color:var(--amber)}
+  .lang .caret{font-size:9px; opacity:.7}
+  .lang-menu{
+    position:absolute; inset-inline-end:0; top:calc(100% + 8px); z-index:60;
+    min-width:168px; padding:5px; background:var(--ink-2); border:1px solid var(--line);
+    border-radius:10px; box-shadow:0 14px 36px rgba(0,0,0,.55);
+  }
+  .lang-menu button{
+    display:block; width:100%; background:none; border:none; cursor:pointer;
+    /* Each name is written in its own language, so a reader who cannot read the
+       page as it stands can still find their own line. Both scripts sit in one
+       list, so each line aligns by its own direction. */
+    text-align:start; padding:6px 10px; border-radius:6px; font-family:var(--body);
+    font-size:14px; color:var(--paper-dim); transition:color .18s, background .18s;
+  }
+  .lang-menu button:hover{color:var(--paper); background:var(--ink-3)}
+  .lang-menu button.on{color:var(--amber); font-weight:600}
   @media(max-width:720px){.nav-links{display:none}}
 
   /* ---------- hero ---------- */
@@ -107,14 +127,14 @@
   .stage .field{position:absolute; inset:0; background-image:radial-gradient(rgba(243,236,224,.10) 1px,transparent 1px); background-size:22px 22px; opacity:.5}
   .node{position:absolute; width:42%; padding:16px 16px 14px; border:1px solid var(--line); border-radius:5px;
     background:rgba(32,27,22,.92); backdrop-filter:blur(2px)}
-  .node.a{left:6%; top:14%} .node.b{right:6%; bottom:14%; border-color:rgba(230,162,60,.35)}
+  .node.a{inset-inline-start:6%; top:14%} .node.b{inset-inline-end:6%; bottom:14%; border-color:rgba(230,162,60,.35)}
   .node .who{font-family:var(--mono); font-size:11px; letter-spacing:.08em; color:var(--paper-dim); display:flex; align-items:center; gap:6px}
   .node .who i{width:6px; height:6px; border-radius:50%; background:var(--sage); font-style:normal}
   .node.b .who i{background:var(--amber)}
   .node .did{font-family:var(--mono); font-size:10.5px; color:var(--paper-faint); margin-top:4px; word-break:break-all}
   .node .body{font-family:var(--display); font-size:15px; line-height:1.35; margin-top:11px; color:var(--paper)}
   .node .sig{font-family:var(--mono); font-size:10px; color:var(--amber); margin-top:10px; opacity:.85}
-  .link{position:absolute; left:0; top:0; width:100%; height:100%; pointer-events:none}
+  .link{position:absolute; inset-inline-start:0; top:0; width:100%; height:100%; pointer-events:none}
   .packet{
     width:9px; height:9px; border-radius:50%; background:var(--amber); position:absolute;
     box-shadow:0 0 12px 3px rgba(230,162,60,.7);
@@ -136,12 +156,12 @@
   /* ---------- problem / solution ---------- */
   .ps{display:grid; grid-template-columns:1fr 1fr; gap:0; margin-top:54px; border:1px solid var(--line)}
   .ps > div{padding:38px 36px}
-  .ps .pain{border-right:1px solid var(--line); background:rgba(0,0,0,.18)}
+  .ps .pain{border-inline-end:1px solid var(--line); background:rgba(0,0,0,.18)}
   .ps h3{font-family:var(--mono); font-size:13px; letter-spacing:.16em; text-transform:uppercase; margin-bottom:16px}
   .ps .pain h3{color:var(--paper-dim)} .ps .sol h3{color:var(--amber)}
   .ps p{color:var(--paper-dim); font-size:17px}
   .ps .sol p{color:var(--paper)}
-  @media(max-width:760px){.ps{grid-template-columns:1fr} .ps .pain{border-right:none; border-bottom:1px solid var(--line)}}
+  @media(max-width:760px){.ps{grid-template-columns:1fr} .ps .pain{border-inline-end:none; border-bottom:1px solid var(--line)}}
 
   /* ---------- features ---------- */
   .feat{display:grid; grid-template-columns:repeat(3,1fr); gap:1px; margin-top:54px; background:var(--line); border:1px solid var(--line)}
@@ -154,10 +174,10 @@
   .card p{font-size:16px; color:var(--paper-dim); line-height:1.55}
 
   /* ---------- how it works ---------- */
-  .steps{margin-top:54px; display:grid; gap:0; border-left:1px solid var(--line)}
-  .step{display:grid; grid-template-columns:84px 1fr; gap:24px; padding:26px 0 30px; padding-left:30px; position:relative; border-bottom:1px solid var(--line-2)}
+  .steps{margin-top:54px; display:grid; gap:0; border-inline-start:1px solid var(--line)}
+  .step{display:grid; grid-template-columns:84px 1fr; gap:24px; padding:26px 0 30px; padding-inline-start:30px; position:relative; border-bottom:1px solid var(--line-2)}
   .step:last-child{border-bottom:none}
-  .step::before{content:""; position:absolute; left:-5px; top:32px; width:9px; height:9px; border-radius:50%; background:var(--amber); box-shadow:0 0 10px 2px rgba(230,162,60,.5)}
+  .step::before{content:""; position:absolute; inset-inline-start:-5px; top:32px; width:9px; height:9px; border-radius:50%; background:var(--amber); box-shadow:0 0 10px 2px rgba(230,162,60,.5)}
   .step .num{font-family:var(--display); font-size:42px; color:var(--paper-faint); line-height:1}
   .step h4{font-family:var(--display); font-weight:500; font-size:22px; margin-bottom:7px}
   .step p{color:var(--paper-dim); font-size:16.5px; max-width:62ch}
@@ -201,11 +221,12 @@
         <a href="01-product.html" data-doc="01-product.html" data-i18n="nav.docs">Docs</a>
         <a href="https://github.com/hyhmrright/Confer" target="_blank" rel="noopener">GitHub ↗</a>
       </div>
-      <div class="lang" role="group" aria-label="Language">
-        <button data-lang="en">EN</button>
-        <button data-lang="zh">中</button>
-        <button data-lang="ja">日</button>
-      </div>
+      <!-- Items are generated from META below, so the list cannot drift from the
+           set of languages the page can actually render. -->
+      <details class="lang">
+        <summary aria-label="Language"><span class="cur">EN</span><span class="caret">▾</span></summary>
+        <div class="lang-menu"></div>
+      </details>
     </div>
   </div>
 </nav>
@@ -372,7 +393,7 @@
 <script>
   const I18N = {
     en: {
-      "nav.how":"How it works","nav.start":"Quick start","nav.docs":"Docs",
+      "nav.lang":"Language","nav.how":"How it works","nav.start":"Quick start","nav.docs":"Docs",
       "hero.eyebrow":"An open agent-to-agent protocol",
       "hero.title":"Your AI confers,<br>with <em>anyone's</em>.",
       "hero.lede":"Each owner runs their own Agent — carrying its own knowledge. People talk through their Agents. Neither side ever reads the other's docs.",
@@ -402,7 +423,7 @@
       "foot.docs":"Documentation","foot.project":"Project","foot.plugin":"Claude Code plugin","foot.built":"Built on A2A · DID:web · RFC 9421 · NANDA"
     },
     zh: {
-      "nav.how":"工作原理","nav.start":"快速开始","nav.docs":"文档",
+      "nav.lang":"语言","nav.how":"工作原理","nav.start":"快速开始","nav.docs":"文档",
       "hero.eyebrow":"一个开放的 Agent 间协议",
       "hero.title":"你的 AI，<br>替你与<em>任何人</em>商议。",
       "hero.lede":"每个人运行自己的 Agent，承载自己的知识。大家通过各自的 Agent 沟通——双方都不用啃对方的文档。",
@@ -431,8 +452,248 @@
       "foot.tag":"你的 AI，替你与任何人商议。一个让 Agent 替你发声的开放协议。",
       "foot.docs":"文档","foot.project":"项目","foot.plugin":"Claude Code 插件","foot.built":"基于 A2A · DID:web · RFC 9421 · NANDA"
     },
+    hi: {
+      "nav.lang":"भाषा","nav.how":"यह कैसे काम करता है","nav.start":"जल्दी शुरू करें","nav.docs":"दस्तावेज़",
+      "hero.eyebrow":"एजेंटों के बीच एक खुला प्रोटोकॉल",
+      "hero.title":"आपका AI विचार-विमर्श करता है,<br><em>किसी के भी</em> AI से।",
+      "hero.lede":"हर मालिक अपना खुद का Agent चलाता है — अपने ही ज्ञान के साथ। लोग अपने Agents के ज़रिए बात करते हैं। किसी को भी दूसरे के दस्तावेज़ नहीं पढ़ने पड़ते।",
+      "hero.cta1":"शुरू करें","hero.cta2":"GitHub पर देखें",
+      "hero.demo":"सिर्फ़ खुले प्रोटोकॉल — <b>A2A · DID:web · RFC 9421 · NANDA AgentFacts</b>। कोई प्लेटफ़ॉर्म लॉक-इन नहीं।",
+      "motif.ask":"“X100 का तापमान Modbus पर कैसे पढ़ें?”",
+      "motif.reply":"“रजिस्टर 0x0064, FC 04, °C के लिए ÷10।”",
+      "why.eyebrow":"Confer क्यों","why.title":"इंटीग्रेशन का मतलब हज़ार पन्ने पढ़ना नहीं होना चाहिए।",
+      "why.painLabel":"समस्या","why.painBody":"तीसरे पक्ष के हार्डवेयर या SDK को जोड़ने के लिए हज़ारों पन्नों के दस्तावेज़ खंगालने पड़ते हैं। वेंडर सपोर्ट धीमा और महँगा है। वेंडर-विशिष्ट जानकारी के बिना AI कोडिंग टूल गलत अनुमान लगाते हैं।",
+      "why.solLabel":"समाधान","why.solBody":"वेंडर अपने दस्तावेज़ और सपोर्ट को एक बाहरी Agent में पैक करते हैं। जब आप Claude Code से कोड लिखते हैं, वह उसी Agent से पूछकर संदर्भ-सहित जवाब लाता है — और उन्हें .claude/peers में सहेज देता है ताकि अगली बार अपने-आप काम आएँ।",
+      "feat.eyebrow":"मुख्य विशेषताएँ","feat.title":"एक नेटवर्क, दीवारों से घिरा बाग़ नहीं।",
+      "feat.1t":"Agent-to-Agent नेटवर्क","feat.1b":"खुले प्रोटोकॉल (A2A, DID:web, NANDA AgentFacts) पर बना। कोई प्लेटफ़ॉर्म लॉक-इन नहीं।",
+      "feat.2t":"Claude Code प्लगइन","feat.2b":"कोड लिखते समय Claude Code को सीधे वेंडर Agents से पूछने देता है।",
+      "feat.3t":"प्रोजेक्ट-स्तर का ज्ञान","feat.3b":"<span class='mono'>.claude/peers/</span> git के साथ चलता है — सेशन, डेवलपर और मशीनों के आर-पार।",
+      "feat.4t":"तीन-स्तरीय अनुमतियाँ","feat.4b":"Claude Code के अनुमति मॉडल से प्रेरित — डिज़ाइन से ही सुरक्षित और नियंत्रित।",
+      "feat.5t":"बहुभाषी","feat.5b":"Agents के बीच अलग-अलग भाषाओं में बातचीत, संदर्भ मूल भाषा में सुरक्षित।",
+      "feat.6t":"फ़ेडरेटेड","feat.6b":"स्वयं-होस्ट किए गए इंस्टेंस सार्वजनिक क्लाउड के साथ काम करते हैं — संप्रभुता डिफ़ॉल्ट रूप से आपकी।",
+      "how.eyebrow":"यह कैसे काम करता है","how.title":"एक सवाल, चार कदम।",
+      "how.1t":"आप Claude Code में पूछते हैं","how.1b":"हमेशा की तरह कोड लिखें। जब कोई वेंडर-विशिष्ट सवाल आए, Claude Code आपके संपर्कों में से सही peer Agent चुन लेता है।",
+      "how.2t":"Agents A2A पर विचार-विमर्श करते हैं","how.2b":"आपका Agent वेंडर के Agent को हस्ताक्षरित अनुरोध (RFC 9421) भेजता है, जिसकी पहचान उसके did:web से होती है। न API कुंजियों की अदला-बदली, न दस्तावेज़ पढ़ना।",
+      "how.3t":"संदर्भ-सहित जवाब लौटता है","how.3b":"वेंडर का Agent अपने ज्ञान से जवाब देता है, संदर्भों के साथ — सत्यापन योग्य और स्रोत-सहित, मूल भाषा में।",
+      "how.4t":"यह प्रोजेक्ट मेमोरी में दर्ज हो जाता है","how.4b":"सत्यापित तथ्य <code>.claude/peers/{vendor}/facts.md</code> में लिखा जाता है, git से कमिट होता है, और अगली बार अपने-आप इस्तेमाल होता है।",
+      "start.eyebrow":"जल्दी शुरू करें","start.title":"दो कमांड, और नेटवर्क चालू।",
+      "start.1tag":"स्वयं-होस्ट","start.1t":"खुद चलाएँ","start.1b":"आपको Docker चाहिए, और npx के लिए Node 18+। यह प्रकाशित इमेज खींचता है, इस इंस्टेंस के अपने सीक्रेट बनाता है, माइग्रेशन चलाता है, और तब तक इंतज़ार करता है जब तक इंटरफ़ेस सचमुच जवाब न देने लगे।",
+      "start.2tag":"Claude Code","start.2t":"Claude Code से पूछें","start.2b":"जिस भी gateway पर आपका खाता है, उसके लिए confer-a2a प्लगइन इंस्टॉल करें। हस्ताक्षर कुंजी कभी gateway से बाहर नहीं जाती।",
+      "foot.tag":"आपका AI किसी के भी AI से विचार-विमर्श करता है। आपकी ओर से बोलने वाले Agents के लिए एक खुला प्रोटोकॉल।",
+      "foot.docs":"दस्तावेज़","foot.project":"प्रोजेक्ट","foot.plugin":"Claude Code प्लगइन","foot.built":"आधार: A2A · DID:web · RFC 9421 · NANDA"
+    },
+    es: {
+      "nav.lang":"Idioma","nav.how":"Cómo funciona","nav.start":"Inicio rápido","nav.docs":"Documentos",
+      "hero.eyebrow":"Un protocolo abierto entre agentes",
+      "hero.title":"Tu IA delibera,<br>con la de <em>cualquiera</em>.",
+      "hero.lede":"Cada persona ejecuta su propio Agente, con su propio conocimiento. La gente habla a través de sus Agentes. Ninguna de las dos partes lee la documentación de la otra.",
+      "hero.cta1":"Empezar","hero.cta2":"Ver en GitHub",
+      "hero.demo":"Solo protocolos abiertos — <b>A2A · DID:web · RFC 9421 · NANDA AgentFacts</b>. Sin dependencia de plataforma.",
+      "motif.ask":"«¿Cómo leo la temperatura del X100 por Modbus?»",
+      "motif.reply":"«Registro 0x0064, FC 04, ÷10 para °C.»",
+      "why.eyebrow":"Por qué Confer","why.title":"Integrar no debería significar leer mil páginas.",
+      "why.painLabel":"El problema","why.painBody":"Integrar hardware o SDK de terceros obliga a atravesar miles de páginas de documentación. El soporte del proveedor es lento y caro. Las herramientas de IA para programar se equivocan sin conocimiento específico del fabricante.",
+      "why.solLabel":"La solución","why.solBody":"Los proveedores empaquetan su documentación y su soporte en un Agente externo. Mientras programas con Claude Code, este consulta a ese Agente para obtener respuestas con citas — y las guarda en .claude/peers para reutilizarlas automáticamente.",
+      "feat.eyebrow":"Características","feat.title":"Una red, no un jardín amurallado.",
+      "feat.1t":"Red de Agente a Agente","feat.1b":"Construida sobre protocolos abiertos (A2A, DID:web, NANDA AgentFacts). Sin dependencia de plataforma.",
+      "feat.2t":"Plugin de Claude Code","feat.2b":"Permite a Claude Code consultar directamente a los Agentes de los proveedores mientras escribes código.",
+      "feat.3t":"Conocimiento a nivel de proyecto","feat.3b":"<span class='mono'>.claude/peers/</span> viaja con git — entre sesiones, desarrolladores y equipos.",
+      "feat.4t":"Permisos en tres niveles","feat.4b":"Inspirados en el modelo de permisos de Claude Code — seguro y controlable por diseño.",
+      "feat.5t":"Multilingüe","feat.5b":"Conversaciones entre Agentes en distintos idiomas, con las citas conservadas en su idioma original.",
+      "feat.6t":"Federado","feat.6b":"Las instancias autoalojadas interoperan con la nube pública — soberanía por defecto.",
+      "how.eyebrow":"Cómo funciona","how.title":"Una pregunta, cuatro movimientos.",
+      "how.1t":"Preguntas, en Claude Code","how.1b":"Programa como siempre. Cuando llegas a una pregunta específica del proveedor, Claude Code recurre al Agente adecuado de tus contactos.",
+      "how.2t":"Los Agentes deliberan por A2A","how.2b":"Tu Agente envía una petición firmada (RFC 9421) al Agente del proveedor, identificado por su did:web. Sin intercambio de claves de API, sin leer documentación.",
+      "how.3t":"Vuelve una respuesta con citas","how.3b":"El Agente del proveedor responde desde su propio conocimiento, con citas — verificables y atribuibles, en el idioma original.",
+      "how.4t":"Se guarda en la memoria del proyecto","how.4b":"El dato verificado se escribe en <code>.claude/peers/{vendor}/facts.md</code>, se confirma con git y se reutiliza automáticamente la próxima vez.",
+      "start.eyebrow":"Inicio rápido","start.title":"Dos comandos para una red en marcha.",
+      "start.1tag":"Autoalojado","start.1t":"Ejecútalo tú mismo","start.1b":"Necesitas Docker y Node 18+ para npx. Descarga las imágenes publicadas, genera los secretos de esta instancia, ejecuta las migraciones y espera hasta que la interfaz responda de verdad.",
+      "start.2tag":"Claude Code","start.2t":"Consulta desde Claude Code","start.2b":"Instala el plugin confer-a2a contra cualquier gateway donde tengas cuenta. La clave de firma nunca sale del gateway.",
+      "foot.tag":"Tu IA delibera, con la de cualquiera. Un protocolo abierto para Agentes que hablan en tu nombre.",
+      "foot.docs":"Documentación","foot.project":"Proyecto","foot.plugin":"Plugin de Claude Code","foot.built":"Basado en A2A · DID:web · RFC 9421 · NANDA"
+    },
+    ar: {
+      "nav.lang":"اللغة","nav.how":"كيف يعمل","nav.start":"البدء السريع","nav.docs":"الوثائق",
+      "hero.eyebrow":"بروتوكول مفتوح بين الوكلاء",
+      "hero.title":"ذكاؤك الاصطناعي يتشاور،<br>مع ذكاء <em>أي شخص</em>.",
+      "hero.lede":"كل صاحب يشغّل وكيله الخاص، حاملاً معرفته هو. يتحاور الناس عبر وكلائهم. ولا يقرأ أي طرف وثائق الطرف الآخر.",
+      "hero.cta1":"ابدأ الآن","hero.cta2":"شاهده على GitHub",
+      "hero.demo":"بروتوكولات مفتوحة فقط — <b>A2A · DID:web · RFC 9421 · NANDA AgentFacts</b>. بلا احتكار منصّة.",
+      "motif.ask":"«كيف أقرأ درجة حرارة X100 عبر Modbus؟»",
+      "motif.reply":"«السجل 0x0064، FC 04، ÷10 للحصول على °م.»",
+      "why.eyebrow":"لماذا Confer","why.title":"التكامل لا ينبغي أن يعني قراءة ألف صفحة.",
+      "why.painLabel":"المشكلة","why.painBody":"دمج عتاد أو حزم تطوير من طرف ثالث يعني الخوض في آلاف الصفحات من الوثائق. دعم المورّد بطيء ومكلف. وأدوات البرمجة بالذكاء الاصطناعي تخطئ التخمين دون معرفة خاصة بالمورّد.",
+      "why.solLabel":"الحل","why.solBody":"يحزم المورّدون وثائقهم ودعمهم داخل وكيل خارجي. وبينما تبرمج مع Claude Code، يستشير ذلك الوكيل ليحصل على إجابات موثّقة بالمصادر — ويحفظها في .claude/peers لإعادة استخدامها تلقائياً.",
+      "feat.eyebrow":"المزايا الأساسية","feat.title":"شبكة، لا حديقة مسوّرة.",
+      "feat.1t":"شبكة من وكيل إلى وكيل","feat.1b":"مبنية على بروتوكولات مفتوحة (A2A، DID:web، NANDA AgentFacts). بلا احتكار منصّة.",
+      "feat.2t":"إضافة Claude Code","feat.2b":"تتيح لـ Claude Code استشارة وكلاء المورّدين مباشرة وأنت تكتب الشيفرة.",
+      "feat.3t":"معرفة على مستوى المشروع","feat.3b":"<span class='mono'>.claude/peers/</span> ينتقل مع git — عبر الجلسات والمطوّرين والأجهزة.",
+      "feat.4t":"أذونات من ثلاث طبقات","feat.4b":"مستوحاة من نموذج أذونات Claude Code — آمنة وقابلة للتحكم بحكم التصميم.",
+      "feat.5t":"متعدد اللغات","feat.5b":"حوارات بين الوكلاء عبر اللغات، مع الحفاظ على الاقتباسات بلغتها الأصلية.",
+      "feat.6t":"اتحادي","feat.6b":"النسخ المستضافة ذاتياً تتخاطب مع السحابة العامة — السيادة لك افتراضياً.",
+      "how.eyebrow":"كيف يعمل","how.title":"سؤال واحد، أربع خطوات.",
+      "how.1t":"تسأل، داخل Claude Code","how.1b":"اكتب الشيفرة كالمعتاد. وعند سؤال خاص بمورّد بعينه، يلجأ Claude Code إلى الوكيل المناسب في جهات اتصالك.",
+      "how.2t":"يتشاور الوكيلان عبر A2A","how.2b":"يرسل وكيلك طلباً موقّعاً (RFC 9421) إلى وكيل المورّد، المعرَّف بـ did:web. لا تبادل لمفاتيح API، ولا قراءة للوثائق.",
+      "how.3t":"تعود إجابة موثّقة بالمصادر","how.3b":"يجيب وكيل المورّد من معرفته هو، مع الاقتباسات — قابلة للتحقق ومنسوبة لمصدرها، وباللغة الأصلية.",
+      "how.4t":"تُحفظ في ذاكرة المشروع","how.4b":"تُكتب الحقيقة المتحقَّق منها في <code>.claude/peers/{vendor}/facts.md</code>، وتُودَع في git، ويُعاد استخدامها تلقائياً في المرة القادمة.",
+      "start.eyebrow":"البدء السريع","start.title":"أمران اثنان، وتصبح الشبكة تعمل.",
+      "start.1tag":"استضافة ذاتية","start.1t":"شغّله بنفسك","start.1b":"تحتاج إلى Docker، وإلى Node 18 أو أحدث لتشغيل npx. يسحب الصور المنشورة، ويولّد أسرار هذه النسخة وحدها، وينفّذ الترحيلات، وينتظر حتى تستجيب الواجهة فعلياً.",
+      "start.2tag":"Claude Code","start.2t":"استشر من Claude Code","start.2b":"ثبّت إضافة confer-a2a على أي بوابة لديك حساب عليها. ومفتاح التوقيع لا يغادر البوابة أبداً.",
+      "foot.tag":"ذكاؤك الاصطناعي يتشاور مع ذكاء أي شخص. بروتوكول مفتوح لوكلاء ينطقون باسمك.",
+      "foot.docs":"الوثائق","foot.project":"المشروع","foot.plugin":"إضافة Claude Code","foot.built":"مبني على A2A · DID:web · RFC 9421 · NANDA"
+    },
+    fr: {
+      "nav.lang":"Langue","nav.how":"Fonctionnement","nav.start":"Démarrage rapide","nav.docs":"Docs",
+      "hero.eyebrow":"Un protocole ouvert entre agents",
+      "hero.title":"Votre IA délibère,<br>avec celle de <em>n'importe qui</em>.",
+      "hero.lede":"Chacun exécute son propre Agent, porteur de son propre savoir. Les gens dialoguent par l'intermédiaire de leurs Agents. Aucune des deux parties ne lit la documentation de l'autre.",
+      "hero.cta1":"Commencer","hero.cta2":"Voir sur GitHub",
+      "hero.demo":"Uniquement des protocoles ouverts — <b>A2A · DID:web · RFC 9421 · NANDA AgentFacts</b>. Aucun verrouillage propriétaire.",
+      "motif.ask":"« Comment lire la température du X100 en Modbus ? »",
+      "motif.reply":"« Registre 0x0064, FC 04, ÷10 pour °C. »",
+      "why.eyebrow":"Pourquoi Confer","why.title":"Intégrer ne devrait pas vouloir dire lire mille pages.",
+      "why.painLabel":"Le problème","why.painBody":"Intégrer du matériel ou un SDK tiers impose de parcourir des milliers de pages de documentation. Le support éditeur est lent et coûteux. Les outils d'IA se trompent sans connaissance propre au fournisseur.",
+      "why.solLabel":"La solution","why.solBody":"Les fournisseurs empaquettent leur documentation et leur support dans un Agent exposé. Pendant que vous codez avec Claude Code, celui-ci interroge cet Agent pour obtenir des réponses sourcées — et les conserve dans .claude/peers pour les réutiliser automatiquement.",
+      "feat.eyebrow":"Fonctionnalités","feat.title":"Un réseau, pas un jardin clos.",
+      "feat.1t":"Réseau d'Agent à Agent","feat.1b":"Bâti sur des protocoles ouverts (A2A, DID:web, NANDA AgentFacts). Aucun verrouillage.",
+      "feat.2t":"Plugin Claude Code","feat.2b":"Permet à Claude Code d'interroger directement les Agents des fournisseurs pendant que vous codez.",
+      "feat.3t":"Savoir au niveau du projet","feat.3b":"<span class='mono'>.claude/peers/</span> voyage avec git — d'une session, d'un développeur et d'une machine à l'autre.",
+      "feat.4t":"Permissions à trois niveaux","feat.4b":"Inspirées du modèle de permissions de Claude Code — sûres et maîtrisables par conception.",
+      "feat.5t":"Multilingue","feat.5b":"Conversations entre Agents d'une langue à l'autre, citations conservées dans leur langue d'origine.",
+      "feat.6t":"Fédéré","feat.6b":"Les instances auto-hébergées dialoguent avec le cloud public — souveraineté par défaut.",
+      "how.eyebrow":"Fonctionnement","how.title":"Une question, quatre gestes.",
+      "how.1t":"Vous demandez, dans Claude Code","how.1b":"Codez comme d'habitude. Face à une question propre à un fournisseur, Claude Code se tourne vers le bon Agent pair dans vos contacts.",
+      "how.2t":"Les Agents délibèrent en A2A","how.2b":"Votre Agent envoie une requête signée (RFC 9421) à l'Agent du fournisseur, identifié par son did:web. Aucune clé d'API échangée, aucune documentation lue.",
+      "how.3t":"Une réponse sourcée revient","how.3b":"L'Agent du fournisseur répond depuis son propre savoir, avec ses sources — vérifiables et attribuables, dans la langue d'origine.",
+      "how.4t":"Elle se dépose dans la mémoire du projet","how.4b":"Le fait vérifié est écrit dans <code>.claude/peers/{vendor}/facts.md</code>, commité avec git, et réutilisé automatiquement la fois suivante.",
+      "start.eyebrow":"Démarrage rapide","start.title":"Deux commandes, et le réseau tourne.",
+      "start.1tag":"Auto-hébergement","start.1t":"Faites-le tourner vous-même","start.1b":"Il vous faut Docker, et Node 18+ pour npx. La commande récupère les images publiées, génère les secrets propres à cette instance, applique les migrations et attend que l'interface réponde réellement.",
+      "start.2tag":"Claude Code","start.2t":"Consulter depuis Claude Code","start.2b":"Installez le plugin confer-a2a sur n'importe quelle gateway où vous avez un compte. La clé de signature ne quitte jamais la gateway.",
+      "foot.tag":"Votre IA délibère, avec celle de n'importe qui. Un protocole ouvert pour les Agents qui parlent en votre nom.",
+      "foot.docs":"Documentation","foot.project":"Projet","foot.plugin":"Plugin Claude Code","foot.built":"Bâti sur A2A · DID:web · RFC 9421 · NANDA"
+    },
+    bn: {
+      "nav.lang":"ভাষা","nav.how":"কীভাবে কাজ করে","nav.start":"দ্রুত শুরু","nav.docs":"ডকুমেন্ট",
+      "hero.eyebrow":"এজেন্টদের মধ্যে একটি উন্মুক্ত প্রোটোকল",
+      "hero.title":"আপনার AI আলোচনা করে,<br><em>যে কারও</em> AI-এর সঙ্গে।",
+      "hero.lede":"প্রত্যেকে নিজের Agent চালান — নিজের জ্ঞান নিয়ে। মানুষ কথা বলে নিজের Agent-এর মাধ্যমে। কোনো পক্ষকেই অন্যের ডকুমেন্ট পড়তে হয় না।",
+      "hero.cta1":"শুরু করুন","hero.cta2":"GitHub-এ দেখুন",
+      "hero.demo":"কেবল উন্মুক্ত প্রোটোকল — <b>A2A · DID:web · RFC 9421 · NANDA AgentFacts</b>। কোনো প্ল্যাটফর্ম লক-ইন নেই।",
+      "motif.ask":"“X100-এর তাপমাত্রা Modbus দিয়ে কীভাবে পড়ব?”",
+      "motif.reply":"“রেজিস্টার 0x0064, FC 04, °C-এর জন্য ÷10।”",
+      "why.eyebrow":"কেন Confer","why.title":"ইন্টিগ্রেশন মানে হাজার পাতা পড়া হওয়া উচিত নয়।",
+      "why.painLabel":"সমস্যা","why.painBody":"তৃতীয় পক্ষের হার্ডওয়্যার বা SDK যুক্ত করতে হাজার হাজার পাতা ডকুমেন্ট ঘাঁটতে হয়। ভেন্ডর সাপোর্ট ধীর ও ব্যয়বহুল। ভেন্ডর-নির্দিষ্ট জ্ঞান ছাড়া AI কোডিং টুল ভুল অনুমান করে।",
+      "why.solLabel":"সমাধান","why.solBody":"ভেন্ডররা নিজেদের ডকুমেন্ট আর সাপোর্ট একটি বাইরের Agent-এ প্যাক করে। আপনি Claude Code দিয়ে কোড লেখার সময় সেটি ওই Agent-কে জিজ্ঞেস করে উদ্ধৃতিসহ উত্তর আনে — এবং .claude/peers-এ রেখে দেয় যাতে পরেরবার আপনা-আপনি কাজে লাগে।",
+      "feat.eyebrow":"মূল বৈশিষ্ট্য","feat.title":"একটি নেটওয়ার্ক, প্রাচীরঘেরা বাগান নয়।",
+      "feat.1t":"Agent-to-Agent নেটওয়ার্ক","feat.1b":"উন্মুক্ত প্রোটোকলের উপর গড়া (A2A, DID:web, NANDA AgentFacts)। কোনো লক-ইন নেই।",
+      "feat.2t":"Claude Code প্লাগইন","feat.2b":"কোড লেখার সময়েই Claude Code-কে সরাসরি ভেন্ডর Agent-এর কাছে জিজ্ঞেস করতে দেয়।",
+      "feat.3t":"প্রকল্প-স্তরের জ্ঞান","feat.3b":"<span class='mono'>.claude/peers/</span> git-এর সঙ্গে চলে — সেশন, ডেভেলপার ও যন্ত্র পেরিয়ে।",
+      "feat.4t":"তিন স্তরের অনুমতি","feat.4b":"Claude Code-এর অনুমতি মডেল থেকে অনুপ্রাণিত — নকশাতেই নিরাপদ ও নিয়ন্ত্রণযোগ্য।",
+      "feat.5t":"বহুভাষিক","feat.5b":"Agent-দের মধ্যে ভিন্ন ভাষায় কথোপকথন, উদ্ধৃতি মূল ভাষাতেই সংরক্ষিত।",
+      "feat.6t":"ফেডারেটেড","feat.6b":"নিজে-হোস্ট করা ইনস্ট্যান্স পাবলিক ক্লাউডের সঙ্গে কাজ করে — সার্বভৌমত্ব ডিফল্টেই আপনার।",
+      "how.eyebrow":"কীভাবে কাজ করে","how.title":"একটি প্রশ্ন, চারটি ধাপ।",
+      "how.1t":"আপনি Claude Code-এ জিজ্ঞেস করেন","how.1b":"স্বাভাবিকভাবেই কোড লিখুন। ভেন্ডর-নির্দিষ্ট প্রশ্ন এলে Claude Code আপনার পরিচিতি থেকে সঠিক peer Agent বেছে নেয়।",
+      "how.2t":"Agent-রা A2A-তে আলোচনা করে","how.2b":"আপনার Agent ভেন্ডরের Agent-কে স্বাক্ষরিত অনুরোধ (RFC 9421) পাঠায়, যার পরিচয় তার did:web। কোনো API key বিনিময় নেই, কোনো ডকুমেন্ট পড়া নেই।",
+      "how.3t":"উদ্ধৃতিসহ উত্তর ফেরে","how.3b":"ভেন্ডরের Agent নিজের জ্ঞান থেকে উদ্ধৃতিসহ উত্তর দেয় — যাচাইযোগ্য ও উৎস-নির্দেশিত, মূল ভাষায়।",
+      "how.4t":"প্রকল্প স্মৃতিতে জমা হয়","how.4b":"যাচাই করা তথ্য <code>.claude/peers/{vendor}/facts.md</code>-এ লেখা হয়, git-এ কমিট হয়, পরেরবার আপনা-আপনি ব্যবহৃত হয়।",
+      "start.eyebrow":"দ্রুত শুরু","start.title":"দুটি কমান্ডেই চালু নেটওয়ার্ক।",
+      "start.1tag":"নিজে হোস্ট করুন","start.1t":"নিজেই চালান","start.1b":"লাগবে Docker, আর npx চালানোর জন্য Node 18+। এটি প্রকাশিত ইমেজ নামায়, এই ইনস্ট্যান্সের নিজস্ব সিক্রেট তৈরি করে, মাইগ্রেশন চালায়, এবং ইন্টারফেস সত্যিই সাড়া না দেওয়া পর্যন্ত অপেক্ষা করে।",
+      "start.2tag":"Claude Code","start.2t":"Claude Code থেকে জিজ্ঞেস করুন","start.2b":"যে gateway-তে আপনার অ্যাকাউন্ট আছে তার জন্য confer-a2a প্লাগইন ইনস্টল করুন। স্বাক্ষর কী কখনোই gateway ছেড়ে যায় না।",
+      "foot.tag":"আপনার AI যে কারও AI-এর সঙ্গে আলোচনা করে। আপনার হয়ে কথা বলা Agent-দের জন্য একটি উন্মুক্ত প্রোটোকল।",
+      "foot.docs":"ডকুমেন্টেশন","foot.project":"প্রকল্প","foot.plugin":"Claude Code প্লাগইন","foot.built":"ভিত্তি: A2A · DID:web · RFC 9421 · NANDA"
+    },
+    pt: {
+      "nav.lang":"Idioma","nav.how":"Como funciona","nav.start":"Início rápido","nav.docs":"Documentos",
+      "hero.eyebrow":"Um protocolo aberto entre agentes",
+      "hero.title":"Sua IA conversa,<br>com a de <em>qualquer um</em>.",
+      "hero.lede":"Cada pessoa roda o próprio Agente, com o próprio conhecimento. As pessoas conversam por meio dos seus Agentes. Nenhum dos lados lê a documentação do outro.",
+      "hero.cta1":"Começar","hero.cta2":"Ver no GitHub",
+      "hero.demo":"Somente protocolos abertos — <b>A2A · DID:web · RFC 9421 · NANDA AgentFacts</b>. Sem aprisionamento de plataforma.",
+      "motif.ask":"“Como leio a temperatura do X100 por Modbus?”",
+      "motif.reply":"“Registrador 0x0064, FC 04, ÷10 para °C.”",
+      "why.eyebrow":"Por que o Confer","why.title":"Integrar não deveria significar ler mil páginas.",
+      "why.painLabel":"A dor","why.painBody":"Integrar hardware ou SDKs de terceiros exige atravessar milhares de páginas de documentação. O suporte do fornecedor é lento e caro. Ferramentas de IA erram sem conhecimento específico do fabricante.",
+      "why.solLabel":"A solução","why.solBody":"Fornecedores empacotam documentação e suporte em um Agente externo. Enquanto você programa com o Claude Code, ele consulta esse Agente para obter respostas com citações — e as grava em .claude/peers para reutilização automática.",
+      "feat.eyebrow":"Recursos principais","feat.title":"Uma rede, não um jardim murado.",
+      "feat.1t":"Rede de Agente para Agente","feat.1b":"Construída sobre protocolos abertos (A2A, DID:web, NANDA AgentFacts). Sem aprisionamento.",
+      "feat.2t":"Plugin do Claude Code","feat.2b":"Permite que o Claude Code consulte Agentes de fornecedores diretamente enquanto você escreve código.",
+      "feat.3t":"Conhecimento no nível do projeto","feat.3b":"<span class='mono'>.claude/peers/</span> viaja com o git — entre sessões, desenvolvedores e máquinas.",
+      "feat.4t":"Permissões em três níveis","feat.4b":"Inspiradas no modelo de permissões do Claude Code — seguras e controláveis por design.",
+      "feat.5t":"Multilíngue","feat.5b":"Conversas entre Agentes em idiomas diferentes, com as citações preservadas no idioma original.",
+      "feat.6t":"Federado","feat.6b":"Instâncias auto-hospedadas interoperam com a nuvem pública — soberania por padrão.",
+      "how.eyebrow":"Como funciona","how.title":"Uma pergunta, quatro movimentos.",
+      "how.1t":"Você pergunta, no Claude Code","how.1b":"Programe como sempre. Quando surge uma pergunta específica do fornecedor, o Claude Code recorre ao Agente certo nos seus contatos.",
+      "how.2t":"Os Agentes conversam por A2A","how.2b":"Seu Agente envia uma requisição assinada (RFC 9421) ao Agente do fornecedor, identificado pelo did:web dele. Sem troca de chaves de API, sem leitura de documentação.",
+      "how.3t":"Volta uma resposta com citações","how.3b":"O Agente do fornecedor responde a partir do próprio conhecimento, com citações — verificáveis e atribuíveis, no idioma original.",
+      "how.4t":"Fica na memória do projeto","how.4b":"O fato verificado é gravado em <code>.claude/peers/{vendor}/facts.md</code>, commitado com git e reutilizado automaticamente da próxima vez.",
+      "start.eyebrow":"Início rápido","start.title":"Dois comandos até uma rede no ar.",
+      "start.1tag":"Auto-hospedagem","start.1t":"Rode você mesmo","start.1b":"Você precisa do Docker e do Node 18+ para o npx. Ele baixa as imagens publicadas, gera os segredos desta instância, roda as migrações e espera até a interface realmente responder.",
+      "start.2tag":"Claude Code","start.2t":"Consulte pelo Claude Code","start.2b":"Instale o plugin confer-a2a contra qualquer gateway em que você tenha conta. A chave de assinatura nunca sai do gateway.",
+      "foot.tag":"Sua IA conversa, com a de qualquer um. Um protocolo aberto para Agentes que falam em seu nome.",
+      "foot.docs":"Documentação","foot.project":"Projeto","foot.plugin":"Plugin do Claude Code","foot.built":"Construído sobre A2A · DID:web · RFC 9421 · NANDA"
+    },
+    ru: {
+      "nav.lang":"Язык","nav.how":"Как это работает","nav.start":"Быстрый старт","nav.docs":"Документы",
+      "hero.eyebrow":"Открытый протокол между агентами",
+      "hero.title":"Ваш ИИ договаривается<br>с ИИ <em>кого угодно</em>.",
+      "hero.lede":"У каждого владельца свой Агент со своими знаниями. Люди общаются через своих Агентов. Ни одной стороне не нужно читать документацию другой.",
+      "hero.cta1":"Начать","hero.cta2":"Открыть на GitHub",
+      "hero.demo":"Только открытые протоколы — <b>A2A · DID:web · RFC 9421 · NANDA AgentFacts</b>. Без привязки к платформе.",
+      "motif.ask":"«Как прочитать температуру X100 по Modbus?»",
+      "motif.reply":"«Регистр 0x0064, FC 04, ÷10 для °C.»",
+      "why.eyebrow":"Зачем нужен Confer","why.title":"Интеграция не должна означать чтение тысячи страниц.",
+      "why.painLabel":"Проблема","why.painBody":"Интеграция стороннего оборудования или SDK — это тысячи страниц документации. Поддержка вендора медленная и дорогая. ИИ-инструменты для кода ошибаются без знаний, специфичных для производителя.",
+      "why.solLabel":"Решение","why.solBody":"Вендор упаковывает свою документацию и поддержку во внешнего Агента. Пока вы пишете код в Claude Code, он спрашивает этого Агента и получает ответы со ссылками — и сохраняет их в .claude/peers для автоматического повторного использования.",
+      "feat.eyebrow":"Ключевые возможности","feat.title":"Сеть, а не огороженный сад.",
+      "feat.1t":"Сеть агент-агент","feat.1b":"Построена на открытых протоколах (A2A, DID:web, NANDA AgentFacts). Без привязки к платформе.",
+      "feat.2t":"Плагин Claude Code","feat.2b":"Позволяет Claude Code напрямую спрашивать Агентов вендоров прямо во время написания кода.",
+      "feat.3t":"Знания на уровне проекта","feat.3b":"<span class='mono'>.claude/peers/</span> ездит вместе с git — между сессиями, разработчиками и машинами.",
+      "feat.4t":"Трёхуровневые разрешения","feat.4b":"По образцу модели разрешений Claude Code — безопасно и управляемо по построению.",
+      "feat.5t":"Многоязычность","feat.5b":"Разговоры Агентов на разных языках, цитаты сохраняются на языке оригинала.",
+      "feat.6t":"Федеративность","feat.6b":"Собственные инсталляции работают вместе с публичным облаком — суверенитет по умолчанию.",
+      "how.eyebrow":"Как это работает","how.title":"Один вопрос, четыре шага.",
+      "how.1t":"Вы спрашиваете в Claude Code","how.1b":"Пишете код как обычно. Дойдя до вопроса, специфичного для вендора, Claude Code обращается к нужному Агенту из ваших контактов.",
+      "how.2t":"Агенты договариваются по A2A","how.2b":"Ваш Агент отправляет подписанный запрос (RFC 9421) Агенту вендора, опознаваемому по его did:web. Никакого обмена API-ключами, никакого чтения документации.",
+      "how.3t":"Возвращается ответ со ссылками","how.3b":"Агент вендора отвечает из собственных знаний, со ссылками — проверяемо и с указанием источника, на языке оригинала.",
+      "how.4t":"Оседает в памяти проекта","how.4b":"Проверенный факт записывается в <code>.claude/peers/{vendor}/facts.md</code>, коммитится в git и в следующий раз используется автоматически.",
+      "start.eyebrow":"Быстрый старт","start.title":"Две команды — и сеть работает.",
+      "start.1tag":"Своя инсталляция","start.1t":"Запустите у себя","start.1b":"Нужны Docker и Node 18+ для npx. Команда скачивает опубликованные образы, генерирует секреты именно этой инсталляции, применяет миграции и ждёт, пока интерфейс действительно ответит.",
+      "start.2tag":"Claude Code","start.2t":"Спрашивать из Claude Code","start.2b":"Установите плагин confer-a2a для любого gateway, где у вас есть аккаунт. Ключ подписи никогда не покидает gateway.",
+      "foot.tag":"Ваш ИИ договаривается с ИИ кого угодно. Открытый протокол для Агентов, говорящих от вашего имени.",
+      "foot.docs":"Документация","foot.project":"Проект","foot.plugin":"Плагин Claude Code","foot.built":"На основе A2A · DID:web · RFC 9421 · NANDA"
+    },
+    ur: {
+      "nav.lang":"زبان","nav.how":"یہ کیسے کام کرتا ہے","nav.start":"فوری آغاز","nav.docs":"دستاویزات",
+      "hero.eyebrow":"ایجنٹوں کے درمیان ایک کھلا پروٹوکول",
+      "hero.title":"آپ کا AI مشورہ کرتا ہے،<br><em>کسی کے بھی</em> AI سے۔",
+      "hero.lede":"ہر مالک اپنا Agent چلاتا ہے — اپنے ہی علم کے ساتھ۔ لوگ اپنے Agents کے ذریعے بات کرتے ہیں۔ کسی فریق کو دوسرے کی دستاویزات پڑھنے کی ضرورت نہیں۔",
+      "hero.cta1":"شروع کریں","hero.cta2":"GitHub پر دیکھیں",
+      "hero.demo":"صرف کھلے پروٹوکول — <b>A2A · DID:web · RFC 9421 · NANDA AgentFacts</b>۔ کوئی پلیٹ فارم لاک اِن نہیں۔",
+      "motif.ask":"”X100 کا درجہ حرارت Modbus پر کیسے پڑھیں؟“",
+      "motif.reply":"”رجسٹر 0x0064، FC 04، °C کے لیے ÷10۔“",
+      "why.eyebrow":"Confer کیوں","why.title":"انضمام کا مطلب ہزار صفحے پڑھنا نہیں ہونا چاہیے۔",
+      "why.painLabel":"مسئلہ","why.painBody":"کسی تیسرے فریق کے ہارڈویئر یا SDK کو جوڑنے کے لیے ہزاروں صفحات کی دستاویزات کھنگالنی پڑتی ہیں۔ وینڈر سپورٹ سست اور مہنگی ہے۔ وینڈر سے متعلق مخصوص علم کے بغیر AI کوڈنگ ٹولز غلط اندازے لگاتے ہیں۔",
+      "why.solLabel":"حل","why.solBody":"وینڈر اپنی دستاویزات اور سپورٹ کو ایک بیرونی Agent میں سمو دیتے ہیں۔ جب آپ Claude Code کے ساتھ کوڈ لکھتے ہیں، وہ اسی Agent سے پوچھ کر حوالہ جات کے ساتھ جواب لاتا ہے — اور انہیں .claude/peers میں محفوظ کر دیتا ہے تاکہ اگلی بار خودبخود کام آئیں۔",
+      "feat.eyebrow":"بنیادی خصوصیات","feat.title":"ایک نیٹ ورک، دیوار میں گھرا باغ نہیں۔",
+      "feat.1t":"Agent-to-Agent نیٹ ورک","feat.1b":"کھلے پروٹوکولز پر بنا (A2A، DID:web، NANDA AgentFacts)۔ کوئی لاک اِن نہیں۔",
+      "feat.2t":"Claude Code پلگ ان","feat.2b":"کوڈ لکھتے ہوئے Claude Code کو براہِ راست وینڈر Agents سے پوچھنے دیتا ہے۔",
+      "feat.3t":"پروجیکٹ سطح کا علم","feat.3b":"<span class='mono'>.claude/peers/</span> git کے ساتھ سفر کرتا ہے — سیشنز، ڈویلپرز اور مشینوں کے آر پار۔",
+      "feat.4t":"تین درجاتی اجازتیں","feat.4b":"Claude Code کے اجازتی ماڈل سے متاثر — بناوٹ ہی سے محفوظ اور قابلِ کنٹرول۔",
+      "feat.5t":"کثیر لسانی","feat.5b":"Agents کے درمیان مختلف زبانوں میں گفتگو، حوالہ جات اصل زبان میں محفوظ۔",
+      "feat.6t":"وفاقی","feat.6b":"خود میزبان انسٹینس عوامی کلاؤڈ کے ساتھ کام کرتے ہیں — خودمختاری بطورِ ڈیفالٹ آپ کی۔",
+      "how.eyebrow":"یہ کیسے کام کرتا ہے","how.title":"ایک سوال، چار قدم۔",
+      "how.1t":"آپ Claude Code میں پوچھتے ہیں","how.1b":"معمول کے مطابق کوڈ لکھیں۔ جب کوئی وینڈر سے متعلق مخصوص سوال آئے، Claude Code آپ کے رابطوں میں سے درست peer Agent چن لیتا ہے۔",
+      "how.2t":"Agents A2A پر مشورہ کرتے ہیں","how.2b":"آپ کا Agent وینڈر کے Agent کو دستخط شدہ درخواست (RFC 9421) بھیجتا ہے، جس کی شناخت اس کے did:web سے ہوتی ہے۔ نہ API کیز کا تبادلہ، نہ دستاویزات پڑھنا۔",
+      "how.3t":"حوالہ جات کے ساتھ جواب واپس آتا ہے","how.3b":"وینڈر کا Agent اپنے علم سے حوالہ جات کے ساتھ جواب دیتا ہے — قابلِ تصدیق اور ماخذ سمیت، اصل زبان میں۔",
+      "how.4t":"یہ پروجیکٹ میموری میں محفوظ ہو جاتا ہے","how.4b":"تصدیق شدہ حقیقت <code>.claude/peers/{vendor}/facts.md</code> میں لکھی جاتی ہے، git سے کمٹ ہوتی ہے، اور اگلی بار خودبخود استعمال ہوتی ہے۔",
+      "start.eyebrow":"فوری آغاز","start.title":"دو کمانڈز، اور نیٹ ورک چالو۔",
+      "start.1tag":"خود میزبانی","start.1t":"خود چلائیں","start.1b":"آپ کو Docker چاہیے، اور npx کے لیے Node 18+۔ یہ شائع شدہ امیجز کھینچتا ہے، اسی انسٹینس کے اپنے سیکرٹس بناتا ہے، مائیگریشنز چلاتا ہے، اور اُس وقت تک انتظار کرتا ہے جب تک انٹرفیس واقعی جواب نہ دینے لگے۔",
+      "start.2tag":"Claude Code","start.2t":"Claude Code سے پوچھیں","start.2b":"جس بھی gateway پر آپ کا اکاؤنٹ ہے، اس کے لیے confer-a2a پلگ ان انسٹال کریں۔ دستخطی کلید کبھی gateway سے باہر نہیں جاتی۔",
+      "foot.tag":"آپ کا AI کسی کے بھی AI سے مشورہ کرتا ہے۔ آپ کی طرف سے بولنے والے Agents کے لیے ایک کھلا پروٹوکول۔",
+      "foot.docs":"دستاویزات","foot.project":"پروجیکٹ","foot.plugin":"Claude Code پلگ ان","foot.built":"بنیاد: A2A · DID:web · RFC 9421 · NANDA"
+    },
     ja: {
-      "nav.how":"仕組み","nav.start":"クイックスタート","nav.docs":"ドキュメント",
+      "nav.lang":"言語","nav.how":"仕組み","nav.start":"クイックスタート","nav.docs":"ドキュメント",
       "hero.eyebrow":"オープンな Agent 間プロトコル",
       "hero.title":"あなたの AI が、<br><em>誰とでも</em>会議する。",
       "hero.lede":"各オーナーが自分の Agent を運用し、自分の知識を持たせる。人は自分の Agent を通じて対話する。どちらも相手のドキュメントを読む必要はない。",
@@ -462,22 +723,72 @@
       "foot.docs":"ドキュメント","foot.project":"プロジェクト","foot.plugin":"Claude Code プラグイン","foot.built":"A2A · DID:web · RFC 9421 · NANDA ベース"
     }
   };
-  const LANGS = ["en","zh","ja"];
+  // Presentation per language: the name it calls itself (identical in every
+  // dictionary on purpose — someone who cannot read the page as it stands has to
+  // find their own line), the one or two characters the closed switcher shows,
+  // the BCP-47 tag for `lang`, and the writing direction. Ordered by total
+  // speakers, matching SUPPORTED_LANGUAGES in the app and _data/i18n.yml.
+  const META = {
+    en:{label:"English",  short:"EN", tag:"en",    rtl:false},
+    zh:{label:"简体中文",  short:"中", tag:"zh-CN", rtl:false},
+    hi:{label:"हिन्दी",     short:"हि", tag:"hi",    rtl:false},
+    es:{label:"Español",  short:"ES", tag:"es",    rtl:false},
+    ar:{label:"العربية",   short:"ع",  tag:"ar",    rtl:true },
+    fr:{label:"Français", short:"FR", tag:"fr",    rtl:false},
+    bn:{label:"বাংলা",     short:"বা", tag:"bn",    rtl:false},
+    pt:{label:"Português",short:"PT", tag:"pt",    rtl:false},
+    ru:{label:"Русский",  short:"РУ", tag:"ru",    rtl:false},
+    ur:{label:"اردو",      short:"اُر", tag:"ur",    rtl:true },
+    ja:{label:"日本語",    short:"あ", tag:"ja",    rtl:false}
+  };
+  const LANGS = Object.keys(META);
   // Keys whose values contain markup. Values are author-controlled (this dictionary),
   // never user input, so innerHTML here carries no XSS risk.
   const HTML_KEYS = new Set(["hero.title","hero.demo","feat.3b","how.4b"]);
+
+  const details = document.querySelector(".lang");
+  const summary = details.querySelector("summary");
+  const menu = details.querySelector(".lang-menu");
+  const cur = details.querySelector(".cur");
+  // Built from META rather than written in the markup, so the menu cannot list a
+  // language the page has no dictionary for, or omit one it does.
+  for(const l of LANGS){
+    const b=document.createElement("button");
+    b.type="button"; b.dataset.lang=l; b.lang=META[l].tag; b.textContent=META[l].label;
+    b.addEventListener("click",()=>{
+      details.open=false;
+      if(LANGS.includes(location.hash.replace("#",""))) location.hash=l;
+      applyLang(l);
+    });
+    menu.appendChild(b);
+  }
+  // `details` has no dismiss behaviour of its own — without this it stays open
+  // over the hero until the summary is clicked again.
+  document.addEventListener("click",e=>{ if(!details.contains(e.target)) details.open=false });
+  document.addEventListener("keydown",e=>{ if(e.key==="Escape") details.open=false });
+
   function applyLang(lang){
     if(!LANGS.includes(lang)) lang="en";
     const dict = I18N[lang];
-    document.documentElement.lang = (lang==="zh"?"zh-CN":lang);
+    document.documentElement.lang = META[lang].tag;
+    // Every positional rule on this page is written in logical properties, so
+    // setting `dir` is the whole of the right-to-left layout.
+    document.documentElement.dir = META[lang].rtl ? "rtl" : "ltr";
     document.querySelectorAll("[data-i18n],[data-i18n-html]").forEach(el=>{
       const k = el.getAttribute("data-i18n-html") || el.getAttribute("data-i18n");
       if(dict[k]==null) return;
       if(el.hasAttribute("data-i18n-html") || HTML_KEYS.has(k)) el.innerHTML=dict[k];
       else el.textContent=dict[k];
     });
-    document.querySelectorAll(".lang button").forEach(b=>b.classList.toggle("on", b.dataset.lang===lang));
-    // Route design-doc links to the chosen language: zh lives at the root, en/ja in subdirs.
+    cur.textContent = META[lang].short;
+    // The name was a fixed English "Language", so a screen reader announced the
+    // control that way in all eleven — and never said which language was
+    // selected. `nav.lang` is the only key with no element in the markup; it
+    // exists for this attribute.
+    summary.setAttribute("aria-label", dict["nav.lang"] + ": " + META[lang].label);
+    menu.querySelectorAll("button").forEach(b=>b.classList.toggle("on", b.dataset.lang===lang));
+    // Route design-doc links to the chosen language: zh lives at the root, every
+    // other language in a directory named for it.
     const docPrefix = lang==="zh" ? "" : lang+"/";
     document.querySelectorAll("[data-doc]").forEach(a=>{ a.setAttribute("href", docPrefix + a.getAttribute("data-doc")); });
     try{localStorage.setItem("confer-lang",lang)}catch(e){}
@@ -486,12 +797,11 @@
     const h=(location.hash||"").replace("#","").toLowerCase();
     if(LANGS.includes(h)) return h;
     try{const s=localStorage.getItem("confer-lang"); if(LANGS.includes(s)) return s}catch(e){}
-    const n=(navigator.language||"en").toLowerCase();
-    if(n.startsWith("zh")) return "zh"; if(n.startsWith("ja")) return "ja"; return "en";
+    // navigator.language always carries a region (`pt-BR`, `zh-CN`); match on the
+    // base tag or every genuine visitor falls through to English.
+    const n=(navigator.language||"en").toLowerCase().split("-")[0];
+    return LANGS.includes(n) ? n : "en";
   }
-  document.querySelectorAll(".lang button").forEach(b=>{
-    b.addEventListener("click",()=>{const l=b.dataset.lang; if(LANGS.includes(location.hash.replace("#",""))) location.hash=l; applyLang(l)});
-  });
   window.addEventListener("hashchange",()=>{const h=location.hash.replace("#","").toLowerCase(); if(LANGS.includes(h)) applyLang(h)});
   applyLang(pick());
 </script>
