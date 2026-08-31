@@ -11,9 +11,29 @@
   --sage: #93b29c;
   --line: rgba(243, 236, 224, 0.11);
   --line-2: rgba(243, 236, 224, 0.06);
-  --display: "Fraunces", Georgia, serif;
-  --body: "Newsreader", Georgia, serif;
-  --mono: "IBM Plex Mono", ui-monospace, monospace;
+  /* CJK is never in a webfont here — one weight of a CJK face is several
+   * megabytes. It comes from the reader's system, and which system face is
+   * right depends on the language: Han unification means a Japanese page set
+   * in a Chinese face shows Chinese glyph forms for characters the two write
+   * differently (直, 骨, 話). The layout already emits <html lang>, so the
+   * default below is the Simplified Chinese set — the language of the canonical
+   * docs — and only Japanese needs to override it. Anything not listed
+   * (Cyrillic, Devanagari, Arabic, Bengali) resolves through the generic
+   * `serif` / `monospace` at the end of each stack.
+   */
+  --cjk: "Songti SC", "Noto Serif CJK SC", "SimSun";
+  --display: "Fraunces", Georgia, var(--cjk), serif;
+  --body: "Newsreader", Georgia, var(--cjk), serif;
+  /* JetBrains Mono carries the box-drawing block the ASCII diagrams are made
+   * of; see the note in fonts.css for why IBM Plex Mono could not. The
+   * fallbacks are ordered so that a font which also has box drawing is reached
+   * before the generic — a diagram is only readable if every character in it
+   * comes from the same font. */
+  --mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas,
+    "DejaVu Sans Mono", monospace;
+}
+html[lang^="ja"] {
+  --cjk: "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP";
 }
 * {
   box-sizing: border-box;

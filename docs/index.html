@@ -5,18 +5,27 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Confer — Your AI confers, with anyone's.</title>
 <meta name="description" content="A protocol and platform for AI Agents to communicate on behalf of their owners. Built on open standards: A2A, DID:web, RFC 9421, NANDA AgentFacts." />
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600&family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,500;1,6..72,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<!-- Fonts are served from this origin. They used to come from
+     fonts.googleapis.com as a render-blocking stylesheet, which hangs rather
+     than fails in mainland China — this page, the first thing a visitor sees,
+     stayed blank until the request timed out and then rendered unstyled. -->
+<link rel="stylesheet" href="assets/fonts.css" />
 <style>
   :root{
     --ink:#100e0c; --ink-2:#171411; --ink-3:#201b16;
     --paper:#f3ece0; --paper-dim:#a99c89; --paper-faint:#6f6557;
     --amber:#e6a23c; --amber-soft:#f3c982; --sage:#93b29c;
     --line:rgba(243,236,224,.11); --line-2:rgba(243,236,224,.06);
-    --display:"Fraunces",Georgia,serif; --body:"Newsreader",Georgia,serif; --mono:"IBM Plex Mono",ui-monospace,monospace;
+    /* --cjk: see assets/style.css — CJK never ships as a webfont, and which
+       system face is correct depends on the page language (Han unification). */
+    --cjk:"Songti SC","Noto Serif CJK SC","SimSun";
+    --display:"Fraunces",Georgia,var(--cjk),serif; --body:"Newsreader",Georgia,var(--cjk),serif;
+    --mono:"JetBrains Mono",ui-monospace,"Cascadia Mono",Consolas,"DejaVu Sans Mono",monospace;
     --maxw:1180px;
   }
+  /* The switcher rewrites documentElement.lang, so this re-resolves on switch.
+     Only Japanese overrides: the :root default above is the Chinese set. */
+  html[lang^="ja"]{--cjk:"Hiragino Mincho ProN","Yu Mincho","Noto Serif JP"}
   *{box-sizing:border-box;margin:0;padding:0}
   html{scroll-behavior:smooth}
   body{

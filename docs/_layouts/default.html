@@ -9,9 +9,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>{{ page.title | default: site.title }} · Confer docs</title>
 <meta name="description" content="{{ site.description }}" />
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500&family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,500;1,6..72,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<!-- Fonts are served from this origin. They used to come from
+     fonts.googleapis.com as a render-blocking stylesheet, which hangs rather
+     than fails in mainland China — the page stayed blank until the request
+     timed out and then rendered unstyled. -->
+<link rel="stylesheet" href="{{ '/assets/fonts.css' | relative_url }}" />
 <link rel="stylesheet" href="{{ '/assets/style.css' | relative_url }}" />
 </head>
 <body>
