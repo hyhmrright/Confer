@@ -232,4 +232,7 @@ milestone ごとにスライスし、各 milestone は提供可能でデモ可�
 5. **A2A プロトコルの実装は既存ライブラリを優先する**（例えば `http-message-signatures` npm パッケージ）、車輪の再発明をしない
 6. **DID:web の実装は `did-resolver` + `did-jwt`** といった W3C ツールを優先する
 7. **MCP server は公式 SDK を優先する** (`@modelcontextprotocol/sdk`)
-8. **commit message は conventional commits を使う** (feat:, fix:, docs:, etc.)
+8. **commit message はこの変更が何をするのかを述べた一文で書く**。conventional
+   な接頭辞は使わない。ただし `.github/scripts/gen-release-notes.sh` は
+   `feat:` / `fix:` のような接頭辞しか認識しないので、リリースノートは手で書く
+   ことになる——散文の subject からは生成されない

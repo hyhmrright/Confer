@@ -232,4 +232,6 @@
 5. **A2A 协议的实现优先用现成库**（如 `http-message-signatures` npm 包），不要自己造轮子
 6. **DID:web 实现优先用 `did-resolver` + `did-jwt`** 这些 W3C 工具
 7. **MCP server 优先用官方 SDK** (`@modelcontextprotocol/sdk`)
-8. **commit message 用 conventional commits** (feat:, fix:, docs:, etc.)
+8. **commit message 写成一句说明这次改动做了什么的散文**，不用 conventional
+   前缀。注意 `.github/scripts/gen-release-notes.sh` 只认 `feat:` / `fix:` 这类
+   前缀，所以发版说明得手写——它不会自己从散文提交里生成

@@ -232,4 +232,7 @@ For example, some sample tasks for v0.1:
 5. **Prefer off-the-shelf libraries for the A2A protocol implementation** (such as the `http-message-signatures` npm package), do not reinvent the wheel
 6. **Prefer `did-resolver` + `did-jwt`** and other W3C tools for the DID:web implementation
 7. **Prefer the official SDK for the MCP server** (`@modelcontextprotocol/sdk`)
-8. **Use conventional commits for commit messages** (feat:, fix:, docs:, etc.)
+8. **Write the commit subject as a sentence saying what the change does**, not
+   a conventional prefix. Note that `.github/scripts/gen-release-notes.sh`
+   recognises only `feat:` / `fix:`-style prefixes, so release notes have to be
+   written by hand — it will not generate them from prose subjects
