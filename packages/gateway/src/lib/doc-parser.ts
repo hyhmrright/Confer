@@ -1,12 +1,23 @@
 // pdf-parse ships CJS only; use createRequire for Bun ESM compatibility
 import { createRequire } from 'node:module';
 import { AppError } from '@confer/shared';
+import { extractDocxText, extractXlsxText } from './office-parser.js';
+import { MAX_EXTRACTED_CHARS } from './rag-config.js';
 
 const pdfParse = createRequire(import.meta.url)('pdf-parse') as (
   buf: Buffer,
 ) => Promise<{ text: string }>;
 
-const SUPPORTED_TYPES = new Set(['text/plain', 'text/markdown', 'application/pdf']);
+const DOCX_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+const XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+const SUPPORTED_TYPES = new Set([
+  'text/plain',
+  'text/markdown',
+  'application/pdf',
+  DOCX_TYPE,
+  XLSX_TYPE,
+]);
 
 /**
  * Whether a document of this content type can be ingested at all.
@@ -35,12 +46,42 @@ export async function parseDocument(buffer: ArrayBuffer, contentType: string): P
     throw new AppError('unsupported_format', `Unsupported file type: ${base}`, 400);
   }
 
+  return capExtractedText(await extract(buffer, base), base);
+}
+
+async function extract(buffer: ArrayBuffer, base: string): Promise<string> {
   if (base === 'text/plain' || base === 'text/markdown') {
     return new TextDecoder().decode(buffer);
   }
+  if (base === DOCX_TYPE) return extractDocxText(buffer);
+  if (base === XLSX_TYPE) return extractXlsxText(buffer);
 
   const data = await pdfParse(Buffer.from(buffer));
   return data.text;
+}
+
+/**
+ * Bound what one document contributes downstream.
+ *
+ * The upload route caps the upload at 10 MB, but the two OOXML formats are zip
+ * archives, so that bounds the compressed bytes and not the text — and nothing
+ * after this point has a ceiling of its own: `chunkText` splits whatever it
+ * receives into 800-char chunks, each of which costs an embedding call and a
+ * Qdrant point. Truncating loses the tail of an implausibly large document;
+ * not truncating lets one upload spend the owner's embedding budget.
+ *
+ * This runs *after* extraction, so it is a ceiling on downstream cost and not
+ * on the memory the parse took to get here — see MAX_EXTRACTED_CHARS.
+ *
+ * Logged rather than thrown: the document still ingests, and a silent cut is
+ * exactly the kind of thing that is impossible to diagnose later.
+ */
+function capExtractedText(text: string, base: string): string {
+  if (text.length <= MAX_EXTRACTED_CHARS) return text;
+  console.warn(
+    `document text truncated: type=${base} extracted=${text.length} cap=${MAX_EXTRACTED_CHARS}`,
+  );
+  return text.slice(0, MAX_EXTRACTED_CHARS);
 }
 
 export function guessContentType(filename: string): string {
@@ -50,6 +91,10 @@ export function guessContentType(filename: string): string {
       return 'text/markdown';
     case 'pdf':
       return 'application/pdf';
+    case 'docx':
+      return DOCX_TYPE;
+    case 'xlsx':
+      return XLSX_TYPE;
     default:
       return 'text/plain';
   }

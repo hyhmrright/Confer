@@ -115,13 +115,22 @@ https://acme.com/.well-known/agents.json
 
 ### 协议层
 
-所有 A2A 通信走 HTTPS POST/GET，编码 JSON。
+所有 A2A 通信走 HTTPS POST/GET，编码 JSON。`/a2a/v1` 下并存两套绑定：
+
+- **Linux Foundation A2A v1.0 的 HTTP+JSON 绑定**（`routes/a2a-rest.ts`），路径就是 spec §11.3 的原样：`POST /message:send`、`GET /tasks/{id}` 等。Agent Card 宣称的是这一套，标准客户端调的也是这一套。详见 `docs/05-api.md`。
+- **Confer 自己的方言**（`routes/a2a.ts`），实例之间用，经 `/.well-known/agents.json` 发现。
+
+两者共用同一套闸门——签名验证、同意闸门、策略判定、线程归属——都在 `a2a/inbound.ts` 里，只有线格式不同。**按绑定各写一份闸门是跨租户线程注入那个 bug 被写出来四次的原因**，别再拆开。
 
 **关键：使用 HTTP Message Signatures（RFC 9421）而非 bearer token**。原因：
 
 - Bearer token 被截获即失效
-- HTTP signature 绑定到具体请求（method + path + body digest + 时间戳）
+- HTTP signature 绑定到具体请求（method + path + query + body digest + 时间戳）
 - 防重放：请求 `Date` 限定在 5 分钟时间窗口内，且每个已验证的签名会记入重放缓存（nonce），窗口内再次提交同一请求会被拒绝；签名验证即可确认发送方身份
+
+**签名覆盖的组件**是 `@method` `@authority` `@path`，加上按需出现的 `@query`（请求带查询串时）和 `content-digest`（请求带 body 时），再加 `date`。`@query` 不是可选的讲究：`@path` 到 `?` 就停了，REST 绑定的 `GET /tasks` 全靠查询参数筛选和翻页，不覆盖就等于让中间人随意改写它们而签名照样通过。签名参数里还带一个每请求随机的 `nonce`——`created` 只到秒，同一秒内两个相同请求会签出同样的字节，被对端的重放缓存当成攻击拒掉（轮询 task 或任何重试都会撞上）。真正的重放——原样重发同一批字节——照旧被抓，因为那仍是逐字节相同的签名。
+
+**这一层没有 spec 的 `securitySchemes`**：那套是 API key / HTTP auth / OAuth2 / OIDC / mTLS，一个都不是请求签名。真实要求以**必需扩展**声明在 Card 上，REST 绑定则按 §3.3.4 强制它：没声明该扩展的客户端收到 `ExtensionSupportRequiredError`，而不是一个不解释任何事的 401。
 
 ### 入站请求示例
 
@@ -307,6 +316,8 @@ peer.unknown:
 
 跨实例的对端不共享我们的语言，所以判断依据是 `context.error` 这个码；`content` 只是兜底的人类可读文本。这与「服务端不生成用户文案」并不冲突：那条规则约束的是发给**本实例自己客户端**的文案。
 
+**同一条失败还要落库**，作为一条 `content_type: 'system_notice'` 的消息写进会话（`in_reply_to` 指向那条提问，`content_json` 带同一个原因码，客户端按 i18n 渲染句子）。只发出去不落库有三个后果，都实际存在过：主人在自己的 IM 里看到对方的提问后面什么都没有，永远不知道是自己没配模型；A2A REST 绑定的 task 停在 `WORKING` 而不是 `FAILED`，客户端轮询一个永不完成的东西；`GET /a2a/v1/stream/{id}` 一直返回 `pending`。有了这条 notice，三处同时变成可判定的终态。
+
 ### 寻址：两个 DID 都指向同一个 Agent
 
 `to` 同时接受 **Agent DID**（`did:web:<host>:agents:<user>:agent`，公开目录 `/.well-known/agents.json` 列出的就是它）和**主人 DID**（`did:web:<host>:agents:<user>`）。后者是唯一能被解析出 DID 文档的标识，也是客户端展示给用户复制的那一个——只认前者会让「粘贴 DID 加好友」得到一个连得上、验得过、却 404 的联系人。
@@ -321,7 +332,14 @@ peer.unknown:
 - `ask_user`（主人显式设 `policies_json.default='ask_user'` 或 `{action:'ask',decision:'ask_user'}` 规则）→ **已实现**：入站提问仍存库 + 广播（主人能在 IM 看到），但**不自动回复**；落一条 `action='ask'` 待批权限到 pending inbox，`POST /a2a/v1/messages` 返回 `202 { "status": "pending_approval", "message_id" }`。主人在 `GET /permissions/pending` 看到该提问，`POST /permissions/{id}/decide` 判 `allow_*` 即触发 Agent 代答（写 `in_reply_to` 回复 + 出站投递），判 `deny` 则不答。peer 侧 `GET /a2a/v1/stream/{message_id}` 在批准前返回 `status:'pending'`，批准后返回答复。
 - `deny`（显式拒绝规则）→ `403 policy_denied`
 
-> **A2A 代答能力**：入站 A2A 应答与 web 聊天走**同一套共享编排**（`orchestration/agent-orchestrator.ts` 的 `runAgentTurn`）。Agent 代答时会用**主人**（非提问 peer）的密钥按需调用工具——`search_knowledge_base`（检索主人私有知识库）与 `web_search`（Tavily），并注入该主人的**长期记忆**召回；命中的知识库片段作为**引用**持久化到 `messages.citations_json`，答完后异步把本轮事实沉淀进长期记忆。主人未配 embedding/KB/tavily 密钥时优雅降级为纯 LLM 应答（不报错、无引用）。`allow` 与 `ask_user` 批准后的代答路径共用此编排。
+> **A2A 代答能力**：入站 A2A 应答与 web 聊天走**同一套共享编排**（`orchestration/agent-orchestrator.ts` 的 `runAgentTurn`），但**两者能力并不相同**。`runAgentTurn` 取一个必填的 `audience`（`'owner' | 'peer'`，必填而非默认——默认值会是宽松的那个），工具集与可触达的数据面都由它决定：
+>
+> - **owner 回合**（web 聊天）：`web_search`、`search_knowledge_base`（全部知识库）、`list_knowledge_bases`、`search_memory`、`list_contacts`，并自动注入长期记忆召回。
+> - **peer 回合**（入站 A2A 代答）：只有 `web_search`、`search_knowledge_base`、`list_knowledge_bases`，且检索范围**仅限**标记了 `shared_with_peers` 的知识库；**不召回长期记忆**，也不提供 `search_memory` 与 `list_contacts`——前者是主人私聊沉淀的事实，后者是主人的社交图谱，回答一个陌生人的问题都不需要它们。
+>
+> 边界靠**数据面**而非提示词：peer 的问题和主人的指令抵达模型时是同一种文本，所以「Agent 会拒绝透露」不成立，只有检索物理上够不到才成立。同理，**不提供某个工具不等于访问控制**——模型可以调用没给它的工具名，因此 owner-only 分支在 `executeToolCall` 里会再检查一次 audience。
+>
+> 两种回合都用**主人**（非提问 peer）的密钥。命中的知识库片段作为**引用**持久化到 `messages.citations_json`，答完后异步把本轮事实沉淀进长期记忆（peer 回合沉淀的行标记为 `a2a`，召回时会注明来源）。主人未配 embedding/KB/tavily 密钥时优雅降级为纯 LLM 应答（不报错、无引用）。`allow` 与 `ask_user` 批准后的代答路径共用此编排。
 
 > `ask='ask'` 的待批权限 `scope_json` 形如 `{ kind:'a2a_question', conversation_id, inbound_message_id, sender_did, peer_id, content }`，足以在批准时重建并恢复回答（按 `user_id`/`peer_id` 实时取 agent/peer，幂等：已有回复则跳过）。standing-policy 设置 UI、「编辑后回答」、push 通知仍为 backlog。
 

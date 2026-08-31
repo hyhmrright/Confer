@@ -78,6 +78,13 @@
       "when": 1788059354263,
       "tag": "0010_late_wolverine",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1788099901710,
+      "tag": "0011_complete_charles_xavier",
+      "breakpoints": true
     }
   ]
 }

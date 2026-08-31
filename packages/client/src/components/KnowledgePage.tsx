@@ -183,7 +183,7 @@ function KbCard({ kbId }: { kbId: string }) {
         <input
           ref={fileRef}
           type="file"
-          accept=".txt,.md,.pdf"
+          accept=".txt,.md,.pdf,.docx,.xlsx"
           className="hidden"
           onChange={handleUpload}
         />

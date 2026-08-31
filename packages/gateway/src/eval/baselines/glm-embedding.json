@@ -1,0 +1,644 @@
+{
+  "provider": "glm",
+  "k": 5,
+  "summaries": {
+    "semantic": {
+      "cases": 12,
+      "recall": 0.75,
+      "precision": 0.3819444444444444,
+      "mrr": 0.6527777777777778,
+      "ndcg": 0.6775774794642881,
+      "misses": 3
+    },
+    "lexical": {
+      "cases": 12,
+      "recall": 1,
+      "precision": 0.4444444444444444,
+      "mrr": 0.9583333333333334,
+      "ndcg": 0.9692441461309548,
+      "misses": 0
+    },
+    "mixed": {
+      "cases": 6,
+      "recall": 1,
+      "precision": 0.5138888888888888,
+      "mrr": 0.6388888888888888,
+      "ndcg": 0.7321315434523954,
+      "misses": 0
+    },
+    "same-lang": {
+      "cases": 25,
+      "recall": 1,
+      "precision": 0.4966666666666667,
+      "mrr": 0.9,
+      "ndcg": 0.9261859507142916,
+      "misses": 0
+    },
+    "cross-lang": {
+      "cases": 5,
+      "recall": 0.4,
+      "precision": 0.11666666666666665,
+      "mrr": 0.13333333333333333,
+      "ndcg": 0.2,
+      "misses": 3
+    },
+    "overall": {
+      "cases": 30,
+      "recall": 0.9,
+      "precision": 0.4333333333333334,
+      "mrr": 0.7722222222222221,
+      "ndcg": 0.8051549589285762,
+      "misses": 3
+    }
+  },
+  "results": [
+    {
+      "id": "s1",
+      "kind": "semantic",
+      "crossLingual": false,
+      "query": "两个 Agent 第一次通信的时候，怎么确认对方真的是它声称的那个人",
+      "expected": [
+        "03-protocol.md"
+      ],
+      "retrieved": [
+        "03-protocol.md"
+      ],
+      "score": {
+        "recall": 1,
+        "precision": 1,
+        "reciprocalRank": 1,
+        "ndcg": 1
+      }
+    },
+    {
+      "id": "s2",
+      "kind": "semantic",
+      "crossLingual": false,
+      "query": "整个系统拆成了哪几块服务，各自负责什么",
+      "expected": [
+        "02-architecture.md"
+      ],
+      "retrieved": [
+        "08-mvp-backlog.md",
+        "02-architecture.md",
+        "03-protocol.md"
+      ],
+      "score": {
+        "recall": 1,
+        "precision": 0.3333333333333333,
+        "reciprocalRank": 0.5,
+        "ndcg": 0.6309297535714575
+      }
+    },
+    {
+      "id": "s3",
+      "kind": "semantic",
+      "crossLingual": false,
+      "query": "这个产品到底想解决什么问题，为什么现有的做法不够",
+      "expected": [
+        "01-product.md"
+      ],
+      "retrieved": [
+        "01-product.md",
+        "08-mvp-backlog.md"
+      ],
+      "score": {
+        "recall": 1,
+        "precision": 0.5,
+        "reciprocalRank": 1,
+        "ndcg": 1
+      }
+    },
+    {
+      "id": "s4",
+      "kind": "semantic",
+      "crossLingual": true,
+      "query": "我搭好的实例想让外面的人也能连上，需要做什么",
+      "expected": [
+        "09-deployment.md"
+      ],
+      "retrieved": [
+        "06-claude-code-plugin.md",
+        "03-protocol.md",
+        "02-architecture.md",
+        "04-data-model.md"
+      ],
+      "score": {
+        "recall": 0,
+        "precision": 0,
+        "reciprocalRank": 0,
+        "ndcg": 0
+      }
+    },
+    {
+      "id": "s5",
+      "kind": "semantic",
+      "crossLingual": false,
+      "query": "聊天记录和参与者分别存在什么地方",
+      "expected": [
+        "04-data-model.md"
+      ],
+      "retrieved": [
+        "04-data-model.md",
+        "05-api.md",
+        "03-protocol.md"
+      ],
+      "score": {
+        "recall": 1,
+        "precision": 0.3333333333333333,
+        "reciprocalRank": 1,
+        "ndcg": 1
+      }
+    },
+    {
+      "id": "s6",
+      "kind": "semantic",
+      "crossLingual": false,
+      "query": "Agent 替我做决定之前，什么情况下必须先征求我同意",
+      "expected": [
+        "03-protocol.md"
+      ],
+      "retrieved": [
+        "03-protocol.md",
+        "06-claude-code-plugin.md",
+        "05-api.md"
+      ],
+      "score": {
+        "recall": 1,
+        "precision": 0.3333333333333333,
+        "reciprocalRank": 1,
+        "ndcg": 1
+      }
+    },
+    {
+      "id": "s7",
+      "kind": "semantic",
+      "crossLingual": false,
+      "query": "第一个可用版本打算做到什么程度，大概要多久",
+      "expected": [
+        "08-mvp-backlog.md"
+      ],
+      "retrieved": [
+        "08-mvp-backlog.md"
+      ],
+      "score": {
+        "recall": 1,
+        "precision": 1,
+        "reciprocalRank": 1,
+        "ndcg": 1
+      }
+    },
+    {
+      "id": "s8",
+      "kind": "semantic",
+      "crossLingual": false,
+      "query": "在编码工具里怎么让它去请教另一个人的 Agent",
+      "expected": [
+        "06-claude-code-plugin.md"
+      ],
+      "retrieved": [
+        "06-claude-code-plugin.md",
+        "03-protocol.md"
+      ],
+      "score": {
+        "recall": 1,
+        "precision": 0.5,
+        "reciprocalRank": 1,
+        "ndcg": 1
+      }
+    },
+    {
+      "id": "s9",
+      "kind": "semantic",
+      "crossLingual": false,
+      "query": "我上传的文档最后是怎么被找出来回答问题的",
+      "expected": [
+        "05-api.md"
+      ],
+      "retrieved": [
+        "05-api.md",
+        "06-claude-code-plugin.md",
+        "03-protocol.md",
+        "07-project-memory.md"
+      ],
+      "score": {
+        "recall": 1,
+        "precision": 0.25,
+        "reciprocalRank": 1,
+        "ndcg": 1
+      }
+    },
+    {
+      "id": "l1",
+      "kind": "lexical",
+      "crossLingual": false,
+      "query": "did:web",
+      "expected": [
+        "03-protocol.md"
+      ],
+      "retrieved": [
+        "03-protocol.md",
+        "08-mvp-backlog.md"
+      ],
+      "score": {
+        "recall": 1,
+        "precision": 0.5,
+        "reciprocalRank": 1,
+        "ndcg": 1
+      }
+    },
+    {
+      "id": "l2",
+      "kind": "lexical",
+      "crossLingual": false,
+      "query": "AgentFacts NANDA",
+      "expected": [
+        "03-protocol.md"
+      ],
+      "retrieved": [
+        "03-protocol.md",
+        "08-mvp-backlog.md"
+      ],
+      "score": {
+        "recall": 1,
+        "precision": 0.5,
+        "reciprocalRank": 1,
+        "ndcg": 1
+      }
+    },
+    {
+      "id": "l3",
+      "kind": "lexical",
+      "crossLingual": false,
+      "query": "L3 权限",
+      "expected": [
+        "03-protocol.md"
+      ],
+      "retrieved": [
+        "03-protocol.md",
+        "04-data-model.md",
+        "05-api.md"
+      ],
+      "score": {
+        "recall": 1,
+        "precision": 0.3333333333333333,
+        "reciprocalRank": 1,
+        "ndcg": 1
+      }
+    },
+    {
+      "id": "l4",
+      "kind": "lexical",
+      "crossLingual": false,
+      "query": "peer_contacts",
+      "expected": [
+        "04-data-model.md"
+      ],
+      "retrieved": [
+        "05-api.md",
+        "04-data-model.md"
+      ],
+      "score": {
+        "recall": 1,
+        "precision": 0.5,
+        "reciprocalRank": 0.5,
+        "ndcg": 0.6309297535714575
+      }
+    },
+    {
+      "id": "l5",
+      "kind": "lexical",
+      "crossLingual": false,
+      "query": "conversation_participants",
+      "expected": [
+        "04-data-model.md"
+      ],
+      "retrieved": [
+        "04-data-model.md",
+        "05-api.md"
+      ],
+      "score": {
+        "recall": 1,
+        "precision": 0.5,
+        "reciprocalRank": 1,
+        "ndcg": 1
+      }
+    },
+    {
+      "id": "l6",
+      "kind": "lexical",
+      "crossLingual": false,
+      "query": "write_project_memory",
+      "expected": [
+        "06-claude-code-plugin.md"
+      ],
+      "retrieved": [
+        "06-claude-code-plugin.md",
+        "04-data-model.md",
+        "05-api.md"
+      ],
+      "score": {
+        "recall": 1,
+        "precision": 0.3333333333333333,
+        "reciprocalRank": 1,
+        "ndcg": 1
+      }
+    },
+    {
+      "id": "l7",
+      "kind": "lexical",
+      "crossLingual": false,
+      "query": "capability token",
+      "expected": [
+        "03-protocol.md"
+      ],
+      "retrieved": [
+        "03-protocol.md",
+        "04-data-model.md",
+        "05-api.md",
+        "06-claude-code-plugin.md"
+      ],
+      "score": {
+        "recall": 1,
+        "precision": 0.25,
+        "reciprocalRank": 1,
+        "ndcg": 1
+      }
+    },
+    {
+      "id": "l8",
+      "kind": "lexical",
+      "crossLingual": false,
+      "query": "meta.json",
+      "expected": [
+        "07-project-memory.md"
+      ],
+      "retrieved": [
+        "07-project-memory.md",
+        "02-architecture.md",
+        "06-claude-code-plugin.md"
+      ],
+      "score": {
+        "recall": 1,
+        "precision": 0.3333333333333333,
+        "reciprocalRank": 1,
+        "ndcg": 1
+      }
+    },
+    {
+      "id": "l9",
+      "kind": "lexical",
+      "crossLingual": false,
+      "query": "Modbus register map X100",
+      "expected": [
+        "07-project-memory.md"
+      ],
+      "retrieved": [
+        "07-project-memory.md"
+      ],
+      "score": {
+        "recall": 1,
+        "precision": 1,
+        "reciprocalRank": 1,
+        "ndcg": 1
+      }
+    },
+    {
+      "id": "l10",
+      "kind": "lexical",
+      "crossLingual": false,
+      "query": "Oracle Cloud Always Free",
+      "expected": [
+        "09-deployment.md"
+      ],
+      "retrieved": [
+        "09-deployment.md",
+        "06-claude-code-plugin.md",
+        "02-architecture.md"
+      ],
+      "score": {
+        "recall": 1,
+        "precision": 0.3333333333333333,
+        "reciprocalRank": 1,
+        "ndcg": 1
+      }
+    },
+    {
+      "id": "l11",
+      "kind": "lexical",
+      "crossLingual": false,
+      "query": "WebSocket 端点",
+      "expected": [
+        "05-api.md"
+      ],
+      "retrieved": [
+        "05-api.md",
+        "02-architecture.md"
+      ],
+      "score": {
+        "recall": 1,
+        "precision": 0.5,
+        "reciprocalRank": 1,
+        "ndcg": 1
+      }
+    },
+    {
+      "id": "l12",
+      "kind": "lexical",
+      "crossLingual": false,
+      "query": "RTU mode timing",
+      "expected": [
+        "07-project-memory.md"
+      ],
+      "retrieved": [
+        "07-project-memory.md",
+        "01-product.md",
+        "04-data-model.md",
+        "03-protocol.md"
+      ],
+      "score": {
+        "recall": 1,
+        "precision": 0.25,
+        "reciprocalRank": 1,
+        "ndcg": 1
+      }
+    },
+    {
+      "id": "m1",
+      "kind": "mixed",
+      "crossLingual": false,
+      "query": "密钥轮换是怎么处理的，旧的公钥还要保留多久",
+      "expected": [
+        "03-protocol.md"
+      ],
+      "retrieved": [
+        "05-api.md",
+        "03-protocol.md"
+      ],
+      "score": {
+        "recall": 1,
+        "precision": 0.5,
+        "reciprocalRank": 0.5,
+        "ndcg": 0.6309297535714575
+      }
+    },
+    {
+      "id": "m2",
+      "kind": "mixed",
+      "crossLingual": true,
+      "query": "自托管一个实例需要先准备什么，有哪些前置条件",
+      "expected": [
+        "09-deployment.md"
+      ],
+      "retrieved": [
+        "02-architecture.md",
+        "03-protocol.md",
+        "09-deployment.md",
+        "08-mvp-backlog.md"
+      ],
+      "score": {
+        "recall": 1,
+        "precision": 0.25,
+        "reciprocalRank": 0.3333333333333333,
+        "ndcg": 0.5
+      }
+    },
+    {
+      "id": "m3",
+      "kind": "mixed",
+      "crossLingual": false,
+      "query": "MVP 阶段面向的目标用户是谁",
+      "expected": [
+        "01-product.md"
+      ],
+      "retrieved": [
+        "08-mvp-backlog.md",
+        "01-product.md"
+      ],
+      "score": {
+        "recall": 1,
+        "precision": 0.5,
+        "reciprocalRank": 0.5,
+        "ndcg": 0.6309297535714575
+      }
+    },
+    {
+      "id": "m4",
+      "kind": "mixed",
+      "crossLingual": false,
+      "query": "sessions 表存了什么，和 refresh token 是什么关系",
+      "expected": [
+        "04-data-model.md"
+      ],
+      "retrieved": [
+        "05-api.md",
+        "04-data-model.md",
+        "03-protocol.md"
+      ],
+      "score": {
+        "recall": 1,
+        "precision": 0.3333333333333333,
+        "reciprocalRank": 0.5,
+        "ndcg": 0.6309297535714575
+      }
+    },
+    {
+      "id": "m5",
+      "kind": "mixed",
+      "crossLingual": false,
+      "query": "A2A 请求进来之后，接收方的验证流程是怎样的",
+      "expected": [
+        "03-protocol.md"
+      ],
+      "retrieved": [
+        "03-protocol.md",
+        "05-api.md"
+      ],
+      "score": {
+        "recall": 1,
+        "precision": 0.5,
+        "reciprocalRank": 1,
+        "ndcg": 1
+      }
+    },
+    {
+      "id": "m6",
+      "kind": "mixed",
+      "crossLingual": false,
+      "query": "知识库上传的文件走的是哪个 API",
+      "expected": [
+        "05-api.md"
+      ],
+      "retrieved": [
+        "05-api.md"
+      ],
+      "score": {
+        "recall": 1,
+        "precision": 1,
+        "reciprocalRank": 1,
+        "ndcg": 1
+      }
+    },
+    {
+      "id": "x1",
+      "kind": "semantic",
+      "crossLingual": true,
+      "query": "怎么升级到新版本，会不会丢数据",
+      "expected": [
+        "09-deployment.md"
+      ],
+      "retrieved": [
+        "05-api.md",
+        "08-mvp-backlog.md",
+        "09-deployment.md"
+      ],
+      "score": {
+        "recall": 1,
+        "precision": 0.3333333333333333,
+        "reciprocalRank": 0.3333333333333333,
+        "ndcg": 0.5
+      }
+    },
+    {
+      "id": "x2",
+      "kind": "semantic",
+      "crossLingual": true,
+      "query": "想把所有数据清空重新来过要执行什么",
+      "expected": [
+        "09-deployment.md"
+      ],
+      "retrieved": [
+        "05-api.md",
+        "04-data-model.md",
+        "06-claude-code-plugin.md",
+        "08-mvp-backlog.md"
+      ],
+      "score": {
+        "recall": 0,
+        "precision": 0,
+        "reciprocalRank": 0,
+        "ndcg": 0
+      }
+    },
+    {
+      "id": "x3",
+      "kind": "semantic",
+      "crossLingual": true,
+      "query": "本地开发怎么开热重载",
+      "expected": [
+        "09-deployment.md"
+      ],
+      "retrieved": [
+        "06-claude-code-plugin.md",
+        "08-mvp-backlog.md",
+        "02-architecture.md"
+      ],
+      "score": {
+        "recall": 0,
+        "precision": 0,
+        "reciprocalRank": 0,
+        "ndcg": 0
+      }
+    }
+  ]
+}

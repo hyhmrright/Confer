@@ -2,8 +2,11 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { errorHandler } from './middleware/error-handler.js';
+import { rateLimit } from './middleware/rate-limit.js';
 import { a2aRoutes } from './routes/a2a.js';
+import { a2aRestRoutes } from './routes/a2a-rest.js';
 import { adminRoutes } from './routes/admin.js';
+import { agentCardRoutes } from './routes/agent-card.js';
 import { agentDidRoutes } from './routes/agent-did.js';
 import { agentFactsRoutes } from './routes/agent-facts.js';
 import { authRoutes } from './routes/auth.js';
@@ -51,6 +54,7 @@ app.route('/.well-known', wellKnownRoutes);
 // sub-identifier resolution. Distinct prefix from `/api/v1/agents` and
 // `/.well-known`; public (no signature gate), like the instance DID document.
 app.route('/agents', agentDidRoutes);
+app.route('/agents', agentCardRoutes);
 
 app.route('/api/v1/auth', authRoutes);
 app.route('/api/v1/users', userRoutes);
@@ -67,5 +71,18 @@ app.route('/api/v1/memories', memoriesRoutes);
 app.route('/api/v1/knowledge-bases', knowledgeBasesRoutes);
 app.route('/api/v1/admin', adminRoutes);
 
+// One rate limiter for everything under `/a2a/v1`, registered here rather than
+// inside a router. Hono runs a sub-app's `use('/*')` for any request under the
+// mount path — including one destined for a SIBLING sub-app — so a limiter in
+// each of the two bindings would charge a single request twice. Verified, not
+// assumed. It now also covers `agent-facts`, which is a public read and had no
+// limit of its own.
+app.use('/a2a/v1/*', rateLimit(60, 60_000));
+
+// The two A2A bindings share a prefix and every gate; only their wire format
+// differs. `a2a-rest.ts` is the spec's HTTP+JSON binding and the one the Agent
+// Card advertises; `a2a.ts` is Confer's own dialect, found through
+// `/.well-known/agents.json`.
+app.route('/a2a/v1', a2aRestRoutes);
 app.route('/a2a/v1', a2aRoutes);
 app.route('/a2a/v1', agentFactsRoutes);

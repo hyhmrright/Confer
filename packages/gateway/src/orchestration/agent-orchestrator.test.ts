@@ -39,6 +39,7 @@ const baseOpts = {
   tavilyApiKey: '',
   hasKb: false,
   recallMemory: true,
+  audience: 'owner' as const,
 };
 
 // Capture the grounding line without letting it reach the real console. Scoped
@@ -104,9 +105,46 @@ describe('runAgentTurn grounding', () => {
     });
 
     expect(result.content).toBe('答案');
-    expect(groundingLine()).toBe(
-      `agent turn user=${baseOpts.userId} recall=off kb=none cites=0 tools=0`,
+    const line = groundingLine();
+    expect(line).toContain(`user=${baseOpts.userId}`);
+    expect(line).toContain('recall=off');
+    expect(line).toContain('kb=none');
+    expect(line).toContain('cites=0');
+    expect(line).toContain('tools=0');
+  });
+
+  test('records what the turn cost beside what it was grounded in', async () => {
+    // One line, not two. A turn's cost and its grounding are read together —
+    // "this answer was expensive AND ungrounded" is the interesting case, and
+    // splitting them across two log lines is what makes it hard to see.
+    await runAgentTurn({
+      ...baseOpts,
+      provider: scriptedProvider([[toolCall('search_knowledge_base')], [token('根据文档…')]]),
+      hasKb: true,
+    });
+
+    const line = groundingLine();
+    expect(line).toContain('gen_ai.provider.name=scripted');
+    expect(line).toContain('rounds=2');
+    expect(line).toMatch(/duration_ms=\d+/);
+  });
+
+  test('records a turn that threw, then rethrows it', async () => {
+    // A turn that fails after two tool rounds has still been paid for, and it is
+    // the one an owner most wants to find afterwards.
+    const boom = {
+      name: 'scripted',
+      chat: () => Promise.reject(new Error('unused')),
+      // biome-ignore lint/correctness/useYield: the throw is the whole point.
+      async *stream(): AsyncIterable<never> {
+        throw new TypeError('provider exploded');
+      },
+    };
+
+    await expect(runAgentTurn({ ...baseOpts, provider: boom })).rejects.toThrow(
+      'provider exploded',
     );
+    expect(groundingLine()).toContain('error.type=TypeError');
   });
 
   // The instruction in the system prompt *mandates* a knowledge-base search
@@ -141,6 +179,7 @@ describe('runAgentTurn grounding', () => {
       ...baseOpts,
       embeddingKey: 'sk-present',
       recallMemory: false,
+      audience: 'owner' as const,
       provider: scriptedProvider([[token('答案')]]),
     });
 
@@ -158,5 +197,53 @@ describe('runAgentTurn grounding', () => {
 
     expect(groundingLine()).not.toContain('110101');
     expect(groundingLine()).not.toContain('身份证');
+  });
+});
+
+// The security property that "we simply don't offer the tool" does not give
+// you. A model can emit a call for a name it was never handed — a peer's
+// question and the owner's instructions arrive as the same kind of text, so
+// being talked into it is exactly the scenario — and `executeToolCall` receives
+// the name and arguments regardless of what the schema advertised. So the
+// audience is re-checked where the call would actually run.
+//
+// These assertions also double as a canary: if the check were removed, the tool
+// would reach getDb() and the failure would be a database error rather than a
+// quiet leak, which is the right way round.
+describe('owner-only tools on a peer turn', () => {
+  const peerOpts = { ...baseOpts, audience: 'peer' as const, recallMemory: false };
+
+  async function callAsPeer(name: string): Promise<string> {
+    const results: string[] = [];
+    await runAgentTurn({
+      ...peerOpts,
+      provider: scriptedProvider([[toolCall(name)], [token('ok')]]),
+      emit: {
+        onToolResult: (result) => {
+          results.push(result);
+        },
+      },
+    });
+    return results[0] ?? '';
+  }
+
+  test('refuses search_memory', async () => {
+    // Long-term memory is distilled from the owner's own chats and nothing in
+    // it is marked fit to leave the instance.
+    expect(await callAsPeer('search_memory')).toContain('未知工具');
+  });
+
+  test('refuses list_contacts', async () => {
+    // A contact list is the owner's social graph; answering a stranger's
+    // question never requires telling them who else the owner talks to.
+    expect(await callAsPeer('list_contacts')).toContain('未知工具');
+  });
+
+  test('still answers the turn rather than aborting it', async () => {
+    // A refused tool is handed back to the model as text, like any other tool
+    // result — the turn continues and the peer gets an answer.
+    const provider = scriptedProvider([[toolCall('list_contacts')], [token('已回答')]]);
+    const turn = await runAgentTurn({ ...peerOpts, provider });
+    expect(turn.content).toBe('已回答');
   });
 });

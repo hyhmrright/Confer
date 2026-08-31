@@ -13,6 +13,20 @@ export const contentTypeSchema = z.enum([
   'system_notice',
 ]);
 
+/**
+ * The structured payload of a `system_notice` message.
+ *
+ * The gateway has no locale context, so it records what happened as a machine
+ * code and the client picks the sentence — the same split `permissionRequestEventSchema`
+ * makes. `content` still carries English prose as a fallback for any reader that
+ * is not our own UI (a peer instance, a raw API consumer).
+ */
+export const systemNoticeSchema = z.object({
+  kind: z.literal('a2a_turn_failed'),
+  /** A `ModelConfigError` code, or `agent_error` when the turn itself threw. */
+  error: z.string().min(1).max(64),
+});
+
 export const citationSchema = z.object({
   source: z.string(),
   url: z.string().url().optional(),
@@ -61,4 +75,5 @@ export const consultRequestSchema = z.object({
 });
 
 export type Message = z.infer<typeof messageSchema>;
+export type SystemNotice = z.infer<typeof systemNoticeSchema>;
 export type Citation = z.infer<typeof citationSchema>;

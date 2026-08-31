@@ -1,5 +1,5 @@
 import type { LLMMessage } from '@confer/agent-runtime';
-import { newId } from '@confer/shared';
+import { newId, type SystemNotice } from '@confer/shared';
 import { eq } from 'drizzle-orm';
 import { getDb } from '../db/connection.js';
 import { agents, messages, peerAgents, type permissions } from '../db/schema.js';
@@ -99,22 +99,61 @@ const FAILURE_NOTICE: Record<A2AFailure, string> = {
 };
 
 /**
- * Tell the asker their question will not be answered.
+ * Record that this question will not be answered, on both sides.
  *
  * Silence is the wrong answer here and it is what this did: a failure was
- * logged on the answering side and nothing was sent, so the asker's consult
- * long-poll ran to its deadline and reported `pending` — forever, on every
- * retry, with no way to tell "still thinking" from "never coming".
+ * logged on the answering side and nothing was written or sent, so the asker's
+ * consult long-poll ran to its deadline and reported `pending` — forever, on
+ * every retry, with no way to tell "still thinking" from "never coming" — while
+ * the OWNER saw their peer's question sitting in the thread with nothing after
+ * it and no hint that their model configuration was the reason.
  *
- * Sent as a `notification` so it lands in the asker's thread without provoking
- * a reply, with the machine code in `context` and prose in `content`: the wire
- * crosses instances, so the receiving client cannot be assumed to share our
- * locale, but it can act on the code.
+ * So two things happen. A row goes into the conversation, in reply to the
+ * question, marked `system_notice` and carrying the machine code — that is what
+ * the owner reads, what an A2A Task reports as `TASK_STATE_FAILED` instead of a
+ * turn stuck at `WORKING`, and what stops `/stream/{id}` answering `pending`
+ * for good. And a `notification` goes to the asker, which cannot provoke a
+ * reply the way an `answer` would. Both carry the code rather than relying on
+ * the sentence: the peer is another instance and the owner another locale, so
+ * prose is the fallback and the code is the contract.
  */
-function notifyPeerOfFailure(params: ProcessA2AMessageParams, failure: A2AFailure): Promise<void> {
-  return sendToPeer(params, {
+async function notifyPeerOfFailure(
+  params: ProcessA2AMessageParams,
+  failure: A2AFailure,
+): Promise<void> {
+  const { targetAgent, conversationId, inboundMessageId } = params;
+  const noticeId = newId();
+  const notice: SystemNotice = { kind: 'a2a_turn_failed', error: failure };
+  const prose = FAILURE_NOTICE[failure];
+
+  await getDb().insert(messages).values({
+    id: noticeId,
+    conversation_id: conversationId,
+    sender_type: 'own_agent',
+    sender_id: targetAgent.id,
+    sender_did: targetAgent.did,
+    content_type: 'system_notice',
+    content: prose,
+    content_json: notice,
+    in_reply_to: inboundMessageId,
+    via: 'a2a',
+  });
+
+  broadcastToConversation(conversationId, {
+    type: 'message.new',
+    data: {
+      id: noticeId,
+      conversation_id: conversationId,
+      sender_type: 'own_agent',
+      sender_id: targetAgent.id,
+      content: prose,
+      in_reply_to: inboundMessageId,
+    },
+  });
+
+  await sendToPeer(params, {
     type: 'notification',
-    content: FAILURE_NOTICE[failure],
+    content: prose,
     context: { error: failure },
   });
 }
@@ -152,6 +191,9 @@ export async function processA2AMessage(params: ProcessA2AMessageParams): Promis
   // these ended the turn here with a log line and nothing on the wire, leaving
   // the asker to poll a question that would never be answered.
   const turn = await runAgentTurn({
+    // An inbound peer's question; same value passed to
+    // resolveAgentCapabilities above, and the two must not drift.
+    audience: 'peer',
     provider,
     systemPromptBase: targetAgent.description ?? 'You are a helpful AI agent.',
     model,

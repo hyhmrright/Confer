@@ -1,9 +1,11 @@
 import { buildDIDDocument } from '@confer/identity';
+import { AppError } from '@confer/shared';
 import { and, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { getDb } from '../db/connection.js';
 import { agents, keypairs } from '../db/schema.js';
 import { instanceDid, selfA2AEndpoint } from '../lib/public-identity.js';
+import { wellKnownAgentCard } from './agent-card.js';
 
 export const wellKnownRoutes = new Hono();
 
@@ -35,6 +37,21 @@ wellKnownRoutes.get('/did.json', async (c) => {
   });
 
   return c.json(doc);
+});
+
+// The A2A standard discovery path. Answered only when this instance hosts
+// exactly one public agent — see wellKnownAgentCard for why inventing one
+// otherwise would be worse than a 404.
+wellKnownRoutes.get('/agent-card.json', async (c) => {
+  const card = await wellKnownAgentCard();
+  if (!card) {
+    throw new AppError(
+      'not_found',
+      'This instance hosts multiple agents; fetch /.well-known/agents.json and then /agents/{username}/agent-card.json',
+      404,
+    );
+  }
+  return c.json(card);
 });
 
 wellKnownRoutes.get('/agents.json', async (c) => {

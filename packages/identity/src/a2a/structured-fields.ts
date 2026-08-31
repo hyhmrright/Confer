@@ -21,6 +21,17 @@ export interface SignatureParamsInput {
   keyid: string;
   created: number;
   alg: string;
+  /**
+   * Per-request uniqueness (RFC 9421 §2.3).
+   *
+   * Without it, two byte-identical requests signed in the same second produce
+   * the same signature — and the replay cache, which keys on exactly that,
+   * rejects the second one as an attack. A client polling `GET /tasks/{id}`
+   * more than once a second, or retrying anything, got a 401 telling it its
+   * credentials were bad. Emitted only when supplied, so the serialization a
+   * peer without this field receives is unchanged.
+   */
+  nonce?: string;
 }
 
 export interface ParsedSignatureInput {
@@ -63,7 +74,8 @@ function decodeBase64(b64: string): Uint8Array<ArrayBuffer> | null {
 //   ("@method" "@authority" "@path" "content-digest" "date");keyid="...";created=<int>;alg="ed25519"
 export function serializeSignatureParams(components: string[], p: SignatureParamsInput): string {
   const inner = components.map((c) => `"${c}"`).join(' ');
-  return `(${inner});keyid="${p.keyid}";created=${p.created};alg="${p.alg}"`;
+  const nonce = p.nonce === undefined ? '' : `;nonce="${p.nonce}"`;
+  return `(${inner});keyid="${p.keyid}";created=${p.created}${nonce};alg="${p.alg}"`;
 }
 
 // Serialize the Signature header value: `sig1=:<base64 bytes>:`.

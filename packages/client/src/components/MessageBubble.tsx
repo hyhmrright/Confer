@@ -1,9 +1,10 @@
-import { permissionRequestEventSchema } from '@confer/shared';
+import { permissionRequestEventSchema, systemNoticeSchema } from '@confer/shared';
 import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { dateLocale } from '../i18n/index.js';
+import { agentFailureText } from '../lib/agent-failure-text.js';
 import { useAuthStore } from '../stores/auth.js';
 import type { Message } from '../stores/chat.js';
 import { useContactsStore } from '../stores/contacts.js';
@@ -47,6 +48,24 @@ export const MessageBubble = memo(function MessageBubble({ message }: { message:
       return (
         <MessageEntry senderType="system" name={t('message.roleSystem')} time={time}>
           <PermissionCard request={parsed.data} />
+        </MessageEntry>
+      );
+    }
+  }
+
+  // A turn the agent could not run at all. Without this the thread showed the
+  // peer's question and then nothing — the owner had no way to learn that their
+  // own model configuration was the reason, and the peer's `pending` was the
+  // only symptom anywhere. The gateway sends the code; the sentence is chosen
+  // here, since the gateway has no idea what language this reader speaks.
+  if (message.content_type === 'system_notice') {
+    const parsed = systemNoticeSchema.safeParse(message.content_json);
+    if (parsed.success) {
+      return (
+        <MessageEntry senderType="system" name={t('message.roleSystem')} time={time}>
+          <p className="text-sm leading-relaxed">
+            {t('message.a2aTurnFailed')} {agentFailureText(parsed.data.error)}
+          </p>
         </MessageEntry>
       );
     }

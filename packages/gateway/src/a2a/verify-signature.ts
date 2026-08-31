@@ -5,7 +5,7 @@ import {
   verifyRequestSignature,
 } from '@confer/identity';
 import { AppError } from '@confer/shared';
-import type { MiddlewareHandler } from 'hono';
+import type { Context, MiddlewareHandler } from 'hono';
 import { resolveDidDocument } from '../lib/did-resolution.js';
 import { addNonce, hasNonce } from '../lib/nonce-cache.js';
 
@@ -99,3 +99,14 @@ export const verifyA2ASignature: MiddlewareHandler = async (c, next) => {
 
   await next();
 };
+
+/**
+ * The signer DID `verifyA2ASignature` proved, or undefined outside that gate.
+ *
+ * Hono's context bag is untyped here, so reading it needs a double cast. That
+ * cast belongs in one place beside the write it mirrors, not repeated at every
+ * handler that wants to know who is calling.
+ */
+export function a2aSenderDid(c: Context): string | undefined {
+  return c.get('a2aSenderDid' as never) as string | undefined;
+}

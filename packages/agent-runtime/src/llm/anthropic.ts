@@ -121,10 +121,35 @@ export class AnthropicProvider implements LLMProvider {
     // Track tool_use blocks being streamed
     const pendingToolBlocks = new Map<number, { id: string; name: string; input: string }>();
 
+    // Token usage arrives split across two events — input on `message_start`,
+    // output on `message_delta` — and is carried to the `done` event so a caller
+    // learns what the turn cost. `LLMStreamEvent.usage` has been declared since
+    // the interface was written and no provider ever set it, which made every
+    // streamed turn (all of them, on both the chat and A2A paths) unmeasurable.
+    let usage: { prompt_tokens: number; completion_tokens: number } | undefined;
+
     for await (const payload of readSSEData(response.body)) {
       const data = JSON.parse(payload) as Record<string, unknown>;
 
-      if (data.type === 'content_block_start') {
+      if (data.type === 'message_start') {
+        const reported = (data.message as Record<string, unknown> | undefined)?.usage as
+          | Record<string, number>
+          | undefined;
+        if (reported) {
+          usage = {
+            prompt_tokens: reported.input_tokens ?? 0,
+            completion_tokens: reported.output_tokens ?? 0,
+          };
+        }
+      } else if (data.type === 'message_delta') {
+        const reported = data.usage as Record<string, number> | undefined;
+        if (reported) {
+          usage = {
+            prompt_tokens: usage?.prompt_tokens ?? 0,
+            completion_tokens: reported.output_tokens ?? usage?.completion_tokens ?? 0,
+          };
+        }
+      } else if (data.type === 'content_block_start') {
         const block = data.content_block as Record<string, unknown>;
         const index = data.index as number;
         if (block.type === 'tool_use') {
@@ -150,7 +175,7 @@ export class AnthropicProvider implements LLMProvider {
             tool_call: { id: block.id, name: block.name, arguments: block.input || '{}' },
           };
         }
-        yield { type: 'done' };
+        yield usage ? { type: 'done', usage } : { type: 'done' };
       }
     }
   }

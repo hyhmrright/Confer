@@ -401,10 +401,26 @@ data: {"finish_reason":"stop","tokens_used":523}
 
 详见 `docs/03-protocol.md`。这里只列 endpoint。
 
+两套绑定并存于同一前缀，共用同一套闸门（`a2a/inbound.ts`），只是线格式不同。
+
+**A2A 标准 HTTP+JSON 绑定**（spec §11.3 的路径原样照抄，Agent Card 宣称的就是这一套）：
+
+```
+POST   /a2a/v1/message:send              # SendMessage → Task
+GET    /a2a/v1/tasks/{id}                # GetTask
+GET    /a2a/v1/tasks                     # ListTasks（游标分页）
+POST   /a2a/v1/tasks/{id}:cancel         # CancelTask → TaskNotCancelable
+POST   /a2a/v1/message:stream            # 未实现 → UnsupportedOperation
+POST   /a2a/v1/tasks/{id}:subscribe      # 未实现 → UnsupportedOperation
+GET    /a2a/v1/extendedAgentCard         # 未实现 → UnsupportedOperation
+*      /a2a/v1/tasks/{id}/pushNotificationConfigs…  # → PushNotificationNotSupported
+```
+
+**Confer 自己的方言**（实例之间用，经 `/.well-known/agents.json` 发现）：
+
 ```
 POST   /a2a/v1/messages                  # 接收外部 Agent 消息
 GET    /a2a/v1/stream/{message_id}       # 流式拉回答（SSE）
-POST   /a2a/v1/threads                   # 开启对话 thread
 GET    /a2a/v1/agent-facts/{agent_did}   # 公开 AgentFacts
 ```
 
@@ -415,8 +431,47 @@ GET    /a2a/v1/agent-facts/{agent_did}   # 公开 AgentFacts
 ```
 GET    /.well-known/did.json                # 主 DID document
 GET    /.well-known/agents.json             # 本实例所有公开 Agent 列表
+GET    /.well-known/agent-card.json         # A2A 标准 Agent Card（仅当实例只有一个公开 Agent）
 GET    /.well-known/openid-configuration    # 未来：OIDC 兼容（v2）
 ```
+
+## A2A 标准 Agent Card（互操作发现层）
+
+```
+GET    /agents/{username}/agent-card.json   # 该 Agent 的 A2A 标准 Card
+GET    /.well-known/agent-card.json         # 同上，仅当本实例只有一个公开 Agent
+```
+
+按 Linux Foundation **Agent2Agent v1.0** 的 `AgentCard`（字段取自 `a2aproject/A2A` 的 `specification/a2a.proto` @ v1.0.1，走 proto3 JSON 映射，故为 camelCase）。目的是让 A2A 生态**发现**本实例的 Agent —— 名字撞了但协议不通：对方的发现文档在 `/.well-known/agent-card.json`，本实例原本只有 `/.well-known/agents.json`。
+
+几个刻意的取舍：
+
+- **每个 Agent 一张 Card**，`supportedInterfaces[].tenant` = 用户名。spec 的 well-known 假设一个域名一个 Agent，而本实例是多租户；`tenant` 正是 spec 为「单个 A2A 端点后面多个 Agent」定义的路由选择器。`/.well-known/agent-card.json` 只在**恰好一个公开 Agent** 时作答（单人自托管场景），否则 404 并在错误信息里指向 `agents.json` —— 随便挑一个账号称之为「本域名的 Agent」是错的。
+- **`streaming: false`**。确实有流式端点，但那是 Confer 自己的形状，不是 spec 的 `SendStreamingMessage`。宣称一个标准客户端用不了的能力，比不宣称更糟。
+- **不声明 `securitySchemes`**。spec 那套是 API key / HTTP auth / OAuth2 / OIDC / mTLS，本端点一个都不收——它要的是请求签名。随便挑一个填上，等于告诉客户端可以用一种必然被拒的方式认证。真实要求改用**必需扩展**（`capabilities.extensions`，`uri` 为 RFC 9421 的地址，`required: true`）声明，这正是 spec 为此提供的机制。
+- Card 是**发现文档**，可见性与 `/.well-known/agents.json` 完全一致：非公开或已停用的 Agent 一律 404，否则这条路由就成了枚举主人没打算公开的账号的办法。
+
+- **只宣称一套绑定**。Confer 自己的方言同在这个 URL 下，但不写进 Card：§5.1 要求一个 Agent 声明的每套绑定在功能上等价，而方言没有 task 生命周期。它经 `/.well-known/agents.json` 发现，Card 里就不留一句兑现不了的话。
+
+### 消息层（Task 语义）
+
+`POST /a2a/v1/message:send` 收 spec 的 `SendMessageRequest`，返回 `Task`。**一个 task 就是一次入站提问**：它的 `id` 是那条消息的 id，`contextId` 是归档它的会话，状态由后续发生的事推出来——不另立一张 `tasks` 表去影子同一个事实。
+
+Confer 的异步 + 同意闸门模型正好落在 spec 的状态机上：
+
+| 情况 | 状态 |
+|---|---|
+| Agent 正在作答 | `TASK_STATE_WORKING` |
+| 答完 | `TASK_STATE_COMPLETED` |
+| 这一轮跑不起来（没配模型 / provider 报错） | `TASK_STATE_FAILED` |
+| `ask_user` 策略挂起，等主人批 | `TASK_STATE_AUTH_REQUIRED`（中断态，非终态） |
+| 主人拒了 | `TASK_STATE_REJECTED` |
+
+两处**没有** task 可返回，因为压根没建行：陌生 peer（挂起为待批连接请求）和策略直接拒绝。两者都回 `403 PERMISSION_DENIED`，用 `ErrorInfo.metadata.confer_status` 区分——凭空造一个下一次调用就 404 的 task id 更糟。
+
+其余按 spec 逐条对齐的行为：错误体是 `google.rpc.Status` 形状并**必带** `ErrorInfo.reason`（多个 A2A 错误共用同一个 HTTP 状态码，reason 是唯一能分辨的字段）；未声明必需扩展的客户端按 §3.3.4 回 `ExtensionSupportRequiredError`，而不是一个不解释任何事的 401；`historyLength=0` 是**整个字段省略**而不是空数组；`nextPageToken` 恒在，没有下一页时为空串。
+
+两处刻意的偏离，都写在代码注释里：阻塞式 `message:send` 的等待**有上限**（55s，之后返回仍为 `WORKING` 的 task 让客户端轮询）——spec §3.2.2 没给超时出口，而一次 LLM 调用没有上界；`messageId` 幂等（§3.3.1 的 MAY）**没做**，因为租户安全的唯一键需要 owner 作用域，而首条消息的线格式里拿不到。
 
 ## Webhooks（可选，v1.5+）
 

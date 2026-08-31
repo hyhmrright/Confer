@@ -189,6 +189,10 @@ export const messages = pgTable(
   (t) => [
     index('idx_messages_conversation_created').on(t.conversation_id, t.created_at),
     index('idx_messages_thread_root').on(t.thread_root),
+    // `ListTasks` in the A2A REST binding pages a peer's own inbound messages
+    // by sender, newest first. Without this it is a sequential scan of every
+    // message on the instance, on an endpoint any connected peer can call.
+    index('idx_messages_sender_did').on(t.sender_did, t.id),
   ],
 );
 

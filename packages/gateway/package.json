@@ -8,7 +8,8 @@
     "test": "bun test",
     "test:db:setup": "bun run scripts/setup-test-db.ts",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "bun run src/db/migrate.ts"
+    "db:migrate": "bun run src/db/migrate.ts",
+    "eval:rag": "bun run src/eval/run-rag-eval.ts"
   },
   "dependencies": {
     "@confer/agent-runtime": "workspace:*",
@@ -16,8 +17,10 @@
     "@confer/shared": "workspace:*",
     "argon2": "^0.45.1",
     "drizzle-orm": "^0.45.2",
+    "exceljs": "^4.4.0",
     "hono": "^4.13.4",
     "jose": "^6.2.10",
+    "mammoth": "^1.12.2",
     "minio": "^8.0.7",
     "pdf-parse": "^2.4.5",
     "postgres": "^3.4.9",

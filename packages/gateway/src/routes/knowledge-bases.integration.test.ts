@@ -194,6 +194,43 @@ describe('document ingestion (real MinIO + Qdrant, mocked embeddings)', () => {
     expect(chunkCount).toBeGreaterThan(0);
   });
 
+  // The unit tests cover the extractor; this covers the wiring around it —
+  // upload admission, MinIO, the ingest queue and the chunker all have to agree
+  // that .docx is a real format, and the type is negotiated in three places
+  // (the browser's `file.type`, `guessContentType`, `isSupportedDocumentType`).
+  test('ingests a .docx end to end', async () => {
+    const kbId = await createKb();
+
+    const fixture = await Bun.file(
+      new URL('../test/fixtures/sample.docx', import.meta.url),
+    ).arrayBuffer();
+    const form = new FormData();
+    form.append(
+      'file',
+      new File([fixture], 'report.docx', {
+        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      }),
+    );
+    const res = await apiRequest(`${BASE}/${kbId}/documents`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${user.token}`, 'x-forwarded-for': 'kb-upload' },
+      body: form,
+    });
+    expect(res.status).toBe(201);
+
+    let status = 'processing';
+    let chunkCount = 0;
+    for (let i = 0; i < 50 && status === 'processing'; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      const docs = await (await get(`${BASE}/${kbId}/documents`, { token: user.token })).json();
+      status = docs.documents[0]?.status;
+      chunkCount = docs.documents[0]?.chunk_count ?? 0;
+    }
+
+    expect(status).toBe('ready');
+    expect(chunkCount).toBeGreaterThan(0);
+  });
+
   // The parser rejected these, but only from inside the async ingestion that
   // starts after the response — by which point the bytes were in MinIO and the
   // row was written. Any account could park 10 MB of anything per request that

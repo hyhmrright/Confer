@@ -1,0 +1,1 @@
+CREATE INDEX "idx_messages_sender_did" ON "messages" USING btree ("sender_did","id");

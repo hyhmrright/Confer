@@ -36,7 +36,8 @@
       "!**/drizzle",
       "!docs",
       "!**/src-tauri/target",
-      "!**/src-tauri/gen"
+      "!**/src-tauri/gen",
+      "!**/eval/baselines"
     ]
   }
 }

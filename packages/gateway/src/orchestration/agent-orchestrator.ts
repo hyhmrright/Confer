@@ -4,10 +4,22 @@ import type {
   LLMProvider,
   LLMToolDefinition,
 } from '@confer/agent-runtime';
+import { getEnv } from '../env.js';
 import type { EmbeddingProvider } from '../lib/embedding.js';
+import type { TurnAudience } from '../lib/llm-keys.js';
 import { ensureMemoryCollection } from '../lib/memory-store.js';
+import { recordAgentTurn } from '../lib/telemetry.js';
+import {
+  listContacts,
+  listContactsToolDefinition,
+  listKnowledgeBases,
+  listKnowledgeBasesToolDefinition,
+  searchMemory,
+  searchMemoryToolDefinition,
+} from '../tools/introspect.js';
 import {
   type KbCitation,
+  type KbRerank,
   knowledgeBaseToolDefinition,
   searchKnowledgeBase,
 } from '../tools/knowledge-base.js';
@@ -55,6 +67,11 @@ export interface RunAgentTurnOptions {
   // default, for the same reason `audience` is: the permissive value must never
   // be what a caller lands on by saying nothing.
   recallMemory: boolean;
+  // Who the answer is going to. Required for the same reason `recallMemory` is:
+  // the permissive value is what a forgotten argument lands on, and this is the
+  // argument deciding whether a stranger's question can list the owner's
+  // contacts or search their long-term memory.
+  audience: TurnAudience;
   emit?: AgentTurnEmit;
 }
 
@@ -70,12 +87,21 @@ function buildSystemPrompt(base: string, hasKb: boolean): string {
   return [base, kbInstruction].filter(Boolean).join('\n');
 }
 
-// Assemble the tool set offered to the LLM: web search when a Tavily key
-// resolves, knowledge-base search when the user has at least one KB.
-function buildToolDefinitions(tavilyApiKey: string, hasKb: boolean): LLMToolDefinition[] {
+// Assemble the tool set offered to the LLM. Each entry is gated on the thing
+// that makes it work at all — a Tavily key, a knowledge base, an embedding key
+// — and the two that read owner-only data are gated on the audience as well.
+//
+// Offering a tool is NOT how access is enforced. A model can emit a call for a
+// name it was never given, and `executeToolCall` passes the arguments straight
+// through, so every owner-only branch re-checks the audience there. This
+// function decides what the model is *told about*; that one decides what runs.
+function buildToolDefinitions(opts: RunAgentTurnOptions): LLMToolDefinition[] {
+  const isOwner = opts.audience === 'owner';
   return [
-    ...(tavilyApiKey ? [tavilyToolDefinition] : []),
-    ...(hasKb ? [knowledgeBaseToolDefinition] : []),
+    ...(opts.tavilyApiKey ? [tavilyToolDefinition] : []),
+    ...(opts.hasKb ? [knowledgeBaseToolDefinition, listKnowledgeBasesToolDefinition] : []),
+    ...(isOwner && opts.embeddingKey ? [searchMemoryToolDefinition] : []),
+    ...(isOwner ? [listContactsToolDefinition] : []),
   ];
 }
 
@@ -85,6 +111,11 @@ interface ToolExecContext {
   embeddingProvider: EmbeddingProvider;
   tavilyApiKey: string;
   kbScope?: string[];
+  audience: TurnAudience;
+  // The turn's own model, reused to rerank knowledge-base hits. Passing it
+  // rather than reaching for a provider inside `tools/` keeps the dependency
+  // pointing the one way it is allowed to.
+  rerank?: KbRerank;
   citations: KbCitation[];
   // Names of the tools the model asked for this turn, in order — attempts, not
   // successes, since the question it answers is whether the model reached for
@@ -145,12 +176,30 @@ async function executeToolCall(
         // never widen: within a scope the model may still choose a subset.
         narrowKbIds(args.kb_ids, ctx.kbScope),
         ctx.embeddingProvider,
+        ctx.rerank,
       );
       ctx.citations.push(...kbResult.citations);
       for (const cite of kbResult.citations) {
         await ctx.emit?.onCitation?.(cite);
       }
       return kbResult.text;
+    }
+    if (tc.name === 'list_knowledge_bases') {
+      return await listKnowledgeBases(ctx.userId, ctx.kbScope);
+    }
+    // The two owner-only tools re-check the audience rather than trusting that
+    // they were never offered. A peer's question and the owner's instructions
+    // reach the model as the same kind of text, so a model can be talked into
+    // calling a name it was not given — and `executeToolCall` is the only place
+    // that decides whether the call actually runs.
+    if (tc.name === 'search_memory') {
+      if (ctx.audience !== 'owner') return `未知工具: ${tc.name}`;
+      const args = JSON.parse(tc.arguments) as { query: string };
+      return await searchMemory(args.query, ctx.userId, ctx.embeddingKey, ctx.embeddingProvider);
+    }
+    if (tc.name === 'list_contacts') {
+      if (ctx.audience !== 'owner') return `未知工具: ${tc.name}`;
+      return await listContacts(ctx.userId);
     }
     return `未知工具: ${tc.name}`;
   } catch (err) {
@@ -167,6 +216,7 @@ async function runAgentWithTools(
   initialMessages: LLMMessage[],
   llmOptions: LLMChatOptions,
   ctx: ToolExecContext,
+  spend: TurnSpend,
 ): Promise<string> {
   let agentMessages = initialMessages;
   let fullContent = '';
@@ -174,6 +224,7 @@ async function runAgentWithTools(
   for (let round = 0; round < 5; round++) {
     const pendingToolCalls: Array<{ id: string; name: string; arguments: string }> = [];
     let turnContent = '';
+    spend.rounds++;
 
     for await (const event of provider.stream(agentMessages, llmOptions)) {
       switch (event.type) {
@@ -186,6 +237,18 @@ async function runAgentWithTools(
           break;
         case 'tool_call':
           if (event.tool_call) pendingToolCalls.push(event.tool_call);
+          break;
+        case 'done':
+          // Summed across rounds, because a tool loop is several model calls
+          // and the owner pays for the prompt again on each one — the round
+          // count beside it is what makes a large number explicable.
+          if (event.usage) {
+            spend.usage = {
+              prompt_tokens: (spend.usage?.prompt_tokens ?? 0) + event.usage.prompt_tokens,
+              completion_tokens:
+                (spend.usage?.completion_tokens ?? 0) + event.usage.completion_tokens,
+            };
+          }
           break;
       }
     }
@@ -221,18 +284,12 @@ async function runAgentWithTools(
   return fullContent;
 }
 
-/**
- * One line per turn saying what the turn was actually grounded in.
- *
- * Two things here have no other way to be noticed. Recall returning nothing has
- * three causes that all present as an empty prompt fragment — nothing stored,
- * nothing above the score floor, or rows that were never indexed — and the last
- * one hid for months. And the KB instruction *mandates* a search before
- * answering, yet a model that ignores it produces a fluent answer from its own
- * priors that reads exactly like a grounded one.
- *
- * Counts and scores only: memory text and message content are PII and stay out.
- */
+/** What one turn spent, accumulated across the rounds of the tool loop. */
+interface TurnSpend {
+  rounds: number;
+  usage?: { prompt_tokens: number; completion_tokens: number };
+}
+
 function recallState(opts: RunAgentTurnOptions, recall: MemoryRecall | undefined): string {
   // `withheld` is a peer-audience turn, `off` is a missing embedding key. Worth
   // separating: one is a deliberate boundary, the other is a misconfiguration.
@@ -246,24 +303,6 @@ function recallState(opts: RunAgentTurnOptions, recall: MemoryRecall | undefined
 function kbState(hasKb: boolean, toolsUsed: string[]): string {
   if (!hasKb) return 'none';
   return toolsUsed.includes('search_knowledge_base') ? 'searched' : 'unsearched';
-}
-
-function logTurnGrounding(
-  opts: RunAgentTurnOptions,
-  recall: MemoryRecall | undefined,
-  toolsUsed: string[],
-  citations: KbCitation[],
-): void {
-  console.log(
-    `agent turn user=${opts.userId}` +
-      ` recall=${recallState(opts, recall)}` +
-      ` kb=${kbState(opts.hasKb, toolsUsed)}` +
-      // `kb=searched` says the model obeyed the instruction, not that anything
-      // came back: a search that matched nothing, or one that threw and was
-      // handed to the model as error text, both still count as searched.
-      ` cites=${citations.length}` +
-      ` tools=${toolsUsed.length}`,
-  );
 }
 
 // Run one agent turn: recall durable memories, layer the KB instruction +
@@ -288,7 +327,7 @@ export async function runAgentTurn(opts: RunAgentTurnOptions): Promise<RunAgentT
 
   const effectiveSystemPrompt =
     buildSystemPrompt(opts.systemPromptBase, opts.hasKb) + (recall?.fragment ?? '');
-  const tools = buildToolDefinitions(opts.tavilyApiKey, opts.hasKb);
+  const tools = buildToolDefinitions(opts);
 
   const initialMessages: LLMMessage[] = [
     { role: 'system', content: effectiveSystemPrompt },
@@ -298,23 +337,58 @@ export async function runAgentTurn(opts: RunAgentTurnOptions): Promise<RunAgentT
 
   const citations: KbCitation[] = [];
   const toolsUsed: string[] = [];
-  const content = await runAgentWithTools(
-    opts.provider,
-    initialMessages,
-    { tools, model: opts.model },
-    {
+  const spend: TurnSpend = { rounds: 0 };
+  const startedAt = Date.now();
+
+  const record = (error?: unknown): void =>
+    recordAgentTurn({
       userId: opts.userId,
-      embeddingKey: opts.embeddingKey,
-      embeddingProvider: opts.embeddingProvider,
-      tavilyApiKey: opts.tavilyApiKey,
-      kbScope: opts.kbScope,
-      citations,
-      toolsUsed,
-      emit: opts.emit,
-    },
-  );
+      audience: opts.audience,
+      provider: opts.provider.name,
+      model: opts.model,
+      durationMs: Date.now() - startedAt,
+      rounds: spend.rounds,
+      usage: spend.usage,
+      recall: recallState(opts, recall),
+      kb: kbState(opts.hasKb, toolsUsed),
+      citations: citations.length,
+      tools: toolsUsed.length,
+      errorType: error === undefined ? undefined : ((error as Error)?.constructor?.name ?? 'Error'),
+    });
 
-  logTurnGrounding(opts, recall, toolsUsed, citations);
+  // Recorded on the way out whether the turn succeeded or threw. A turn that
+  // fails after three tool rounds has still been paid for, and it is the one an
+  // owner most wants to find afterwards — logging only the successes would hide
+  // exactly the turns worth looking at.
+  try {
+    const content = await runAgentWithTools(
+      opts.provider,
+      initialMessages,
+      { tools, model: opts.model },
+      {
+        userId: opts.userId,
+        embeddingKey: opts.embeddingKey,
+        embeddingProvider: opts.embeddingProvider,
+        tavilyApiKey: opts.tavilyApiKey,
+        kbScope: opts.kbScope,
+        audience: opts.audience,
+        // Off unless the operator turned it on: it spends an extra model call
+        // per search, and the measurement that justified the recall headroom did
+        // not establish that any given chat model can exploit it. See env.ts.
+        rerank: getEnv().RERANK_ENABLED
+          ? { provider: opts.provider, model: opts.model }
+          : undefined,
+        citations,
+        toolsUsed,
+        emit: opts.emit,
+      },
+      spend,
+    );
 
-  return { content, citations };
+    record();
+    return { content, citations };
+  } catch (error) {
+    record(error);
+    throw error;
+  }
 }
