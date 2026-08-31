@@ -30,12 +30,22 @@ export function LanguageSwitcher({ id }: { id?: string }) {
   );
 }
 
-// One glyph per language for the rail button — a word would not fit in 36px.
+// One or two characters per language for the rail button — a word would not fit
+// in 36px. Written in each language's own script, so the button reads as that
+// language to someone who speaks it rather than as an ISO code they may not
+// associate with themselves.
 const SHORT_LABEL: Record<SupportedLanguage, string> = {
   en: 'EN',
   zh: '中',
-  ja: 'あ',
+  hi: 'हि',
+  es: 'ES',
   ar: 'ع',
+  fr: 'FR',
+  bn: 'বা',
+  pt: 'PT',
+  ru: 'РУ',
+  ur: 'اُر',
+  ja: 'あ',
 };
 
 /**
