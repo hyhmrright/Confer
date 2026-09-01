@@ -76,7 +76,7 @@ export function PermissionCard({
           <p className="text-sm text-ink-primary">{description}</p>
         </div>
       </div>
-      {error && <p className="text-xs text-red-400 ml-6 mb-1">{error}</p>}
+      {error && <p className="text-xs text-red-400 ms-6 mb-1">{error}</p>}
       {/*
         Deny and Allow once carry equal weight; Always allow is quieter than
         both. It used to be the only filled button on the card — the broadest,
@@ -87,7 +87,7 @@ export function PermissionCard({
         decisions of genuinely different consequence should be read, not
         aimed at.
       */}
-      <div className="flex flex-wrap gap-2 ml-6">
+      <div className="flex flex-wrap gap-2 ms-6">
         <button
           type="button"
           onClick={() => handleDecide('deny')}

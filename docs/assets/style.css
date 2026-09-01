@@ -132,23 +132,66 @@ nav {
   }
 }
 /* in-doc language switcher (lives in the nav) */
+/* Language disclosure. A `details` rather than a row of links: eleven of them
+   would not fit in the nav, and a `select` would need script the rest of this
+   page does without. */
 .doc-lang {
+  position: relative;
+}
+.doc-lang summary {
   display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
   border: 1px solid var(--line);
   border-radius: 999px;
-  overflow: hidden;
-}
-.doc-lang a {
-  padding: 3px 10px;
   color: var(--paper-faint);
-  transition: color .2s, background .2s;
+  cursor: pointer;
+  list-style: none;
+  transition: color .2s, border-color .2s;
 }
-.doc-lang a:hover {
+.doc-lang summary::-webkit-details-marker {
+  display: none;
+}
+.doc-lang summary:hover,
+.doc-lang[open] summary {
   color: var(--paper);
+  border-color: var(--amber);
 }
-.doc-lang a.on {
-  background: var(--amber);
-  color: #1a1206;
+.doc-lang .caret {
+  font-size: 9px;
+  opacity: .7;
+}
+.doc-lang-menu {
+  position: absolute;
+  inset-inline-end: 0;
+  top: calc(100% + 8px);
+  z-index: 40;
+  min-width: 160px;
+  padding: 5px;
+  background: var(--ink-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, .5);
+}
+.doc-lang-menu a {
+  display: block;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--paper-dim);
+  /* Each name is in its own language and script, so the menu stays usable to a
+     reader who cannot read the page it is currently rendered in. Both scripts
+     appear in one list, so each line is aligned by its own direction. */
+  text-align: start;
+  transition: color .18s, background .18s;
+}
+.doc-lang-menu a:hover {
+  color: var(--paper);
+  background: var(--ink-3);
+}
+.doc-lang-menu a.on {
+  color: var(--amber);
   font-weight: 600;
 }
 
@@ -200,9 +243,10 @@ nav {
   font-size: 13.5px;
   color: var(--paper-dim);
   padding: 8px 12px;
-  border-left: 2px solid transparent;
+  border-inline-start: 2px solid transparent;
   transition: all .18s;
-  border-radius: 0 3px 3px 0;
+  border-start-end-radius: 3px;
+  border-end-end-radius: 3px;
 }
 .doc-nav a:hover {
   color: var(--paper);
@@ -210,15 +254,27 @@ nav {
 }
 .doc-nav a.on {
   color: var(--amber-soft);
-  border-left-color: var(--amber);
+  border-inline-start-color: var(--amber);
   background: var(--ink-2);
 }
 .doc-nav a .n {
   color: var(--paper-faint);
-  margin-right: 9px;
+  margin-inline-end: 9px;
 }
 .doc-nav a.on .n {
   color: var(--amber);
+}
+
+/* Which language is authoritative. Quiet — it is a provenance note, not a
+   warning, and it sits above the title on every page. */
+.doc-canonical {
+  margin-bottom: 26px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--paper-faint);
+  border-inline-start: 1px solid var(--line);
+  padding-inline-start: 12px;
 }
 
 /* article (rendered markdown) */
@@ -301,7 +357,7 @@ nav {
 .doc ul,
 .doc ol {
   margin: 0 0 20px;
-  padding-left: 1.4em;
+  padding-inline-start: 1.4em;
   color: var(--paper);
 }
 .doc li {
@@ -313,7 +369,7 @@ nav {
 .doc blockquote {
   margin: 22px 0;
   padding: 6px 22px;
-  border-left: 2px solid var(--amber);
+  border-inline-start: 2px solid var(--amber);
   background: rgba(230, 162, 60, 0.05);
   color: var(--paper-dim);
   font-style: italic;
@@ -358,7 +414,7 @@ nav {
 .doc td {
   border: 1px solid var(--line);
   padding: 10px 14px;
-  text-align: left;
+  text-align: start;
 }
 .doc th {
   font-family: var(--mono);

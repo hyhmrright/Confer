@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "client",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": ["run", "--filter", "@confer/client", "dev"],
+      "port": 1420
+    }
+  ]
+}

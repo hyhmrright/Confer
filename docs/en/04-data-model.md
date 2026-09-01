@@ -457,6 +457,11 @@ CREATE INDEX idx_audit_user_created ON audit_log (user_id, created_at DESC);
 
 ## Redis key conventions
 
+> The next two sections are the scale-out design. **Redis and NATS are neither
+> deployed nor wired up today** (removed from `docker-compose*.yml` and `env.ts`
+> on 2026-08-07). The tables above exist; these two sections do not — see the note
+> at the top of `docs/02-architecture.md`.
+
 ```
 session:{token_jti}                # session data, TTL = token exp
 presence:{user_id}                 # online status, SET contains active device_ids

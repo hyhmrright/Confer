@@ -107,7 +107,8 @@ docker compose -f docker-compose.prod.yml up -d --build
 The first build takes a few minutes. When it finishes:
 
 1. Open **http://localhost**.
-2. Click **注册 / Register** and create the first account. (Registration is
+2. Click **Register** (the label appears in your own language) and create the
+   first account. (Registration is
    rate-limited to 3 attempts per hour per IP.)
 3. Go to **Settings** and add an LLM API key (Claude / OpenAI / DeepSeek / Qwen /
    Ollama). Keys are encrypted at rest with `ENCRYPTION_KEY` (AES-256-GCM) and are
@@ -176,8 +177,8 @@ bun run dev                      # gateway on :3000, client (Vite) on :1420
 - Web preview: **http://localhost:1420** (Vite proxies `/api` → gateway on :3000).
 - Native desktop app: `cd packages/client && bunx tauri dev`.
 
-The dev `docker-compose.yml` publishes each infra port to localhost (5432, 6379,
-4222, 6333, 9000/9001) so the locally-run gateway can reach them. See
+The dev `docker-compose.yml` publishes each infra port to localhost (5432, 6333, 6334,
+9000/9001) so the locally-run gateway can reach them. See
 `CONTRIBUTING.md` for the full developer workflow and the isolated test stack.
 
 ## Connecting the Claude Code plugin

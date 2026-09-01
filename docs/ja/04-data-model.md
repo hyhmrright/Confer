@@ -457,6 +457,11 @@ CREATE INDEX idx_audit_user_created ON audit_log (user_id, created_at DESC);
 
 ## Redis キー規約
 
+> 以下の 2 節は水平スケール時の想定設計です。**Redis と NATS は現時点で配備も
+> 結線もされていません**（2026-08-07 に `docker-compose*.yml` と `env.ts` から
+> 削除済み）。上のテーブル定義は実在しますが、この 2 節は実在しません。詳しくは
+> `docs/02-architecture.md` の冒頭を参照してください。
+
 ```
 session:{token_jti}                # session 数据，TTL = token exp
 presence:{user_id}                 # online status, SET 包含 active device_ids

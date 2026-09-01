@@ -5,24 +5,42 @@ lang: en
 
 # Custom dark "ink & amber" theme — no remote theme; layout lives in _layouts/.
 #
-# i18n: every design doc exists in three languages — zh at the repo root (canonical,
-# also the dev reference), en under /en, ja under /ja. The path-scoped defaults below
-# tag each rendered page with its language; _layouts/default.html reads page.lang to
+# i18n: every design doc exists in eleven languages — zh at the repo root
+# (canonical, and the reference the others are translated from), each other
+# language in a directory named for it. The path-scoped defaults below tag each
+# rendered page with its language; _layouts/default.html reads page.lang to
 # localise the chrome, build the sidebar, and emit cross-language links.
+#
+# Jekyll has no loop here, so this list is a second registration point beside
+# _data/i18n.yml: a language present there but missing below renders with the
+# root default (lang: zh), i.e. Chinese chrome around a translated body, with no
+# warning. Keep the two in step.
 defaults:
   - scope:
       path: ""
     values:
       layout: default
       lang: zh
-  - scope:
-      path: "en"
-    values:
-      lang: en
-  - scope:
-      path: "ja"
-    values:
-      lang: ja
+  - scope: { path: "en" }
+    values: { lang: en }
+  - scope: { path: "hi" }
+    values: { lang: hi }
+  - scope: { path: "es" }
+    values: { lang: es }
+  - scope: { path: "ar" }
+    values: { lang: ar }
+  - scope: { path: "fr" }
+    values: { lang: fr }
+  - scope: { path: "bn" }
+    values: { lang: bn }
+  - scope: { path: "pt" }
+    values: { lang: pt }
+  - scope: { path: "ru" }
+    values: { lang: ru }
+  - scope: { path: "ur" }
+    values: { lang: ur }
+  - scope: { path: "ja" }
+    values: { lang: ja }
   - scope:
       path: "i18n/README.ja.md"
     values:

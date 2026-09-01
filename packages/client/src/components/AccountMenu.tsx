@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useDismissable } from '../lib/use-dismissable.js';
 import { LogOut } from './Icons.js';
 
 export type AccountUser = {
@@ -21,21 +22,7 @@ export function AccountMenu({
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('mousedown', onDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
+  useDismissable(rootRef, open, () => setOpen(false));
 
   const displayName = user?.display_name ?? user?.username ?? '';
 
@@ -55,7 +42,7 @@ export function AccountMenu({
       {open && (
         <div
           role="menu"
-          className="absolute left-full bottom-0 ml-2 w-56 rounded-lg bg-dark-panel border border-dark-border shadow-lg z-50 overflow-hidden"
+          className="absolute start-full bottom-0 ms-2 w-56 rounded-lg bg-dark-panel border border-dark-border shadow-lg z-50 overflow-hidden"
         >
           <div className="px-3 py-3 border-b border-dark-border">
             <p className="text-sm font-medium text-ink-primary truncate" title={displayName}>

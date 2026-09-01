@@ -1,5 +1,23 @@
 # Confer — System architecture
 
+> **This document describes the target architecture, not the current implementation.**
+> What runs today is a **single-process, single-instance** gateway: the WebSocket
+> connection table, the A2A replay-protection nonces and the rate-limit counters all
+> live in that one process's memory (`ws/handler.ts`, `lib/nonce-cache.ts`,
+> `middleware/rate-limit.ts`).
+>
+> **So the gateway cannot run a second replica.** Adding one silently breaks A2A
+> replay protection — a replayed request that lands on the other replica finds an
+> empty nonce table and is accepted. WebSocket pushes also miss users connected to
+> the other replica, and every rate-limit threshold is multiplied by the replica count.
+>
+> The NATS / Redis mentioned below are the plan for scaling out; **today they are
+> neither deployed nor wired up** (removed from `docker-compose*.yml` and `env.ts` on
+> 2026-08-07 — before that they were idle containers and an environment variable
+> nothing ever read). Scaling out for real means moving those three pieces of
+> in-process state to shared storage first, nonces above all, because that one is
+> security-critical.
+
 ## High-level architecture
 
 ```
@@ -95,13 +113,13 @@ For the detailed protocol design, see `docs/03-protocol.md`.
 
 ## Data layer
 
-| Component | Purpose |
-|---|---|
-| PostgreSQL | Users, Agents, conversations, messages, permissions, peer relationships (primary store) |
-| Redis | Sessions, presence, rate-limit counters, hot-data cache |
-| NATS Streams | Message fan-out (user.{uid}.events) + Agent runtime task queue |
-| Qdrant or pgvector | Agent long-term memory RAG, user knowledge-base index |
-| S3-compatible (MinIO) | File attachments, DID document backups, conversation archives |
+| Component | Purpose | Status |
+|---|---|---|
+| PostgreSQL | Users, Agents, conversations, messages, permissions, peer relationships (primary store) | ✅ In use |
+| Qdrant | Agent long-term memory RAG, user knowledge-base index | ✅ In use |
+| S3-compatible (MinIO) | Knowledge-base file storage | ✅ In use |
+| Redis | Sessions, presence, rate-limit counters, hot-data cache | ⬜ Not deployed; needed only when scaling out |
+| NATS Streams | Message fan-out (user.{uid}.events) + Agent runtime task queue | ⬜ Not deployed; needed only when scaling out |
 
 ## Client architecture
 
@@ -136,18 +154,16 @@ See `docs/06-claude-code-plugin.md`.
 
 ### Single instance (individuals / small teams)
 
+The actual `docker-compose.prod.yml` (agent-runtime and identity are libraries
+inside the gateway, not services of their own):
+
 ```
-docker-compose.yml:
-  - gateway       (Bun 服务)
-  - agent-runtime (Bun 服务)
-  - conversation  (Bun 服务)
-  - identity      (Bun 服务)
+  - gateway   (Bun service, single replica — see the top of this document)
+  - client    (frontend served by nginx)
+  - migrate   (one-shot task)
   - postgres
-  - redis
-  - nats
   - qdrant
   - minio
-  - caddy / traefik  (反向代理 + TLS)
 ```
 
 Deployment: `npx confer-cli` for the published images, or

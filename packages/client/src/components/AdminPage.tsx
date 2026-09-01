@@ -46,12 +46,12 @@ function useConfirmedAction() {
 }
 
 // Inline "that didn't apply" marker for a row whose last action failed. It sits
-// in a flex button row (users) and in a plain right-aligned cell (agents,
+// in a flex button row (users) and in a plain end-aligned cell (agents,
 // conversations), hence both the flex and the inline alignment class.
 function ActionFailed() {
   const { t } = useTranslation();
   return (
-    <span className="text-[11px] text-red-400 self-center align-middle mr-2">
+    <span className="text-[11px] text-red-400 self-center align-middle me-2">
       {t('admin.actionError')}
     </span>
   );
@@ -146,7 +146,7 @@ function UserRow({ u, selfId }: { u: AdminUser; selfId: string | undefined }) {
       <td className="py-2.5 px-3 text-xs text-ink-muted">
         {new Date(u.created_at).toLocaleDateString(dateLocale())}
       </td>
-      <td className="py-2.5 px-3 text-right">
+      <td className="py-2.5 px-3 text-end">
         {isSelf ? (
           <span className="text-[11px] text-ink-muted">{t('admin.selfHint')}</span>
         ) : (
@@ -285,7 +285,7 @@ function UserManagement() {
       <div className="overflow-x-auto scrollbar-thin">
         <table className="w-full min-w-[520px]">
           <thead>
-            <tr className="text-left">
+            <tr className="text-start">
               <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
                 {t('admin.usersColUser')}
               </th>
@@ -298,7 +298,7 @@ function UserManagement() {
               <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
                 {t('admin.usersColCreated')}
               </th>
-              <th className="py-2 px-3 text-[11px] font-medium text-ink-muted text-right">
+              <th className="py-2 px-3 text-[11px] font-medium text-ink-muted text-end">
                 {t('admin.usersColActions')}
               </th>
             </tr>
@@ -343,7 +343,7 @@ function AgentRow({ a }: { a: AdminAgent }) {
           {suspended ? t('admin.agentStatusSuspended') : t('admin.agentStatusActive')}
         </span>
       </td>
-      <td className="py-2.5 px-3 text-right">
+      <td className="py-2.5 px-3 text-end">
         {failed && <ActionFailed />}
         {suspended ? (
           <RowAction
@@ -387,7 +387,7 @@ function ConversationRow({ conv }: { conv: AdminConversation }) {
       <td className="py-2.5 px-3 text-xs text-ink-muted">
         {new Date(conv.created_at).toLocaleDateString(dateLocale())}
       </td>
-      <td className="py-2.5 px-3 text-right">
+      <td className="py-2.5 px-3 text-end">
         {failed && <ActionFailed />}
         {hidden ? (
           <RowAction
@@ -440,14 +440,14 @@ function ContentModeration() {
         <div className="overflow-x-auto scrollbar-thin">
           <table className="w-full min-w-[520px]">
             <thead>
-              <tr className="text-left">
+              <tr className="text-start">
                 <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
                   {t('admin.agentColName')}
                 </th>
                 <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
                   {t('admin.agentColStatus')}
                 </th>
-                <th className="py-2 px-3 text-[11px] font-medium text-ink-muted text-right">
+                <th className="py-2 px-3 text-[11px] font-medium text-ink-muted text-end">
                   {t('admin.agentColActions')}
                 </th>
               </tr>
@@ -476,7 +476,7 @@ function ContentModeration() {
         <div className="overflow-x-auto scrollbar-thin">
           <table className="w-full min-w-[520px]">
             <thead>
-              <tr className="text-left">
+              <tr className="text-start">
                 <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
                   {t('admin.convColName')}
                 </th>
@@ -486,7 +486,7 @@ function ContentModeration() {
                 <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
                   {t('admin.convColCreated')}
                 </th>
-                <th className="py-2 px-3 text-[11px] font-medium text-ink-muted text-right">
+                <th className="py-2 px-3 text-[11px] font-medium text-ink-muted text-end">
                   {t('admin.convColActions')}
                 </th>
               </tr>
@@ -573,8 +573,12 @@ function GlobalConfig() {
           }`}
         >
           <span
-            className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
-              config.registration_open ? 'translate-x-5' : ''
+            // `start-0.5` parks the knob at the inline start, but the travel is
+            // a transform, and there is no logical translate — so the RTL
+            // variant has to mirror it explicitly or the knob slides off the
+            // track instead of across it.
+            className={`absolute top-0.5 start-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
+              config.registration_open ? 'translate-x-5 rtl:-translate-x-5' : ''
             }`}
           />
         </button>

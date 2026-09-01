@@ -3,7 +3,23 @@ import LanguageDetector from 'i18next-browser-languagedetector';
 import { initReactI18next } from 'react-i18next';
 import type { Resources } from './locales/zh.js';
 
-export const SUPPORTED_LANGUAGES = ['en', 'zh', 'ja'] as const;
+// The ten most-spoken languages by total speakers, plus Japanese, which this
+// app already shipped. Ordered by that ranking rather than alphabetically, so
+// the switcher's list reads as a deliberate order instead of an accident of
+// spelling — and so the reason a language is here is visible from the order.
+export const SUPPORTED_LANGUAGES = [
+  'en',
+  'zh',
+  'hi',
+  'es',
+  'ar',
+  'fr',
+  'bn',
+  'pt',
+  'ru',
+  'ur',
+  'ja',
+] as const;
 export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];
 
 // A statically-checked translation key (e.g. 'settings.title'). Use this to
@@ -22,6 +38,14 @@ export type TranslationKey = ParseKeys;
 const LOADERS: Record<SupportedLanguage, () => Promise<Resources>> = {
   en: () => import('./locales/en.js').then((m) => m.en),
   zh: () => import('./locales/zh.js').then((m) => m.zh),
+  hi: () => import('./locales/hi.js').then((m) => m.hi),
+  es: () => import('./locales/es.js').then((m) => m.es),
+  ar: () => import('./locales/ar.js').then((m) => m.ar),
+  fr: () => import('./locales/fr.js').then((m) => m.fr),
+  bn: () => import('./locales/bn.js').then((m) => m.bn),
+  pt: () => import('./locales/pt.js').then((m) => m.pt),
+  ru: () => import('./locales/ru.js').then((m) => m.ru),
+  ur: () => import('./locales/ur.js').then((m) => m.ur),
   ja: () => import('./locales/ja.js').then((m) => m.ja),
 };
 
@@ -49,6 +73,22 @@ function isSupported(lng: string): lng is SupportedLanguage {
 export function resolveLanguage(lng: string): SupportedLanguage {
   const base = lng.split('-')[0] ?? '';
   return isSupported(base) ? base : 'en';
+}
+
+// Scripts that run right to left.
+//
+// Setting `dir` is the whole mechanism: every positional style in this app is
+// written in logical properties (`ms-`/`me-`, `ps-`/`pe-`, `start-`/`end-`,
+// `text-start`), which the browser mirrors on its own once the attribute is
+// there. Transforms are the one thing it cannot mirror, since CSS has no
+// logical translate — those are handled at their two call sites, both marked.
+const RTL_LANGUAGES: ReadonlySet<SupportedLanguage> = new Set(['ar', 'ur']);
+
+// Goes through resolveLanguage for the same reason dateLocale does: a browser
+// sends `ar-EG`, and matching the raw code would leave every real Arabic
+// visitor in a left-to-right layout.
+export function languageDirection(lng: string): 'ltr' | 'rtl' {
+  return RTL_LANGUAGES.has(resolveLanguage(lng)) ? 'rtl' : 'ltr';
 }
 
 async function loadResources(lng: string): Promise<void> {
@@ -102,6 +142,19 @@ export function initI18n(): Promise<void> {
 const DATE_LOCALES: Record<SupportedLanguage, string> = {
   en: 'en-US',
   zh: 'zh-CN',
+  hi: 'hi-IN',
+  // The region decides the date order and the numeral system, so it is chosen
+  // by where most speakers are — pt-BR over pt-PT, bn-BD over bn-IN. Arabic is
+  // the one left bare: its speakers span two dozen countries with no region
+  // more canonical than the others, and picking one would impose that
+  // country's conventions on everyone else.
+  es: 'es-ES',
+  ar: 'ar',
+  fr: 'fr-FR',
+  bn: 'bn-BD',
+  pt: 'pt-BR',
+  ru: 'ru-RU',
+  ur: 'ur-PK',
   ja: 'ja-JP',
 };
 
@@ -113,11 +166,17 @@ export function dateLocale(): string {
 }
 
 // The served index.html can only carry one static `lang`, so it is wrong for
-// two of the three UI languages — and that attribute is what tells a screen
-// reader which voice to use. Keep it on the real language instead, reusing the
-// same BCP-47 tags the date formatter maps to.
+// every UI language but one — and that attribute is what tells a screen reader
+// which voice to use. Keep it on the real language instead, reusing the same
+// BCP-47 tags the date formatter maps to.
+//
+// `dir` rides along because it has the same trigger and the same failure mode
+// if it drifts: set from anywhere else, a language switch would leave the
+// attribute describing the previous language's script and mirror the entire
+// layout the wrong way.
 function syncDocumentLang() {
   document.documentElement.lang = dateLocale();
+  document.documentElement.dir = languageDirection(i18n.language);
 }
 i18n.on('languageChanged', syncDocumentLang);
 

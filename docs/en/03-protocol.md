@@ -135,7 +135,7 @@ Authorization: Capability eyJhbGciOiJFZDI1NTE5IiwidHlwIjoiQ2FwIn0...
   "thread_id": "thread_8f3a9c",
   "message": {
     "type": "question",
-    "content": "X100 在 RTU 模式下的电压范围？",
+    "content": "What is the X100's voltage range in RTU mode?",
     "language": "zh",
     "context": {
       "via": "claude-code",
@@ -197,10 +197,10 @@ event: token
 data: {"text": "X100 "}
 
 event: token
-data: {"text": "在 RTU "}
+data: {"text": "In RTU "}
 
 event: citation
-data: {"source": "X100 安装手册 p.12", "url": "..."}
+data: {"source": "X100 installation manual p.12", "url": "..."}
 
 event: done
 data: {"thread_id": "thread_8f3a9c"}
@@ -316,7 +316,7 @@ Integrate with the NANDA Index or a similar public registry, supporting:
 
 ## Anti-spam
 
-- Rate-limit each peer-domain per minute (Redis counter)
+- Rate-limit each peer-domain per minute (in-process counter; the gateway is single-instance)
 - Peers not on the allowlist default to low priority
 - The user can blocklist a peer-domain
 - Reputation scoring (v2+): how many other instances have flagged it as spam

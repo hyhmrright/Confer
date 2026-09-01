@@ -458,6 +458,10 @@ CREATE INDEX idx_audit_user_created ON audit_log (user_id, created_at DESC);
 
 ## Redis 键约定
 
+> 下面两节是横向扩展时的目标设计。**Redis 与 NATS 目前既未部署也未接线**
+> （2026-08-07 已从 `docker-compose*.yml` 和 `env.ts` 移除）。上面的表结构是
+> 真实存在的，这两节不是——详见 `docs/02-architecture.md` 开头的说明。
+
 ```
 session:{token_jti}                # session 数据，TTL = token exp
 presence:{user_id}                 # online status, SET 包含 active device_ids

@@ -101,7 +101,7 @@ export function ErrandCard({ card }: { card: ErrandCardData }) {
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-1">
             <span className="text-xs font-medium text-ink-secondary">{card.errand_title}</span>
-            <span className="text-xs ml-auto shrink-0 text-ink-muted">
+            <span className="text-xs ms-auto shrink-0 text-ink-muted">
               {card.strictly_necessary ? t('errand.necessary') : t('errand.optional')}
             </span>
           </div>
@@ -115,7 +115,7 @@ export function ErrandCard({ card }: { card: ErrandCardData }) {
                 })}
               </span>
               {card.price_delta_cents != null && (
-                <span className="ml-2 text-yellow-400">
+                <span className="ms-2 text-yellow-400">
                   {t('errand.priceDelta', {
                     delta: `${card.price_delta_cents >= 0 ? '+' : ''}${formatCents(card.price_delta_cents, card.currency)}`,
                   })}
@@ -130,10 +130,10 @@ export function ErrandCard({ card }: { card: ErrandCardData }) {
         </div>
       </div>
 
-      {error && <p className="text-xs text-red-400 ml-6 mb-1">{error}</p>}
+      {error && <p className="text-xs text-red-400 ms-6 mb-1">{error}</p>}
 
       {changing ? (
-        <div className="flex gap-2 ml-6">
+        <div className="flex gap-2 ms-6">
           <input
             type="number"
             value={newPrice}
@@ -151,7 +151,7 @@ export function ErrandCard({ card }: { card: ErrandCardData }) {
           </button>
         </div>
       ) : (
-        <div className="flex gap-2 ml-6">
+        <div className="flex gap-2 ms-6">
           <button
             type="button"
             onClick={() => decide('approve')}

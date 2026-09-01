@@ -143,7 +143,10 @@
   --animate-dot-bounce: dot-bounce 1.4s infinite ease-in-out both;
   --animate-fade-in: fade-in 0.25s ease-out;
   --animate-cursor-blink: cursor-blink 1s step-end infinite;
-  --animate-slide-in-left: slide-in-left 0.2s ease-out;
+  /* "start", not "left": the drawer opens from the inline start edge, which is
+     the right-hand side under a right-to-left language. CSS has no logical
+     translate, so the distance is signed by a custom property [dir] flips. */
+  --animate-slide-in-start: slide-in-start 0.2s ease-out;
 
   @keyframes dot-bounce {
     0%,
@@ -170,9 +173,9 @@
   /* The narrow-viewport navigation drawer. It is toggled with `hidden`, which
      keeps it out of the tab order while closed, so it can't be transitioned in
      — the animation has to run on appearance instead. */
-  @keyframes slide-in-left {
+  @keyframes slide-in-start {
     from {
-      transform: translateX(-100%);
+      transform: translateX(var(--slide-in-from, -100%));
     }
     to {
       transform: translateX(0);
@@ -204,6 +207,16 @@
   ::backdrop,
   ::file-selector-button {
     border-color: var(--color-gray-200, currentcolor);
+  }
+
+  /* Right-to-left languages. Everything positional in this app is written in
+     logical properties, which the browser mirrors on its own once `dir` is set
+     — the i18n layer sets it from the active language. Transforms are the
+     exception, because CSS has no logical translate: the drawer's slide-in
+     distance is signed here, and the one other transform that encodes a
+     direction (the admin toggle knob) carries an `rtl:` variant in place. */
+  [dir="rtl"] {
+    --slide-in-from: 100%;
   }
 }
 

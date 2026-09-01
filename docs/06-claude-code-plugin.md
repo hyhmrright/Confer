@@ -68,7 +68,7 @@ export CONFER_PASSWORD=secret
 # 可选：export CONFER_GATEWAY_URL=http://localhost:3000  (默认值)
 ```
 
-plugin 捆绑自包含 bundle（`plugins/confer-a2a/dist/server.mjs`，裸 `node` 即可跑，无需 monorepo 或 `bun`），由 `packages/mcp-a2a` 经 `bun run --filter @confer/mcp-a2a build:plugin` 生成。提供 9 个工具（`list_agents` / `ask_agent` / `follow_up` / `ask_multiple` / `check_reply` 等），细节见 `plugins/confer-a2a/README.md` 与 `packages/mcp-a2a/README.md`。
+plugin 捆绑自包含 bundle（`plugins/confer-a2a/dist/server.mjs`，裸 `node` 即可跑，无需 monorepo 或 `bun`），由 `packages/mcp-a2a` 经 `bun run --filter @confer/mcp-a2a build:plugin` 生成。提供 15 个工具（`list_agents` / `ask_agent` / `follow_up` / `ask_multiple` / `check_reply` 等），细节见 `plugins/confer-a2a/README.md` 与 `packages/mcp-a2a/README.md`。
 
 仓库内开发者也可不装 plugin，直接用根目录 `.mcp.json`（指向源码 `server.ts`）或 `claude mcp add`。
 

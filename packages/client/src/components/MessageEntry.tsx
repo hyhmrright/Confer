@@ -30,7 +30,7 @@ const ROLE = {
 /** The owner's own words get a card so they scan as "what I said". At the
  *  `dark-card/50` this started as, the tint resolved to within a couple of
  *  points of the page ground and the distinction was invisible. */
-const OWN_SURFACE = 'bg-dark-card rounded-r-lg py-3 pr-4';
+const OWN_SURFACE = 'bg-dark-card rounded-e-lg py-3 pe-4';
 
 export function MessageEntry({
   senderType,
@@ -53,7 +53,7 @@ export function MessageEntry({
   const role = ROLE[senderType as keyof typeof ROLE] ?? ROLE.system;
   return (
     <article
-      className={`border-l-2 pl-4 animate-fade-in ${role.rule} ${
+      className={`border-s-2 ps-4 animate-fade-in ${role.rule} ${
         senderType === 'user' ? OWN_SURFACE : ''
       }`}
     >
@@ -68,7 +68,7 @@ export function MessageEntry({
             {address}
           </span>
         )}
-        {time && <time className="eyebrow text-ink-muted ml-auto shrink-0 tabular">{time}</time>}
+        {time && <time className="eyebrow text-ink-muted ms-auto shrink-0 tabular">{time}</time>}
       </header>
       {children}
     </article>

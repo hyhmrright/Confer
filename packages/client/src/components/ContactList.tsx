@@ -44,7 +44,7 @@ export function ContactList() {
           <button
             type="button"
             onClick={() => handleStartChat(contact.alias ?? contact.peer.name)}
-            className="flex items-center gap-3 flex-1 min-w-0 text-left cursor-pointer"
+            className="flex items-center gap-3 flex-1 min-w-0 text-start cursor-pointer"
           >
             <div className="w-9 h-9 rounded-full bg-dark-border flex items-center justify-center shrink-0">
               <Bot className="w-[18px] h-[18px] text-ink-muted" />

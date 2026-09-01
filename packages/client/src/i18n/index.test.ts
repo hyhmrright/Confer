@@ -1,5 +1,11 @@
 import { afterAll, describe, expect, test } from 'bun:test';
-import i18n, { changeLanguage, dateLocale, resolveLanguage } from './index.js';
+import i18n, {
+  changeLanguage,
+  dateLocale,
+  languageDirection,
+  resolveLanguage,
+  SUPPORTED_LANGUAGES,
+} from './index.js';
 
 // Every real browser reports a region — `zh-CN`, `ja-JP`, `en-GB` — and
 // `i18n.language` keeps it. Matching that raw value against the supported list
@@ -29,6 +35,35 @@ describe('resolveLanguage', () => {
   });
 });
 
+// `dir` is the entire RTL mechanism: every positional style is written in
+// logical properties, which the browser mirrors only once the attribute is set.
+// Getting it wrong is not a subtle bug — the layout either mirrors or it does
+// not — but it is silent in a suite that never asserts on the attribute.
+describe('languageDirection', () => {
+  test('reports rtl for a right-to-left language', () => {
+    expect(languageDirection('ar')).toBe('rtl');
+    expect(languageDirection('ur')).toBe('rtl');
+  });
+
+  test('reports ltr for the rest', () => {
+    for (const lng of SUPPORTED_LANGUAGES.filter((l) => l !== 'ar' && l !== 'ur')) {
+      expect(languageDirection(lng)).toBe('ltr');
+    }
+  });
+
+  // Same trap resolveLanguage exists for: a browser sends `ar-EG`, never `ar`.
+  // Comparing the raw code against the RTL set would leave every real Arabic
+  // visitor in a left-to-right layout.
+  test('strips the region a browser actually sends', () => {
+    expect(languageDirection('ar-EG')).toBe('rtl');
+    expect(languageDirection('ar-SA')).toBe('rtl');
+  });
+
+  test('treats an untranslated language as ltr, matching its en fallback', () => {
+    expect(languageDirection('de-DE')).toBe('ltr');
+  });
+});
+
 describe('language resolution end to end', () => {
   const original = i18n.language;
   afterAll(async () => {
@@ -52,5 +87,56 @@ describe('language resolution end to end', () => {
 
     await changeLanguage('ja');
     expect(dateLocale()).toBe('ja-JP');
+  });
+
+  // The unit test above proves the function; this proves it is actually wired
+  // to the document. A correct `languageDirection` that nothing calls would
+  // leave Arabic rendering left-to-right, and no other assertion would notice.
+  test('switching to an RTL language mirrors the document, and back again', async () => {
+    await changeLanguage('ar');
+    expect(document.documentElement.dir).toBe('rtl');
+    expect(document.documentElement.lang).toBe('ar');
+
+    await changeLanguage('en');
+    expect(document.documentElement.dir).toBe('ltr');
+    expect(document.documentElement.lang).toBe('en-US');
+  });
+
+  test('the Arabic bundle loads its own strings, not the fallback', async () => {
+    await changeLanguage('ar');
+    expect(i18n.hasResourceBundle('ar', 'translation')).toBe(true);
+    expect(i18n.t('login.welcomeBack')).toBe('أهلًا بعودتك');
+  });
+
+  // `Resources` proves each locale has every key. It cannot prove the loader
+  // for `pt` imports the Portuguese file — registering one language's module
+  // under another's code typechecks perfectly, since both satisfy the same
+  // type. Distinct greetings are the cheapest thing that would not survive it.
+  test('every language loads a bundle of its own, not another language’s', async () => {
+    const greetings = new Map<string, string>();
+    for (const lng of SUPPORTED_LANGUAGES) {
+      await changeLanguage(lng);
+      expect(i18n.hasResourceBundle(lng, 'translation')).toBe(true);
+      const greeting = i18n.t('login.welcomeBack');
+      expect(greeting).not.toBe('');
+      greetings.set(lng, greeting);
+    }
+    expect(new Set(greetings.values()).size).toBe(SUPPORTED_LANGUAGES.length);
+  });
+
+  // A malformed tag — `pt-BRA`, a transposed `ur-KP` — is a valid string and a
+  // valid `Record` value, so nothing upstream objects. `Intl` throws on it, and
+  // it is only reached when a speaker of that language formats a date, which is
+  // the last place anyone looks.
+  test('every date locale is a tag Intl accepts', async () => {
+    for (const lng of SUPPORTED_LANGUAGES) {
+      await changeLanguage(lng);
+      const tag = dateLocale();
+      expect(() => new Intl.DateTimeFormat(tag)).not.toThrow();
+      // Intl silently falls back for a well-formed tag naming no real locale,
+      // so also assert it resolved to the language actually asked for.
+      expect(Intl.DateTimeFormat.supportedLocalesOf([tag])).toEqual([tag]);
+      expect(tag.split('-')[0]).toBe(lng);
+    }
   });
 });

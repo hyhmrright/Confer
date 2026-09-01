@@ -378,7 +378,7 @@ peer.unknown:
 
 ## 反垃圾
 
-- 每个 peer-domain 每分钟限流（Redis counter）
+- 每个 peer-domain 每分钟限流（进程内计数器；网关目前是单实例）
 - 未在白名单的 peer 默认低优先级
 - 用户可以拉黑某个 peer-domain
 - Reputation 评分（v2+）：被多少其他实例标记过 spam

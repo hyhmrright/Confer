@@ -50,7 +50,7 @@ function DocRow({
           </span>
         )}
       </div>
-      <div className="flex items-center gap-1 ml-2 shrink-0 opacity-0 group-hover:opacity-100">
+      <div className="flex items-center gap-1 ms-2 shrink-0 opacity-0 group-hover:opacity-100">
         {doc.status === 'failed' && onRetry && (
           <button
             type="button"
@@ -126,7 +126,7 @@ function KbCard({ kbId }: { kbId: string }) {
       <div className="flex items-center justify-between px-3 py-2.5">
         <button
           type="button"
-          className="flex items-center gap-2 flex-1 text-left min-w-0 group"
+          className="flex items-center gap-2 flex-1 text-start min-w-0 group"
           onClick={handleExpand}
         >
           <ChevronDown
@@ -141,7 +141,7 @@ function KbCard({ kbId }: { kbId: string }) {
             )}
           </div>
         </button>
-        <div className="flex items-center gap-1 ml-2 shrink-0">
+        <div className="flex items-center gap-1 ms-2 shrink-0">
           {/* Reads as a state chip rather than a switch, because "off" is the
               normal condition and should look unremarkable — it is being ON
               that is worth noticing across a list of bases. */}

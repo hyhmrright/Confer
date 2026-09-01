@@ -1,9 +1,20 @@
 <!DOCTYPE html>
 {%- assign t = site.data.i18n[page.lang] | default: site.data.i18n.en -%}
 {%- assign cur = page.url | split: "/" | last -%}
-{%- if page.lang == "en" -%}{%- assign prefix = "en/" -%}{%- elsif page.lang == "ja" -%}{%- assign prefix = "ja/" -%}{%- else -%}{%- assign prefix = "" -%}{%- endif -%}
-{%- assign docfiles = "01-product.html,02-architecture.html,03-protocol.html,04-data-model.html,05-api.html,06-claude-code-plugin.html,07-project-memory.html,08-mvp-backlog.html,09-deployment.html" -%}
-<html lang="{{ t.htmllang }}">
+{%- comment -%}
+  Chinese is the canonical text and lives at the site root; every other language
+  lives in a directory named for it. Derived rather than enumerated, so adding a
+  language to _data/i18n.yml (and _config.yml) needs no edit here.
+{%- endcomment -%}
+{%- if page.lang == "zh" -%}{%- assign prefix = "" -%}{%- else -%}{%- assign prefix = page.lang | append: "/" -%}{%- endif -%}
+{%- comment -%}
+  Which pages are design docs, and so get the sidebar and the language menu.
+  Derived from the nav data rather than repeated: the two lists were the same
+  nine filenames written twice, and a tenth document would have had to be added
+  to both.
+{%- endcomment -%}
+{%- assign docfiles = t.docs | map: "file" | join: "," -%}
+<html lang="{{ t.htmllang }}" dir="{{ t.dir }}">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -26,13 +37,40 @@
       <a href="{{ '/' | relative_url }}">← {{ t.home }}</a>
       <a href="{{ prefix | append: '09-deployment.html' | prepend: '/' | relative_url }}" class="hide-sm">{{ t.deploy }}</a>
       {%- if docfiles contains cur -%}
-      <span class="doc-lang" role="group" aria-label="{{ t.langlabel }}">
-        {%- assign langorder = "zh,en,ja" | split: "," -%}
-        {%- for l in langorder -%}
-          {%- if l == "en" -%}{%- assign lp = "en/" -%}{%- assign ll = "EN" -%}{%- elsif l == "ja" -%}{%- assign lp = "ja/" -%}{%- assign ll = "日" -%}{%- else -%}{%- assign lp = "" -%}{%- assign ll = "中" -%}{%- endif -%}
-          <a href="{{ lp | append: cur | prepend: '/' | relative_url }}" class="{% if l == page.lang %}on{% endif %}">{{ ll }}</a>
-        {%- endfor -%}
-      </span>
+      {%- comment -%}
+        Eleven languages do not fit as inline links the way three did, so this is
+        a disclosure rather than a row. `details` because the items are ordinary
+        links: the control still works with scripting off, which matters when it
+        is the only way out of a language you cannot read. The script at the foot
+        of the page only closes it again.
+
+        The list is the languages this particular document has actually been
+        translated into. The chrome is localised ahead of the bodies, so offering
+        every language would send readers to a 404 — the exact bug /en/ and /ja/
+        had as bare directories. Reading site.pages means the menu grows on its
+        own as translations land, with no edit here.
+      {%- endcomment -%}
+      {%- assign urls = site.pages | map: "url" -%}
+      {%- comment -%}
+        Guard on our own URL first. The design docs are Markdown with no front
+        matter and become pages only through jekyll-optional-front-matter; if
+        that ever stops populating site.pages, every `contains` below goes false
+        and the switcher would silently empty itself. Listing everything is the
+        better failure — a dead link is visible, a missing control is not.
+      {%- endcomment -%}
+      {%- assign indexed = urls contains page.url -%}
+      <details class="doc-lang">
+        <summary aria-label="{{ t.langlabel }}: {{ t.label }}"><span class="cur">{{ t.short }}</span><span class="caret">▾</span></summary>
+        <div class="doc-lang-menu">
+          {%- for l in site.data.i18n -%}
+            {%- if l[0] == "zh" -%}{%- assign lp = "" -%}{%- else -%}{%- assign lp = l[0] | append: "/" -%}{%- endif -%}
+            {%- assign lurl = lp | append: cur | prepend: "/" -%}
+            {%- if indexed == false or urls contains lurl -%}
+            <a lang="{{ l[1].htmllang }}" href="{{ lurl | relative_url }}" class="{% if l[0] == page.lang %}on{% endif %}">{{ l[1].label }}</a>
+            {%- endif -%}
+          {%- endfor -%}
+        </div>
+      </details>
       {%- endif -%}
       <a href="https://github.com/hyhmrright/Confer" target="_blank" rel="noopener">GitHub ↗</a>
     </div>
@@ -49,6 +87,14 @@
   </aside>
 
   <article class="doc">
+    {%- comment -%}
+      Which text is authoritative, stated on the page rather than assumed. These
+      are specs — a wire format, a schema, a deployment runbook — and a reader
+      implementing against a translation that has drifted from the original has
+      no way to know it from the page alone. Four of the nine already carry en
+      and ja translations weeks to months behind the Chinese.
+    {%- endcomment -%}
+    <p class="doc-canonical">{{ t.canonical }}</p>
     {{ content }}
     <div class="doc-foot">
       <a href="{{ '/' | relative_url }}">← {{ t.back }}</a>
@@ -63,6 +109,17 @@
     <a href="https://github.com/hyhmrright/Confer" target="_blank" rel="noopener">github.com/hyhmrright/Confer ↗</a>
   </div>
 </footer>
+
+<!-- `details` has no dismiss behaviour of its own: without this the language
+     menu stays open over the article until you click the summary again. The
+     menu itself is plain links and works without this script. -->
+<script>
+  (function(d){
+    if(!d) return;
+    document.addEventListener("click", function(e){ if(!d.contains(e.target)) d.open = false });
+    document.addEventListener("keydown", function(e){ if(e.key === "Escape") d.open = false });
+  })(document.querySelector(".doc-lang"));
+</script>
 
 </body>
 </html>
