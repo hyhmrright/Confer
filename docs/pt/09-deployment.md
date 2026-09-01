@@ -2,7 +2,7 @@
 
 Como rodar você mesmo uma instância completa do Confer — no seu notebook para experimentar, ou num servidor para compartilhar com outras pessoas. Tudo aqui é um caminho real e testado; nada é aspiracional.
 
-> **Escopo:** este guia cobre a instalação **auto-hospedada de instância única**, com ou sem TLS (veja «Servir HTTPS» mais abaixo). Hospedagem pública multi-inquilino e endurecimento da federação estão fora do escopo da v0.1 — veja `docs/02-architecture.md` para a direção arquitetural.
+> **Escopo:** este guia cobre a instalação **auto-hospedada de instância única**, com ou sem TLS (veja [Servir HTTPS](#servir-https) mais abaixo). Hospedagem pública multi-inquilino e endurecimento da federação estão fora do escopo da v0.1 — veja `docs/02-architecture.md` para a direção arquitetural.
 
 ## O que você ganha
 
@@ -294,7 +294,7 @@ Guarde `confer_pgdata_backup` e `confer_qdrantdata_backup` até ter usado a inst
 
 | Sintoma | Causa provável / solução |
 |---------|--------------------|
-| `postgres` reinicia em laço depois de uma atualização | O volume dele foi escrito pelo PostgreSQL 16. Veja «Atualizar uma instância criada antes de 2026-08-29». |
+| `postgres` reinicia em laço depois de uma atualização | O volume dele foi escrito pelo PostgreSQL 16. Veja [Atualizar uma instância criada antes de 2026-08-29](#atualizar-uma-instância-criada-antes-de-2026-08-29). |
 | `qdrant` sai com 101 e um rastro de pânico | O armazenamento dele foi escrito pelo Qdrant 1.12. A mesma seção acima. |
 | `port is already allocated` na 80 | Outra coisa é dona da porta 80. Ponha `EXPOSE_PORT=8080` no `.env` e abra http://localhost:8080. |
 | A interface web carrega mas toda requisição dá 500 | Veja `docker compose -f docker-compose.prod.yml logs gateway`. Na maioria das vezes `JWT_SECRET` ou `ENCRYPTION_KEY` está vazia: elas não têm padrão no compose, então precisam estar presentes no `.env`. |

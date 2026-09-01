@@ -2,7 +2,7 @@
 
 Cómo poner en marcha una instancia completa de Confer tú mismo — en tu portátil para probarla, o en un servidor para compartirla con otras personas. Todo lo de aquí es un camino real y probado; nada es aspiracional.
 
-> **Alcance:** esta guía cubre la instalación **autoalojada de una sola instancia**, con TLS o sin él (véase «Servir HTTPS» más abajo). El alojamiento público multiinquilino y el endurecimiento de la federación quedan fuera del alcance de la v0.1 — véase `docs/02-architecture.md` para la dirección arquitectónica.
+> **Alcance:** esta guía cubre la instalación **autoalojada de una sola instancia**, con TLS o sin él (véase [Servir HTTPS](#servir-https) más abajo). El alojamiento público multiinquilino y el endurecimiento de la federación quedan fuera del alcance de la v0.1 — véase `docs/02-architecture.md` para la dirección arquitectónica.
 
 ## Qué obtienes
 
@@ -294,7 +294,7 @@ Conserva `confer_pgdata_backup` y `confer_qdrantdata_backup` hasta que hayas usa
 
 | Síntoma | Causa probable / solución |
 |---------|--------------------|
-| `postgres` reinicia en bucle después de actualizar | Su volumen lo escribió PostgreSQL 16. Véase «Actualizar una instancia creada antes del 2026-08-29». |
+| `postgres` reinicia en bucle después de actualizar | Su volumen lo escribió PostgreSQL 16. Véase [Actualizar una instancia creada antes del 2026-08-29](#actualizar-una-instancia-creada-antes-del-2026-08-29). |
 | `qdrant` sale con 101 y una traza de pánico | Su almacenamiento lo escribió Qdrant 1.12. La misma sección de arriba. |
 | `port is already allocated` en el 80 | Otra cosa se ha quedado con el puerto 80. Pon `EXPOSE_PORT=8080` en `.env` y abre http://localhost:8080. |
 | La interfaz web carga pero toda petición da 500 | Mira `docker compose -f docker-compose.prod.yml logs gateway`. Lo más habitual es que `JWT_SECRET` o `ENCRYPTION_KEY` estén vacías: no tienen valor por defecto en compose, así que han de estar presentes en `.env`. |
