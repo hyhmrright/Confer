@@ -8,19 +8,19 @@ Sliced by milestone, where each milestone is a deliverable, demoable version.
 
 **Scope (must-do)**:
 
-- [ ] Backend: gateway + agent runtime + conversation + identity (4 services, either in a single process or standalone)
-- [ ] PostgreSQL schema (see 04-data-model.md), managed via a migration tool
-- [ ] User registration / login (password login alone is enough, no OAuth/passkey)
-- [ ] DID:web document generation and exposure (`/.well-known/did.json`)
-- [ ] AgentFacts document generation and exposure
+- [x] Backend: gateway + agent runtime + conversation + identity (4 services, either in a single process or standalone)
+- [x] PostgreSQL schema (see 04-data-model.md), managed via a migration tool
+- [x] User registration / login (password login alone is enough, no OAuth/passkey)
+- [x] DID:web document generation and exposure (`/.well-known/did.json`)
+- [x] AgentFacts document generation and exposure
 - [ ] A2A protocol inbound and outbound (HTTP signature verification + capability token verification)
-- [ ] Agent runtime: LLM call loop (support only the two providers Claude and DeepSeek at first)
-- [ ] Simple policy engine: peer whitelist + allow-all / deny-all
-- [ ] Client: a single Tauri app, desktop three-platform first (Linux / macOS / Windows, mobile later)
-- [ ] The client can: log in / add contacts (add by DID) / 1-on-1 conversation / see citations
-- [ ] WebSocket real-time message push (single instance is enough, no NATS fan-out)
-- [ ] SSE streaming LLM output
-- [ ] Docker Compose one-command local dev environment
+- [x] Agent runtime: LLM call loop (support only the two providers Claude and DeepSeek at first)
+- [x] Simple policy engine: peer whitelist + allow-all / deny-all
+- [x] Client: a single Tauri app, desktop three-platform first (Linux / macOS / Windows, mobile later)
+- [x] The client can: log in / add contacts (add by DID) / 1-on-1 conversation / see citations
+- [x] WebSocket real-time message push (single instance is enough, no NATS fan-out)
+- [x] SSE streaming LLM output
+- [x] Docker Compose one-command local dev environment
 
 **Out of scope**:
 
@@ -39,7 +39,7 @@ Two developers each spin up a Confer instance locally, add each other as friends
 
 **Scope**:
 
-- [ ] MCP server implementation, providing the 4 tools `ask_peer`, `list_peers`, `read_project_memory`, `write_project_memory`
+- [x] MCP server implementation, providing the 4 tools `ask_peer`, `list_peers`, `read_project_memory`, `write_project_memory`
 - [ ] OAuth-style binding of a Confer account to a Claude Code instance
 - [ ] `.claude/confer.toml` config file parsing
 - [ ] Reading and writing the `.claude/peers/{slug}/` directory (facts.md, decisions.md, conversations/, meta.json)
@@ -63,7 +63,7 @@ A developer installs `claude mcp add confer`, and after configuration, can ask t
 - [ ] Group member management (add / remove people and Agents)
 - [ ] Multiple @Agents answering simultaneously (collapsed display, an "adopt" mechanism)
 - [ ] Enterprise instance: with a custom domain, SSO login (OIDC is enough)
-- [ ] Contact discovery: lookup by domain (enter acme.com to automatically find the Agents that domain publishes)
+- [x] Contact discovery: lookup by domain (enter acme.com to automatically find the Agents that domain publishes)
 - [ ] Multi-device fan-out (introduce NATS)
 - [ ] Mobile (iOS, Android)
 
@@ -79,12 +79,12 @@ A small team of 5 + 2 Agents run a project discussion together in one group, wit
 
 **Scope**:
 
-- [ ] UI i18n (Chinese, English to start, with Japanese/German/French reserved)
+- [x] UI i18n (Chinese, English to start, with Japanese/German/French reserved)
 - [ ] Cross-language conversation between Agents (translation done inside the target Agent, citations preserve the original text)
 - [ ] Add a `primary_language` field to AgentFacts
 - [ ] Offline auto-answer: standing policy settings UI + pending inbox + push notification
-- [ ] Pre-flight design review tool added to the MCP server
-- [ ] Post-flight code review tool added to the MCP server
+- [x] Pre-flight design review tool added to the MCP server
+- [x] Post-flight code review tool added to the MCP server
 
 **Acceptance**:
 
@@ -100,11 +100,11 @@ A Chinese developer asks a German vendor's Agent (German docs) a question in Chi
 
 - [ ] Full observability (OTel tracing, Prometheus metrics, Loki logs)
 - [ ] Backup and recovery (PG physical backup + S3 incremental)
-- [ ] Security audit (audit log for critical operations)
+- [x] Security audit (audit log for critical operations)
 - [ ] Rate-limiting refinement (all 4 dimensions done)
 - [ ] LLM usage dashboard (per-Agent monthly cost)
 - [ ] Full BYO LLM key UX (encrypted storage, rotation, quotas)
-- [ ] Documentation site (user manual, self-hosting deployment guide, API reference)
+- [x] Documentation site (user manual, self-hosting deployment guide, API reference)
 - [ ] Public Confer Cloud instance goes live (`cloud.confer.ai`)
 
 **Acceptance**:
@@ -139,70 +139,70 @@ For example, some sample tasks for v0.1:
 
 ### Backend skeleton
 
-- [ ] Create the monorepo (pnpm workspaces or Bun workspaces)
-- [ ] `packages/shared`: shared type definitions (using zod or valibot)
-- [ ] `packages/gateway`: Bun + Hono application skeleton
-- [ ] `packages/agent-runtime`: Agent state machine skeleton
+- [x] Create the monorepo (pnpm workspaces or Bun workspaces)
+- [x] `packages/shared`: shared type definitions (using zod or valibot)
+- [x] `packages/gateway`: Bun + Hono application skeleton
+- [x] `packages/agent-runtime`: Agent state machine skeleton
 - [x] ~~`packages/conversation`: message storage / push service~~ — folded into the gateway (`ws/handler.ts` + `routes/conversations.ts`); the standalone package had zero consumers and was removed 2026-08-07
-- [ ] `packages/identity`: DID + AgentFacts + A2A verification
-- [ ] PostgreSQL migration tool (drizzle-kit or prisma)
-- [ ] Create the migration files for all data tables
+- [x] `packages/identity`: DID + AgentFacts + A2A verification
+- [x] PostgreSQL migration tool (drizzle-kit or prisma)
+- [x] Create the migration files for all data tables
 
 ### Database layer
 
-- [ ] User CRUD (registration, login, view personal info)
-- [ ] Agent CRUD (create your own Agent, modify config)
-- [ ] PeerAgent CRUD (add, query, delete contacts)
-- [ ] Conversation CRUD + Participant management
-- [ ] Message CRUD + pagination
-- [ ] Writing to and querying the Permission table
+- [x] User CRUD (registration, login, view personal info)
+- [x] Agent CRUD (create your own Agent, modify config)
+- [x] PeerAgent CRUD (add, query, delete contacts)
+- [x] Conversation CRUD + Participant management
+- [x] Message CRUD + pagination
+- [x] Writing to and querying the Permission table
 
 ### Identity and protocol
 
-- [ ] DID document generation (create an ed25519 keypair per user)
-- [ ] `/.well-known/did.json` endpoint
-- [ ] AgentFacts generation and endpoint
-- [ ] HTTP signature signer (outbound)
-- [ ] HTTP signature verifier (inbound)
+- [x] DID document generation (create an ed25519 keypair per user)
+- [x] `/.well-known/did.json` endpoint
+- [x] AgentFacts generation and endpoint
+- [x] HTTP signature signer (outbound)
+- [x] HTTP signature verifier (inbound)
 - [ ] Capability token issuance and verification
-- [ ] DID document fetcher + cache
+- [x] DID document fetcher + cache
 
 ### LLM abstraction
 
-- [ ] LLM provider interface (chat, stream, tools)
-- [ ] Claude provider implementation
-- [ ] DeepSeek provider implementation
-- [ ] API key encrypted storage (Vault / env)
-- [ ] Apply per-Agent model config
+- [x] LLM provider interface (chat, stream, tools)
+- [x] Claude provider implementation
+- [x] DeepSeek provider implementation
+- [x] API key encrypted storage (Vault / env)
+- [x] Apply per-Agent model config
 
 ### Agent runtime
 
-- [ ] Agent state machine: load → process → save loop
-- [ ] LLM call loop + tool calling
-- [ ] Simple policy engine (whitelist + allow/deny)
-- [ ] A2A outbound calls (Agent sends a message to someone else)
-- [ ] A2A inbound handling (receive a message from someone else's Agent)
+- [x] Agent state machine: load → process → save loop
+- [x] LLM call loop + tool calling
+- [x] Simple policy engine (whitelist + allow/deny)
+- [x] A2A outbound calls (Agent sends a message to someone else)
+- [x] A2A inbound handling (receive a message from someone else's Agent)
 
 ### Gateway and API
 
-- [ ] JWT issuance / verification middleware
-- [ ] All `/api/v1/auth/*` endpoints
-- [ ] All `/api/v1/conversations/*` endpoints
-- [ ] WebSocket handler (subscribe, send messages)
-- [ ] SSE handler (LLM streaming output)
-- [ ] A2A inbound endpoints + signature verification middleware
-- [ ] Rate-limiting middleware (simple version first: fixed window)
+- [x] JWT issuance / verification middleware
+- [x] All `/api/v1/auth/*` endpoints
+- [x] All `/api/v1/conversations/*` endpoints
+- [x] WebSocket handler (subscribe, send messages)
+- [x] SSE handler (LLM streaming output)
+- [x] A2A inbound endpoints + signature verification middleware
+- [x] Rate-limiting middleware (simple version first: fixed window)
 
 ### Client
 
-- [ ] Tauri 2.0 project initialization
-- [ ] Login / registration pages
-- [ ] Main interface: contact list on the left + conversation on the right
-- [ ] Add-contact dialog (by DID or domain)
-- [ ] Conversation message list (streaming rendering)
-- [ ] Citation capsule rendering
-- [ ] Permission request card rendering
-- [ ] WebSocket connection management
+- [x] Tauri 2.0 project initialization
+- [x] Login / registration pages
+- [x] Main interface: contact list on the left + conversation on the right
+- [x] Add-contact dialog (by DID or domain)
+- [x] Conversation message list (streaming rendering)
+- [x] Citation capsule rendering
+- [x] Permission request card rendering
+- [x] WebSocket connection management
 - [ ] Local SQLite cache of the most recent 100 messages
 
 ### Demo content

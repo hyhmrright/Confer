@@ -8,19 +8,19 @@ Découpé par jalons ; chaque jalon est une version livrable et démontrable.
 
 **Périmètre (obligatoire)**
 
-- [ ] backend : gateway + agent runtime + conversation + identity (quatre services, en un seul processus ou séparés, peu importe)
-- [ ] schéma PostgreSQL (voir 04-data-model.md), géré par un outil de migrations
-- [ ] inscription et connexion des utilisateurs (le mot de passe suffit ; ni OAuth ni passkey)
-- [ ] génération et publication du document DID:web (`/.well-known/did.json`)
-- [ ] génération et publication du document AgentFacts
+- [x] backend : gateway + agent runtime + conversation + identity (quatre services, en un seul processus ou séparés, peu importe)
+- [x] schéma PostgreSQL (voir 04-data-model.md), géré par un outil de migrations
+- [x] inscription et connexion des utilisateurs (le mot de passe suffit ; ni OAuth ni passkey)
+- [x] génération et publication du document DID:web (`/.well-known/did.json`)
+- [x] génération et publication du document AgentFacts
 - [ ] protocole A2A entrant et sortant (vérification de la signature HTTP + vérification du capability token)
-- [ ] agent runtime : la boucle d'appels au LLM (pour l'instant deux fournisseurs seulement, Claude et DeepSeek)
-- [ ] moteur de politiques simple : pairs en liste blanche, tout autorisé ou tout refusé
-- [ ] client : une seule application Tauri, d'abord les trois bureaux (Linux / macOS / Windows ; le mobile plus tard)
-- [ ] que le client sache : se connecter, ajouter des contacts (par DID), converser en tête-à-tête et voir les citations
-- [ ] push de messages en temps réel par WebSocket (une instance suffit ; pas de fan-out NATS)
-- [ ] sortie du LLM en flux par SSE
-- [ ] environnement de développement local en une commande avec Docker Compose
+- [x] agent runtime : la boucle d'appels au LLM (pour l'instant deux fournisseurs seulement, Claude et DeepSeek)
+- [x] moteur de politiques simple : pairs en liste blanche, tout autorisé ou tout refusé
+- [x] client : une seule application Tauri, d'abord les trois bureaux (Linux / macOS / Windows ; le mobile plus tard)
+- [x] que le client sache : se connecter, ajouter des contacts (par DID), converser en tête-à-tête et voir les citations
+- [x] push de messages en temps réel par WebSocket (une instance suffit ; pas de fan-out NATS)
+- [x] sortie du LLM en flux par SSE
+- [x] environnement de développement local en une commande avec Docker Compose
 
 **Out of scope**:
 
@@ -39,7 +39,7 @@ Deux personnes lancent chacune leur instance locale de Confer, s'ajoutent mutuel
 
 **Scope**:
 
-- [ ] implémenter le serveur MCP, avec quatre outils : `ask_peer`, `list_peers`, `read_project_memory` et `write_project_memory`
+- [x] implémenter le serveur MCP, avec quatre outils : `ask_peer`, `list_peers`, `read_project_memory` et `write_project_memory`
 - [ ] relier le compte Confer à l'instance de Claude Code, façon OAuth
 - [ ] analyse du fichier de configuration `.claude/confer.toml`
 - [ ] lecture et écriture du répertoire `.claude/peers/{slug}/` (facts.md, decisions.md, conversations/, meta.json)
@@ -63,7 +63,7 @@ Quelqu'un installe `claude mcp add confer`, le configure, et peut depuis Claude 
 - [ ] gestion des membres du groupe (ajouter et retirer personnes et Agents)
 - [ ] plusieurs Agents mentionnés répondent en même temps (affichage replié, mécanisme d'« adoption »)
 - [ ] instance d'entreprise : nom de domaine propre et connexion SSO (OIDC suffit)
-- [ ] découverte de contacts : recherche par domaine (taper acme.com trouve les Agents que ce domaine publie)
+- [x] découverte de contacts : recherche par domaine (taper acme.com trouve les Agents que ce domaine publie)
 - [ ] fan-out multi-appareils (arrivée de NATS)
 - [ ] mobile (iOS, Android)
 
@@ -79,12 +79,12 @@ Une équipe de cinq personnes et deux Agents mènent une discussion de projet da
 
 **Scope**:
 
-- [ ] i18n de l'interface (chinois et anglais pour commencer, en réservant la place au japonais, à l'allemand et au français)
+- [x] i18n de l'interface (chinois et anglais pour commencer, en réservant la place au japonais, à l'allemand et au français)
 - [ ] conversation entre Agents de langues différentes (la traduction se fait à l'intérieur de l'Agent destinataire, la citation garde l'original)
 - [ ] ajouter le champ `primary_language` à AgentFacts
 - [ ] réponse en différé : interface de réglage de la standing policy, boîte d'attente et notifications push
-- [ ] ajouter au serveur MCP l'outil de pre-flight design review
-- [ ] ajouter au serveur MCP l'outil de post-flight code review
+- [x] ajouter au serveur MCP l'outil de pre-flight design review
+- [x] ajouter au serveur MCP l'outil de post-flight code review
 
 **Acceptance**:
 
@@ -100,11 +100,11 @@ Quelqu'un en Chine interroge en chinois l'Agent d'un fabricant allemand (documen
 
 - [ ] observabilité complète (traces OTel, métriques Prometheus, logs Loki)
 - [ ] sauvegarde et restauration (sauvegarde physique PG + incrémental vers S3)
-- [ ] audit de sécurité (les opérations sensibles laissent un audit log)
+- [x] audit de sécurité (les opérations sensibles laissent un audit log)
 - [ ] limitation de débit affinée (les quatre dimensions)
 - [ ] tableau de bord de consommation LLM (coût mensuel par Agent)
 - [ ] expérience complète du BYO LLM key (stockage chiffré, rotation, quota)
-- [ ] site de documentation (manuel d'utilisation, manuel d'auto-hébergement, référence de l'API)
+- [x] site de documentation (manuel d'utilisation, manuel d'auto-hébergement, référence de l'API)
 - [ ] mise en service de l'instance publique Confer Cloud (`cloud.confer.ai`)
 
 **Acceptance**:
@@ -139,70 +139,70 @@ Par exemple, quelques tâches de la v0.1 :
 
 ### Squelette du backend
 
-- [ ] créer le monorepo (workspaces pnpm ou Bun)
-- [ ] `packages/shared` : définitions de types partagées (avec zod ou valibot)
-- [ ] `packages/gateway` : squelette de l'application Bun + Hono
-- [ ] `packages/agent-runtime` : squelette de la machine à états de l'Agent
+- [x] créer le monorepo (workspaces pnpm ou Bun)
+- [x] `packages/shared` : définitions de types partagées (avec zod ou valibot)
+- [x] `packages/gateway` : squelette de l'application Bun + Hono
+- [x] `packages/agent-runtime` : squelette de la machine à états de l'Agent
 - [x] ~~`packages/conversation` : service de stockage et de push des messages~~ — absorbé par le gateway (`ws/handler.ts` + `routes/conversations.ts`) ; le paquet séparé n'avait aucun consommateur, il a été supprimé le 2026-08-07
-- [ ] `packages/identity` : DID + AgentFacts + vérification A2A
-- [ ] outil de migrations PostgreSQL (drizzle-kit ou prisma)
-- [ ] créer les fichiers de migration de toutes les tables
+- [x] `packages/identity` : DID + AgentFacts + vérification A2A
+- [x] outil de migrations PostgreSQL (drizzle-kit ou prisma)
+- [x] créer les fichiers de migration de toutes les tables
 
 ### Couche base de données
 
-- [ ] CRUD User (inscription, connexion, consultation du profil)
-- [ ] CRUD Agent (créer son propre Agent, modifier sa configuration)
-- [ ] CRUD PeerAgent (ajouter, consulter, supprimer des contacts)
-- [ ] CRUD Conversation et gestion des Participant
-- [ ] CRUD Message et pagination
-- [ ] écriture et lecture de la table Permission
+- [x] CRUD User (inscription, connexion, consultation du profil)
+- [x] CRUD Agent (créer son propre Agent, modifier sa configuration)
+- [x] CRUD PeerAgent (ajouter, consulter, supprimer des contacts)
+- [x] CRUD Conversation et gestion des Participant
+- [x] CRUD Message et pagination
+- [x] écriture et lecture de la table Permission
 
 ### Identité et protocole
 
-- [ ] génération du document DID (une paire de clés ed25519 par utilisateur)
-- [ ] `/.well-known/did.json` endpoint
-- [ ] génération d'AgentFacts et son endpoint
-- [ ] signeur de signatures HTTP (sortant)
-- [ ] vérificateur de signatures HTTP (entrant)
+- [x] génération du document DID (une paire de clés ed25519 par utilisateur)
+- [x] `/.well-known/did.json` endpoint
+- [x] génération d'AgentFacts et son endpoint
+- [x] signeur de signatures HTTP (sortant)
+- [x] vérificateur de signatures HTTP (entrant)
 - [ ] émission et vérification des capability tokens
-- [ ] téléchargeur de documents DID + cache
+- [x] téléchargeur de documents DID + cache
 
 ### Abstraction du LLM
 
-- [ ] interface de fournisseur LLM (chat, stream, tools)
-- [ ] implémentation du fournisseur Claude
-- [ ] implémentation du fournisseur DeepSeek
-- [ ] stockage chiffré des clés d'API (Vault / env)
-- [ ] appliquer la configuration de modèle propre à chaque Agent
+- [x] interface de fournisseur LLM (chat, stream, tools)
+- [x] implémentation du fournisseur Claude
+- [x] implémentation du fournisseur DeepSeek
+- [x] stockage chiffré des clés d'API (Vault / env)
+- [x] appliquer la configuration de modèle propre à chaque Agent
 
 ### Agent runtime
 
-- [ ] machine à états de l'Agent : boucle load → process → save
-- [ ] boucle d'appels au LLM avec tool calling
-- [ ] moteur de politiques simple (liste blanche + allow/deny)
-- [ ] appel A2A sortant (l'Agent écrit à quelqu'un d'autre)
-- [ ] traitement A2A entrant (réception du message de l'Agent d'un autre)
+- [x] machine à états de l'Agent : boucle load → process → save
+- [x] boucle d'appels au LLM avec tool calling
+- [x] moteur de politiques simple (liste blanche + allow/deny)
+- [x] appel A2A sortant (l'Agent écrit à quelqu'un d'autre)
+- [x] traitement A2A entrant (réception du message de l'Agent d'un autre)
 
 ### Gateway et API
 
-- [ ] middleware d'émission et de vérification des JWT
-- [ ] tous les endpoints `/api/v1/auth/*`
-- [ ] tous les endpoints `/api/v1/conversations/*`
-- [ ] handler WebSocket (souscrire, envoyer des messages)
-- [ ] handler SSE (sortie du LLM en flux)
-- [ ] endpoints A2A entrants + middleware de vérification de signature
-- [ ] middleware de limitation de débit (d'abord la version simple : fenêtre fixe)
+- [x] middleware d'émission et de vérification des JWT
+- [x] tous les endpoints `/api/v1/auth/*`
+- [x] tous les endpoints `/api/v1/conversations/*`
+- [x] handler WebSocket (souscrire, envoyer des messages)
+- [x] handler SSE (sortie du LLM en flux)
+- [x] endpoints A2A entrants + middleware de vérification de signature
+- [x] middleware de limitation de débit (d'abord la version simple : fenêtre fixe)
 
 ### Client
 
-- [ ] initialiser le projet Tauri 2.0
-- [ ] pages de connexion et d'inscription
-- [ ] écran principal : liste des contacts à gauche, conversation à droite
-- [ ] fenêtre d'ajout de contact (par DID ou par domaine)
-- [ ] liste des messages de la conversation (rendu en flux)
-- [ ] rendu des capsules de citation
-- [ ] rendu de la carte de demande de permission
-- [ ] gestion de la connexion WebSocket
+- [x] initialiser le projet Tauri 2.0
+- [x] pages de connexion et d'inscription
+- [x] écran principal : liste des contacts à gauche, conversation à droite
+- [x] fenêtre d'ajout de contact (par DID ou par domaine)
+- [x] liste des messages de la conversation (rendu en flux)
+- [x] rendu des capsules de citation
+- [x] rendu de la carte de demande de permission
+- [x] gestion de la connexion WebSocket
 - [ ] cache local SQLite des 100 derniers messages
 
 ### Contenu de démonstration

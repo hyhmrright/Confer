@@ -8,19 +8,19 @@
 
 **Scope（必须做）**：
 
-- [ ] 后端：gateway + agent runtime + conversation + identity（4 个服务，单进程或独立都行）
-- [ ] PostgreSQL schema（参考 04-data-model.md），用 migration 工具管理
-- [ ] 用户注册 / 登录（仅密码登录够了，不做 OAuth/passkey）
-- [ ] DID:web 文档生成和暴露（`/.well-known/did.json`）
-- [ ] AgentFacts 文档生成和暴露
+- [x] 后端：gateway + agent runtime + conversation + identity（4 个服务，单进程或独立都行）
+- [x] PostgreSQL schema（参考 04-data-model.md），用 migration 工具管理
+- [x] 用户注册 / 登录（仅密码登录够了，不做 OAuth/passkey）
+- [x] DID:web 文档生成和暴露（`/.well-known/did.json`）
+- [x] AgentFacts 文档生成和暴露
 - [ ] A2A 协议入站和出站（HTTP signature 验证 + capability token 验证）
-- [ ] Agent runtime：LLM 调用循环（先只支持 Claude 和 DeepSeek 两个 provider）
-- [ ] 简单策略引擎：白名单 peer + 全允许 / 全拒绝
-- [ ] 客户端：单一 Tauri 应用，桌面三端先（Linux / macOS / Windows，移动端后期）
-- [ ] 客户端能：登录 / 加联系人（按 DID 添加）/ 1对1 对话 / 看到引用
-- [ ] WebSocket 实时消息推送（单实例够了，不做 NATS fan-out）
-- [ ] SSE 流式 LLM 输出
-- [ ] Docker Compose 一键起本地开发环境
+- [x] Agent runtime：LLM 调用循环（先只支持 Claude 和 DeepSeek 两个 provider）
+- [x] 简单策略引擎：白名单 peer + 全允许 / 全拒绝
+- [x] 客户端：单一 Tauri 应用，桌面三端先（Linux / macOS / Windows，移动端后期）
+- [x] 客户端能：登录 / 加联系人（按 DID 添加）/ 1对1 对话 / 看到引用
+- [x] WebSocket 实时消息推送（单实例够了，不做 NATS fan-out）
+- [x] SSE 流式 LLM 输出
+- [x] Docker Compose 一键起本地开发环境
 
 **Out of scope**：
 
@@ -39,7 +39,7 @@
 
 **Scope**：
 
-- [ ] MCP server 实现，提供 `ask_peer`、`list_peers`、`read_project_memory`、`write_project_memory` 4 个工具
+- [x] MCP server 实现，提供 `ask_peer`、`list_peers`、`read_project_memory`、`write_project_memory` 4 个工具
 - [ ] OAuth-style 绑定 Confer 账号到 Claude Code 实例
 - [ ] `.claude/confer.toml` 配置文件解析
 - [ ] `.claude/peers/{slug}/` 目录的读写（facts.md, decisions.md, conversations/, meta.json）
@@ -63,7 +63,7 @@
 - [ ] 群成员管理（添加 / 移除人和 Agent）
 - [ ] 多 @ Agent 同时回答（折叠展示，"采纳"机制）
 - [ ] 企业实例：用自定义域名、SSO 登录（OIDC 即可）
-- [ ] 联系人发现：按域名查找（输入 acme.com 自动找该域名公开的 Agent）
+- [x] 联系人发现：按域名查找（输入 acme.com 自动找该域名公开的 Agent）
 - [ ] 多设备 fan-out（NATS 引入）
 - [ ] 移动端（iOS、Android）
 
@@ -79,12 +79,12 @@
 
 **Scope**：
 
-- [ ] UI i18n（中文、英文起步，预留日德法）
+- [x] UI i18n（中文、英文起步，预留日德法）
 - [ ] Agent 之间跨语言对话（翻译在目标 Agent 内部完成，引用保留原文）
 - [ ] AgentFacts 加 `primary_language` 字段
 - [ ] 离线代答：standing policy 设置 UI + pending inbox + push notification
-- [ ] Pre-flight design review 工具加进 MCP server
-- [ ] Post-flight code review 工具加进 MCP server
+- [x] Pre-flight design review 工具加进 MCP server
+- [x] Post-flight code review 工具加进 MCP server
 
 **Acceptance**：
 
@@ -100,11 +100,11 @@
 
 - [ ] 完整可观测性（OTel tracing、Prometheus metrics、Loki logs）
 - [ ] 备份和恢复（PG 物理备份 + S3 增量）
-- [ ] 安全审计（关键操作有 audit log）
+- [x] 安全审计（关键操作有 audit log）
 - [ ] 限流细化（4 维度全做）
 - [ ] LLM 用量面板（per-Agent 月度成本）
 - [ ] BYO LLM key 完整 UX（加密存储、轮换、配额）
-- [ ] 文档站（用户使用手册、自建部署手册、API 参考）
+- [x] 文档站（用户使用手册、自建部署手册、API 参考）
 - [ ] 公共 Confer Cloud 实例上线（`cloud.confer.ai`）
 
 **Acceptance**：
@@ -139,70 +139,70 @@
 
 ### 后端骨架
 
-- [ ] 创建 monorepo（pnpm workspaces 或 Bun workspaces）
-- [ ] `packages/shared`：共享类型定义（用 zod 或 valibot）
-- [ ] `packages/gateway`：Bun + Hono 应用骨架
-- [ ] `packages/agent-runtime`：Agent 状态机骨架
+- [x] 创建 monorepo（pnpm workspaces 或 Bun workspaces）
+- [x] `packages/shared`：共享类型定义（用 zod 或 valibot）
+- [x] `packages/gateway`：Bun + Hono 应用骨架
+- [x] `packages/agent-runtime`：Agent 状态机骨架
 - [x] ~~`packages/conversation`：消息存储 / 推送服务~~ —— 已并入 gateway（`ws/handler.ts` + `routes/conversations.ts`）；独立包零消费者，2026-08-07 删除
-- [ ] `packages/identity`：DID + AgentFacts + A2A 验证
-- [ ] PostgreSQL migration 工具（drizzle-kit 或 prisma）
-- [ ] 创建所有数据表的 migration 文件
+- [x] `packages/identity`：DID + AgentFacts + A2A 验证
+- [x] PostgreSQL migration 工具（drizzle-kit 或 prisma）
+- [x] 创建所有数据表的 migration 文件
 
 ### 数据库层
 
-- [ ] User CRUD（注册、登录、查个人信息）
-- [ ] Agent CRUD（创建自己的 Agent、修改配置）
-- [ ] PeerAgent CRUD（增、查、删联系人）
-- [ ] Conversation CRUD + Participant 管理
-- [ ] Message CRUD + 分页
-- [ ] Permission 表的写入和查询
+- [x] User CRUD（注册、登录、查个人信息）
+- [x] Agent CRUD（创建自己的 Agent、修改配置）
+- [x] PeerAgent CRUD（增、查、删联系人）
+- [x] Conversation CRUD + Participant 管理
+- [x] Message CRUD + 分页
+- [x] Permission 表的写入和查询
 
 ### 身份和协议
 
-- [ ] DID document 生成（按 user 创建 ed25519 keypair）
-- [ ] `/.well-known/did.json` endpoint
-- [ ] AgentFacts 生成和 endpoint
-- [ ] HTTP signature 签名器（出站）
-- [ ] HTTP signature 验证器（入站）
+- [x] DID document 生成（按 user 创建 ed25519 keypair）
+- [x] `/.well-known/did.json` endpoint
+- [x] AgentFacts 生成和 endpoint
+- [x] HTTP signature 签名器（出站）
+- [x] HTTP signature 验证器（入站）
 - [ ] Capability token 签发和验证
-- [ ] DID document fetcher + cache
+- [x] DID document fetcher + cache
 
 ### LLM 抽象
 
-- [ ] LLM provider interface（chat, stream, tools）
-- [ ] Claude provider 实现
-- [ ] DeepSeek provider 实现
-- [ ] API key 加密存储（Vault / env）
-- [ ] Per-Agent model config 应用
+- [x] LLM provider interface（chat, stream, tools）
+- [x] Claude provider 实现
+- [x] DeepSeek provider 实现
+- [x] API key 加密存储（Vault / env）
+- [x] Per-Agent model config 应用
 
 ### Agent runtime
 
-- [ ] Agent 状态机：load → process → save 循环
-- [ ] LLM 调用循环 + tool calling
-- [ ] 简单策略引擎（白名单 + allow/deny）
-- [ ] A2A 出站调用（Agent 给别人发消息）
-- [ ] A2A 入站处理（收到别人 Agent 消息）
+- [x] Agent 状态机：load → process → save 循环
+- [x] LLM 调用循环 + tool calling
+- [x] 简单策略引擎（白名单 + allow/deny）
+- [x] A2A 出站调用（Agent 给别人发消息）
+- [x] A2A 入站处理（收到别人 Agent 消息）
 
 ### Gateway 和 API
 
-- [ ] JWT 签发 / 验证 middleware
-- [ ] 所有 `/api/v1/auth/*` endpoints
-- [ ] 所有 `/api/v1/conversations/*` endpoints
-- [ ] WebSocket handler（订阅、发消息）
-- [ ] SSE handler（LLM 流式输出）
-- [ ] A2A inbound endpoints + signature 验证 middleware
-- [ ] 限流 middleware（先简单版：固定窗口）
+- [x] JWT 签发 / 验证 middleware
+- [x] 所有 `/api/v1/auth/*` endpoints
+- [x] 所有 `/api/v1/conversations/*` endpoints
+- [x] WebSocket handler（订阅、发消息）
+- [x] SSE handler（LLM 流式输出）
+- [x] A2A inbound endpoints + signature 验证 middleware
+- [x] 限流 middleware（先简单版：固定窗口）
 
 ### 客户端
 
-- [ ] Tauri 2.0 项目初始化
-- [ ] 登录 / 注册页面
-- [ ] 主界面：左侧联系人列表 + 右侧对话
-- [ ] 添加联系人弹窗（按 DID 或域名）
-- [ ] 对话消息列表（流式渲染）
-- [ ] 引用胶囊渲染
-- [ ] 权限请求卡片渲染
-- [ ] WebSocket 连接管理
+- [x] Tauri 2.0 项目初始化
+- [x] 登录 / 注册页面
+- [x] 主界面：左侧联系人列表 + 右侧对话
+- [x] 添加联系人弹窗（按 DID 或域名）
+- [x] 对话消息列表（流式渲染）
+- [x] 引用胶囊渲染
+- [x] 权限请求卡片渲染
+- [x] WebSocket 连接管理
 - [ ] 本地 SQLite 缓存最近 100 条消息
 
 ### Demo 内容
