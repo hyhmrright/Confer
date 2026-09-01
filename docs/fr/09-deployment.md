@@ -2,7 +2,7 @@
 
 Comment faire tourner soi-même une instance Confer complète — sur son portable pour l'essayer, ou sur un serveur pour la partager. Tout ce qui suit est un chemin réel et éprouvé ; rien n'y est de l'ordre du souhait.
 
-> **Portée :** ce guide couvre l'installation **auto-hébergée en instance unique**, avec ou sans TLS (voir « Servir en HTTPS » plus bas). L'hébergement public multi-locataire et le durcissement de la fédération sortent du périmètre de la v0.1 — voir `docs/02-architecture.md` pour la direction architecturale.
+> **Portée :** ce guide couvre l'installation **auto-hébergée en instance unique**, avec ou sans TLS (voir [Servir en HTTPS](#servir-en-https) plus bas). L'hébergement public multi-locataire et le durcissement de la fédération sortent du périmètre de la v0.1 — voir `docs/02-architecture.md` pour la direction architecturale.
 
 ## Ce que vous obtenez
 
@@ -294,7 +294,7 @@ Gardez `confer_pgdata_backup` et `confer_qdrantdata_backup` jusqu'à ce que vous
 
 | Symptôme | Cause probable / remède |
 |---------|--------------------|
-| `postgres` redémarre en boucle après une mise à niveau | Son volume a été écrit par PostgreSQL 16. Voir « Mettre à niveau une instance créée avant le 2026-08-29 ». |
+| `postgres` redémarre en boucle après une mise à niveau | Son volume a été écrit par PostgreSQL 16. Voir [Mettre à niveau une instance créée avant le 2026-08-29](#mettre-à-niveau-une-instance-créée-avant-le-2026-08-29). |
 | `qdrant` sort en 101 avec une trace de panique | Son stockage a été écrit par Qdrant 1.12. Même section que ci-dessus. |
 | `port is already allocated` sur le 80 | Quelque chose d'autre possède le port 80. Mettez `EXPOSE_PORT=8080` dans `.env` et ouvrez http://localhost:8080. |
 | L'interface web se charge mais chaque requête renvoie 500 | Regardez `docker compose -f docker-compose.prod.yml logs gateway`. Le plus souvent `JWT_SECRET` ou `ENCRYPTION_KEY` est vide : elles n'ont pas de valeur par défaut dans compose, elles doivent donc figurer dans `.env`. |

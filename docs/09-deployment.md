@@ -1,70 +1,64 @@
-# Confer — deployment & self-hosting
+# Confer — 部署与自托管
 
-How to run a full Confer instance yourself — on your laptop to try it, or on a
-server to share with others. Everything here is a real, tested path; nothing is
-aspirational.
+如何自己跑起一套完整的 Confer 实例——在笔记本上试用,或放在服务器上供他人使用。
+本文写的每一条路径都真实跑通过,没有一条是设想中的。
 
-> **Scope:** this guide covers the **single-instance, self-hosted** setup, with or
-> without TLS ([Serving HTTPS](#serving-https)). Public multi-tenant hosting and
-> federation hardening are out of scope for v0.1 — see `docs/02-architecture.md` for
-> the architectural direction.
+> **适用范围:**本指南覆盖**单实例自托管**部署,带或不带 TLS(见
+> [用 HTTPS 提供服务](#用-https-提供服务))。面向公众的多租户托管和联邦加固不在 v0.1
+> 范围内——架构方向见 `docs/02-architecture.md`。
 
-## What you get
+## 你会得到什么
 
-One command starts the whole platform:
+一条命令启动整个平台:
 
-| Service | Image / build | Role |
+| 服务 | 镜像 / 构建 | 职责 |
 |---------|---------------|------|
-| `client` | built from `infra/client.Dockerfile` | Web UI + nginx reverse proxy (the only port exposed) |
-| `gateway` | built from `infra/gateway.Dockerfile` | Hono API, A2A endpoints, WebSocket — **single replica, see below** |
-| `migrate` | one-shot | runs Drizzle migrations, then exits |
-| `postgres` | `postgres:18-alpine` | primary datastore |
-| `qdrant` | `qdrant/qdrant:v1.19.0` | vector search for the RAG knowledge base |
-| `minio` | `minio/minio` | S3-compatible file storage |
+| `client` | 由 `infra/client.Dockerfile` 构建 | Web UI + nginx 反向代理(唯一对外暴露的端口) |
+| `gateway` | 由 `infra/gateway.Dockerfile` 构建 | Hono API、A2A 端点、WebSocket——**单副本,原因见下** |
+| `migrate` | 一次性任务 | 执行 Drizzle 迁移后退出 |
+| `postgres` | `postgres:18-alpine` | 主数据存储 |
+| `qdrant` | `qdrant/qdrant:v1.19.0` | RAG 知识库的向量检索 |
+| `minio` | `minio/minio` | S3 兼容的文件存储 |
 
-> **Do not scale `gateway` past one replica.** WebSocket connections, A2A replay
-> nonces and rate-limit counters live in that process's memory. A second replica
-> would accept replayed A2A requests (its nonce table is empty), miss WS pushes
-> for users connected to the other replica, and multiply rate limits by the
-> replica count. See `docs/02-architecture.md` for what has to move first.
+> **不要把 `gateway` 扩到一个副本以上。**WebSocket 连接、A2A 重放 nonce 和限流计数
+> 都存在那个进程的内存里。第二个副本会接受被重放的 A2A 请求(它的 nonce 表是空的)、
+> 收不到连在另一个副本上的用户的 WS 推送,并且把限流阈值乘以副本数。要先搬走哪些东西,
+> 见 `docs/02-architecture.md`。
 
-nginx (inside `client`) serves the SPA on port **80** and reverse-proxies
-`/api`, `/ws`, `/a2a`, and `/.well-known` to the gateway. The gateway's own port
-(3000) is **not** published in production — everything goes through nginx on 80.
+nginx(在 `client` 容器内)在 **80** 端口提供 SPA,并把 `/api`、`/ws`、`/a2a`、
+`/.well-known` 反向代理到 gateway。生产环境**不**发布 gateway 自己的端口(3000)——
+所有流量都走 80 端口上的 nginx。
 
-## Prerequisites
+## 前置条件
 
-- **Docker** with Compose v2 (`docker compose`, not `docker-compose`). The only hard
-  requirement.
-- **Node 18+** — only for `npx confer-cli` (option A). The plain-Compose path, also
-  under A, does without it.
-- Roughly 4 GB free RAM and 2 GB disk for images + volumes.
-- [Bun](https://bun.sh) ≥ 1.1 — only if you want the hot-reload dev workflow
-  (option C below) or to regenerate migrations.
+- **Docker**,带 Compose v2(`docker compose`,不是 `docker-compose`)。唯一的硬性要求。
+- **Node 18+**——只有 `npx confer-cli`(方案 A)需要。同属方案 A 的纯 Compose 路径不需要它。
+- 大约 4 GB 空闲内存,以及 2 GB 磁盘用于镜像和卷。
+- [Bun](https://bun.sh) ≥ 1.1——只有当你要用热重载开发流程(下面的方案 C)
+  或重新生成迁移文件时才需要。
 
-## A. Published images (recommended)
+## A. 使用已发布镜像(推荐)
 
-Nothing to clone, nothing to build:
+不用克隆,也不用构建:
 
 ```bash
 npx confer-cli
 ```
 
-[`confer-cli`](https://www.npmjs.com/package/confer-cli) refuses to start unless Docker
-is actually running, writes `docker-compose.ghcr.yml` and a `0600` `.env` into
-`~/.confer` — `JWT_SECRET`, `ENCRYPTION_KEY` and the database and object-store
-passwords, all generated with `crypto.randomBytes` on first run and then reused — pulls
-the images, applies migrations, and polls `/health` for up to three minutes. It reports
-success when a page is served, not when containers start; if that never happens it
-prints the last 40 lines of the `migrate` and `gateway` logs. `npx confer-cli down`
-stops everything and keeps the data, `npx confer-cli logs` follows the gateway.
+[`confer-cli`](https://www.npmjs.com/package/confer-cli) 在 Docker 没真正运行时会拒绝启动;
+它把 `docker-compose.ghcr.yml` 和一个权限为 `0600` 的 `.env` 写进 `~/.confer`——
+其中 `JWT_SECRET`、`ENCRYPTION_KEY` 以及数据库和对象存储的密码,都在首次运行时用
+`crypto.randomBytes` 生成并在此后复用——然后拉取镜像、执行迁移,并轮询 `/health` 最多三分钟。
+它是在页面真的能打开时才报告成功,而不是在容器启动时;如果一直没等到,它会打印
+`migrate` 和 `gateway` 日志的最后 40 行。`npx confer-cli down` 停掉一切并保留数据,
+`npx confer-cli logs` 跟踪 gateway 的日志。
 
-Flags: `--port` (default 80), `--dir` (default `~/.confer`), `--version` (image tag),
-`--project` (compose project name). If a compose project named `confer` already exists
-and this CLI did not create it, the CLI stops rather than adopt it — compose volumes are
-keyed by project name, so starting would point these images at that stack's database.
+参数:`--port`(默认 80)、`--dir`(默认 `~/.confer`)、`--version`(镜像标签)、
+`--project`(compose 项目名)。如果已经存在一个名为 `confer` 的 compose 项目而它不是这个
+CLI 创建的,CLI 会停下来而不是接管它——compose 的卷是按项目名索引的,直接启动会让这些镜像
+指向那套栈的数据库。
 
-The same thing by hand, for a host without Node:
+在没有 Node 的主机上手工做同样的事:
 
 ```bash
 curl -O https://raw.githubusercontent.com/hyhmrright/Confer/main/docker-compose.ghcr.yml
@@ -72,30 +66,28 @@ printf 'JWT_SECRET=%s\nENCRYPTION_KEY=%s\n' "$(openssl rand -hex 32)" "$(openssl
 docker compose -f docker-compose.ghcr.yml up -d
 ```
 
-That leaves `POSTGRES_PASSWORD` and `MINIO_ROOT_PASSWORD` at the compose file's
-defaults (`confer` / `confer-secret`), which the CLI would have randomised. Neither port
-is published, so it is not a hole on a single-tenant box — but set both in `.env` on any
-host you share.
+这样会让 `POSTGRES_PASSWORD` 和 `MINIO_ROOT_PASSWORD` 停留在 compose 文件的默认值
+(`confer` / `confer-secret`),而 CLI 本来会把它们随机化。这两个端口都没有发布,
+所以在单租户机器上不构成漏洞——但在任何与他人共用的主机上,都要在 `.env` 里把两者设好。
 
-`ghcr.io/hyhmrright/confer-gateway` and `-client` are built for linux/amd64 and
-linux/arm64 on every push to `main`, and tagged `latest`, the commit SHA, and the
-release version. Pin one with `CONFER_VERSION` in `.env`.
+`ghcr.io/hyhmrright/confer-gateway` 和 `-client` 在每次推送到 `main` 时都会构建
+linux/amd64 和 linux/arm64 两个架构,并打上 `latest`、提交 SHA 和发布版本号三种标签。
+要固定某一个,在 `.env` 里设 `CONFER_VERSION`。
 
-Unlike `docker-compose.prod.yml`, this file runs `migrate` and `gateway` from the
-*same* image. That is only safe because nothing is built here — see the warning
-under option B, which is where the two can drift apart.
+与 `docker-compose.prod.yml` 不同,这个文件用**同一个**镜像跑 `migrate` 和 `gateway`。
+这只有在这里什么都不构建的前提下才安全——见方案 B 下面的警告,那里才是两者会漂移的地方。
 
-Then open **http://localhost**, register the first account, and add an LLM API key
-in **Settings** — the same three steps listed under B below.
+然后打开 **http://localhost**,注册第一个账号,并在**设置**里添加一个 LLM API key——
+就是下面方案 B 列出的同样三步。
 
-Everything after this point that says `-f docker-compose.prod.yml` applies equally
-here with `-f docker-compose.ghcr.yml`, run from wherever that file lives (`~/.confer`
-if the CLI put it there), except updating: there is nothing to rebuild, so an update is
-`npx confer-cli` again, or `docker compose -f docker-compose.ghcr.yml pull && … up -d`.
+从这里往后所有写着 `-f docker-compose.prod.yml` 的地方,换成 `-f docker-compose.ghcr.yml`
+在那个文件所在目录(CLI 放的话就是 `~/.confer`)执行同样成立,只有更新是例外:这里没有东西
+要重新构建,所以更新就是再跑一次 `npx confer-cli`,或者
+`docker compose -f docker-compose.ghcr.yml pull && … up -d`。
 
-## B. Build from a clone
+## B. 从克隆构建
 
-Use this to run a modified tree, or to self-host without depending on GHCR:
+如果你要跑一棵改动过的代码树,或者不想依赖 GHCR 来自托管,用这个:
 
 ```bash
 git clone https://github.com/hyhmrright/Confer.git
@@ -104,93 +96,88 @@ cp .env.example .env
 docker compose -f docker-compose.prod.yml up -d --build
 ```
 
-The first build takes a few minutes. When it finishes:
+首次构建要几分钟。完成之后:
 
-1. Open **http://localhost**.
-2. Click **Register** (the label appears in your own language) and create the
-   first account. (Registration is
-   rate-limited to 3 attempts per hour per IP.)
-3. Go to **Settings** and add an LLM API key (Claude / OpenAI / DeepSeek / Qwen /
-   Ollama). Keys are encrypted at rest with `ENCRYPTION_KEY` (AES-256-GCM) and are
-   never sent to the client.
+1. 打开 **http://localhost**。
+2. 点击**注册**(按钮上显示的是你自己的语言)并创建第一个账号。
+   (注册限流为每个 IP 每小时 3 次。)
+3. 进入**设置**,添加一个 LLM API key(Claude / OpenAI / DeepSeek / Qwen /
+   Ollama)。key 用 `ENCRYPTION_KEY` 加密存储(AES-256-GCM),永远不会下发到客户端。
 
-That's it — you now have a working Agent. Talk to it in the web UI, add contacts,
-and consult peer Agents.
+到这里就完成了——你现在有一个能用的 Agent。在 Web UI 里和它对话、添加联系人,
+并向对端 Agent 发起咨询。
 
-### Check it's healthy
+### 确认它是健康的
 
 ```bash
-docker compose -f docker-compose.prod.yml ps        # all services "running"/"healthy"; migrate is "exited (0)"
+docker compose -f docker-compose.prod.yml ps        # 所有服务应为 "running"/"healthy",migrate 应为 "exited (0)"
 docker compose -f docker-compose.prod.yml logs -f gateway
 ```
 
-### Configuration
+### 配置
 
-`.env` drives the production stack. The defaults in `.env.example` are functional
-for local use but **insecure** — change the secrets before exposing the instance to
-anyone else.
+生产栈由 `.env` 驱动。`.env.example` 里的默认值本地可用,但**并不安全**——
+在把实例开放给任何其他人之前,先把这些机密换掉。
 
-| Variable | Default (`.env.example`) | Notes |
+| 变量 | 默认值(`.env.example`) | 说明 |
 |----------|--------------------------|-------|
-| `JWT_SECRET` | `change-me-in-production` | **Change this.** Signs user session tokens. |
-| `ENCRYPTION_KEY` | 64 zeros | **Change this.** Must be 32 bytes as 64 hex chars. Generate: `openssl rand -hex 32`. Encrypts stored LLM keys. |
-| `POSTGRES_PASSWORD` | `confer` (compose default) | Database password. |
-| `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` | `confer` / `confer-secret` | Object storage credentials. |
-| `EXPOSE_PORT` | `80` | Host port the web UI binds to. Set e.g. `8080` if 80 is taken. |
-| `TAVILY_API_KEY` | empty | Optional fallback for web search; a per-user key in Settings takes precedence. |
-| `ADMIN_USERNAMES` | empty | Comma-separated usernames auto-promoted to the `admin` role on gateway startup. The accounts must already be registered. Admins log in with their normal account password and get the admin panel; they can then promote others from the UI. |
+| `JWT_SECRET` | `change-me-in-production` | **必须改。**用于签发用户会话 token。 |
+| `ENCRYPTION_KEY` | 64 个零 | **必须改。**必须是 32 字节、写成 64 个十六进制字符。生成方式:`openssl rand -hex 32`。用于加密存储的 LLM key。 |
+| `POSTGRES_PASSWORD` | `confer`(compose 默认值) | 数据库密码。 |
+| `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` | `confer` / `confer-secret` | 对象存储凭据。 |
+| `EXPOSE_PORT` | `80` | Web UI 绑定的宿主机端口。80 被占用时可设成比如 `8080`。 |
+| `TAVILY_API_KEY` | 空 | 网页搜索的可选兜底;设置里的用户级 key 优先。 |
+| `ADMIN_USERNAMES` | 空 | 逗号分隔的用户名,在 gateway 启动时自动提升为 `admin` 角色。这些账号必须已经注册。管理员用自己账号的普通密码登录即可进入管理面板;之后可以在界面上提升其他人。 |
 
-> LLM / embedding / Tavily keys are **not** set in `.env` — they live encrypted per
-> user in the database and are configured through the Settings UI. The `.env` keys
-> are infrastructure secrets only.
+> LLM / embedding / Tavily 的 key **不**在 `.env` 里配置——它们按用户加密存在数据库中,
+> 通过设置界面配置。`.env` 里的 key 只是基础设施机密。
 
-After editing `.env`, apply it with:
+改完 `.env` 后,用这个让它生效:
 
 ```bash
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-### Updating
+### 更新
 
 ```bash
 git pull
-docker compose -f docker-compose.prod.yml up -d --build   # migrate re-runs automatically
+docker compose -f docker-compose.prod.yml up -d --build   # migrate 会自动重跑
 ```
 
-### Resetting (wipes all data)
+### 重置(会清空所有数据)
 
 ```bash
-docker compose -f docker-compose.prod.yml down -v          # -v also deletes the volumes
+docker compose -f docker-compose.prod.yml down -v          # -v 会连卷一起删掉
 ```
 
-## C. Local development (hot reload)
+## C. 本地开发(热重载)
 
-Run only the infra in Docker and the app code with Bun:
+只把基础设施跑在 Docker 里,应用代码用 Bun 跑:
 
 ```bash
 bun install
-docker compose up -d            # infra only — Postgres, Qdrant, MinIO (ports published on localhost)
+docker compose up -d            # 只跑基础设施 — Postgres、Qdrant、MinIO(端口发布到 localhost)
 bun run db:migrate
-bun run dev                      # gateway on :3000, client (Vite) on :1420
+bun run dev                      # gateway 在 :3000,客户端(Vite)在 :1420
 ```
 
-- Web preview: **http://localhost:1420** (Vite proxies `/api` → gateway on :3000).
-- Native desktop app: `cd packages/client && bunx tauri dev`.
+- 网页预览:**http://localhost:1420**(Vite 把 `/api` 代理到 :3000 上的 gateway)。
+- 原生桌面应用:`cd packages/client && bunx tauri dev`。
 
-The dev `docker-compose.yml` publishes each infra port to localhost (5432, 6333, 6334,
-9000/9001) so the locally-run gateway can reach them. See
-`CONTRIBUTING.md` for the full developer workflow and the isolated test stack.
+开发用的 `docker-compose.yml` 会把每个基础设施端口发布到 localhost(5432、6333、6334、
+9000/9001),这样本地跑的 gateway 才能连上它们。完整的开发流程和隔离测试栈见
+`CONTRIBUTING.md`。
 
-## Connecting the Claude Code plugin
+## 接入 Claude Code 插件
 
-The `confer-a2a` plugin talks to the gateway over HTTP. **Point it at the right
-URL for your setup:**
+`confer-a2a` 插件通过 HTTP 与 gateway 通信。**要按你的部署方式指向正确的 URL:**
 
-| Your setup | `CONFER_GATEWAY_URL` |
+| 你的部署方式 | `CONFER_GATEWAY_URL` |
 |------------|----------------------|
-| Published images or a clone (options A/B) | `http://localhost` (nginx on port 80; the gateway's 3000 is not published) |
-| Local dev (option C) | `http://localhost:3000` (the default) |
-| Remote instance | `https://your-host` |
+| 已发布镜像或从克隆构建(方案 A/B) | `http://localhost`(nginx 在 80 端口;gateway 的 3000 没有发布) |
+| 本地开发(方案 C) | `http://localhost:3000`(默认值) |
+| 远程实例 | `https://your-host` |
 
 ```bash
 /plugin marketplace add hyhmrright/Confer
@@ -200,117 +187,107 @@ URL for your setup:**
 ```bash
 export CONFER_USERNAME=you
 export CONFER_PASSWORD=secret
-export CONFER_GATEWAY_URL=http://localhost   # match the table above
+export CONFER_GATEWAY_URL=http://localhost   # 与上面的表保持一致
 ```
 
-The peer Agents you consult must already be **contacts** of your account (adding a
-contact is the consent gate). Full plugin reference:
-[`plugins/confer-a2a/README.md`](../plugins/confer-a2a/README.md).
+你要咨询的对端 Agent 必须已经是你账号的**联系人**(添加联系人就是那道同意闸门)。
+插件完整参考见
+[`plugins/confer-a2a/README.md`](../plugins/confer-a2a/README.md)。
 
-## Exposing the instance to others
+## 把实例开放给其他人
 
-The default stack listens on plain HTTP, which is fine for its own users and useless
-for federation. **HTTPS is not a hardening step here, it is the feature.** An agent's
-identity is a `did:web`, and the resolution algorithm is https-only: a peer handed
-`did:web:your.domain:agents:you` fetches
-`https://your.domain/agents/you/did.json` and nothing else. Serve that over http and
-every peer's signature check fails at resolution, before it ever looks at the
-signature.
+默认这套栈监听的是明文 HTTP,自己人用没问题,但对联邦毫无用处。
+**这里的 HTTPS 不是加固措施,它就是功能本身。**一个 Agent 的身份是 `did:web`,
+而它的解析算法只走 https:拿到 `did:web:your.domain:agents:you` 的对端会去取
+`https://your.domain/agents/you/did.json`,不会取别的。用 http 提供这个文档,
+每个对端的签名校验都会在解析这一步就失败,根本轮不到看签名。
 
-### Serving HTTPS
+### 用 HTTPS 提供服务
 
-`docker-compose.tls.yml` is an overlay that fronts the stack with Caddy, which obtains
-and renews the certificate itself. Layer it on either base file:
+`docker-compose.tls.yml` 是一个 overlay,用 Caddy 挡在整套栈前面,证书由它自己申请和续期。
+它可以叠加在任意一个基础文件上:
 
 ```bash
 PUBLIC_HOST=confer.example.com \
   docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml up -d
 ```
 
-or, from the CLI, `npx confer-cli --domain confer.example.com`.
+或者走 CLI:`npx confer-cli --domain confer.example.com`。
 
-Three things have to be true, and Caddy will keep retrying until they are (watch
-`docker compose … logs caddy`):
+有三件事必须成立,在成立之前 Caddy 会一直重试(用
+`docker compose … logs caddy` 观察):
 
-- `PUBLIC_HOST` is the **bare domain** — no scheme, no port. Caddy serves 443 and the
-  overlay's port mapping is fixed, so `:8443` here would listen where nothing forwards.
-- That domain's A/AAAA record already points at this host.
-- Ports **80 and 443** are both reachable from the internet. 80 is not optional:
-  Let's Encrypt validates over it before anything can be served on 443.
+- `PUBLIC_HOST` 必须是**裸域名**——不带协议,不带端口。Caddy 服务在 443,而 overlay 的
+  端口映射是固定的,所以这里写 `:8443` 会监听在没有任何东西转发过来的地方。
+- 那个域名的 A/AAAA 记录已经指向这台主机。
+- **80 和 443** 两个端口都能从公网访问。80 不是可选的:Let's Encrypt 要先通过它完成验证,
+  之后 443 上才可能有东西可服务。
 
-The overlay takes the published port away from the `client` container, so `EXPOSE_PORT`
-no longer applies. Certificates live in the `caddydata` volume — losing it means
-re-issuing, which is rate-limited.
+这个 overlay 会把发布的端口从 `client` 容器上拿走,所以 `EXPOSE_PORT` 不再起作用。
+证书存在 `caddydata` 卷里——丢了就得重新签发,而签发是有频率限制的。
 
-### Everything else
+### 其余事项
 
-- Set `PUBLIC_HOST` before you create accounts. Every DID this instance mints derives
-  from it, so it is not cosmetic: left at `localhost`, the identities you hand a peer
-  resolve to *the peer's own* loopback. Changing it later re-hosts identities still
-  carrying the old `localhost` default on the next start (a one-off, logged); any peer
-  already holding an old DID has to re-add the contact.
-- Change every default secret (`JWT_SECRET`, `ENCRYPTION_KEY`, DB and MinIO passwords).
-- Registration is open by default. An admin can close it at any time from the
-  **Admin → Config** tab (`registration_open`), or front it with an invite/allowlist.
+- 在创建账号**之前**就把 `PUBLIC_HOST` 设好。这个实例签发的每一个 DID 都由它推导而来,
+  所以它不是装饰性的:留在 `localhost` 的话,你交给对端的身份会解析到*对端自己*的回环地址。
+  之后再改,会在下次启动时把仍带着旧 `localhost` 默认值的身份重新挂到新域名上
+  (一次性操作,有日志);而任何已经持有旧 DID 的对端必须重新添加联系人。
+- 把每一个默认机密都改掉(`JWT_SECRET`、`ENCRYPTION_KEY`、数据库和 MinIO 密码)。
+- 注册默认是开放的。管理员随时可以在**管理 → 配置**页关闭它(`registration_open`),
+  或者在前面加一层邀请码/白名单。
 
-Bringing your own reverse proxy (Traefik, an existing nginx, a cloud load balancer)
-works too — skip the overlay, terminate TLS wherever you like, and forward to the
-`client` container's port 80. `PUBLIC_HOST` still has to match the name on the
-certificate.
+自带反向代理(Traefik、已有的 nginx、云负载均衡)同样可行——跳过这个 overlay,
+在你想终止 TLS 的地方终止,然后转发到 `client` 容器的 80 端口。`PUBLIC_HOST` 仍然
+必须和证书上的名字一致。
 
-### Free public instance on Oracle Cloud (Always Free)
+### 在 Oracle Cloud 上跑免费公开实例(Always Free)
 
-The cheapest way to run a always-on public test instance is Oracle Cloud's
-**Always Free** ARM tier (4 OCPU / 24 GB / 10 TB egress, no time limit). The whole
-stack builds and runs on `arm64`.
+跑一个常开的公开测试实例,最便宜的办法是 Oracle Cloud 的 **Always Free** ARM 套餐
+(4 OCPU / 24 GB / 10 TB 出网流量,无时间限制)。整套栈在 `arm64` 上都能构建和运行。
 
-1. Create a VM: shape **VM.Standard.A1.Flex** (up to 4 OCPU / 24 GB), image
-   **Ubuntu 22.04+ (arm64)**. ARM capacity is tight in popular regions — pick a
-   large region (Ashburn, London) and retry if you hit "out of capacity".
-2. In the Console, open the VCN **security list / NSG** to allow inbound **TCP 80 and
-   443**. Open both now even if you start without a domain — the script opens the
-   host firewall for both, and this is the half it cannot reach.
-3. SSH in and run the bootstrap (installs Docker, opens the host firewall, clones,
-   generates secrets, builds and starts the stack):
+1. 创建一台虚拟机:规格选 **VM.Standard.A1.Flex**(最多 4 OCPU / 24 GB),镜像选
+   **Ubuntu 22.04+ (arm64)**。热门区域的 ARM 容量很紧张——挑一个大区域
+   (Ashburn、London),遇到 "out of capacity" 就重试。
+2. 在控制台里打开 VCN 的**安全列表 / NSG**,放行入站的 **TCP 80 和 443**。
+   即使你打算先不用域名,也把两个都开了——脚本会打开主机防火墙的这两个端口,
+   而控制台这一半是它够不着的。
+3. SSH 上去运行引导脚本(它会安装 Docker、打开主机防火墙、克隆代码、生成机密、
+   构建并启动整套栈):
 
    ```bash
    curl -fsSL https://raw.githubusercontent.com/hyhmrright/Confer/main/infra/oracle-bootstrap.sh | bash
    ```
 
-   With a domain already pointed at the VM, ask for HTTPS at the same time:
+   如果域名已经指向这台 VM,可以顺便一起要 HTTPS:
 
    ```bash
    curl -fsSL https://raw.githubusercontent.com/hyhmrright/Confer/main/infra/oracle-bootstrap.sh \
      | CONFER_DOMAIN=confer.example.com bash
    ```
 
-   Or clone first and run `bash infra/oracle-bootstrap.sh`. It is idempotent, and
-   re-running it with `CONFER_DOMAIN` moves an existing instance onto that domain.
-4. Open the URL it prints, register, then grant yourself admin: set
-   `ADMIN_USERNAMES=<you>` in `~/Confer/.env` and re-run `up -d gateway` with the same
-   `-f` files.
+   或者先克隆再跑 `bash infra/oracle-bootstrap.sh`。它是幂等的,带上 `CONFER_DOMAIN`
+   重跑一次就能把已有实例迁到那个域名上。
+4. 打开它打印出来的 URL,注册,然后给自己开管理员:在 `~/Confer/.env` 里设
+   `ADMIN_USERNAMES=<你>`,再用同样的 `-f` 文件重跑 `up -d gateway`。
 
-Without `CONFER_DOMAIN` this serves plain HTTP by IP — fine for testing, but the
-instance cannot federate, because `did:web` resolves over HTTPS only.
+不带 `CONFER_DOMAIN` 的话,这就是按 IP 提供明文 HTTP——测试没问题,但这个实例无法联邦,
+因为 `did:web` 只走 HTTPS 解析。
 
-## Upgrading an instance created before 2026-08-29
+## 升级 2026-08-29 之前创建的实例
 
-Confer now runs **PostgreSQL 18** and **Qdrant 1.19**; it previously ran 16 and
-1.12. Neither reads storage the older one wrote, so an instance that already
-holds data needs one migration before it will start. Nothing is lost, and both
-failures are loud: postgres refuses to start and says why, and qdrant panics on
-load. A fresh install needs none of this.
+Confer 现在跑的是 **PostgreSQL 18** 和 **Qdrant 1.19**;此前是 16 和 1.12。
+新版本都读不了旧版本写下的存储,所以已经存有数据的实例,必须先做一次迁移才能启动。
+数据不会丢,而且两种失败都很响亮:postgres 拒绝启动并说明原因,qdrant 在加载时 panic。
+全新安装完全不需要这一节。
 
-`npx confer-cli` checks for the postgres case before it starts anything and
-prints the same instructions. To stay on the old versions in the meantime, run
-the CLI that shipped them: `npx confer-cli@0.3.3`.
+`npx confer-cli` 会在启动任何东西之前先检查 postgres 这种情况,并打印同样的指引。
+如果暂时想留在旧版本,就跑当初带着它们的那个 CLI:`npx confer-cli@0.3.3`。
 
-Substitute your own compose file and project name below — `docker-compose.prod.yml`
-for a clone, or `-p confer -f ~/.confer/docker-compose.ghcr.yml` for the CLI path.
-Volumes are named `<project>_pgdata` and `<project>_qdrantdata`.
+下面的命令里请替换成你自己的 compose 文件和项目名——从克隆部署的是
+`docker-compose.prod.yml`,走 CLI 的是 `-p confer -f ~/.confer/docker-compose.ghcr.yml`。
+卷的名字是 `<project>_pgdata` 和 `<project>_qdrantdata`。
 
-**1. Back up, twice.** A logical dump and a byte copy of each volume fail in
-different ways, which is the point of taking both.
+**1. 备份两次。**逻辑导出和卷的字节级拷贝失败方式不同,这正是两个都要做的原因。
 
 ```bash
 docker compose -f docker-compose.prod.yml exec -T postgres pg_dumpall -U confer > pg16-dumpall.sql
@@ -320,8 +297,8 @@ for v in pgdata qdrantdata; do
 done
 ```
 
-**2. Export the vectors** — with their vectors, so nothing has to be embedded
-again. Save the output to `qdrant-export.json`:
+**2. 导出向量**——连同向量本身一起导,这样什么都不用重新做 embedding。
+把输出保存为 `qdrant-export.json`:
 
 ```bash
 docker compose -f docker-compose.prod.yml exec -T gateway bun -e '
@@ -340,9 +317,8 @@ for (const { name } of (await (await fetch(base + "/collections")).json()).resul
 console.log(JSON.stringify(out));' > qdrant-export.json
 ```
 
-**3. Replace the volumes and start the new versions.** Removing the volumes is
-the destructive step; do not run it until step 1 and step 2 have produced files
-you have looked at.
+**3. 替换卷并启动新版本。**删卷是不可逆的那一步;在第 1 步和第 2 步真的产出了文件、
+而且你已经亲眼看过之前,不要执行它。
 
 ```bash
 docker compose -f docker-compose.prod.yml down
@@ -350,17 +326,15 @@ docker volume rm confer_pgdata confer_qdrantdata
 docker compose -f docker-compose.prod.yml up -d postgres qdrant --wait
 ```
 
-**4. Restore.** The dump recreates the `confer` role and database that the fresh
-container already made, so two `already exists` errors are expected; anything
-else is not.
+**4. 恢复。**这份导出会重建 `confer` 角色和数据库,而新容器已经建过一遍了,
+所以出现两条 `already exists` 报错是正常的;除此之外的报错都不正常。
 
 ```bash
 docker compose -f docker-compose.prod.yml exec -T postgres psql -U confer -d postgres < pg16-dumpall.sql
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-Then put the vectors back — collections first, since the app only creates them
-lazily:
+然后把向量放回去——先建 collection,因为应用只在用到时才惰性创建它们:
 
 ```bash
 docker compose -f docker-compose.prod.yml exec -T gateway bun -e '
@@ -375,8 +349,7 @@ for (const [name, { config, points }] of Object.entries(data)) {
 }' < qdrant-export.json
 ```
 
-**5. Verify against the data, not the logs.** Row counts should match what the
-old instance had, and a search should return results:
+**5. 拿数据本身来验证,而不是看日志。**行数应该和旧实例一致,搜索应该能返回结果:
 
 ```bash
 docker compose -f docker-compose.prod.yml exec -T postgres \
@@ -386,25 +359,25 @@ const j = await (await fetch("http://qdrant:6333/collections/knowledge_chunks"))
 console.log(j.result.points_count);'
 ```
 
-Keep `confer_pgdata_backup` and `confer_qdrantdata_backup` until you have used
-the instance for a while — they are the only way back.
+在你把实例正常用上一段时间之前,别删 `confer_pgdata_backup` 和
+`confer_qdrantdata_backup`——它们是唯一的退路。
 
-## Troubleshooting
+## 排障
 
-| Symptom | Likely cause / fix |
+| 现象 | 可能原因 / 处理 |
 |---------|--------------------|
-| `postgres` restarts on loop after an upgrade | Its volume was written by PostgreSQL 16. See [Upgrading an instance created before 2026-08-29](#upgrading-an-instance-created-before-2026-08-29). |
-| `qdrant` exits 101 with a panic backtrace | Its storage was written by Qdrant 1.12. Same section as above. |
-| `port is already allocated` on 80 | Something else owns port 80. Set `EXPOSE_PORT=8080` in `.env` and open http://localhost:8080. |
-| Web UI loads but every request 500s | Check `docker compose -f docker-compose.prod.yml logs gateway`. Most often `JWT_SECRET` or `ENCRYPTION_KEY` is empty — they have no compose default, so they must be present in `.env`. |
-| `migrate` exits non-zero | Postgres wasn't healthy yet or `DATABASE_URL` is wrong. Re-run `docker compose -f docker-compose.prod.yml up -d`; `migrate` is idempotent. |
-| Plugin: `login failed` / 401 | Wrong `CONFER_GATEWAY_URL` (see the table — prod is port 80, not 3000), or wrong username/password. |
-| Plugin: `connection refused` on :3000 | You're on the one-command setup; use `http://localhost` instead of `:3000`. |
-| LLM calls fail | No LLM key configured for your user. Add one in Settings. |
-| Embedding/RAG errors | See `.claude/skills/rag-debug` or run the rag-debug skill for Qdrant/embedding/MinIO diagnostics. |
+| 升级后 `postgres` 反复重启 | 它的卷是 PostgreSQL 16 写的。见[升级 2026-08-29 之前创建的实例](#升级-2026-08-29-之前创建的实例)。 |
+| `qdrant` 以 101 退出并打印 panic 堆栈 | 它的存储是 Qdrant 1.12 写的。同上一节。 |
+| 80 端口报 `port is already allocated` | 80 端口被别的东西占了。在 `.env` 里设 `EXPOSE_PORT=8080`,然后打开 http://localhost:8080。 |
+| Web UI 能打开但每个请求都 500 | 查 `docker compose -f docker-compose.prod.yml logs gateway`。最常见的是 `JWT_SECRET` 或 `ENCRYPTION_KEY` 为空——它们在 compose 里没有默认值,必须写在 `.env` 里。 |
+| `migrate` 非零退出 | Postgres 还没健康,或者 `DATABASE_URL` 写错了。重跑 `docker compose -f docker-compose.prod.yml up -d`;`migrate` 是幂等的。 |
+| 插件报 `login failed` / 401 | `CONFER_GATEWAY_URL` 不对(见上面的表——生产是 80 端口,不是 3000),或者用户名/密码错了。 |
+| 插件在 :3000 上报 `connection refused` | 你用的是一键部署方式;应该用 `http://localhost` 而不是 `:3000`。 |
+| LLM 调用失败 | 你的用户没配 LLM key。去设置里加一个。 |
+| Embedding/RAG 报错 | 见 `.claude/skills/rag-debug`,或直接跑 rag-debug skill 做 Qdrant/embedding/MinIO 诊断。 |
 
-## See also
+## 延伸阅读
 
-- [`docs/02-architecture.md`](./02-architecture.md) — system architecture and service boundaries
-- [`CONTRIBUTING.md`](../CONTRIBUTING.md) — developer setup, test stack, conventions
-- [`plugins/confer-a2a/README.md`](../plugins/confer-a2a/README.md) — Claude Code plugin reference
+- [`docs/02-architecture.md`](./02-architecture.md) — 系统架构与服务边界
+- [`CONTRIBUTING.md`](../CONTRIBUTING.md) — 开发环境搭建、测试栈、约定
+- [`plugins/confer-a2a/README.md`](../plugins/confer-a2a/README.md) — Claude Code 插件参考

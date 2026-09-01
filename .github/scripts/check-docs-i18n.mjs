@@ -162,6 +162,38 @@ for (const lng of languages) {
   }
 }
 
+// ---- docs/<lang>/*.md : a whole document in the wrong language ------------
+// The check above looks for Chinese leaking into a translation. Nothing looked
+// the other way, and docs/09-deployment.md — the Chinese canonical, the text
+// every other language declares itself translated from — was written in English
+// from the day it was added and stayed that way for three months. Picking
+// 简体中文 and opening the deployment guide gave you English, and the ten
+// translations pointed at it as the authoritative original.
+//
+// English function words separate the two cleanly: measured over all 99 files,
+// a document not written in English scores 0-2 and an English one scores
+// 19-370. Prose only — code blocks and inline code are full of English either
+// way, and so is a link's target.
+const ENGLISH = /\b(the|and|with|which|that|from|this|your|then|when|there)\b/gi;
+const ENGLISH_MAX = 8;
+for (const lng of languages) {
+  if (lng === 'en') continue;
+  const dir = lng === 'zh' ? 'docs' : `docs/${lng}`; // Chinese is the root
+  for (const file of new Bun.Glob('0*.md').scanSync(dir)) {
+    const prose = readFileSync(`${dir}/${file}`, 'utf8')
+      .replace(/```[\s\S]*?```/g, '')
+      .replace(/`[^`]*`/g, '')
+      .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1');
+    const score = (prose.match(ENGLISH) ?? []).length;
+    if (score > ENGLISH_MAX) {
+      fail(
+        `${dir}/${file}: reads as English (${score} English function words, ` +
+          `threshold ${ENGLISH_MAX}) — is this document actually in '${lng}'?`,
+      );
+    }
+  }
+}
+
 if (problems.length) {
   console.error(`docs i18n: ${problems.length} problem(s)`);
   for (const p of problems) console.error(`  ${p}`);
