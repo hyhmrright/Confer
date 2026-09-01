@@ -1,0 +1,21 @@
+-- Custom because drizzle-kit's differ structurally cannot see this drift, and
+-- never will: 0011's snapshot already records agent_memories.tags as having
+-- DEFAULT '{}', so `db:generate` emits nothing no matter how often it is run.
+-- The snapshot is right about the schema and wrong about production.
+--
+-- How they came apart: 0002 is the idempotent migration that repaired the
+-- journal after 0002-0004 had been written by hand and left untracked. It
+-- declares the column as `"tags" text[] DEFAULT '{}'` — but inside a
+-- CREATE TABLE IF NOT EXISTS. On every instance where agent_memories already
+-- existed that whole statement was a no-op, so the column default was never
+-- applied. A fresh install has it; an instance older than the repair does not;
+-- and nothing in the journal, the snapshot or schema.ts can tell them apart.
+--
+-- Nothing depends on the database default today — every writer goes through
+-- Drizzle, which puts '{}' in the INSERT itself. What is being repaired is the
+-- divergence: two classes of instance with different DDL, asserted identical by
+-- three artifacts, with no mechanism that could ever notice.
+--
+-- Both statements are idempotent and a no-op on an instance that already agrees.
+ALTER TABLE "agent_memories" ALTER COLUMN "tags" SET DEFAULT '{}';--> statement-breakpoint
+UPDATE "agent_memories" SET "tags" = '{}' WHERE "tags" IS NULL;

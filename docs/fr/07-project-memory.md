@@ -2,6 +2,8 @@
 
 Définit le format de fichier par lequel le savoir se dépose dans le projet sous l'intégration Claude Code. C'est l'une des innovations centrales de Confer : **faire voyager le savoir du fournisseur avec le projet, sans qu'il se perde d'une session, d'une personne ou d'une machine à l'autre**.
 
+> **État (2026-09-01)** : ce document décrit la forme visée. Ce qui existe aujourd'hui est la **mémoire de projet côté serveur** : les outils MCP `read_project_memory` / `write_project_memory` conservent `facts` / `decisions` dans la table `project_memory` de votre propre instance (unique par utilisateur × projet × peer), toujours en Markdown. L'arborescence `.claude/` décrite ci-dessous, l'analyse de `confer.toml` et l'extraction automatique de faits ne sont pas encore implémentées ; voir v0.2 dans [`08-mvp-backlog.md`](./08-mvp-backlog.md).
+
 ## Arborescence
 
 À la racine de chaque projet :

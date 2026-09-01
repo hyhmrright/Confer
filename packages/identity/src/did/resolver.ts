@@ -1,5 +1,5 @@
 import { err, ok, type Result } from '@confer/shared';
-import { assertPublicHostname, SsrfBlockedError } from '../net/ssrf-guard.js';
+import { assertPublicHostname, SsrfBlockedError, SsrfUnresolvedError } from '../net/ssrf-guard.js';
 import type { DIDDocument } from './document.js';
 import { didDocumentSchema, parseDidWeb } from './document.js';
 
@@ -66,12 +66,15 @@ export async function resolveDID(did: string): Promise<Result<DIDDocument, strin
   // address. The guard receives only the bare hostname — never a path — so a
   // sub-identifier DID can't smuggle a private target past it. Loopback stays
   // allowed because a single-machine deployment serves its own agents at
-  // `did:web:localhost`. A DNS-resolution failure is not a block — the fetch
-  // below fails the same way — so only a positively-resolved blocked address
-  // aborts here.
+  // `did:web:localhost`. A DNS-resolution *failure* is not a block — the fetch
+  // below fails the same way — but a resolver that never answers is, because
+  // the fetch would then resolve the name a second time, unguarded.
   try {
     await assertPublicHostname(loc.hostname, { allowLoopback: true });
   } catch (e) {
+    if (e instanceof SsrfUnresolvedError) {
+      return err(`Refusing to resolve DID whose host did not resolve in time: ${did}`);
+    }
     if (e instanceof SsrfBlockedError) {
       return err(`Refusing to resolve DID pointing at a private address: ${did}`);
     }

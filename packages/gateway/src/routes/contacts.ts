@@ -1,4 +1,4 @@
-import { assertPublicHostname, SsrfBlockedError } from '@confer/identity';
+import { assertPublicHostname, SsrfBlockedError, SsrfUnresolvedError } from '@confer/identity';
 import { AppError, contactLookupSchema, newId, policyOverridesSchema } from '@confer/shared';
 import { and, count, desc, eq, like } from 'drizzle-orm';
 import { Hono } from 'hono';
@@ -321,12 +321,16 @@ function lookupByDomain(value: string): Promise<LookupResult> {
     try {
       await assertPublicHostname(hostname);
     } catch (e) {
+      if (e instanceof SsrfUnresolvedError) {
+        return { candidates: [], error: 'Address could not be resolved in time' };
+      }
       if (e instanceof SsrfBlockedError) {
         return { candidates: [], error: 'Private addresses not allowed' };
       }
       // A name that doesn't resolve isn't an SSRF block; fall through and let
       // the fetch below fail on its own (safeLookup maps transport errors to
-      // the uniform empty-candidates result).
+      // the uniform empty-candidates result). A resolver that never answered is
+      // a different matter — see SsrfUnresolvedError — and is handled above.
     }
     // AbortSignal rather than withTimeout: racing a promise rejects the wrapper
     // but leaves the request running, and the body is read after that race has

@@ -8,19 +8,19 @@ milestone کے حساب سے ٹکڑے؛ ہر milestone ایک ایسا نسخہ 
 
 **دائرہ (لازمی)**
 
-- [ ] بیک اینڈ: gateway + agent runtime + conversation + identity (چار خدمات؛ ایک ہی پروسیس میں ہوں یا الگ الگ، دونوں چلے گا)
-- [ ] PostgreSQL کا schema (دیکھیں 04-data-model.md)، migration اوزار سے سنبھالا ہوا
-- [ ] صارف کا اندراج / لاگ اِن (صرف پاس ورڈ کافی ہے؛ OAuth یا passkey نہیں)
-- [ ] DID:web دستاویز بنانا اور پیش کرنا (`/.well-known/did.json`)
-- [ ] AgentFacts دستاویز بنانا اور پیش کرنا
+- [x] بیک اینڈ: gateway + agent runtime + conversation + identity (چار خدمات؛ ایک ہی پروسیس میں ہوں یا الگ الگ، دونوں چلے گا)
+- [x] PostgreSQL کا schema (دیکھیں 04-data-model.md)، migration اوزار سے سنبھالا ہوا
+- [x] صارف کا اندراج / لاگ اِن (صرف پاس ورڈ کافی ہے؛ OAuth یا passkey نہیں)
+- [x] DID:web دستاویز بنانا اور پیش کرنا (`/.well-known/did.json`)
+- [x] AgentFacts دستاویز بنانا اور پیش کرنا
 - [ ] A2A پروٹوکول — اندر آنا اور باہر جانا (HTTP دستخط کی جانچ + capability token کی جانچ)
-- [ ] agent runtime: LLM بلانے کا چکر (فی الحال صرف دو فراہم کنندہ — Claude اور DeepSeek)
-- [ ] سادہ پالیسی انجن: سفید فہرست کے peer، اور یا سب اجازت یا سب انکار
-- [ ] کلائنٹ: ایک ہی Tauri ایپ، پہلے تینوں ڈیسک ٹاپ (Linux / macOS / Windows؛ موبائل بعد میں)
-- [ ] کلائنٹ یہ کر سکے: لاگ اِن، رابطہ شامل کرنا (DID سے)، ایک سے ایک گفتگو، اور حوالے دیکھنا
-- [ ] WebSocket سے حقیقی وقت میں پیغام بھیجنا (ایک انسٹنس کافی ہے؛ NATS fan-out نہیں)
-- [ ] SSE سے LLM کا رواں آؤٹ پٹ
-- [ ] Docker Compose سے ایک ہی حکم میں مقامی ترقیاتی ماحول
+- [x] agent runtime: LLM بلانے کا چکر (فی الحال صرف دو فراہم کنندہ — Claude اور DeepSeek)
+- [x] سادہ پالیسی انجن: سفید فہرست کے peer، اور یا سب اجازت یا سب انکار
+- [x] کلائنٹ: ایک ہی Tauri ایپ، پہلے تینوں ڈیسک ٹاپ (Linux / macOS / Windows؛ موبائل بعد میں)
+- [x] کلائنٹ یہ کر سکے: لاگ اِن، رابطہ شامل کرنا (DID سے)، ایک سے ایک گفتگو، اور حوالے دیکھنا
+- [x] WebSocket سے حقیقی وقت میں پیغام بھیجنا (ایک انسٹنس کافی ہے؛ NATS fan-out نہیں)
+- [x] SSE سے LLM کا رواں آؤٹ پٹ
+- [x] Docker Compose سے ایک ہی حکم میں مقامی ترقیاتی ماحول
 
 **Out of scope**:
 
@@ -39,7 +39,7 @@ milestone کے حساب سے ٹکڑے؛ ہر milestone ایک ایسا نسخہ 
 
 **Scope**:
 
-- [ ] MCP سرور بنانا، جس میں چار اوزار ہوں: `ask_peer`، `list_peers`، `read_project_memory`، `write_project_memory`
+- [x] MCP سرور بنانا — آج حقیقت میں پندرہ اوزار موجود ہیں (`ask_agent`، `list_agents`، `read_project_memory`، `write_project_memory`، `request_code_review` وغیرہ)؛ اس سطر میں پہلے لکھے `ask_peer` / `list_peers` کبھی حقیقی اوزار کے نام تھے ہی نہیں
 - [ ] OAuth طرز پر Confer کھاتے کو Claude Code انسٹنس سے جوڑنا
 - [ ] `.claude/confer.toml` ترتیب فائل کا تجزیہ
 - [ ] `.claude/peers/{slug}/` ڈائریکٹری کا پڑھنا لکھنا (facts.md، decisions.md، conversations/، meta.json)
@@ -63,8 +63,8 @@ milestone کے حساب سے ٹکڑے؛ ہر milestone ایک ایسا نسخہ 
 - [ ] گروہ کے ارکان کا انتظام (لوگوں اور Agent کو شامل کرنا / نکالنا)
 - [ ] کئی @ کیے گئے Agent بیک وقت جواب دیں (لپیٹ کر دکھانا، «قبول کرنے» کا طریقہ)
 - [ ] ادارہ جاتی انسٹنس: اپنا ڈومین اور SSO لاگ اِن (OIDC ہی کافی)
-- [ ] رابطوں کی دریافت: ڈومین سے تلاش (acme.com لکھتے ہی اُس ڈومین کے عوامی Agent مل جائیں)
-- [ ] کئی آلات پر fan-out (NATS آتا ہے)
+- [x] رابطوں کی دریافت: ڈومین سے تلاش (acme.com لکھتے ہی اُس ڈومین کے عوامی Agent مل جائیں)
+- [ ] کئی آلات پر fan-out (گیٹ وے اس وقت واحد instance ہے: WS رابطوں کی فہرست، A2A replay nonce اور شرح کی حد کے شمار سب عمل کے اندر `Map` ہیں۔ جس Redis/NATS ترتیب سے کبھی رابطہ ہی نہیں ہوا وہ 2026-08-07 کو ہٹا دی گئی؛ کام شروع کرتے وقت پہلے یہ تین منتقل کرنے ہوں گے، سب سے پہلے nonce)
 - [ ] موبائل (iOS، Android)
 
 **Acceptance**:
@@ -79,12 +79,12 @@ milestone کے حساب سے ٹکڑے؛ ہر milestone ایک ایسا نسخہ 
 
 **Scope**:
 
-- [ ] UI کا i18n (چینی اور انگریزی سے شروع، جاپانی/جرمن/فرانسیسی کے لیے جگہ چھوڑ کر)
+- [x] UI کا i18n (چینی اور انگریزی سے شروع، جاپانی/جرمن/فرانسیسی کے لیے جگہ چھوڑ کر)
 - [ ] Agent کے درمیان زبان پار گفتگو (ترجمہ ہدف Agent کے اندر ہوتا ہے، حوالے میں اصل متن باقی رہتا ہے)
 - [ ] AgentFacts میں `primary_language` خانہ شامل کرنا
 - [ ] غیر حاضری میں جواب: standing policy طے کرنے کا UI + زیرِ التوا اِن باکس + push اطلاع
-- [ ] MCP سرور میں pre-flight design review اوزار شامل کرنا
-- [ ] MCP سرور میں post-flight code review اوزار شامل کرنا
+- [x] MCP سرور میں pre-flight design review اوزار شامل کرنا
+- [x] MCP سرور میں post-flight code review اوزار شامل کرنا
 
 **Acceptance**:
 
@@ -100,11 +100,11 @@ milestone کے حساب سے ٹکڑے؛ ہر milestone ایک ایسا نسخہ 
 
 - [ ] مکمل قابلِ مشاہدگی (OTel tracing، Prometheus metrics، Loki logs)
 - [ ] بیک اپ اور بحالی (PG کا طبیعی بیک اپ + S3 پر اضافی)
-- [ ] سلامتی کا آڈٹ (کلیدی کارروائیوں کا audit log ہو)
+- [x] سلامتی کا آڈٹ (کلیدی کارروائیوں کا audit log ہو)
 - [ ] شرحِ حد کی باریکی (چاروں جہتیں)
 - [ ] LLM استعمال کا پینل (فی Agent ماہانہ لاگت)
 - [ ] BYO LLM key کا مکمل تجربہ (مشفّر ذخیرہ، گردش، کوٹا)
-- [ ] دستاویزی مقام (استعمال کی دستی، خود میزبانی کی دستی، API حوالہ)
+- [x] دستاویزی مقام (استعمال کی دستی، خود میزبانی کی دستی، API حوالہ)
 - [ ] عوامی Confer Cloud انسٹنس کا اجرا (`cloud.confer.ai`)
 
 **Acceptance**:
@@ -139,70 +139,70 @@ milestone کے حساب سے ٹکڑے؛ ہر milestone ایک ایسا نسخہ 
 
 ### بیک اینڈ کا ڈھانچہ
 
-- [ ] monorepo بنانا (pnpm workspaces یا Bun workspaces)
-- [ ] `packages/shared`: مشترکہ ٹائپ تعریفیں (zod یا valibot سے)
-- [ ] `packages/gateway`: Bun + Hono ایپلیکیشن کا ڈھانچہ
-- [ ] `packages/agent-runtime`: Agent کی حالت مشین کا ڈھانچہ
+- [x] monorepo بنانا (pnpm workspaces یا Bun workspaces)
+- [x] `packages/shared`: مشترکہ ٹائپ تعریفیں (zod یا valibot سے)
+- [x] `packages/gateway`: Bun + Hono ایپلیکیشن کا ڈھانچہ
+- [x] `packages/agent-runtime`: Agent کی حالت مشین کا ڈھانچہ
 - [x] ~~`packages/conversation`: پیغام ذخیرہ / ترسیل کی خدمت~~ — gateway میں ضم کر دی گئی (`ws/handler.ts` + `routes/conversations.ts`)؛ الگ پیکج کا ایک بھی صارف نہ تھا، 2026-08-07 کو ہٹا دیا گیا
-- [ ] `packages/identity`: DID + AgentFacts + A2A جانچ
-- [ ] PostgreSQL migration اوزار (drizzle-kit یا prisma)
-- [ ] تمام جدولوں کی migration فائلیں بنانا
+- [x] `packages/identity`: DID + AgentFacts + A2A جانچ
+- [x] PostgreSQL migration اوزار (drizzle-kit یا prisma)
+- [x] تمام جدولوں کی migration فائلیں بنانا
 
 ### ڈیٹابیس کی تہہ
 
-- [ ] User CRUD (اندراج، لاگ اِن، اپنی معلومات دیکھنا)
-- [ ] Agent CRUD (اپنا Agent بنانا، ترتیب بدلنا)
-- [ ] PeerAgent CRUD (رابطہ شامل کرنا، دیکھنا، مٹانا)
-- [ ] Conversation CRUD اور Participant کا انتظام
-- [ ] Message CRUD اور صفحہ بندی
-- [ ] Permission جدول میں لکھنا اور اس سے پوچھنا
+- [x] User CRUD (اندراج، لاگ اِن، اپنی معلومات دیکھنا)
+- [x] Agent CRUD (اپنا Agent بنانا، ترتیب بدلنا)
+- [x] PeerAgent CRUD (رابطہ شامل کرنا، دیکھنا، مٹانا)
+- [x] Conversation CRUD اور Participant کا انتظام
+- [x] Message CRUD اور صفحہ بندی
+- [x] Permission جدول میں لکھنا اور اس سے پوچھنا
 
 ### شناخت اور پروٹوکول
 
-- [ ] DID دستاویز بنانا (ہر صارف کے لیے ed25519 کلید جوڑا)
-- [ ] `/.well-known/did.json` endpoint
-- [ ] AgentFacts بنانا اور اس کا endpoint
-- [ ] HTTP دستخط کنندہ (باہر جانے والے)
-- [ ] HTTP دستخط جانچنے والا (اندر آنے والے)
+- [x] DID دستاویز بنانا (ہر صارف کے لیے ed25519 کلید جوڑا)
+- [x] `/.well-known/did.json` endpoint
+- [x] AgentFacts بنانا اور اس کا endpoint
+- [x] HTTP دستخط کنندہ (باہر جانے والے)
+- [x] HTTP دستخط جانچنے والا (اندر آنے والے)
 - [ ] Capability token جاری کرنا اور جانچنا
-- [ ] DID دستاویز لانے والا + کیش
+- [x] DID دستاویز لانے والا + کیش
 
 ### LLM کی تجرید
 
-- [ ] LLM فراہم کنندہ کا انٹرفیس (chat، stream، tools)
-- [ ] Claude فراہم کنندہ کا نفاذ
-- [ ] DeepSeek فراہم کنندہ کا نفاذ
-- [ ] API کلید کا مشفّر ذخیرہ (Vault / env)
-- [ ] فی Agent ماڈل ترتیب کا اطلاق
+- [x] LLM فراہم کنندہ کا انٹرفیس (chat، stream، tools)
+- [x] Claude فراہم کنندہ کا نفاذ
+- [x] DeepSeek فراہم کنندہ کا نفاذ
+- [x] API کلید کا مشفّر ذخیرہ (Vault / env)
+- [x] فی Agent ماڈل ترتیب کا اطلاق
 
 ### Agent runtime
 
-- [ ] Agent کی حالت مشین: load ← process ← save کا چکر
-- [ ] LLM بلانے کا چکر + tool calling
-- [ ] سادہ پالیسی انجن (سفید فہرست + allow/deny)
-- [ ] A2A باہر جاتی پکار (Agent دوسرے کو پیغام بھیجے)
-- [ ] A2A اندر آتی کارروائی (دوسرے کے Agent کا پیغام ملے)
+- [x] Agent کی حالت مشین: load ← process ← save کا چکر
+- [x] LLM بلانے کا چکر + tool calling
+- [x] سادہ پالیسی انجن (سفید فہرست + allow/deny)
+- [x] A2A باہر جاتی پکار (Agent دوسرے کو پیغام بھیجے)
+- [x] A2A اندر آتی کارروائی (دوسرے کے Agent کا پیغام ملے)
 
 ### Gateway اور API
 
-- [ ] JWT جاری / جانچنے کا middleware
-- [ ] تمام `/api/v1/auth/*` endpoints
-- [ ] تمام `/api/v1/conversations/*` endpoints
-- [ ] WebSocket handler (رکنیت، پیغام بھیجنا)
-- [ ] SSE handler (LLM کا رواں آؤٹ پٹ)
-- [ ] A2A اندر آتے endpoints + دستخط جانچ کا middleware
-- [ ] شرحِ حد کا middleware (پہلے سادہ صورت: مقررہ کھڑکی)
+- [x] JWT جاری / جانچنے کا middleware
+- [x] تمام `/api/v1/auth/*` endpoints
+- [x] تمام `/api/v1/conversations/*` endpoints
+- [x] WebSocket handler (رکنیت، پیغام بھیجنا)
+- [x] SSE handler (LLM کا رواں آؤٹ پٹ)
+- [x] A2A اندر آتے endpoints + دستخط جانچ کا middleware
+- [x] شرحِ حد کا middleware (پہلے سادہ صورت: مقررہ کھڑکی)
 
 ### کلائنٹ
 
-- [ ] Tauri 2.0 منصوبے کی ابتدا
-- [ ] لاگ اِن / اندراج کے صفحات
-- [ ] مرکزی سکرین: بائیں رابطوں کی فہرست، دائیں گفتگو
-- [ ] رابطہ شامل کرنے کا پاپ اپ (DID یا ڈومین سے)
-- [ ] گفتگو کی پیغام فہرست (رواں پیشکش)
-- [ ] حوالہ کیپسول کی پیشکش
-- [ ] اجازت درخواست کارڈ کی پیشکش
-- [ ] WebSocket اتصال کا انتظام
+- [x] Tauri 2.0 منصوبے کی ابتدا
+- [x] لاگ اِن / اندراج کے صفحات
+- [x] مرکزی سکرین: بائیں رابطوں کی فہرست، دائیں گفتگو
+- [x] رابطہ شامل کرنے کا پاپ اپ (DID یا ڈومین سے)
+- [x] گفتگو کی پیغام فہرست (رواں پیشکش)
+- [x] حوالہ کیپسول کی پیشکش
+- [x] اجازت درخواست کارڈ کی پیشکش
+- [x] WebSocket اتصال کا انتظام
 - [ ] حالیہ 100 پیغامات کا مقامی SQLite کیش
 
 ### ڈیمو مواد

@@ -8,19 +8,19 @@ milestone ごとにスライスし、各 milestone は提供可能でデモ可�
 
 **Scope（必須）**：
 
-- [ ] バックエンド：gateway + agent runtime + conversation + identity（4 サービス、単一プロセスでも独立でも可）
-- [ ] PostgreSQL schema（04-data-model.md を参照）を migration ツールで管理
-- [ ] ユーザー登録 / ログイン（パスワードログインのみで十分、OAuth/passkey は不要）
-- [ ] DID:web ドキュメントの生成と公開（`/.well-known/did.json`）
-- [ ] AgentFacts ドキュメントの生成と公開
+- [x] バックエンド：gateway + agent runtime + conversation + identity（4 サービス、単一プロセスでも独立でも可）
+- [x] PostgreSQL schema（04-data-model.md を参照）を migration ツールで管理
+- [x] ユーザー登録 / ログイン（パスワードログインのみで十分、OAuth/passkey は不要）
+- [x] DID:web ドキュメントの生成と公開（`/.well-known/did.json`）
+- [x] AgentFacts ドキュメントの生成と公開
 - [ ] A2A プロトコルの入站と出站（HTTP signature 検証 + capability token 検証）
-- [ ] Agent runtime：LLM 呼び出しループ（まずは Claude と DeepSeek の 2 つの provider のみ対応）
-- [ ] シンプルなポリシーエンジン：whitelist peer + 全許可 / 全拒否
-- [ ] クライアント：単一の Tauri アプリ、デスクトップ 3 プラットフォームを先に（Linux / macOS / Windows、モバイルは後期）
-- [ ] クライアントでできること：ログイン / 連絡先追加（DID で追加）/ 1 対 1 の対話 / 引用の表示
-- [ ] WebSocket リアルタイムメッセージ配信（単一インスタンスで十分、NATS fan-out は不要）
-- [ ] SSE ストリーミング LLM 出力
-- [ ] Docker Compose によるワンコマンドでのローカル開発環境起動
+- [x] Agent runtime：LLM 呼び出しループ（まずは Claude と DeepSeek の 2 つの provider のみ対応）
+- [x] シンプルなポリシーエンジン：whitelist peer + 全許可 / 全拒否
+- [x] クライアント：単一の Tauri アプリ、デスクトップ 3 プラットフォームを先に（Linux / macOS / Windows、モバイルは後期）
+- [x] クライアントでできること：ログイン / 連絡先追加（DID で追加）/ 1 対 1 の対話 / 引用の表示
+- [x] WebSocket リアルタイムメッセージ配信（単一インスタンスで十分、NATS fan-out は不要）
+- [x] SSE ストリーミング LLM 出力
+- [x] Docker Compose によるワンコマンドでのローカル開発環境起動
 
 **Out of scope**：
 
@@ -39,7 +39,7 @@ milestone ごとにスライスし、各 milestone は提供可能でデモ可�
 
 **Scope**：
 
-- [ ] MCP server の実装。`ask_peer`、`list_peers`、`read_project_memory`、`write_project_memory` の 4 つのツールを提供
+- [x] MCP server の実装 —— 実際に提供しているのは 15 個のツール（`ask_agent`、`list_agents`、`read_project_memory`、`write_project_memory`、`request_code_review` など）。本行にかつて記されていた `ask_peer` / `list_peers` は実在したツール名ではない
 - [ ] OAuth-style での Confer アカウントと Claude Code インスタンスの紐付け
 - [ ] `.claude/confer.toml` 設定ファイルのパース
 - [ ] `.claude/peers/{slug}/` ディレクトリの読み書き（facts.md, decisions.md, conversations/, meta.json）
@@ -63,8 +63,8 @@ milestone ごとにスライスし、各 milestone は提供可能でデモ可�
 - [ ] グループメンバー管理（人と Agent の追加 / 削除）
 - [ ] 複数の @ Agent が同時に回答（折りたたみ表示、「採用」メカニズム）
 - [ ] 企業インスタンス：カスタムドメイン、SSO ログイン（OIDC で可）
-- [ ] 連絡先の発見：ドメインで検索（acme.com を入力すると、そのドメインが公開する Agent を自動的に検索）
-- [ ] マルチデバイス fan-out（NATS の導入）
+- [x] 連絡先の発見：ドメインで検索（acme.com を入力すると、そのドメインが公開する Agent を自動的に検索）
+- [ ] マルチデバイス fan-out（gateway は現在シングルインスタンス：WS 接続表・A2A replay nonce・レート制限カウンタはいずれもプロセス内の `Map`。一度も接続されなかった Redis/NATS の設定は 2026-08-07 に削除済み。着手する際はまずこの三つを移すこと、nonce が最優先）
 - [ ] モバイル（iOS、Android）
 
 **Acceptance**：
@@ -79,12 +79,12 @@ milestone ごとにスライスし、各 milestone は提供可能でデモ可�
 
 **Scope**：
 
-- [ ] UI i18n（中国語、英語からスタート、日独仏を予約）
+- [x] UI i18n（中国語、英語からスタート、日独仏を予約）
 - [ ] Agent 間のクロス言語対話（翻訳はターゲット Agent の内部で完了し、引用は原文を保持）
 - [ ] AgentFacts に `primary_language` フィールドを追加
 - [ ] オフライン代理応答：standing policy 設定 UI + pending inbox + push notification
-- [ ] Pre-flight design review ツールを MCP server に追加
-- [ ] Post-flight code review ツールを MCP server に追加
+- [x] Pre-flight design review ツールを MCP server に追加
+- [x] Post-flight code review ツールを MCP server に追加
 
 **Acceptance**：
 
@@ -100,11 +100,11 @@ milestone ごとにスライスし、各 milestone は提供可能でデモ可�
 
 - [ ] 完全な可観測性（OTel tracing、Prometheus metrics、Loki logs）
 - [ ] バックアップとリストア（PG 物理バックアップ + S3 増分）
-- [ ] セキュリティ監査（重要な操作に audit log）
+- [x] セキュリティ監査（重要な操作に audit log）
 - [ ] 細分化されたレート制限（4 次元すべてを実装）
 - [ ] LLM 使用量ダッシュボード（per-Agent の月次コスト）
 - [ ] BYO LLM key の完全な UX（暗号化保存、ローテーション、クォータ）
-- [ ] ドキュメントサイト（ユーザー利用マニュアル、自前デプロイマニュアル、API リファレンス）
+- [x] ドキュメントサイト（ユーザー利用マニュアル、自前デプロイマニュアル、API リファレンス）
 - [ ] パブリックな Confer Cloud インスタンスの公開（`cloud.confer.ai`）
 
 **Acceptance**：
@@ -139,70 +139,70 @@ milestone ごとにスライスし、各 milestone は提供可能でデモ可�
 
 ### バックエンドの骨格
 
-- [ ] monorepo の作成（pnpm workspaces または Bun workspaces）
-- [ ] `packages/shared`：共有型定義（zod または valibot を使用）
-- [ ] `packages/gateway`：Bun + Hono アプリの骨格
-- [ ] `packages/agent-runtime`：Agent 状態機の骨格
+- [x] monorepo の作成（pnpm workspaces または Bun workspaces）
+- [x] `packages/shared`：共有型定義（zod または valibot を使用）
+- [x] `packages/gateway`：Bun + Hono アプリの骨格
+- [x] `packages/agent-runtime`：Agent 状態機の骨格
 - [x] ~~`packages/conversation`：メッセージ保存 / 配信サービス~~ — gateway に統合済み（`ws/handler.ts` + `routes/conversations.ts`）。独立パッケージは利用者ゼロのため 2026-08-07 に削除
-- [ ] `packages/identity`：DID + AgentFacts + A2A 検証
-- [ ] PostgreSQL migration ツール（drizzle-kit または prisma）
-- [ ] すべてのデータテーブルの migration ファイルの作成
+- [x] `packages/identity`：DID + AgentFacts + A2A 検証
+- [x] PostgreSQL migration ツール（drizzle-kit または prisma）
+- [x] すべてのデータテーブルの migration ファイルの作成
 
 ### データベース層
 
-- [ ] User CRUD（登録、ログイン、個人情報の取得）
-- [ ] Agent CRUD（自分の Agent の作成、設定の変更）
-- [ ] PeerAgent CRUD（連絡先の追加、取得、削除）
-- [ ] Conversation CRUD + Participant 管理
-- [ ] Message CRUD + ページネーション
-- [ ] Permission テーブルの書き込みとクエリ
+- [x] User CRUD（登録、ログイン、個人情報の取得）
+- [x] Agent CRUD（自分の Agent の作成、設定の変更）
+- [x] PeerAgent CRUD（連絡先の追加、取得、削除）
+- [x] Conversation CRUD + Participant 管理
+- [x] Message CRUD + ページネーション
+- [x] Permission テーブルの書き込みとクエリ
 
 ### 身元とプロトコル
 
-- [ ] DID document 生成（user ごとに ed25519 keypair を作成）
-- [ ] `/.well-known/did.json` endpoint
-- [ ] AgentFacts 生成と endpoint
-- [ ] HTTP signature 署名器（出站）
-- [ ] HTTP signature 検証器（入站）
+- [x] DID document 生成（user ごとに ed25519 keypair を作成）
+- [x] `/.well-known/did.json` endpoint
+- [x] AgentFacts 生成と endpoint
+- [x] HTTP signature 署名器（出站）
+- [x] HTTP signature 検証器（入站）
 - [ ] Capability token の発行と検証
-- [ ] DID document fetcher + cache
+- [x] DID document fetcher + cache
 
 ### LLM 抽象化
 
-- [ ] LLM provider interface（chat, stream, tools）
-- [ ] Claude provider の実装
-- [ ] DeepSeek provider の実装
-- [ ] API key の暗号化保存（Vault / env）
-- [ ] Per-Agent model config の適用
+- [x] LLM provider interface（chat, stream, tools）
+- [x] Claude provider の実装
+- [x] DeepSeek provider の実装
+- [x] API key の暗号化保存（Vault / env）
+- [x] Per-Agent model config の適用
 
 ### Agent runtime
 
-- [ ] Agent 状態機：load → process → save ループ
-- [ ] LLM 呼び出しループ + tool calling
-- [ ] シンプルなポリシーエンジン（whitelist + allow/deny）
-- [ ] A2A 出站呼び出し（Agent が他者にメッセージを送る）
-- [ ] A2A 入站処理（他者の Agent からメッセージを受け取る）
+- [x] Agent 状態機：load → process → save ループ
+- [x] LLM 呼び出しループ + tool calling
+- [x] シンプルなポリシーエンジン（whitelist + allow/deny）
+- [x] A2A 出站呼び出し（Agent が他者にメッセージを送る）
+- [x] A2A 入站処理（他者の Agent からメッセージを受け取る）
 
 ### Gateway と API
 
-- [ ] JWT 発行 / 検証 middleware
-- [ ] すべての `/api/v1/auth/*` endpoints
-- [ ] すべての `/api/v1/conversations/*` endpoints
-- [ ] WebSocket handler（購読、メッセージ送信）
-- [ ] SSE handler（LLM ストリーミング出力）
-- [ ] A2A inbound endpoints + signature 検証 middleware
-- [ ] レート制限 middleware（まずはシンプル版：固定ウィンドウ）
+- [x] JWT 発行 / 検証 middleware
+- [x] すべての `/api/v1/auth/*` endpoints
+- [x] すべての `/api/v1/conversations/*` endpoints
+- [x] WebSocket handler（購読、メッセージ送信）
+- [x] SSE handler（LLM ストリーミング出力）
+- [x] A2A inbound endpoints + signature 検証 middleware
+- [x] レート制限 middleware（まずはシンプル版：固定ウィンドウ）
 
 ### クライアント
 
-- [ ] Tauri 2.0 プロジェクトの初期化
-- [ ] ログイン / 登録ページ
-- [ ] メイン画面：左側に連絡先リスト + 右側に対話
-- [ ] 連絡先追加ダイアログ（DID またはドメインで）
-- [ ] 対話メッセージリスト（ストリーミングレンダリング）
-- [ ] 引用カプセルのレンダリング
-- [ ] 権限リクエストカードのレンダリング
-- [ ] WebSocket 接続管理
+- [x] Tauri 2.0 プロジェクトの初期化
+- [x] ログイン / 登録ページ
+- [x] メイン画面：左側に連絡先リスト + 右側に対話
+- [x] 連絡先追加ダイアログ（DID またはドメインで）
+- [x] 対話メッセージリスト（ストリーミングレンダリング）
+- [x] 引用カプセルのレンダリング
+- [x] 権限リクエストカードのレンダリング
+- [x] WebSocket 接続管理
 - [ ] ローカル SQLite で直近 100 件のメッセージをキャッシュ
 
 ### Demo コンテンツ
