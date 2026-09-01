@@ -39,7 +39,7 @@ milestone ধরে ভাগ করা; প্রতিটি milestone এম�
 
 **Scope**:
 
-- [x] MCP সার্ভার বানানো, যাতে চারটি যন্ত্র থাকে: `ask_peer`, `list_peers`, `read_project_memory`, `write_project_memory`
+- [x] MCP সার্ভার বানানো — বাস্তবে আছে পনেরোটি যন্ত্র (`ask_agent`, `list_agents`, `read_project_memory`, `write_project_memory`, `request_code_review` প্রভৃতি); এই লাইনে আগে লেখা `ask_peer` / `list_peers` কখনোই সত্যিকারের যন্ত্র-নাম ছিল না
 - [ ] OAuth-ধাঁচে Confer অ্যাকাউন্টকে Claude Code ইনস্ট্যান্সের সঙ্গে জোড়া
 - [ ] `.claude/confer.toml` বিন্যাস ফাইলের বিশ্লেষণ
 - [ ] `.claude/peers/{slug}/` ডিরেক্টরির পড়া-লেখা (facts.md, decisions.md, conversations/, meta.json)
@@ -64,7 +64,7 @@ milestone ধরে ভাগ করা; প্রতিটি milestone এম�
 - [ ] একাধিক @ করা Agent একসঙ্গে উত্তর দিক (গুটিয়ে দেখানো, «গ্রহণ» করার ব্যবস্থা)
 - [ ] প্রাতিষ্ঠানিক ইনস্ট্যান্স: নিজস্ব ডোমেইন আর SSO লগইন (OIDC হলেই চলবে)
 - [x] পরিচিত খোঁজা: ডোমেইন ধরে (acme.com লিখলেই ওই ডোমেইনের প্রকাশ্য Agent মিলুক)
-- [ ] একাধিক যন্ত্রে fan-out (NATS আসে)
+- [ ] একাধিক যন্ত্রে fan-out (গেটওয়ে এখন একক-ইনস্ট্যান্স: WS সংযোগ-তালিকা, A2A replay nonce ও হার-সীমার গণনা সবই প্রক্রিয়ার ভিতরের `Map`। যে Redis/NATS বিন্যাসে কখনো সংযোগ করা হয়নি তা 2026-08-07-এ মুছে ফেলা হয়েছে; কাজটি ধরার সময় আগে এই তিনটি সরাতে হবে, সবার আগে nonce)
 - [ ] মোবাইল (iOS, Android)
 
 **Acceptance**:

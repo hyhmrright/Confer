@@ -2,6 +2,8 @@
 
 定义 Claude Code 集成下，知识沉淀到项目里的文件格式。这是 Confer 的核心创新之一：**让供应商知识跟着项目走，跨 session、跨开发者、跨设备都不丢**。
 
+> **状态（2026-09-01）**：本文写的是目标形态。今天真正落地的是**服务端项目记忆**——MCP 的 `read_project_memory` / `write_project_memory` 把 `facts` / `decisions` 存进你自己实例的 `project_memory` 表（按 用户 × 项目 × peer 唯一），内容依然是 Markdown。下面这套 `.claude/` 文件布局、`confer.toml` 解析和自动事实抽取都还没实现，进度见 [`08-mvp-backlog.md`](./08-mvp-backlog.md) 的 v0.2。
+
 ## 目录结构
 
 每个项目根下：

@@ -2,6 +2,8 @@
 
 Define o formato de arquivo com que o conhecimento se deposita no projeto sob a integração com o Claude Code. É uma das inovações centrais do Confer: **fazer o conhecimento do fornecedor viajar junto com o projeto, sem se perder entre sessões, entre pessoas ou entre máquinas**.
 
+> **Estado (2026-09-01)**: este documento descreve a forma pretendida. O que existe hoje é a **memória de projeto do lado do servidor**: as ferramentas MCP `read_project_memory` / `write_project_memory` guardam `facts` / `decisions` na tabela `project_memory` da sua própria instância (única por usuário × projeto × peer), ainda em Markdown. A disposição de arquivos `.claude/` mostrada abaixo, a análise de `confer.toml` e a extração automática de fatos ainda não estão implementadas; veja v0.2 em [`08-mvp-backlog.md`](./08-mvp-backlog.md).
+
 ## Estrutura de diretórios
 
 Na raiz de cada projeto:

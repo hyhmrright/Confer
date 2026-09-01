@@ -39,7 +39,7 @@
 
 **Scope**：
 
-- [x] MCP server 实现，提供 `ask_peer`、`list_peers`、`read_project_memory`、`write_project_memory` 4 个工具
+- [x] MCP server 实现——实际提供 15 个工具（`ask_agent`、`list_agents`、`read_project_memory`、`write_project_memory`、`request_code_review` 等）；本行原先写的 `ask_peer` / `list_peers` 从来不是真实的工具名
 - [ ] OAuth-style 绑定 Confer 账号到 Claude Code 实例
 - [ ] `.claude/confer.toml` 配置文件解析
 - [ ] `.claude/peers/{slug}/` 目录的读写（facts.md, decisions.md, conversations/, meta.json）
@@ -64,7 +64,7 @@
 - [ ] 多 @ Agent 同时回答（折叠展示，"采纳"机制）
 - [ ] 企业实例：用自定义域名、SSO 登录（OIDC 即可）
 - [x] 联系人发现：按域名查找（输入 acme.com 自动找该域名公开的 Agent）
-- [ ] 多设备 fan-out（NATS 引入）
+- [ ] 多设备 fan-out（网关现为单实例：WS 连接表、A2A replay nonce、限流计数都是进程内 `Map`。从未被拨号的 Redis/NATS 配置已于 2026-08-07 删除，重做时先搬这三个，nonce 最优先）
 - [ ] 移动端（iOS、Android）
 
 **Acceptance**：

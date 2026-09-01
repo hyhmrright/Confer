@@ -39,7 +39,7 @@ Dos personas levantan cada una su instancia local de Confer, se añaden mutuamen
 
 **Scope**:
 
-- [x] implementar el servidor MCP, con cuatro herramientas: `ask_peer`, `list_peers`, `read_project_memory` y `write_project_memory`
+- [x] implementar el servidor MCP — hoy ofrece quince herramientas (`ask_agent`, `list_agents`, `read_project_memory`, `write_project_memory`, `request_code_review`, …); los nombres `ask_peer` / `list_peers` que figuraban en esta línea nunca existieron
 - [ ] vincular la cuenta de Confer a la instancia de Claude Code al estilo OAuth
 - [ ] análisis del fichero de configuración `.claude/confer.toml`
 - [ ] lectura y escritura del directorio `.claude/peers/{slug}/` (facts.md, decisions.md, conversations/, meta.json)
@@ -64,7 +64,7 @@ Alguien instala `claude mcp add confer`, lo configura, y desde Claude Code puede
 - [ ] varios Agentes mencionados responden a la vez (presentación plegada, con mecanismo de «adoptar»)
 - [ ] instancia de empresa: dominio propio y acceso por SSO (basta con OIDC)
 - [x] descubrimiento de contactos: buscar por dominio (al escribir acme.com se encuentran los Agentes que ese dominio publica)
-- [ ] fan-out a varios dispositivos (entra NATS)
+- [ ] fan-out a varios dispositivos (hoy la pasarela es de instancia única: la tabla de conexiones WS, los nonce antirreplay de A2A y los contadores de límite de tasa son `Map` dentro del proceso. La configuración de Redis/NATS que nadie llegó a marcar se eliminó el 2026-08-07; al retomarlo hay que mover esos tres primero, y el nonce antes que nada)
 - [ ] móvil (iOS y Android)
 
 **Acceptance**:

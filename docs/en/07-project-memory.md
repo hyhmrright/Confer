@@ -2,6 +2,8 @@
 
 Defines the file format for knowledge accumulated into a project under the Claude Code integration. This is one of Confer's core innovations: **let vendor knowledge travel with the project, never lost across sessions, developers, or devices**.
 
+> **Status (2026-09-01)**: this document describes the target form. What ships today is **server-side project memory** — the MCP tools `read_project_memory` / `write_project_memory` keep `facts` / `decisions` in your own instance's `project_memory` table (unique per user × project × peer), still as Markdown. The `.claude/` file layout below, `confer.toml` parsing, and automatic fact extraction are not implemented yet; see v0.2 in [`08-mvp-backlog.md`](./08-mvp-backlog.md).
+
 ## Directory structure
 
 Under each project root:

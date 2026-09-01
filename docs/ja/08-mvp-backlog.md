@@ -39,7 +39,7 @@ milestone ごとにスライスし、各 milestone は提供可能でデモ可�
 
 **Scope**：
 
-- [x] MCP server の実装。`ask_peer`、`list_peers`、`read_project_memory`、`write_project_memory` の 4 つのツールを提供
+- [x] MCP server の実装 —— 実際に提供しているのは 15 個のツール（`ask_agent`、`list_agents`、`read_project_memory`、`write_project_memory`、`request_code_review` など）。本行にかつて記されていた `ask_peer` / `list_peers` は実在したツール名ではない
 - [ ] OAuth-style での Confer アカウントと Claude Code インスタンスの紐付け
 - [ ] `.claude/confer.toml` 設定ファイルのパース
 - [ ] `.claude/peers/{slug}/` ディレクトリの読み書き（facts.md, decisions.md, conversations/, meta.json）
@@ -64,7 +64,7 @@ milestone ごとにスライスし、各 milestone は提供可能でデモ可�
 - [ ] 複数の @ Agent が同時に回答（折りたたみ表示、「採用」メカニズム）
 - [ ] 企業インスタンス：カスタムドメイン、SSO ログイン（OIDC で可）
 - [x] 連絡先の発見：ドメインで検索（acme.com を入力すると、そのドメインが公開する Agent を自動的に検索）
-- [ ] マルチデバイス fan-out（NATS の導入）
+- [ ] マルチデバイス fan-out（gateway は現在シングルインスタンス：WS 接続表・A2A replay nonce・レート制限カウンタはいずれもプロセス内の `Map`。一度も接続されなかった Redis/NATS の設定は 2026-08-07 に削除済み。着手する際はまずこの三つを移すこと、nonce が最優先）
 - [ ] モバイル（iOS、Android）
 
 **Acceptance**：

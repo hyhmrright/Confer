@@ -39,7 +39,7 @@ milestone کے حساب سے ٹکڑے؛ ہر milestone ایک ایسا نسخہ 
 
 **Scope**:
 
-- [x] MCP سرور بنانا، جس میں چار اوزار ہوں: `ask_peer`، `list_peers`، `read_project_memory`، `write_project_memory`
+- [x] MCP سرور بنانا — آج حقیقت میں پندرہ اوزار موجود ہیں (`ask_agent`، `list_agents`، `read_project_memory`، `write_project_memory`، `request_code_review` وغیرہ)؛ اس سطر میں پہلے لکھے `ask_peer` / `list_peers` کبھی حقیقی اوزار کے نام تھے ہی نہیں
 - [ ] OAuth طرز پر Confer کھاتے کو Claude Code انسٹنس سے جوڑنا
 - [ ] `.claude/confer.toml` ترتیب فائل کا تجزیہ
 - [ ] `.claude/peers/{slug}/` ڈائریکٹری کا پڑھنا لکھنا (facts.md، decisions.md، conversations/، meta.json)
@@ -64,7 +64,7 @@ milestone کے حساب سے ٹکڑے؛ ہر milestone ایک ایسا نسخہ 
 - [ ] کئی @ کیے گئے Agent بیک وقت جواب دیں (لپیٹ کر دکھانا، «قبول کرنے» کا طریقہ)
 - [ ] ادارہ جاتی انسٹنس: اپنا ڈومین اور SSO لاگ اِن (OIDC ہی کافی)
 - [x] رابطوں کی دریافت: ڈومین سے تلاش (acme.com لکھتے ہی اُس ڈومین کے عوامی Agent مل جائیں)
-- [ ] کئی آلات پر fan-out (NATS آتا ہے)
+- [ ] کئی آلات پر fan-out (گیٹ وے اس وقت واحد instance ہے: WS رابطوں کی فہرست، A2A replay nonce اور شرح کی حد کے شمار سب عمل کے اندر `Map` ہیں۔ جس Redis/NATS ترتیب سے کبھی رابطہ ہی نہیں ہوا وہ 2026-08-07 کو ہٹا دی گئی؛ کام شروع کرتے وقت پہلے یہ تین منتقل کرنے ہوں گے، سب سے پہلے nonce)
 - [ ] موبائل (iOS، Android)
 
 **Acceptance**:

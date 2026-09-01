@@ -39,7 +39,7 @@ Two developers each spin up a Confer instance locally, add each other as friends
 
 **Scope**:
 
-- [x] MCP server implementation, providing the 4 tools `ask_peer`, `list_peers`, `read_project_memory`, `write_project_memory`
+- [x] MCP server implementation — 15 tools ship today (`ask_agent`, `list_agents`, `read_project_memory`, `write_project_memory`, `request_code_review`, …); the `ask_peer` / `list_peers` names this line used to carry were never real tool names
 - [ ] OAuth-style binding of a Confer account to a Claude Code instance
 - [ ] `.claude/confer.toml` config file parsing
 - [ ] Reading and writing the `.claude/peers/{slug}/` directory (facts.md, decisions.md, conversations/, meta.json)
@@ -64,7 +64,7 @@ A developer installs `claude mcp add confer`, and after configuration, can ask t
 - [ ] Multiple @Agents answering simultaneously (collapsed display, an "adopt" mechanism)
 - [ ] Enterprise instance: with a custom domain, SSO login (OIDC is enough)
 - [x] Contact discovery: lookup by domain (enter acme.com to automatically find the Agents that domain publishes)
-- [ ] Multi-device fan-out (introduce NATS)
+- [ ] Multi-device fan-out (the gateway is single-instance today: WS connections, A2A replay nonces and rate-limit counters are all process-local `Map`s. The Redis/NATS config nothing ever dialed was removed on 2026-08-07 — move those three first when this is picked up, nonce foremost)
 - [ ] Mobile (iOS, Android)
 
 **Acceptance**:

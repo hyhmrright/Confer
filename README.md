@@ -25,14 +25,14 @@ pasting documentation into a chat window.
 
 **Confer gives that knowledge an address.** You run your own Agent — it holds your docs,
 your knowledge base, and your rules. Claude Code consults it over MCP, gets an answer
-**with citations**, and writes the verified facts into `.claude/peers/` where they travel
-with git and get reused automatically.
+**with citations**, and can record what it learned as project memory your instance keeps,
+so the next session starts from it instead of asking again.
 
 The same channel works across organizations. When the other side runs an Agent too — a
 vendor, a partner, another team — the two Agents talk to each other over a signed,
 identity-verified protocol. Neither human reads the other's documentation.
 
-<img src="./docs/assets/social/how-it-works.png" alt="How Confer works: Claude Code asks your Confer instance over MCP, which consults the peer Agent over signed A2A, and the cited answer is persisted to .claude/peers/" width="100%">
+<img src="./docs/assets/social/how-it-works.png" alt="How Confer works: Claude Code asks your Confer instance over MCP, which consults the peer Agent over signed A2A, and the cited answer comes back to the session" width="100%">
 
 ## Why it might interest you
 
@@ -40,8 +40,9 @@ identity-verified protocol. Neither human reads the other's documentation.
   guessing. You don't need anyone else to join first.
 - **Answers carry citations.** Every fact traces back to a source document, in its
   original language.
-- **Knowledge outlives the session.** `.claude/peers/{peer}/facts.md` is plain Markdown,
-  committed to your repo — it survives context windows, machines, and teammates.
+- **Knowledge outlives the session.** Facts and decisions you record about a peer are kept
+  per project as plain Markdown on your own instance, and read back by name in a later
+  session — they survive context windows and the machine you were sitting at.
 - **No platform in the middle.** Built on open protocols: A2A, W3C DID:web, HTTP Message
   Signatures (RFC 9421), NANDA AgentFacts, MCP. Self-host it and federate with anyone.
 - **Your keys stay yours.** LLM and embedding keys are AES-256-GCM encrypted per user and
@@ -188,7 +189,7 @@ Details in [`docs/02-architecture.md`](./docs/02-architecture.md).
 | [`docs/04-data-model.md`](./docs/04-data-model.md) | Database schema, TypeScript types |
 | [`docs/05-api.md`](./docs/05-api.md) | REST + WebSocket + A2A interfaces |
 | [`docs/06-claude-code-plugin.md`](./docs/06-claude-code-plugin.md) | MCP plugin design |
-| [`docs/07-project-memory.md`](./docs/07-project-memory.md) | `.claude/peers/` format |
+| [`docs/07-project-memory.md`](./docs/07-project-memory.md) | Project memory, and the `.claude/peers/` git-committed form it is headed for (design) |
 | [`docs/08-mvp-backlog.md`](./docs/08-mvp-backlog.md) | Roadmap and task checklist |
 | [`docs/09-deployment.md`](./docs/09-deployment.md) | Self-hosting, configuration, troubleshooting |
 | [`CONTRIBUTING.md`](./CONTRIBUTING.md) | Developer setup, monorepo layout, test stack |
