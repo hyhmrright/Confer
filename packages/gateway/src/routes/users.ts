@@ -92,6 +92,16 @@ async function assertDialableBaseUrl(provider: string, apiKey: string): Promise<
     }
     // A name that does not resolve is not a block. Store it and let the dial
     // fail on its own, the same way a runtime that is merely switched off does.
+    //
+    // SsrfUnresolvedError lands here too, deliberately, and unlike the DID
+    // resolver and contact lookup — which refuse it. Those two guard a host
+    // someone else named, so "no answer" has to refuse or a resolver that
+    // stalls past the deadline slips past the guard into an unguarded fetch.
+    // Here the host is one the owner typed into their own settings, and the
+    // comment above already declines to defend against an attacker who
+    // controls DNS. Refusing would only mean a slow resolver stops an owner
+    // saving their own Ollama address. The bound still matters: it turns a
+    // black-holed resolver from a hung request into a 5s one.
   }
 }
 

@@ -1,3 +1,4 @@
+import type { LookupAddress } from 'node:dns';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 
@@ -17,6 +18,40 @@ export class SsrfBlockedError extends Error {
     this.address = address;
   }
 }
+
+// Thrown when the resolver produced no answer at all before the deadline.
+//
+// Every call site has to decide about this one; it is a sibling of
+// SsrfBlockedError, not a subclass, so a `catch` that handles only the block
+// lets this one fall through to the fetch it was guarding — silently. All three
+// callers therefore account for it in so many words, two by refusing it and
+// routes/users.ts by admitting it on purpose.
+//
+// It is deliberately not folded into the harmless "name doesn't resolve" case,
+// even though both leave us without an address. A definitive negative —
+// NXDOMAIN, no records — is an answer, and it means the caller's own fetch
+// fails the same way, so waving it through costs nothing. Silence is not an
+// answer. The caller resolves the name a second time, independently, and that
+// lookup is not bounded by us: an authoritative server that stalls past our
+// deadline and then answers the fetch normally would have skipped this guard
+// entirely, and the one party who can arrange that is whoever controls the name
+// we were asked to dial. So where the name came from someone else, no answer
+// means we could not verify, and could-not-verify refuses.
+export class SsrfUnresolvedError extends Error {
+  readonly hostname: string;
+
+  constructor(hostname: string, timeoutMs: number) {
+    super(`Refusing to connect to ${hostname}: no DNS answer within ${timeoutMs}ms`);
+    this.name = 'SsrfUnresolvedError';
+    this.hostname = hostname;
+  }
+}
+
+// A healthy resolver answers in single-digit milliseconds; this is a ceiling on
+// a hang, not a performance budget. It matters most on the inbound A2A path,
+// where the hostname comes from the peer's own DID: before this bound existed a
+// black-holed resolver held the request until Bun's 255s idle timeout.
+const DNS_TIMEOUT_MS = 5_000;
 
 // IPv4 ranges we refuse to connect to (SSRF surface): unspecified, private,
 // loopback, link-local, carrier-grade NAT.
@@ -165,21 +200,29 @@ function isLoopbackIp(ip: string): boolean {
   return isZeroExceptLast(groups) && groups[7] === 1; // ::1 only — :: (unspecified) is not loopback
 }
 
+/** `dnsTimeoutMs` bounds the lookup; past it the guard throws SsrfUnresolvedError. */
+export interface SsrfGuardOptions {
+  allowLoopback?: boolean;
+  dnsTimeoutMs?: number;
+}
+
 // Resolve a hostname and reject it if it (or any of its addresses) points at a
 // private/reserved range. Returns the resolved addresses on success. A literal
 // IP is checked directly; otherwise DNS resolution decides. Throws
-// SsrfBlockedError for a blocked target and propagates the DNS error for a name
-// that cannot be resolved. `allowLoopback` permits 127.0.0.0/8 and ::1 (still
+// SsrfBlockedError for a blocked target, SsrfUnresolvedError when the resolver
+// never answered, and propagates the DNS error for a name that answered with a
+// definitive negative. `allowLoopback` permits 127.0.0.0/8 and ::1 (still
 // blocking every other private/reserved range) for callers whose own service
 // lives on loopback.
 export async function assertPublicHostname(
   hostname: string,
-  opts?: { allowLoopback?: boolean },
+  opts?: SsrfGuardOptions,
 ): Promise<string[]> {
   const allowLoopback = opts?.allowLoopback ?? false;
   return assertAddresses(
     hostname,
     (address) => isBlockedIp(address) && !(allowLoopback && isLoopbackIp(address)),
+    opts?.dnsTimeoutMs ?? DNS_TIMEOUT_MS,
   );
 }
 
@@ -217,8 +260,11 @@ function isLinkLocalIp(ip: string): boolean {
  * feature rather than an attack. What stays blocked is the one range with no
  * legitimate use, which is also the one worth reaching: cloud metadata.
  */
-export function assertNotLinkLocalHostname(hostname: string): Promise<string[]> {
-  return assertAddresses(hostname, isLinkLocalIp);
+export function assertNotLinkLocalHostname(
+  hostname: string,
+  opts?: SsrfGuardOptions,
+): Promise<string[]> {
+  return assertAddresses(hostname, isLinkLocalIp, opts?.dnsTimeoutMs ?? DNS_TIMEOUT_MS);
 }
 
 // Resolve `hostname` to its addresses and throw SsrfBlockedError if `blocked`
@@ -227,6 +273,7 @@ export function assertNotLinkLocalHostname(hostname: string): Promise<string[]> 
 async function assertAddresses(
   hostname: string,
   blocked: (address: string) => boolean,
+  dnsTimeoutMs: number,
 ): Promise<string[]> {
   const reject = (address: string): void => {
     if (blocked(address)) {
@@ -260,8 +307,29 @@ async function assertAddresses(
     return [bareHost];
   }
 
-  const resolved = await lookup(bareHost, { all: true, verbatim: true });
+  const resolved = await lookupWithin(bareHost, dnsTimeoutMs);
   const addresses = resolved.map((entry) => entry.address);
   for (const address of addresses) reject(address);
   return addresses;
+}
+
+// `dns.promises.lookup` takes no AbortSignal, so the deadline has to be a race.
+// The losing lookup keeps its libuv threadpool slot until the OS resolver gives
+// up, which is the cost of not having a cancel; it is bounded by the rate
+// limiter in front of every caller, and the alternative — `dns.Resolver`, which
+// does support a timeout — asks c-ares directly and so cannot see /etc/hosts,
+// where `host.docker.internal` lives. Losing the local LLM runtime to fix a
+// hang would be trading a whole feature for a deadline.
+async function lookupWithin(hostname: string, ms: number): Promise<LookupAddress[]> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      lookup(hostname, { all: true, verbatim: true }),
+      new Promise<never>((_, rejectRace) => {
+        timer = setTimeout(() => rejectRace(new SsrfUnresolvedError(hostname, ms)), ms);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }

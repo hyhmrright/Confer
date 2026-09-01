@@ -18,4 +18,5 @@ export {
   assertPublicHostname,
   isBlockedIp,
   SsrfBlockedError,
+  SsrfUnresolvedError,
 } from './net/ssrf-guard.js';
