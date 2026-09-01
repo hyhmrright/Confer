@@ -4,12 +4,22 @@ import postgres from 'postgres';
 import { app } from '../app.js';
 import { getDb } from '../db/connection.js';
 import { sessions, users } from '../db/schema.js';
+import { settleDetached } from '../lib/background.js';
 
 // Dedicated admin connection for truncation/teardown, separate from the
 // connection the app uses through getDb().
 const adminSql = postgres(process.env.DATABASE_URL ?? '', { max: 1 });
 
 export async function resetDb(): Promise<void> {
+  // Drain first. A turn detaches its memory extraction, an approval detaches
+  // the agent turn it resumes, an upload detaches ingestion — all of them write
+  // here, and the previous test returned without waiting. TRUNCATE takes an
+  // ACCESS EXCLUSIVE lock on every table, so truncating over one of those
+  // writes deadlocks against it (Postgres 40P01, reported after its 1s
+  // deadlock_timeout) or queues behind it until the test times out. See
+  // `lib/background.ts`.
+  await settleDetached();
+
   const rows = await adminSql<{ tablename: string }[]>`
     SELECT tablename FROM pg_tables WHERE schemaname = 'public'
   `;

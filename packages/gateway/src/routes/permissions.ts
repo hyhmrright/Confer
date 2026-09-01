@@ -4,6 +4,7 @@ import { Hono } from 'hono';
 import { resumeHeldA2AQuestion } from '../a2a/answer.js';
 import { getDb } from '../db/connection.js';
 import { peerAgents, peerContacts, permissions } from '../db/schema.js';
+import { runDetached } from '../lib/background.js';
 import { toPermissionRequestEvent } from '../lib/permission-notify.js';
 import { authMiddleware } from '../middleware/auth.js';
 import type { AppEnv } from '../types.js';
@@ -104,11 +105,12 @@ permissionRoutes.post('/:id/decide', async (c) => {
     (row.scope_json as { kind?: string } | null)?.kind === 'a2a_question' &&
     body.decision.startsWith('allow')
   ) {
-    setImmediate(() => {
-      resumeHeldA2AQuestion(row).catch((error) =>
-        console.error('Failed to resume held A2A question:', error),
-      );
-    });
+    // Registered now, started on the next tick: the response goes out first,
+    // and a test can still join work that has not begun.
+    runDetached(
+      new Promise<void>((tick) => setImmediate(tick)).then(() => resumeHeldA2AQuestion(row)),
+      (error) => console.error('Failed to resume held A2A question:', error),
+    );
   }
 
   return c.json({ ok: true });

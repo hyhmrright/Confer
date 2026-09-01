@@ -5,6 +5,7 @@ import { getDb } from '../db/connection.js';
 import { agents, messages, peerAgents, type permissions } from '../db/schema.js';
 import { getEnv } from '../env.js';
 import { type ModelConfigError, resolveAgentModel } from '../lib/agent-model.js';
+import { runDetached } from '../lib/background.js';
 import { historyBefore } from '../lib/conversation-history.js';
 import { getUserLlmKeys, resolveAgentCapabilities } from '../lib/llm-keys.js';
 import { isContact } from '../lib/tenant.js';
@@ -250,17 +251,18 @@ export async function processA2AMessage(params: ProcessA2AMessageParams): Promis
   // Best-effort: log userId only on failure, never the message content (PII).
   if (embeddingKey && replyContent) {
     const recentTurns = `peer：${messageContent}\n本agent：${replyContent}`;
-    void extractAndStore({
-      userId: targetAgent.user_id,
-      provider,
-      model,
-      embeddingKey,
-      embeddingProvider,
-      recentTurns,
-      source: 'a2a',
-    }).catch((err) => {
-      console.error(`Memory extraction failed for user ${targetAgent.user_id}:`, err);
-    });
+    runDetached(
+      extractAndStore({
+        userId: targetAgent.user_id,
+        provider,
+        model,
+        embeddingKey,
+        embeddingProvider,
+        recentTurns,
+        source: 'a2a',
+      }),
+      (err) => console.error(`Memory extraction failed for user ${targetAgent.user_id}:`, err),
+    );
   }
 
   await sendToPeer(params, { type: 'answer', content: replyContent });

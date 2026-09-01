@@ -7,6 +7,7 @@ import { getDb } from '../db/connection.js';
 import { agents, messages } from '../db/schema.js';
 import { getEnv } from '../env.js';
 import { resolveAgentModel } from '../lib/agent-model.js';
+import { runDetached } from '../lib/background.js';
 import { historyBefore } from '../lib/conversation-history.js';
 import { getUserLlmKeys, resolveAgentCapabilities } from '../lib/llm-keys.js';
 import { assertIsConversationParticipant } from '../lib/tenant.js';
@@ -210,17 +211,18 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
       // memory. Never block or fail the response on memory errors.
       if (embeddingKey && fullContent) {
         const recentTurns = `用户：${msg.content ?? ''}\n助手：${fullContent}`;
-        void extractAndStore({
-          userId: user.sub,
-          provider,
-          model,
-          embeddingKey,
-          embeddingProvider,
-          recentTurns,
-          source: 'auto',
-        }).catch((err) => {
-          console.error(`Memory extraction failed for user ${user.sub}:`, err);
-        });
+        runDetached(
+          extractAndStore({
+            userId: user.sub,
+            provider,
+            model,
+            embeddingKey,
+            embeddingProvider,
+            recentTurns,
+            source: 'auto',
+          }),
+          (err) => console.error(`Memory extraction failed for user ${user.sub}:`, err),
+        );
       }
     } catch (error) {
       const detail = error instanceof Error ? error.message : 'Stream failed';
