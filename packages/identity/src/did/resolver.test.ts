@@ -3,7 +3,17 @@ import { generateEd25519KeyPair, publicKeyToMultibase } from '../crypto/keypair.
 import { buildDIDDocument, didFromDomain } from './document.js';
 import { clearDIDCache, resolveDID } from './resolver.js';
 
-const DOMAIN = 'agent.example.com';
+// An address, not a name, and deliberately: `resolveDID` runs the SSRF guard
+// before it fetches, and that guard resolves the host through node:dns. Mocking
+// `fetch` does not reach it, so every test here that resolved a DID made a real
+// DNS query for `agent.example.com` — 8-60ms when the resolver answers, and one
+// CI run where it did not, which is a resolver timeout wearing the costume of a
+// flaky test (`HTTP 5xx returns an err result`, normally 15ms, killed at
+// 5000.64ms). A literal IP short-circuits the guard before the lookup, so this
+// suite makes no network call at all. 203.0.113.0/24 is TEST-NET-3, RFC 5737's
+// documentation range — the address-shaped `example.com`, and public, so the
+// guard admits it without needing the loopback exemption.
+const DOMAIN = '203.0.113.10';
 const DID = didFromDomain(DOMAIN);
 
 let document: ReturnType<typeof buildDIDDocument>;

@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { getDb } from '../db/connection.js';
 import { knowledgeBases, knowledgeDocuments } from '../db/schema.js';
 import { getEnv } from '../env.js';
+import { runDetached } from '../lib/background.js';
 import { chunkText } from '../lib/chunker.js';
 import { ingestQueue } from '../lib/concurrency.js';
 import { guessContentType, isSupportedDocumentType, parseDocument } from '../lib/doc-parser.js';
@@ -93,16 +94,17 @@ type IngestJob = {
 
 /** Queues ingestion and marks the document failed if the pipeline throws. */
 function submitIngestion(job: IngestJob, failureLabel: string): void {
-  ingestQueue
-    .submit(() => ingestDocument(job))
-    .catch((err) => {
+  runDetached(
+    ingestQueue.submit(() => ingestDocument(job)),
+    async (err) => {
       console.error(`${failureLabel} for doc ${job.docId}:`, err);
-      getDb()
+      await getDb()
         .update(knowledgeDocuments)
         .set({ status: 'failed' })
         .where(eq(knowledgeDocuments.id, job.docId))
         .catch(() => {});
-    });
+    },
+  );
 }
 
 // --- Knowledge Base CRUD ---
