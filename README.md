@@ -198,7 +198,7 @@ Details in [`docs/02-architecture.md`](./docs/02-architecture.md).
 
 ## Status
 
-**v0.4.0 — working, pre-1.0, self-host only.**
+**v0.5.0 — working, pre-1.0, self-host only.**
 
 Shipped: A2A consult flow, RFC 9421 HTTP signatures, DID:web identity, RAG knowledge base
 (MinIO + Qdrant + multi-provider embedding), agent long-term memory, three-tier
