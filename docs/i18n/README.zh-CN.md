@@ -178,8 +178,9 @@ monorepo 布局、测试栈与代码约定见 **[`CONTRIBUTING.md`](../../CONTRI
 以及 `confer-a2a` Claude Code 插件。每个 PR 都会在真实的 Postgres + Qdrant + MinIO 栈上
 跑完整测试。
 
-还没有的：没有官方托管的公共实例——需要你自托管。桌面与移动端每个版本都会构建，但测试
-覆盖不如 Web 客户端。剩余范围见 [`docs/08-mvp-backlog.md`](../08-mvp-backlog.md)。
+还没有的：没有官方托管的公共实例——需要你自托管。桌面与移动端每个版本都会构建，首次启动
+时要填写你的实例地址，测试覆盖仍不如 Web 客户端。剩余范围见
+[`docs/08-mvp-backlog.md`](../08-mvp-backlog.md)。
 
 <img src="../assets/screenshot-login.png" alt="Confer Web 客户端" width="100%">
 

@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import i18n, { dateLocale } from '../i18n/index.js';
 import { agentFailureText } from '../lib/agent-failure-text.js';
 import { api, getToken } from '../lib/api.js';
+import { gatewayOrigin } from '../lib/gateway.js';
 import { prependNew } from '../lib/list.js';
 import { useAuthStore } from './auth.js';
 
@@ -238,7 +239,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
 
     try {
-      const res = await fetch(data.stream_url, {
+      // The gateway hands back a path, not a URL — it has no idea which address
+      // this client reached it on. Relative is right for the web build and
+      // resolves to the app bundle in a desktop one, so it goes through the same
+      // origin every other request does.
+      const res = await fetch(`${gatewayOrigin()}${data.stream_url}`, {
         headers: { Authorization: `Bearer ${getToken() ?? ''}` },
       });
       if (!res.ok || !res.body) {

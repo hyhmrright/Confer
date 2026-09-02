@@ -1,4 +1,5 @@
 import { getToken } from './api.js';
+import { websocketUrl } from './gateway.js';
 
 type MessageHandler = (data: unknown) => void;
 
@@ -16,8 +17,7 @@ export function connectWs(): void {
   const token = getToken();
   if (!token || socket?.readyState === WebSocket.OPEN) return;
 
-  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  socket = new WebSocket(`${protocol}//${location.host}/ws?token=${token}`);
+  socket = new WebSocket(websocketUrl(`/ws?token=${token}`));
 
   socket.onopen = () => {
     if (reconnectTimer) {

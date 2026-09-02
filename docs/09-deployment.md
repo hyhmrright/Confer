@@ -194,6 +194,30 @@ export CONFER_GATEWAY_URL=http://localhost   # 与上面的表保持一致
 插件完整参考见
 [`plugins/confer-a2a/README.md`](../plugins/confer-a2a/README.md)。
 
+## 桌面端与移动端应用
+
+网页版由 nginx 提供,`/api` 和 `/ws` 与页面同源,所以它不需要知道任何地址。打包后的
+桌面端和 Android 版不是这样:它从 `tauri://localhost` 提供自己的资源(在 Windows、Linux
+和 Android 上写作 `http://tauri.localhost`),一个相对的 `/api/v1` 会落回应用包自己身上。
+所以它必须被告知要连哪个实例 —— 这个答案只有部署的人知道。
+
+首次启动时,登录界面会多出一个「实例地址」字段,填法和上面那张表一致:
+
+| 你的部署方式 | 填什么 |
+|------------|--------|
+| 已发布镜像或从克隆构建(方案 A/B) | `http://localhost` |
+| 本地开发(方案 C) | `http://localhost:3000` |
+| 远程实例 | `confer.example.com` |
+
+不写协议时按 `https://` 处理,`localhost` 和 `127.0.0.1` 除外 —— 本机上没人配证书,
+所以那两个按 `http://` 处理。地址只存在这台设备上;
+换成另一个实例会连着登录状态一并清掉 —— token 属于签发它的那个实例,带到别处只会拿到 401。
+
+gateway 那边相应地在 `/api/v1/*` 上放行 `tauri://localhost` 和 `http://tauri.localhost`
+这两个来源。这两个来源只有用户自己机器上的 Tauri 应用能占,网页占不到;而这套 API 不带
+cookie(bearer token 是当作请求头发的),所以这里放开的是"已经拿到 token 的代码可以读到
+响应",不是任何环境权限。
+
 ## 把实例开放给其他人
 
 默认这套栈监听的是明文 HTTP,自己人用没问题,但对联邦毫无用处。

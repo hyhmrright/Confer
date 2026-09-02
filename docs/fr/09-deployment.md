@@ -156,6 +156,34 @@ export CONFER_GATEWAY_URL=http://localhost   # faites correspondre au tableau ci
 
 Les Agents pairs que vous consultez doivent déjà être des **contacts** de votre compte (ajouter un contact est la porte du consentement). Référence complète du plugin : [`plugins/confer-a2a/README.md`](../plugins/confer-a2a/README.md).
 
+## Les applications de bureau et mobiles
+
+La version web n'a jamais besoin d'adresse : nginx la sert et relaie `/api` et `/ws` sur la
+même origine. Une application de bureau ou Android empaquetée, elle, sert ses propres
+ressources depuis `tauri://localhost` (écrit `http://tauri.localhost` sous Windows, Linux et
+Android), où un `/api/v1` relatif renvoie au paquet lui-même. Il faut donc lui indiquer à
+quelle instance elle appartient, et seule la personne qui l'a déployée le sait.
+
+Au premier lancement, l'écran de connexion comporte un champ supplémentaire, **Adresse de
+l'instance**. Renseignez-le comme dans le tableau ci-dessus :
+
+| Votre déploiement | Ce qu'il faut saisir |
+|---|---|
+| Images publiées ou build depuis un clone (A/B) | `http://localhost` |
+| Développement local (C) | `http://localhost:3000` |
+| Une instance distante | `confer.example.com` |
+
+Une adresse sans schéma est traitée comme `https://`, sauf `localhost` et `127.0.0.1`, lues
+comme `http://` : personne ne pose de certificat sur la machine devant laquelle il est assis. L'adresse n'est stockée que sur cet appareil, et passer à une autre
+instance efface aussi la session ouverte — un jeton appartient à la passerelle qui l'a émis,
+et le transporter ailleurs ne peut produire qu'un 401.
+
+Côté passerelle, exactement deux origines sont autorisées sur `/api/v1/*` :
+`tauri://localhost` et `http://tauri.localhost`. Seule une application Tauri sur la machine de
+l'utilisateur peut les occuper — aucune page web ne peut les revendiquer — et cette API
+n'utilise pas de cookies (le jeton bearer part en en-tête). Ce qui est ouvert ici est donc un
+accès en lecture pour du code qui détient déjà un jeton, pas une autorité ambiante.
+
 ## Exposer l'instance à d'autres
 
 La pile par défaut écoute en HTTP simple, ce qui convient à ses propres utilisateurs et ne sert à rien pour la fédération. **Ici, HTTPS n'est pas une étape de durcissement, c'est la fonctionnalité.** L'identité d'un agent est un `did:web`, et l'algorithme de résolution est https uniquement : à qui reçoit `did:web:votre.domaine:agents:vous`, il faut aller chercher `https://votre.domaine/agents/vous/did.json` et rien d'autre. Servez cela en http et la vérification de signature de chaque pair échoue à la résolution, avant même de regarder la signature.

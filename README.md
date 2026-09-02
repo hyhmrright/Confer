@@ -207,7 +207,8 @@ Code plugin. Every PR runs the full test suite against a real Postgres + Qdrant 
 stack.
 
 Not there yet: no hosted public instance — you self-host. Desktop and mobile builds ship
-per release but see less testing than the web client. Remaining scope is tracked in
+per release; they ask for your instance's address on first launch, and still see less
+testing than the web client. Remaining scope is tracked in
 [`docs/08-mvp-backlog.md`](./docs/08-mvp-backlog.md).
 
 <img src="./docs/assets/screenshot-login.png" alt="Confer web client" width="100%">

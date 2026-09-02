@@ -55,10 +55,13 @@ beforeEach(() => {
   FakeWebSocket.instances = [];
   timers = [];
   globalThis.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
-  // Deterministic location for URL assembly.
+  // Deterministic location for URL assembly. `origin` is the field the URL is
+  // built from now that a desktop bundle can point elsewhere; the other two are
+  // kept because a partial Location is the kind of fake that passes here and
+  // fails somewhere else.
   Object.defineProperty(globalThis, 'location', {
     configurable: true,
-    value: { protocol: 'http:', host: 'example.test' } as Location,
+    value: { protocol: 'http:', host: 'example.test', origin: 'http://example.test' } as Location,
   });
   // Capture scheduled reconnects instead of waiting on the clock.
   globalThis.setTimeout = ((fn: () => void) => {

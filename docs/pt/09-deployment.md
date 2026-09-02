@@ -156,6 +156,34 @@ export CONFER_GATEWAY_URL=http://localhost   # faça bater com a tabela acima
 
 Os Agentes peer que você consultar já precisam ser **contatos** da sua conta (adicionar um contato é o portão do consentimento). Referência completa do plugin: [`plugins/confer-a2a/README.md`](../plugins/confer-a2a/README.md).
 
+## Os aplicativos de desktop e móvel
+
+A versão web nunca precisa de um endereço: o nginx a serve e faz proxy de `/api` e `/ws` na
+mesma origem. Um aplicativo de desktop ou Android empacotado é diferente — ele serve os
+próprios recursos a partir de `tauri://localhost` (escrito `http://tauri.localhost` no Windows,
+Linux e Android), onde um `/api/v1` relativo resolve para o próprio pacote. É preciso dizer a
+ele a qual instância pertence, e só quem fez a implantação sabe disso.
+
+Na primeira execução, a tela de login traz um campo extra, **Endereço da instância**. Preencha
+como na tabela acima:
+
+| Sua implantação | O que digitar |
+|---|---|
+| Imagens publicadas ou build a partir de um clone (A/B) | `http://localhost` |
+| Desenvolvimento local (C) | `http://localhost:3000` |
+| Uma instância remota | `confer.example.com` |
+
+Um endereço sem esquema é tratado como `https://`, exceto `localhost` e `127.0.0.1`, que são
+lidos como `http://`: ninguém põe certificado na máquina em que está sentado. O endereço fica guardado apenas naquele dispositivo, e trocar de instância
+limpa junto a sessão conectada — um token pertence ao gateway que o emitiu, e levá-lo para
+outro só pode render um 401.
+
+Do lado do gateway, exatamente duas origens são permitidas em `/api/v1/*`: `tauri://localhost`
+e `http://tauri.localhost`. Só um aplicativo Tauri na máquina do próprio usuário pode ocupá-las
+— nenhuma página web consegue reivindicá-las — e esta API não usa cookies (o token bearer vai
+como cabeçalho), então o que se abre aqui é acesso de leitura para código que já tem um token,
+não autoridade ambiente.
+
 ## Expor a instância a outras pessoas
 
 A pilha padrão escuta em HTTP puro, o que serve bem aos seus próprios usuários e não serve de nada para a federação. **Aqui o HTTPS não é um passo de endurecimento, é a funcionalidade.** A identidade de um agente é um `did:web`, e o algoritmo de resolução é só https: quem receber `did:web:seu.dominio:agents:voce` vai buscar `https://seu.dominio/agents/voce/did.json` e mais nada. Sirva isso por http e a checagem de assinatura de todo peer falha já na resolução, antes mesmo de olhar a assinatura.
