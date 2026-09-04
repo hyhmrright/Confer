@@ -27,7 +27,7 @@ services:
     # it. Vectors are derived data — re-embedding rebuilds them — but the
     # cheaper path is to export the points and upsert them back, which needs no
     # embedding calls at all. Same section of docs/09-deployment.md.
-    image: qdrant/qdrant:v1.19.0
+    image: qdrant/qdrant:v1.19.1
     restart: unless-stopped
     volumes:
       - qdrantdata:/qdrant/storage
