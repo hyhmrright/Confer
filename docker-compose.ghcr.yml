@@ -40,7 +40,7 @@ services:
   qdrant:
     # Storage written by 1.12 is not readable here: 1.18 renamed a segment.json
     # variant and the server panics on load. Same note as postgres above.
-    image: qdrant/qdrant:v1.19.0
+    image: qdrant/qdrant:v1.19.1
     restart: unless-stopped
     volumes:
       - qdrantdata:/qdrant/storage
