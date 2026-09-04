@@ -120,7 +120,7 @@ jobs:
       # --audit-level=high on the bun side. install-action fetches a prebuilt
       # binary that runs standalone, so this needs no Rust toolchain and
       # `cargo install` never has to compile for a minute.
-      - uses: taiki-e/install-action@fcf5432d9f50d67e37ee6e29bdb7a224ff67b4a7 # v2.86.8
+      - uses: taiki-e/install-action@0758d235715de2f3551eacc980d9ae8fce9342c3 # v2.87.3
         with:
           tool: cargo-audit
       - name: Security audit (Rust)
