@@ -12,6 +12,7 @@ import {
   users,
 } from '../db/schema.js';
 import { getEnv } from '../env.js';
+import { runDetached } from '../lib/background.js';
 import { type AuthPayload, TOKEN_TYPE } from '../middleware/auth.js';
 
 export interface WsData {
@@ -194,7 +195,10 @@ export const websocket = {
     }
     set.add(ws);
 
-    broadcastPresence(userId, ws.data.user.username, true).catch((e) =>
+    // `open`, `message` and `close` are synchronous, so the database work they
+    // start is detached by construction. `runDetached` keeps the promise so a
+    // test's `resetDb` can join it rather than truncate over it.
+    runDetached(broadcastPresence(userId, ws.data.user.username, true), (e) =>
       console.error('presence broadcast failed:', e),
     );
   },
@@ -223,7 +227,7 @@ export const websocket = {
         break;
 
       case 'subscribe.conversation':
-        authorizeSubscription(ws, msg.data.conversation_id).catch((e) =>
+        runDetached(authorizeSubscription(ws, msg.data.conversation_id), (e) =>
           console.error('subscription authorization failed:', e),
         );
         break;
@@ -256,7 +260,7 @@ export const websocket = {
         break;
 
       case 'read.ack':
-        handleReadAck(ws.data.user.sub, msg.data.conversation_id).catch(() => {});
+        runDetached(handleReadAck(ws.data.user.sub, msg.data.conversation_id), () => {});
         break;
     }
   },
@@ -269,7 +273,7 @@ export const websocket = {
       set.delete(ws);
       if (set.size === 0) {
         connectionsByUser.delete(userId);
-        broadcastPresence(userId, ws.data.user.username, false).catch((e) =>
+        runDetached(broadcastPresence(userId, ws.data.user.username, false), (e) =>
           console.error('presence broadcast failed:', e),
         );
       }

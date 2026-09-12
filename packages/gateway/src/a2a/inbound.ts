@@ -4,6 +4,7 @@ import { and, eq } from 'drizzle-orm';
 import { getDb } from '../db/connection.js';
 import { type agents, messages, peerContacts } from '../db/schema.js';
 import { decideAdmission } from '../lib/a2a-admission.js';
+import { runDetached } from '../lib/background.js';
 import { isContact } from '../lib/tenant.js';
 import { broadcastToConversation } from '../ws/handler.js';
 import { processA2AMessage } from './answer.js';
@@ -133,9 +134,13 @@ export async function admitInboundMessage(params: InboundMessageParams): Promise
     return { status: 'stored', messageId, conversationId };
   }
 
-  setImmediate(async () => {
-    try {
-      await processA2AMessage({
+  // Registered now, started on the next tick, as `routes/permissions.ts` does
+  // for a resumed question: the response goes out first, and the promise is
+  // kept so a test's `resetDb` can join the turn instead of truncating over
+  // its reply (see `lib/background.ts`).
+  runDetached(
+    new Promise<void>((tick) => setImmediate(tick)).then(() =>
+      processA2AMessage({
         targetAgent,
         senderDid,
         senderPeer: peer,
@@ -143,11 +148,10 @@ export async function admitInboundMessage(params: InboundMessageParams): Promise
         conversationId,
         peerThreadId: threadId,
         inboundMessageId: messageId,
-      });
-    } catch (error) {
-      console.error('A2A processing failed:', error);
-    }
-  });
+      }),
+    ),
+    (error) => console.error('A2A processing failed:', error),
+  );
 
   return { status: 'answering', messageId, conversationId };
 }
