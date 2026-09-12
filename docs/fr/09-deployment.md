@@ -15,7 +15,7 @@ Une seule commande démarre toute la plateforme :
 | `migrate` | à usage unique | exécute les migrations Drizzle puis s'arrête |
 | `postgres` | `postgres:18-alpine` | stockage de données principal |
 | `qdrant` | `qdrant/qdrant:v1.19.0` | recherche vectorielle pour la base de connaissances RAG |
-| `minio` | `minio/minio` | stockage de fichiers compatible S3 |
+| `minio` | `quay.io/minio/minio` | stockage de fichiers compatible S3 |
 
 > **Ne montez pas `gateway` au-delà d'une réplique.** Les connexions WebSocket, les nonces anti-rejeu d'A2A et les compteurs de limitation de débit vivent dans la mémoire de ce processus. Une seconde réplique accepterait des requêtes A2A rejouées (sa table de nonces est vide), manquerait les envois WS pour les utilisateurs connectés à l'autre réplique, et multiplierait les seuils par le nombre de répliques. `docs/02-architecture.md` dit ce qu'il faut déplacer en premier.
 
