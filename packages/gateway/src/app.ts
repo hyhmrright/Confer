@@ -42,6 +42,25 @@ for (const path of ['/.well-known/*', '/agents/*', '/a2a/v1/agent-facts/*']) {
   app.use(path, cors());
 }
 
+// The desktop and mobile bundles are the one browser client that is *not*
+// same-origin. A Tauri app serves its own assets from `tauri://localhost` (macOS,
+// iOS) or `http://tauri.localhost` (Windows, Linux, Android) and calls whichever
+// gateway its owner pointed it at, so without this every request from a shipped
+// build dies in a preflight — the reason those builds could be installed and
+// launched but never signed in.
+//
+// Named exactly, never `*`. Only a Tauri webview on the user's own machine can
+// occupy these two origins; no web page can claim them. And since this API
+// carries no cookies — the bearer token is read from localStorage and set as a
+// header — what CORS grants here is read access to code that already holds a
+// token, not ambient authority.
+// `maxAge` is not decoration: every call this client makes carries an
+// `Authorization` header, which is not CORS-safelisted, so each one is preceded
+// by its own preflight. Uncached, a desktop app on a remote instance pays two
+// round trips for every request it makes.
+const TAURI_ORIGINS = ['tauri://localhost', 'http://tauri.localhost'];
+app.use('/api/v1/*', cors({ origin: TAURI_ORIGINS, maxAge: 3600 }));
+
 if (process.env.NODE_ENV !== 'test') {
   app.use('*', logger());
 }

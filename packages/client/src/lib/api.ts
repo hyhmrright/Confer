@@ -1,4 +1,4 @@
-const BASE_URL = '/api/v1';
+import { apiBase } from './gateway.js';
 
 let accessToken: string | null = null;
 let refreshToken: string | null = null;
@@ -36,7 +36,7 @@ async function tryRefresh(): Promise<boolean> {
   if (!refreshToken) return false;
 
   try {
-    const res = await fetch(`${BASE_URL}/auth/refresh`, {
+    const res = await fetch(`${apiBase()}/auth/refresh`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refresh_token: refreshToken }),
@@ -75,7 +75,7 @@ async function fetchWithAuth(path: string, options: RequestInit): Promise<Respon
     },
   });
 
-  const res = await fetch(`${BASE_URL}${path}`, withAuthHeader());
+  const res = await fetch(`${apiBase()}${path}`, withAuthHeader());
   if (res.status !== 401) return res;
 
   if (!refreshToken) {
@@ -93,7 +93,7 @@ async function fetchWithAuth(path: string, options: RequestInit): Promise<Respon
   const ok = await refreshing;
   if (!ok) return res;
 
-  const retry = await fetch(`${BASE_URL}${path}`, withAuthHeader());
+  const retry = await fetch(`${apiBase()}${path}`, withAuthHeader());
   if (retry.status === 401) onAuthExpired?.();
   return retry;
 }

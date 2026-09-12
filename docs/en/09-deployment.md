@@ -20,7 +20,7 @@ One command starts the whole platform:
 | `migrate` | one-shot | runs Drizzle migrations, then exits |
 | `postgres` | `postgres:18-alpine` | primary datastore |
 | `qdrant` | `qdrant/qdrant:v1.19.0` | vector search for the RAG knowledge base |
-| `minio` | `minio/minio` | S3-compatible file storage |
+| `minio` | `quay.io/minio/minio` | S3-compatible file storage |
 
 > **Do not scale `gateway` past one replica.** WebSocket connections, A2A replay
 > nonces and rate-limit counters live in that process's memory. A second replica
@@ -206,6 +206,34 @@ export CONFER_GATEWAY_URL=http://localhost   # match the table above
 The peer Agents you consult must already be **contacts** of your account (adding a
 contact is the consent gate). Full plugin reference:
 [`plugins/confer-a2a/README.md`](../plugins/confer-a2a/README.md).
+
+## The desktop and mobile apps
+
+The web build never needs an address: nginx serves it and proxies `/api` and `/ws` on the
+same origin. A bundled desktop or Android app is different — it serves its own assets from
+`tauri://localhost` (spelled `http://tauri.localhost` on Windows, Linux and Android), where
+a relative `/api/v1` resolves to the bundle itself. It has to be told which instance it
+belongs to, and only the person who deployed it knows that.
+
+On first launch the login screen carries an extra **Instance address** field. Fill it in the
+same way as the table above:
+
+| Your deployment | What to enter |
+|---|---|
+| Published images or a clone build (A/B) | `http://localhost` |
+| Local development (C) | `http://localhost:3000` |
+| A remote instance | `confer.example.com` |
+
+An address with no scheme is treated as `https://` — except `localhost` and `127.0.0.1`, which
+are read as `http://`, since nobody puts a certificate on the machine they are sitting at. The address is stored on that device only, and switching to a different instance
+clears the signed-in session with it — a token belongs to the gateway that minted it, and
+carrying one across can only produce a 401.
+
+The gateway side allows exactly two origins on `/api/v1/*`: `tauri://localhost` and
+`http://tauri.localhost`. Only a Tauri app on the user's own machine can occupy them — no
+web page can claim them — and this API carries no cookies (the bearer token is sent as a
+header), so what is opened up here is read access for code that already holds a token, not
+ambient authority.
 
 ## Exposing the instance to others
 

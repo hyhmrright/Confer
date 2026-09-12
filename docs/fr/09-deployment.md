@@ -15,7 +15,7 @@ Une seule commande démarre toute la plateforme :
 | `migrate` | à usage unique | exécute les migrations Drizzle puis s'arrête |
 | `postgres` | `postgres:18-alpine` | stockage de données principal |
 | `qdrant` | `qdrant/qdrant:v1.19.0` | recherche vectorielle pour la base de connaissances RAG |
-| `minio` | `minio/minio` | stockage de fichiers compatible S3 |
+| `minio` | `quay.io/minio/minio` | stockage de fichiers compatible S3 |
 
 > **Ne montez pas `gateway` au-delà d'une réplique.** Les connexions WebSocket, les nonces anti-rejeu d'A2A et les compteurs de limitation de débit vivent dans la mémoire de ce processus. Une seconde réplique accepterait des requêtes A2A rejouées (sa table de nonces est vide), manquerait les envois WS pour les utilisateurs connectés à l'autre réplique, et multiplierait les seuils par le nombre de répliques. `docs/02-architecture.md` dit ce qu'il faut déplacer en premier.
 
@@ -155,6 +155,34 @@ export CONFER_GATEWAY_URL=http://localhost   # faites correspondre au tableau ci
 ```
 
 Les Agents pairs que vous consultez doivent déjà être des **contacts** de votre compte (ajouter un contact est la porte du consentement). Référence complète du plugin : [`plugins/confer-a2a/README.md`](../plugins/confer-a2a/README.md).
+
+## Les applications de bureau et mobiles
+
+La version web n'a jamais besoin d'adresse : nginx la sert et relaie `/api` et `/ws` sur la
+même origine. Une application de bureau ou Android empaquetée, elle, sert ses propres
+ressources depuis `tauri://localhost` (écrit `http://tauri.localhost` sous Windows, Linux et
+Android), où un `/api/v1` relatif renvoie au paquet lui-même. Il faut donc lui indiquer à
+quelle instance elle appartient, et seule la personne qui l'a déployée le sait.
+
+Au premier lancement, l'écran de connexion comporte un champ supplémentaire, **Adresse de
+l'instance**. Renseignez-le comme dans le tableau ci-dessus :
+
+| Votre déploiement | Ce qu'il faut saisir |
+|---|---|
+| Images publiées ou build depuis un clone (A/B) | `http://localhost` |
+| Développement local (C) | `http://localhost:3000` |
+| Une instance distante | `confer.example.com` |
+
+Une adresse sans schéma est traitée comme `https://`, sauf `localhost` et `127.0.0.1`, lues
+comme `http://` : personne ne pose de certificat sur la machine devant laquelle il est assis. L'adresse n'est stockée que sur cet appareil, et passer à une autre
+instance efface aussi la session ouverte — un jeton appartient à la passerelle qui l'a émis,
+et le transporter ailleurs ne peut produire qu'un 401.
+
+Côté passerelle, exactement deux origines sont autorisées sur `/api/v1/*` :
+`tauri://localhost` et `http://tauri.localhost`. Seule une application Tauri sur la machine de
+l'utilisateur peut les occuper — aucune page web ne peut les revendiquer — et cette API
+n'utilise pas de cookies (le jeton bearer part en en-tête). Ce qui est ouvert ici est donc un
+accès en lecture pour du code qui détient déjà un jeton, pas une autorité ambiante.
 
 ## Exposer l'instance à d'autres
 

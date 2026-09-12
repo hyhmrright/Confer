@@ -14,6 +14,7 @@ mock.module('../lib/api.js', () => ({
 }));
 
 const { useChatStore } = await import('./chat.js');
+const { setGatewayUrl } = await import('../lib/gateway.js');
 
 const initial = useChatStore.getState();
 
@@ -271,6 +272,35 @@ describe('chat store', () => {
     const { messages, streaming } = useChatStore.getState();
     expect(messages.filter((m) => m.id === 'a1')).toHaveLength(1);
     expect(streaming).toBe(false);
+  });
+
+  // `stream_url` arrives as a path — the gateway has no idea which address this
+  // client reached it on. Left relative it resolves to the app bundle in a
+  // desktop build, so the turn would stream the app's own index.html.
+  test('sendMessage streams from the configured instance, not the app bundle', async () => {
+    const realFetch = globalThis.fetch;
+    const seen: string[] = [];
+    globalThis.fetch = mock(async (url: string) => {
+      seen.push(String(url));
+      return new Response('event: done\ndata: {"message_id":"a1"}\n\n', { status: 200 });
+    }) as unknown as typeof fetch;
+    post.mockResolvedValue({ id: 'u1', stream_url: '/api/v1/stream/c1/u1' });
+    useChatStore.setState({ activeConversationId: 'c1', messages: [] });
+
+    try {
+      setGatewayUrl('https://confer.example.com');
+      await useChatStore.getState().sendMessage('hello');
+      expect(seen).toEqual(['https://confer.example.com/api/v1/stream/c1/u1']);
+
+      // And unset — the web build — it stays exactly as relative as it was.
+      seen.length = 0;
+      setGatewayUrl('');
+      await useChatStore.getState().sendMessage('hello');
+      expect(seen).toEqual(['/api/v1/stream/c1/u1']);
+    } finally {
+      globalThis.fetch = realFetch;
+      setGatewayUrl('');
+    }
   });
 
   // Send one message against a stream that answers with a single error event,

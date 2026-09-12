@@ -1,6 +1,12 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router';
+import {
+  gatewayOrigin,
+  gatewayUrlRequired,
+  normalizeGatewayUrl,
+  setGatewayUrl,
+} from '../lib/gateway.js';
 import { DISABLED_FILLED, FOCUS_RING } from '../lib/styles.js';
 import { useAuthStore } from '../stores/auth.js';
 import { Loader } from './Icons.js';
@@ -12,14 +18,35 @@ export function LoginPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
+  // Only a bundled app asks for this: it serves its own assets, so it has no
+  // origin to send `/api/v1` to until someone names one.
+  const needsGateway = gatewayUrlRequired();
+  const [gateway, setGateway] = useState(gatewayOrigin);
+  const [gatewayInvalid, setGatewayInvalid] = useState(false);
   const login = useAuthStore((s) => s.login);
   const register = useAuthStore((s) => s.register);
+  const logout = useAuthStore((s) => s.logout);
   const loading = useAuthStore((s) => s.loading);
   const error = useAuthStore((s) => s.error);
   const navigate = useNavigate();
 
+  // Stores the address the form is pointed at, and reports whether it is usable
+  // at all. Switching instances drops the stored session with it: tokens belong
+  // to whichever gateway minted them, so carrying one across can only 401.
+  const applyGateway = (): boolean => {
+    const origin = normalizeGatewayUrl(gateway);
+    setGatewayInvalid(origin === null);
+    if (origin === null) return false;
+    if (origin !== gatewayOrigin()) {
+      setGatewayUrl(origin);
+      logout();
+    }
+    return true;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (needsGateway && !applyGateway()) return;
     try {
       if (isRegister) {
         await register(username, password, displayName || undefined);
@@ -80,6 +107,35 @@ export function LoginPage() {
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-3.5">
+            {needsGateway && (
+              <div>
+                <label
+                  htmlFor="login-gateway"
+                  className="block text-xs font-medium text-ink-secondary mb-1.5"
+                >
+                  {t('login.gateway')}
+                </label>
+                <input
+                  id="login-gateway"
+                  type="text"
+                  inputMode="url"
+                  autoComplete="url"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  value={gateway}
+                  onChange={(e) => setGateway(e.target.value)}
+                  placeholder={t('login.gatewayPlaceholder')}
+                  className={inputCls}
+                  required
+                />
+                <p
+                  className={`text-xs mt-1.5 ${gatewayInvalid ? 'text-red-400' : 'text-ink-muted'}`}
+                >
+                  {gatewayInvalid ? t('login.gatewayInvalid') : t('login.gatewayHint')}
+                </p>
+              </div>
+            )}
+
             <div>
               <label
                 htmlFor="login-username"

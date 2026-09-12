@@ -15,7 +15,7 @@ Un solo comando levanta toda la plataforma:
 | `migrate` | de un solo uso | ejecuta las migraciones de Drizzle y termina |
 | `postgres` | `postgres:18-alpine` | almacén de datos principal |
 | `qdrant` | `qdrant/qdrant:v1.19.0` | búsqueda vectorial para la base de conocimiento RAG |
-| `minio` | `minio/minio` | almacenamiento de ficheros compatible con S3 |
+| `minio` | `quay.io/minio/minio` | almacenamiento de ficheros compatible con S3 |
 
 > **No escales `gateway` más allá de una réplica.** Las conexiones WebSocket, los nonces antirreplay de A2A y los contadores de límite de tasa viven en la memoria de ese proceso. Una segunda réplica aceptaría peticiones A2A reproducidas (su tabla de nonces está vacía), se perdería los envíos WS de los usuarios conectados a la otra réplica, y multiplicaría los límites de tasa por el número de réplicas. En `docs/02-architecture.md` está qué hay que mover primero.
 
@@ -155,6 +155,34 @@ export CONFER_GATEWAY_URL=http://localhost   # haz que coincida con la tabla de 
 ```
 
 Los Agentes peer a los que consultes tienen que ser ya **contactos** de tu cuenta (añadir un contacto es la puerta del consentimiento). Referencia completa del plugin: [`plugins/confer-a2a/README.md`](../plugins/confer-a2a/README.md).
+
+## Las aplicaciones de escritorio y móvil
+
+La versión web nunca necesita una dirección: nginx la sirve y hace de proxy de `/api` y `/ws`
+en el mismo origen. Una aplicación de escritorio o Android empaquetada es distinta: sirve sus
+propios recursos desde `tauri://localhost` (escrito `http://tauri.localhost` en Windows, Linux
+y Android), donde un `/api/v1` relativo apunta al propio paquete. Hay que decirle a qué
+instancia pertenece, y eso solo lo sabe quien la desplegó.
+
+En el primer arranque, la pantalla de inicio de sesión muestra un campo adicional, **Dirección
+de la instancia**. Complétalo igual que en la tabla anterior:
+
+| Tu despliegue | Qué escribir |
+|---|---|
+| Imágenes publicadas o compilación desde un clon (A/B) | `http://localhost` |
+| Desarrollo local (C) | `http://localhost:3000` |
+| Una instancia remota | `confer.example.com` |
+
+Una dirección sin esquema se trata como `https://`, salvo `localhost` y `127.0.0.1`, que se leen
+como `http://`: nadie pone un certificado en la máquina que tiene delante. La dirección se guarda solo en ese dispositivo, y cambiar de instancia
+borra también la sesión iniciada: un token pertenece al gateway que lo emitió, y llevarlo a
+otro solo produce un 401.
+
+Del lado del gateway se permiten exactamente dos orígenes en `/api/v1/*`: `tauri://localhost`
+y `http://tauri.localhost`. Solo una aplicación Tauri en la máquina del propio usuario puede
+ocuparlos —ninguna página web puede reclamarlos— y esta API no usa cookies (el token bearer
+va como cabecera), así que lo que se abre aquí es acceso de lectura para código que ya tiene
+un token, no autoridad ambiental.
 
 ## Exponer la instancia a otras personas
 

@@ -40,13 +40,13 @@ services:
   qdrant:
     # Storage written by 1.12 is not readable here: 1.18 renamed a segment.json
     # variant and the server panics on load. Same note as postgres above.
-    image: qdrant/qdrant:v1.19.0
+    image: qdrant/qdrant:v1.19.1
     restart: unless-stopped
     volumes:
       - qdrantdata:/qdrant/storage
 
   minio:
-    image: minio/minio:latest
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
     restart: unless-stopped
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-confer}

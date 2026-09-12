@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, mock, test } from 'bun:test';
 import { act, cleanup, render, screen } from '@testing-library/react';
+import type { ComponentProps } from 'react';
+import * as reactMarkdown from 'react-markdown';
+
+// Read out before the `mock.module` below, so this const holds the real
+// component. A plain `import RealMarkdown from 'react-markdown'` does not work:
+// `mock.module` rebinds that binding to the replacement, which then renders
+// itself and hangs the run — tried, not assumed.
+const RealMarkdown = reactMarkdown.default;
 
 // The point of this file. `d37518c` moved the per-token stream state out of
 // MessageView and into StreamingMessage, and memoised MessageBubble, on the
@@ -8,21 +16,30 @@ import { act, cleanup, render, screen } from '@testing-library/react';
 // shell is not reachable from a headless run — so it is pinned here instead.
 //
 // react-markdown parses inside its render body with no cache (`runSync(parse())`
-// in lib/index.js), so one render of it *is* one parse. Counting renders of this
-// stub therefore counts real parse work, and separating the counts by content
+// in lib/index.js), so one render of it *is* one parse. Counting renders of the
+// wrapper below therefore counts real parse work, and separating them by content
 // prefix keeps the streaming bubble — which is supposed to re-render per token —
 // out of the number under test.
 let historyParses = 0;
 let streamParses = 0;
 
+// The counter wraps the real renderer rather than standing in for it, and that
+// is load-bearing: `mock.module` is process-global and permanent — bun cannot
+// unregister one — and bun walks test files in filesystem order, not
+// alphabetically. A stub returning `<span>{children}</span>` therefore reached
+// MessageBubble.test.tsx, which asserts the *real* renderer's output, on every
+// machine whose readdir put that file second. CI's did and a dev's macOS did
+// not, so the suite was green locally and red on unrelated PRs. Wrapping does
+// not stop the leak; it makes it behaviour-preserving, which is the only
+// property available here. Same reason `remark-gfm` is left unmocked.
 mock.module('react-markdown', () => ({
-  default: ({ children }: { children?: string }) => {
+  default: (props: ComponentProps<typeof RealMarkdown>) => {
+    const { children } = props;
     if (typeof children === 'string' && children.startsWith('HISTORY')) historyParses++;
     else streamParses++;
-    return <span>{children}</span>;
+    return <RealMarkdown {...props} />;
   },
 }));
-mock.module('remark-gfm', () => ({ default: () => {} }));
 
 mock.module('../lib/api.js', () => ({
   api: {

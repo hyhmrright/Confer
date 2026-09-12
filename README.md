@@ -198,7 +198,7 @@ Details in [`docs/02-architecture.md`](./docs/02-architecture.md).
 
 ## Status
 
-**v0.5.0 — working, pre-1.0, self-host only.**
+**v0.5.1 — working, pre-1.0, self-host only.**
 
 Shipped: A2A consult flow, RFC 9421 HTTP signatures, DID:web identity, RAG knowledge base
 (MinIO + Qdrant + multi-provider embedding), agent long-term memory, three-tier
@@ -207,7 +207,8 @@ Code plugin. Every PR runs the full test suite against a real Postgres + Qdrant 
 stack.
 
 Not there yet: no hosted public instance — you self-host. Desktop and mobile builds ship
-per release but see less testing than the web client. Remaining scope is tracked in
+per release; they ask for your instance's address on first launch, and still see less
+testing than the web client. Remaining scope is tracked in
 [`docs/08-mvp-backlog.md`](./docs/08-mvp-backlog.md).
 
 <img src="./docs/assets/screenshot-login.png" alt="Confer web client" width="100%">
