@@ -19,6 +19,7 @@ import {
   permissions,
 } from '../db/schema.js';
 import { SIGNATURE_EXTENSION_URI } from '../lib/agent-card.js';
+import { settleDetached } from '../lib/background.js';
 import { clearNonceCache } from '../lib/nonce-cache.js';
 import { mockFetch, resetDb, type SeededUser, seedUser } from '../test/helpers.js';
 
@@ -483,6 +484,21 @@ describe('tasks', () => {
 
     const task = await (await call('GET', `/tasks/${created.id}`)).json();
     expect(task.status.state).toBe('TASK_STATE_FAILED');
+  });
+
+  test('the turn a send starts can be joined, so a truncate cannot land on it', async () => {
+    // The turn runs detached from the request; the fixture has no model key, so
+    // it ends in a notice row. `settleDetached` must see that row land — it is
+    // what `resetDb` drains before truncating, and an untracked turn is the
+    // deadlock class `lib/background.ts` exists for.
+    await seedAgent();
+    await connectPeer();
+    const task = await (await call('POST', '/message:send', sendNow('hi'))).json();
+
+    await settleDetached();
+
+    const after = await (await call('GET', `/tasks/${task.id}`)).json();
+    expect(after.status.state).toBe('TASK_STATE_FAILED');
   });
 
   test('honours historyLength', async () => {
