@@ -102,8 +102,8 @@ describe('buildAgentCard', () => {
   });
 
   test('ignores entries that are not capabilities', () => {
-    // capabilities_json is jsonb, and the route that writes it checks only that
-    // each entry is an object.
+    // capabilities_json is jsonb, and PATCH /agents/me accepted any object before
+    // it checked for capabilities, so an older row can hold these.
     const card = build({ capabilities_json: ['ok', 42, null, { a: 1 }, capability('ok')] });
     expect(card.skills).toHaveLength(1);
     expect(card.skills[0]?.name).toBe('ok');

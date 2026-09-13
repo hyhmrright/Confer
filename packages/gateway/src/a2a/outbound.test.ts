@@ -106,7 +106,7 @@ describe('sendA2AMessage', () => {
       'https://10.0.0.5/a2a/v1',
       'https://169.254.169.254/latest',
       'https://[::1]:6333/collections',
-      'https://localhost/a2a/v1',
+      'https://127.0.0.1/a2a/v1',
       // A trailing `?` or `#` swallows the appended `/messages`.
       'https://peer.test/collections/x/points/delete?',
       'https://peer.test/a2a/v1#',

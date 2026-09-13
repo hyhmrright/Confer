@@ -20,8 +20,9 @@ export function getProvider(name: string): LLMProvider | undefined {
  * Now a catalogue entry is the whole change.
  *
  * Returns null for an unknown name so callers can report a misconfiguration
- * rather than dial an arbitrary host. `fetcher` is how an OpenAI-compatible
- * provider reaches its vendor; the gateway passes one for a local runtime.
+ * rather than dial an arbitrary host. `fetcher` is how the provider reaches its
+ * vendor, whichever wire shape it speaks; the gateway passes one for a local
+ * runtime.
  */
 export function createProvider(
   name: string,
@@ -32,7 +33,7 @@ export function createProvider(
   if (!spec) return null;
 
   if (spec.kind === 'anthropic') {
-    return new AnthropicProvider(apiKey, providerBaseUrl(spec));
+    return new AnthropicProvider(apiKey, providerBaseUrl(spec, apiKey), fetcher);
   }
 
   return new OpenAICompatibleProvider(

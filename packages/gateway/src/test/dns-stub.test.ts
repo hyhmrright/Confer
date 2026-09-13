@@ -13,5 +13,8 @@ test('a fixture host resolves in-process, to TEST-NET', async () => {
 });
 
 test('localhost still resolves to loopback, so the guard can refuse it', async () => {
-  await expect(assertPublicHostname('localhost')).rejects.toBeInstanceOf(SsrfBlockedError);
+  // A short deadline, because a refused name is held until it.
+  await expect(assertPublicHostname('localhost', { dnsTimeoutMs: 50 })).rejects.toBeInstanceOf(
+    SsrfBlockedError,
+  );
 });

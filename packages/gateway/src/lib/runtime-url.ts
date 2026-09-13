@@ -50,6 +50,11 @@ export function isRuntimeBaseUrl(value: string): boolean {
  * header, so pinning it would mean dialling the IP literal and losing the name
  * that virtual hosting and TLS both need.
  *
+ * node:http also ignores HTTP(S)_PROXY, which fetch honoured, and that stays so.
+ * A proxy resolves the name again itself — the second answer this closes — and
+ * loopback or the Docker host, where a local runtime usually lives, would be
+ * the proxy's own machine once the proxy dialled them.
+ *
  * Build one per use rather than per stored address. The settings route checks
  * an address when it is saved, but a name can be re-pointed afterwards, and a
  * value saved before these rules existed was never looked at again.

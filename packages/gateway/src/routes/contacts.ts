@@ -55,13 +55,6 @@ const remoteAgentSchema = z.object({
   capabilities_json: z.array(z.unknown()).max(64).optional().catch(undefined),
 });
 
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), ms)),
-  ]);
-}
-
 // Scope a contact row to its owner. Used both to load the contact and to target
 // the subsequent write, so a contact id from another user is never reachable.
 function contactScope(contactId: string, userSub: string) {
@@ -263,8 +256,8 @@ interface LookupResult {
   error?: string;
 }
 
-// Shared timeout for the two network-bound lookups (well-known fetch, DID
-// resolution).
+// Deadline for fetching a domain's `/.well-known/agents.json`. A DID lookup sets
+// none of its own; see lookupByDid.
 const LOOKUP_TIMEOUT_MS = 5000;
 
 // How many agents a remote instance's directory may contribute to one lookup.
@@ -313,8 +306,8 @@ function lookupByDomain(value: string): Promise<LookupResult> {
       // the asker which names exist on the network this gateway sits in.
       return { candidates: [], error: 'Address does not resolve to a public host' };
     }
-    // AbortSignal rather than withTimeout: racing a promise rejects the wrapper
-    // but leaves the request running, and the body is read after that race has
+    // AbortSignal rather than racing the promise: a race rejects the wrapper but
+    // leaves the request running, and the body is read after that race has
     // already been decided. One deadline over the whole exchange, and a socket
     // that actually closes when it expires.
     const res = await fetch(`https://${hostname}/.well-known/agents.json`, {
@@ -362,7 +355,10 @@ function lookupByDomain(value: string): Promise<LookupResult> {
 
 function lookupByDid(value: string): Promise<LookupResult> {
   return safeLookup(async () => {
-    const result = await withTimeout(resolveDidDocument(value), LOOKUP_TIMEOUT_MS);
+    // No deadline of our own: resolution has one for each step, DNS and then the
+    // fetch. A 5s race here ended in the same millisecond as the guard's hold on
+    // a refused name, so which answer came back depended on timer order.
+    const result = await resolveDidDocument(value);
     if (!result.ok) {
       return { candidates: [], error: result.error };
     }

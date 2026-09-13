@@ -366,7 +366,9 @@ describe('contacts', () => {
   test('blocks domain lookups against private addresses (SSRF guard)', async () => {
     const res = await post(`${BASE}/lookup`, {
       token: user.token,
-      body: { method: 'domain', value: 'localhost' },
+      // A literal, not `localhost`: the guard holds a refused name until its 5s
+      // DNS deadline, which is this test's whole budget.
+      body: { method: 'domain', value: '127.0.0.1' },
     });
     expect(res.status).toBe(200);
     const json = await res.json();

@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
+import { clientIp } from './lib/client-ip.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { rateLimit } from './middleware/rate-limit.js';
 import { a2aRoutes } from './routes/a2a.js';
@@ -96,6 +97,13 @@ app.route('/api/v1/admin', adminRoutes);
 // each of the two bindings would charge a single request twice. Verified, not
 // assumed. It now also covers `agent-facts`, which is a public read and had no
 // limit of its own.
+//
+// Two budgets, one per address and one per path. Per path alone, a path that
+// carries an id — `/tasks/{id}`, `/stream/{messageId}` — was a fresh budget for
+// every id, and each of those requests resolves its signer's DID before any
+// handler reads the id: for a name that does not resolve, that holds the
+// request until the DNS deadline.
+app.use('/a2a/v1/*', rateLimit(300, 60_000, { keyBy: (c) => `a2a:${clientIp(c)}` }));
 app.use('/a2a/v1/*', rateLimit(60, 60_000));
 
 // The two A2A bindings share a prefix and every gate; only their wire format

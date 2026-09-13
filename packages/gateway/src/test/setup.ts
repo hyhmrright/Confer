@@ -30,7 +30,7 @@ for (const [key, value] of Object.entries(TEST_ENV)) {
 // (`did_resolution_failed`): issue #75, once in 25 runs, never reproducible
 // locally. Answer every name in-process instead. Fixture hosts land in
 // TEST-NET-3 (RFC 5737, never routable); `localhost` keeps its loopback
-// address because the contact lookup's guard is expected to refuse it. Only
+// address so dns-stub.test.ts can show the guard still refuses a name. Only
 // `lookup` is stubbed — the guard uses nothing else from the module.
 const TEST_NET_ADDRESS = '203.0.113.10';
 

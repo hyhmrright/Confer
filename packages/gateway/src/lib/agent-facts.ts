@@ -1,21 +1,18 @@
 import { type AgentFacts, agentFactsSchema } from '@confer/identity';
+import { agentCapabilitySchema } from '@confer/shared';
 import { z } from 'zod';
 
 // What Confer keeps of AgentFacts. The NANDA schema bounds no string and no
 // list, while remote directories and old rows feed this and the MCP discovery
-// tool hands the result to Claude Code — so every field is capped here.
-const capabilitySchema = z.object({
-  type: z.string().min(1).max(64),
-  scope: z.array(z.string().max(200)).max(50),
-  languages: z.array(z.string().max(35)).max(10),
-});
+// tool hands the result to Claude Code — so every field is capped here, a
+// capability by the same schema PATCH /agents/me saves it with.
 const boundedFactsSchema = agentFactsSchema.extend({
   name: z.string().max(128),
   description: z.string().max(4000).optional(),
-  capabilities: z.array(capabilitySchema).max(64),
+  capabilities: z.array(agentCapabilitySchema).max(64),
 });
 
-export type AgentCapability = z.infer<typeof capabilitySchema>;
+export type AgentCapability = z.infer<typeof agentCapabilitySchema>;
 
 /** The fields AgentFacts are built from: an `agents` row, or a remote directory entry. */
 export interface AgentFactsSource {
@@ -29,14 +26,14 @@ export interface AgentFactsSource {
  * The entries of a `capabilities_json` value that are NANDA capabilities
  * (`{type, scope, languages}`) within the caps above.
  *
- * That column is what the owner saved through `PATCH /agents/me`, which checks
- * only that each entry is an object, so the rest are left out rather than
- * failing whatever is built from it.
+ * `PATCH /agents/me` checks that shape now, but it once accepted any object and
+ * the column is jsonb, so an older row can hold anything. Those entries are left
+ * out rather than failing whatever is built from it.
  */
 export function declaredCapabilities(value: unknown): AgentCapability[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((entry) => {
-    const parsed = capabilitySchema.safeParse(entry);
+    const parsed = agentCapabilitySchema.safeParse(entry);
     return parsed.success ? [parsed.data] : [];
   });
 }

@@ -181,7 +181,10 @@ export function isBlockedIp(ip: string): boolean {
   return true;
 }
 
-/** `dnsTimeoutMs` bounds the lookup; past it the guard throws SsrfUnresolvedError. */
+/**
+ * `dnsTimeoutMs` bounds the lookup; past it the guard throws SsrfUnresolvedError.
+ * assertPublicHostname also refuses a name no sooner than it.
+ */
 export interface SsrfGuardOptions {
   dnsTimeoutMs?: number;
 }
@@ -191,9 +194,14 @@ export interface SsrfGuardOptions {
 // IP is checked directly; otherwise DNS resolution decides. Throws
 // SsrfBlockedError for a blocked target, SsrfUnresolvedError when the resolver
 // never answered, and propagates the DNS error for a name that answered with a
-// definitive negative.
+// definitive negative. A name is refused no sooner than the DNS deadline,
+// whichever of the three refused it.
 export function assertPublicHostname(hostname: string, opts?: SsrfGuardOptions): Promise<string[]> {
-  return assertAddresses(hostname, isBlockedIp, opts?.dnsTimeoutMs ?? DNS_TIMEOUT_MS);
+  return assertAddresses(hostname, {
+    blocked: isBlockedIp,
+    dnsTimeoutMs: opts?.dnsTimeoutMs ?? DNS_TIMEOUT_MS,
+    holdRefusals: true,
+  });
 }
 
 // IPv4 addresses cloud instance metadata answers on. 169.254.169.254 serves AWS,
@@ -247,7 +255,20 @@ export function assertNotMetadataHostname(
   hostname: string,
   opts?: SsrfGuardOptions,
 ): Promise<string[]> {
-  return assertAddresses(hostname, isMetadataIp, opts?.dnsTimeoutMs ?? DNS_TIMEOUT_MS);
+  return assertAddresses(hostname, {
+    blocked: isMetadataIp,
+    dnsTimeoutMs: opts?.dnsTimeoutMs ?? DNS_TIMEOUT_MS,
+    // The owner already reaches our network through the address they set, so
+    // how long a refusal takes has nothing to tell them.
+    holdRefusals: false,
+  });
+}
+
+interface AddressCheck {
+  blocked: (address: string) => boolean;
+  dnsTimeoutMs: number;
+  /** Refuse a name no sooner than the DNS deadline. */
+  holdRefusals: boolean;
 }
 
 // Resolve `hostname` to its addresses and throw SsrfBlockedError if `blocked`
@@ -255,8 +276,7 @@ export function assertNotMetadataHostname(
 // about bracket notation or about which addresses a name actually has.
 async function assertAddresses(
   hostname: string,
-  blocked: (address: string) => boolean,
-  dnsTimeoutMs: number,
+  { blocked, dnsTimeoutMs, holdRefusals }: AddressCheck,
 ): Promise<string[]> {
   const reject = (address: string): void => {
     if (blocked(address)) {
@@ -290,16 +310,37 @@ async function assertAddresses(
     return [bareHost];
   }
 
-  const resolved = await lookupWithin(bareHost, dnsTimeoutMs);
-  const addresses = resolved.map((entry) => entry.address);
-  for (const address of addresses) reject(address);
-  return addresses;
+  // A name on the internal network, one that does not exist and one whose
+  // resolver hung are refused in the same words, but each still took its own
+  // time — as long as the resolver that knows the name, as long as whoever
+  // denies it, the whole deadline — so a stopwatch told a peer what the message
+  // no longer did. Every refusal therefore waits on one timer, started before
+  // the lookup's deadline timer: a hang rejects on that second one, and a hold
+  // computed after it landed a tick later than the rest. An IP literal is
+  // refused on sight above, since whoever wrote it already knows what it is.
+  let holdTimer: ReturnType<typeof setTimeout> | undefined;
+  const hold = holdRefusals
+    ? new Promise<void>((resolve) => {
+        holdTimer = setTimeout(resolve, dnsTimeoutMs);
+      })
+    : undefined;
+  try {
+    const resolved = await lookupWithin(bareHost, dnsTimeoutMs);
+    const addresses = resolved.map((entry) => entry.address);
+    for (const address of addresses) reject(address);
+    clearTimeout(holdTimer);
+    return addresses;
+  } catch (error) {
+    await hold;
+    throw error;
+  }
 }
 
 // `dns.promises.lookup` takes no AbortSignal, so the deadline has to be a race.
 // The losing lookup keeps its libuv threadpool slot until the OS resolver gives
-// up, which is the cost of not having a cancel; it is bounded by the rate
-// limiter in front of every caller, and the alternative — `dns.Resolver`, which
+// up, which is the cost of not having a cancel; it is bounded by what admits
+// each caller — a per-address rate limit on inbound A2A, a signed-in account on
+// contact lookup and consult — and the alternative — `dns.Resolver`, which
 // does support a timeout — asks c-ares directly and so cannot see /etc/hosts,
 // where `host.docker.internal` lives. Losing the local LLM runtime to fix a
 // hang would be trading a whole feature for a deadline.

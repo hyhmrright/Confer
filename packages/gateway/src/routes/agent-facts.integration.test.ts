@@ -27,15 +27,14 @@ describe('GET /a2a/v1/agent-facts/:agentDid', () => {
     expect(res.status).toBe(404);
   });
 
-  // Driven through PATCH /agents/me, the only writer of capabilities: it stores
-  // objects, checked only for being objects. Contract 3 — the route used to
-  // publish the column verbatim, schema or not.
+  // Driven through PATCH /agents/me, the only writer of capabilities. Contract 3
+  // — the route used to publish the column verbatim, schema or not.
   test('publishes schema-valid AgentFacts with the capabilities the owner saved', async () => {
     const { did, token } = await seedAgent();
     const capability = { type: 'code-generation', scope: ['python'], languages: ['en'] };
     const saved = await patch('/api/v1/agents/me', {
       token,
-      body: { is_public: true, capabilities_json: [capability, { note: 'not a capability' }] },
+      body: { is_public: true, capabilities_json: [capability] },
     });
     expect(saved.status).toBe(200);
 
@@ -51,6 +50,38 @@ describe('GET /a2a/v1/agent-facts/:agentDid', () => {
       capabilities: [capability],
       endpoints: { a2a: expect.stringContaining('/a2a/v1') },
     });
+  });
+
+  // The route stored any object, and the fact sheet then left out whatever was
+  // not a capability — silently, to an owner who believed it saved.
+  test('refuses to save an entry that is not a capability', async () => {
+    const { did, token } = await seedAgent();
+    const capability = { type: 'code-generation', scope: [], languages: [] };
+    const res = await patch('/api/v1/agents/me', {
+      token,
+      body: { capabilities_json: [capability, { note: 'not a capability' }] },
+    });
+    expect(res.status).toBe(400);
+
+    const [row] = await getDb()
+      .select({ capabilities: agents.capabilities_json })
+      .from(agents)
+      .where(eq(agents.did, did));
+    expect(row?.capabilities).toEqual([]);
+  });
+
+  // A row saved before the route checked the shape can hold anything, and what
+  // gets published from it is only what is a capability.
+  test('publishes only the capabilities out of an older row', async () => {
+    const { did } = await seedAgent();
+    const capability = { type: 'translation', scope: [], languages: ['ja'] };
+    await getDb()
+      .update(agents)
+      .set({ is_public: true, capabilities_json: ['chat', { note: 'not one' }, capability] })
+      .where(eq(agents.did, did));
+
+    const facts = await (await get(`/a2a/v1/agent-facts/${did}`)).json();
+    expect(facts.capabilities).toEqual([capability]);
   });
 
   // The Agent Card refuses a private or suspended agent so its existence cannot

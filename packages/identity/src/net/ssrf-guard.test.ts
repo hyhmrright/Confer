@@ -124,7 +124,10 @@ describe('assertPublicHostname', () => {
 
   test('rejects a hostname that resolves to loopback (localhost)', async () => {
     // `localhost` resolves via the hosts file (no network) to ::1 / 127.0.0.1.
-    await expect(assertPublicHostname('localhost')).rejects.toBeInstanceOf(SsrfBlockedError);
+    // A refused name is held until the DNS deadline, so this one is short.
+    await expect(assertPublicHostname('localhost', { dnsTimeoutMs: 1_000 })).rejects.toBeInstanceOf(
+      SsrfBlockedError,
+    );
   });
 });
 

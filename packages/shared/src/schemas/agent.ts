@@ -27,6 +27,18 @@ export const agentModelConfigSchema = z.object({
   system_prompt: z.string().max(8000).optional(),
 });
 
+/**
+ * One capability an agent declares, in the NANDA shape AgentFacts publish
+ * (docs/03-protocol.md). The caps are ours: the NANDA schema bounds no string
+ * and no list, and what an agent declares is published, stored by peers and
+ * handed to Claude Code by the MCP discovery tool.
+ */
+export const agentCapabilitySchema = z.object({
+  type: z.string().min(1).max(64),
+  scope: z.array(z.string().max(200)).max(50),
+  languages: z.array(z.string().max(35)).max(10),
+});
+
 /** Body of `PATCH /api/v1/agents/me`. Absent fields are left as they were. */
 export const updateAgentRequestSchema = z.object({
   name: z.string().max(128).nullish(),
@@ -37,7 +49,9 @@ export const updateAgentRequestSchema = z.object({
   primary_language: z.string().max(8).optional(),
   style: z.enum(['formal', 'friendly', 'technical', 'casual']).nullish(),
   model_config_json: agentModelConfigSchema.optional(),
-  capabilities_json: z.array(z.record(z.string(), z.unknown())).max(64).optional(),
+  // Any object used to pass, and AgentFacts then left out whatever was not a
+  // capability without a word to the owner who saved it.
+  capabilities_json: z.array(agentCapabilitySchema).max(64).optional(),
   is_public: z.boolean().optional(),
 });
 
