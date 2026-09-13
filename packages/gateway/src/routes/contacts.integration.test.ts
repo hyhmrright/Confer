@@ -222,7 +222,7 @@ describe('contacts', () => {
       expect(res.status).toBe(200);
       const json = await res.json();
       expect(json.candidates).toEqual([]);
-      expect(json.error).toBe('directory too large');
+      expect(json.error).toBe('response too large');
 
       // Nothing from an over-sized body may be persisted, including the prefix
       // that arrived before the limit was hit.
@@ -255,6 +255,35 @@ describe('contacts', () => {
       });
       const { candidates } = await res.json();
       expect(candidates).toHaveLength(1);
+    } finally {
+      restore();
+    }
+  });
+
+  // The SSRF guard vets the host the user named. A 3xx from that host used to
+  // be followed — to the metadata address, or `http://qdrant:6333/` — so it
+  // is now a failure, and never a hop.
+  test('does not follow a redirect from the directory host', async () => {
+    let redirect: RequestRedirect | undefined;
+    const restore = mockFetch((url, init) => {
+      if (url.includes('/.well-known/agents.json')) {
+        redirect = init?.redirect;
+        return new Response(null, {
+          status: 302,
+          headers: { location: 'http://169.254.169.254/latest/meta-data/' },
+        });
+      }
+      return undefined;
+    });
+    try {
+      const res = await post(`${BASE}/lookup`, {
+        token: user.token,
+        body: { method: 'domain', value: 'redirector.example.com' },
+      });
+      const json = await res.json();
+      expect(redirect).toBe('manual');
+      expect(json.candidates).toEqual([]);
+      expect(json.error).toBe('Directory request failed (HTTP 302)');
     } finally {
       restore();
     }

@@ -118,14 +118,6 @@ describe('assertPublicHostname', () => {
     await expect(assertPublicHostname('[not-an-ip]')).rejects.toBeInstanceOf(SsrfBlockedError);
   });
 
-  test('allowLoopback permits a bracketed ::1 literal too', async () => {
-    await expect(assertPublicHostname('[::1]', { allowLoopback: true })).resolves.toEqual(['::1']);
-    // A bracketed non-loopback private address stays blocked.
-    await expect(
-      assertPublicHostname('[::ffff:169.254.169.254]', { allowLoopback: true }),
-    ).rejects.toBeInstanceOf(SsrfBlockedError);
-  });
-
   test('returns the address for a literal public IP without DNS', async () => {
     await expect(assertPublicHostname('8.8.8.8')).resolves.toEqual(['8.8.8.8']);
   });
@@ -133,21 +125,6 @@ describe('assertPublicHostname', () => {
   test('rejects a hostname that resolves to loopback (localhost)', async () => {
     // `localhost` resolves via the hosts file (no network) to ::1 / 127.0.0.1.
     await expect(assertPublicHostname('localhost')).rejects.toBeInstanceOf(SsrfBlockedError);
-  });
-
-  test('allowLoopback permits loopback but still blocks other private ranges', async () => {
-    // Loopback is admitted (a single-machine did:web:localhost deployment).
-    await expect(assertPublicHostname('127.0.0.1', { allowLoopback: true })).resolves.toEqual([
-      '127.0.0.1',
-    ]);
-    await expect(assertPublicHostname('::1', { allowLoopback: true })).resolves.toEqual(['::1']);
-    // LAN and metadata ranges remain blocked even with allowLoopback.
-    await expect(assertPublicHostname('10.0.0.1', { allowLoopback: true })).rejects.toBeInstanceOf(
-      SsrfBlockedError,
-    );
-    await expect(
-      assertPublicHostname('169.254.169.254', { allowLoopback: true }),
-    ).rejects.toBeInstanceOf(SsrfBlockedError);
   });
 });
 

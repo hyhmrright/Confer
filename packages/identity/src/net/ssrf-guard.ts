@@ -3,10 +3,9 @@ import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 
 // Thrown when a hostname resolves to (or literally is) a private, loopback,
-// link-local, or otherwise reserved address. Callers distinguish this from a
-// plain DNS-resolution failure: a blocked address must abort the request, while
-// a name that simply doesn't resolve is harmless (the subsequent fetch fails on
-// its own with nothing to connect to).
+// link-local, or otherwise reserved address. A blocked address always aborts
+// the request; whether a DNS failure does too is the caller's decision, and the
+// separate type is what lets it make one.
 export class SsrfBlockedError extends Error {
   readonly hostname: string;
   readonly address: string;
@@ -23,9 +22,10 @@ export class SsrfBlockedError extends Error {
 //
 // Every call site has to decide about this one; it is a sibling of
 // SsrfBlockedError, not a subclass, so a `catch` that handles only the block
-// lets this one fall through to the fetch it was guarding — silently. All three
-// callers therefore account for it in so many words, two by refusing it and
-// routes/users.ts by admitting it on purpose.
+// lets this one fall through to the fetch it was guarding — silently. Every
+// caller therefore accounts for it in so many words: the ones guarding a host
+// someone else named refuse it, and routes/users.ts admits it on purpose when an
+// owner saves their own runtime's address.
 //
 // It is deliberately not folded into the harmless "name doesn't resolve" case,
 // even though both leave us without an address. A definitive negative —
@@ -181,28 +181,8 @@ export function isBlockedIp(ip: string): boolean {
   return true;
 }
 
-// True for the loopback range (127.0.0.0/8, ::1, ::ffff:127.x). Callers that
-// legitimately talk to their own host (e.g. DID resolution against a
-// single-machine `did:web:localhost` deployment) opt loopback back in via
-// `allowLoopback` without also re-admitting the LAN / metadata ranges.
-function isLoopbackIp(ip: string): boolean {
-  if (isIP(ip) === 4) {
-    const value = ipv4ToInt(ip);
-    return value !== null && inCidr(value, '127.0.0.0', 8);
-  }
-  const groups = expandIpv6(ip.toLowerCase());
-  if (!groups) return false; // unparseable → not additionally allowed; isBlockedIpv6 already fails closed on it
-  const embedded = embeddedIpv4(groups);
-  if (embedded) {
-    const value = ipv4ToInt(embedded);
-    return value !== null && inCidr(value, '127.0.0.0', 8);
-  }
-  return isZeroExceptLast(groups) && groups[7] === 1; // ::1 only — :: (unspecified) is not loopback
-}
-
 /** `dnsTimeoutMs` bounds the lookup; past it the guard throws SsrfUnresolvedError. */
 export interface SsrfGuardOptions {
-  allowLoopback?: boolean;
   dnsTimeoutMs?: number;
 }
 
@@ -211,19 +191,9 @@ export interface SsrfGuardOptions {
 // IP is checked directly; otherwise DNS resolution decides. Throws
 // SsrfBlockedError for a blocked target, SsrfUnresolvedError when the resolver
 // never answered, and propagates the DNS error for a name that answered with a
-// definitive negative. `allowLoopback` permits 127.0.0.0/8 and ::1 (still
-// blocking every other private/reserved range) for callers whose own service
-// lives on loopback.
-export async function assertPublicHostname(
-  hostname: string,
-  opts?: SsrfGuardOptions,
-): Promise<string[]> {
-  const allowLoopback = opts?.allowLoopback ?? false;
-  return assertAddresses(
-    hostname,
-    (address) => isBlockedIp(address) && !(allowLoopback && isLoopbackIp(address)),
-    opts?.dnsTimeoutMs ?? DNS_TIMEOUT_MS,
-  );
+// definitive negative.
+export function assertPublicHostname(hostname: string, opts?: SsrfGuardOptions): Promise<string[]> {
+  return assertAddresses(hostname, isBlockedIp, opts?.dnsTimeoutMs ?? DNS_TIMEOUT_MS);
 }
 
 // True for the link-local ranges: IPv4 169.254.0.0/16 and IPv6 fe80::/10.

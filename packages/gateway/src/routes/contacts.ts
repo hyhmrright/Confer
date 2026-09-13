@@ -1,4 +1,9 @@
-import { assertPublicHostname, SsrfBlockedError, SsrfUnresolvedError } from '@confer/identity';
+import {
+  assertPublicHostname,
+  readCappedText,
+  SsrfBlockedError,
+  SsrfUnresolvedError,
+} from '@confer/identity';
 import { AppError, contactLookupSchema, newId, policyOverridesSchema } from '@confer/shared';
 import { and, count, desc, eq, like } from 'drizzle-orm';
 import { Hono } from 'hono';
@@ -273,37 +278,6 @@ const MAX_REMOTE_AGENTS = 20;
 // gigabyte is the whole instance. Twenty agents of metadata is a few kilobytes.
 const MAX_DIRECTORY_BYTES = 512 * 1024;
 
-// Read a response body, refusing to buffer more than `limit` bytes.
-//
-// The cap has to be enforced while reading, not after: checking Content-Length
-// trusts the sender to describe itself, and checking the finished string means
-// the memory was already spent.
-async function readCapped(res: Response, limit: number): Promise<string> {
-  const reader = res.body?.getReader();
-  if (!reader) return '';
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      size += value.length;
-      if (size > limit) throw new Error('directory too large');
-      chunks.push(value);
-    }
-  } finally {
-    // Drops the connection rather than letting the rest arrive unread.
-    await reader.cancel().catch(() => {});
-  }
-  const body = new Uint8Array(size);
-  let at = 0;
-  for (const chunk of chunks) {
-    body.set(chunk, at);
-    at += chunk.length;
-  }
-  return new TextDecoder().decode(body);
-}
-
 // Run a network lookup body, mapping any thrown error to the uniform
 // LookupResult error shape so a single transport failure can't bubble a 500.
 async function safeLookup(fn: () => Promise<LookupResult>): Promise<LookupResult> {
@@ -327,19 +301,26 @@ function lookupByDomain(value: string): Promise<LookupResult> {
       if (e instanceof SsrfBlockedError) {
         return { candidates: [], error: 'Private addresses not allowed' };
       }
-      // A name that doesn't resolve isn't an SSRF block; fall through and let
-      // the fetch below fail on its own (safeLookup maps transport errors to
-      // the uniform empty-candidates result). A resolver that never answered is
-      // a different matter — see SsrfUnresolvedError — and is handled above.
+      // Refused as well, not left for the fetch to fail on its own: the fetch
+      // resolves the name a second time, and a name that failed here can answer
+      // with a private address there.
+      return { candidates: [], error: 'Address could not be resolved' };
     }
     // AbortSignal rather than withTimeout: racing a promise rejects the wrapper
     // but leaves the request running, and the body is read after that race has
     // already been decided. One deadline over the whole exchange, and a socket
     // that actually closes when it expires.
     const res = await fetch(`https://${hostname}/.well-known/agents.json`, {
+      // The guard vetted this host, not wherever a 3xx points next.
+      redirect: 'manual',
       signal: AbortSignal.timeout(LOOKUP_TIMEOUT_MS),
     });
-    const data = JSON.parse(await readCapped(res, MAX_DIRECTORY_BYTES)) as { agents?: unknown[] };
+    if (!res.ok) {
+      return { candidates: [], error: `Directory request failed (HTTP ${res.status})` };
+    }
+    const data = JSON.parse(await readCappedText(res, MAX_DIRECTORY_BYTES)) as {
+      agents?: unknown[];
+    };
     // Every agent on a did:web:<host> instance shares the instance A2A
     // endpoint, mirroring the service entry we publish in did.json.
     const endpoint = `https://${hostname}/a2a/v1`;

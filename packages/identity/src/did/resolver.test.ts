@@ -12,7 +12,7 @@ import { clearDIDCache, resolveDID } from './resolver.js';
 // 5000.64ms). A literal IP short-circuits the guard before the lookup, so this
 // suite makes no network call at all. 203.0.113.0/24 is TEST-NET-3, RFC 5737's
 // documentation range — the address-shaped `example.com`, and public, so the
-// guard admits it without needing the loopback exemption.
+// guard admits it.
 const DOMAIN = '203.0.113.10';
 const DID = didFromDomain(DOMAIN);
 
@@ -23,6 +23,7 @@ const originalFetch = globalThis.fetch;
 interface FetchCall {
   url: string;
   headers: Record<string, string>;
+  redirect?: RequestRedirect;
 }
 let calls: FetchCall[];
 
@@ -31,7 +32,7 @@ function mockFetch(responder: (call: FetchCall) => Response): void {
     const headers: Record<string, string> = {};
     const raw = init?.headers as Record<string, string> | undefined;
     if (raw) for (const [k, v] of Object.entries(raw)) headers[k] = v;
-    const call = { url: String(input), headers };
+    const call = { url: String(input), headers, redirect: init?.redirect };
     calls.push(call);
     return responder(call);
   }) as typeof fetch;
@@ -194,13 +195,53 @@ describe('resolveDID', () => {
     if (!res.ok) expect(res.error).toContain('Failed to resolve DID');
   });
 
-  test('network error returns an err result', async () => {
+  // The error reaches an unauthenticated A2A caller as the reason it was
+  // refused, so the transport's own text stays out of it: "refused" against
+  // "handshake failed" is a port probe.
+  test('network error returns an err result without the transport text', async () => {
     mockFetch(() => {
       throw new Error('econnrefused');
     });
     const res = await resolveDID(DID);
     expect(res.ok).toBe(false);
-    if (!res.ok) expect(res.error).toContain('econnrefused');
+    if (!res.ok) {
+      expect(res.error).toContain('Failed to resolve DID');
+      expect(res.error).not.toContain('econnrefused');
+    }
+  });
+
+  // The guard vets the DID's host, not wherever that host redirects to; a
+  // followed 302 to the metadata address walked straight past it.
+  test('a redirect is a failure, not a hop', async () => {
+    mockFetch(
+      () =>
+        new Response(null, {
+          status: 302,
+          headers: { location: 'http://169.254.169.254/latest/' },
+        }),
+    );
+    const res = await resolveDID(DID);
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toContain('HTTP 302');
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.redirect).toBe('manual');
+  });
+
+  test('refuses a document larger than the read cap', async () => {
+    mockFetch(() => jsonResponse({ ...document, padding: 'x'.repeat(100_000) }));
+    const res = await resolveDID(DID);
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toContain('Failed to resolve DID');
+  });
+
+  // This instance's own DIDs are answered from its database before they get
+  // here, so a loopback DID can only be someone else's aimed at our loopback.
+  test('refuses a DID on a loopback address without fetching', async () => {
+    mockFetch(() => jsonResponse(document));
+    const res = await resolveDID('did:web:127.0.0.1%3A6333');
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toContain('private address');
+    expect(calls).toHaveLength(0);
   });
 
   test('rejects a non-did:web identifier without fetching', async () => {

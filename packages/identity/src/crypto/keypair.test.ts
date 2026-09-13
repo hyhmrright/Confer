@@ -52,7 +52,34 @@ describe('publicKeyToMultibase / multibaseToPublicKey', () => {
     const result = await multibaseToPublicKey('z1111');
     expect(result).toEqual({ ok: false, error: 'Invalid Ed25519 multicodec prefix' });
   });
+
+  // The value comes from a remote DID document, before any signature is
+  // checked, and base58 decoding is quadratic — two million characters held
+  // the event loop for minutes. It has to be refused without being decoded.
+  test('refuses an over-long value without decoding it', async () => {
+    const started = performance.now();
+    const result = await multibaseToPublicKey(`z${'2'.repeat(2_000_000)}`);
+    expect(result).toEqual({ ok: false, error: 'Invalid Ed25519 public key length' });
+    expect(performance.now() - started).toBeLessThan(100);
+  });
+
+  test('rejects a correctly prefixed key of the wrong length', async () => {
+    const tooShort = new Uint8Array([0xed, 0x01, ...new Uint8Array(31).fill(7)]);
+    const result = await multibaseToPublicKey(`z${base58(tooShort)}`);
+    expect(result).toEqual({ ok: false, error: 'Invalid Ed25519 public key length' });
+  });
 });
+
+function base58(bytes: Uint8Array): string {
+  const alphabet = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+  let n = BigInt(`0x${Buffer.from(bytes).toString('hex')}`);
+  let out = '';
+  while (n > 0n) {
+    out = alphabet[Number(n % 58n)] + out;
+    n /= 58n;
+  }
+  return out;
+}
 
 describe('exportPrivateKey / importPrivateKey', () => {
   test('round-trips a private key through JWK', async () => {
