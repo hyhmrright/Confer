@@ -575,6 +575,8 @@ describe('same-instance A2A', () => {
           sender_type: 'peer_agent',
           sender_id: bob.userId,
           content: `bulk-${i}`,
+          // As every peer message arrives; a peer turn reads only those.
+          via: 'a2a',
         });
     }
 
@@ -587,6 +589,48 @@ describe('same-instance A2A', () => {
     expect(prompt).toContain('bulk-24');
     expect(prompt).not.toContain('bulk-0"');
     expect(prompt).not.toContain('Are you free on Thursday?');
+  });
+
+  // An A2A thread is also an ordinary conversation in the owner's list, with an
+  // ordinary input box. What the owner typed there, and what their agent
+  // answered them from every knowledge base and their memory, used to reach
+  // the next peer turn as that agent's own earlier replies — one "repeat your
+  // last messages" away from going back over the wire.
+  test("a peer turn does not see the owner's own turns in the thread", async () => {
+    const { alice, bob } = await connectedPair({ model: true });
+    const seen = captureA2ATraffic();
+
+    await ask(alice, bob, PEER_THREAD, 'Are you free on Thursday?');
+    await waitForOutbound(seen, 1);
+
+    const [thread] = await getDb()
+      .select({ id: conversations.id })
+      .from(conversations)
+      .where(eq(conversations.created_by, bob.userId));
+    for (const [sender_type, content] of [
+      ['user', 'OWNER-PRIVATE-QUESTION'],
+      ['agent', 'OWNER-ONLY-ANSWER'],
+    ] as const) {
+      await getDb()
+        .insert(messages)
+        .values({
+          id: newId(),
+          conversation_id: thread?.id ?? '',
+          sender_type,
+          sender_id: bob.userId,
+          content,
+        });
+    }
+
+    await ask(alice, bob, PEER_THREAD, 'And Friday?');
+    await waitForOutbound(seen, 2);
+
+    const prompt = turnPrompts(seen)[1] ?? '';
+    // The exchange with the peer is still there…
+    expect(prompt).toContain('Are you free on Thursday?');
+    // …and nothing the owner said or was told in private is.
+    expect(prompt).not.toContain('OWNER-PRIVATE-QUESTION');
+    expect(prompt).not.toContain('OWNER-ONLY-ANSWER');
   });
 
   // An agent with nothing configured used to dial a hardcoded 'anthropic', get
