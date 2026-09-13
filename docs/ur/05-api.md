@@ -478,7 +478,7 @@ DELETE /api/v1/webhooks/{id}
 | `/api/v1/auth/login` | 10/منٹ فی IP |
 | `/api/v1/auth/register` | 3/گھنٹہ فی IP |
 | `/api/v1/conversations/*/messages` POST | 60/منٹ فی صارف |
-| `/a2a/v1/*` | 100/منٹ فی peer ڈومین (سفید فہرست میں زیادہ) |
+| `/a2a/v1/*` | 60/منٹ فی IP اور پاتھ، پورے `/a2a/v1` پر 300/منٹ فی IP |
 | WSS | فی صارف زیادہ سے زیادہ 10 بیک وقت کنکشن |
 
 حد پار ہونے پر جواب:

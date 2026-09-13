@@ -478,7 +478,7 @@ DELETE /api/v1/webhooks/{id}
 | `/api/v1/auth/login` | 10/分 per IP |
 | `/api/v1/auth/register` | 3/時 per IP |
 | `/api/v1/conversations/*/messages` POST | 60/分 per user |
-| `/a2a/v1/*` | 100/分 per peer-domain（ホワイトリストはより高い） |
+| `/a2a/v1/*` | 60/分 per IP・パス、`/a2a/v1` 全体で 300/分 per IP |
 | WSS | 1 ユーザーあたり同時接続は最大 10 |
 
 制限に掛かったときのレスポンス:

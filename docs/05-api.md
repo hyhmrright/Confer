@@ -496,7 +496,7 @@ DELETE /api/v1/webhooks/{id}
 | `/api/v1/auth/login` | 10/分钟 per IP |
 | `/api/v1/auth/register` | 3/小时 per IP |
 | `/api/v1/conversations/*/messages` POST | 60/分钟 per user |
-| `/a2a/v1/*` | 100/分钟 per peer-domain（白名单更高） |
+| `/a2a/v1/*` | 60/分钟 per IP + 路径；整个 `/a2a/v1` 合计 300/分钟 per IP |
 | WSS | 单用户最多 10 个并发连接 |
 
 限流响应：

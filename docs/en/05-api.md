@@ -478,7 +478,7 @@ Supported events: `message.new.peer`, `permission.granted`, `thread.archived`.
 | `/api/v1/auth/login` | 10/minute per IP |
 | `/api/v1/auth/register` | 3/hour per IP |
 | `/api/v1/conversations/*/messages` POST | 60/minute per user |
-| `/a2a/v1/*` | 100/minute per peer-domain (higher when whitelisted) |
+| `/a2a/v1/*` | 60/minute per IP and path, and 300/minute per IP across all of `/a2a/v1` |
 | WSS | at most 10 concurrent connections per user |
 
 Response when the limit is exceeded:
