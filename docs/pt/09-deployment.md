@@ -111,6 +111,8 @@ git pull
 docker compose -f docker-compose.prod.yml up -d --build   # migrate roda de novo sozinho
 ```
 
+> Desde 2026-09-13, o gateway se recusa a iniciar enquanto `JWT_SECRET` ainda for `change-me-in-production` ou tiver menos de 32 caracteres. Antes de atualizar uma instância antiga, confira o `.env` e, se o valor não servir, troque por um gerado com `openssl rand -hex 32`. A troca encerra todas as sessões abertas, e todo mundo precisa entrar de novo uma vez. Instâncias instaladas com `npx confer-cli` ou com o script da Oracle receberam um valor aleatório desde o início e não são afetadas.
+
 ### Zerar (apaga todos os dados)
 
 ```bash

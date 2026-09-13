@@ -157,6 +157,8 @@ git pull
 docker compose -f docker-compose.prod.yml up -d --build   # migrate re-runs automatically
 ```
 
+> Since 2026-09-13 the gateway refuses to start while `JWT_SECRET` is still `change-me-in-production` or shorter than 32 characters. Before upgrading an older instance, check `.env` and replace a value that fails with one from `openssl rand -hex 32`. Changing it signs everyone out once. Instances installed with `npx confer-cli` or the Oracle script were given a random value from the start and are unaffected.
+
 ### Resetting (wipes all data)
 
 ```bash

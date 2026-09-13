@@ -111,6 +111,8 @@ git pull
 docker compose -f docker-compose.prod.yml up -d --build   # migrate は自動で再実行される
 ```
 
+> 2026-09-13 以降、`JWT_SECRET` が `change-me-in-production` のまま、または 32 文字未満だと gateway は起動を拒否する。古いインスタンスを更新する前に `.env` を確認し、満たしていなければ `openssl rand -hex 32` で生成した値に置き換える。値を変えるとログイン中のセッションはすべて無効になり、一度ログインし直すことになる。`npx confer-cli` や Oracle スクリプトで導入したインスタンスは最初からランダムな値なので影響はない。
+
 ### リセット（すべてのデータを消去）
 
 ```bash
