@@ -18,6 +18,7 @@ import { agents, users } from '../db/schema.js';
 import { getEnv } from '../env.js';
 import { uniqueViolation } from '../lib/db-errors.js';
 import { getUserLlmKeys } from '../lib/llm-keys.js';
+import { assertDialableRuntimeUrl, isRuntimeBaseUrl } from '../lib/runtime-url.js';
 import { authMiddleware } from '../middleware/auth.js';
 import type { AppEnv } from '../types.js';
 
@@ -37,21 +38,14 @@ const llmKeyBodySchema = z
   })
   // For a local runtime this field is an address, not a credential, and the
   // gateway goes on to dial it — both to chat and to list models. Check it is a
-  // plain http(s) URL at the point it is stored: the owner gets told now rather
-  // than through a puzzling failure at chat time, and the fetch can never be
-  // handed a `file:` or other scheme.
+  // plain http(s) base URL at the point it is stored: the owner gets told now
+  // rather than through a puzzling failure at chat time, the fetch can never be
+  // handed a `file:` or other scheme, and no `?` can swallow the path a dialer
+  // appends (see isRuntimeBaseUrl).
   .refine(
-    ({ provider, api_key }) => !llmProvider(provider)?.keyIsBaseUrl || isHttpUrl(api_key),
+    ({ provider, api_key }) => !llmProvider(provider)?.keyIsBaseUrl || isRuntimeBaseUrl(api_key),
     'Local runtimes take a base URL, e.g. http://host.docker.internal:11434',
   );
-
-function isHttpUrl(value: string): boolean {
-  try {
-    return ['http:', 'https:'].includes(new URL(value).protocol);
-  } catch {
-    return false;
-  }
-}
 
 /*
   Refuse a local-runtime address that points at cloud metadata.
@@ -65,12 +59,9 @@ function isHttpUrl(value: string): boolean {
   attempt — 169.254.0.0/16, where every major cloud answers instance metadata to
   anyone who can send it a packet, this instance's own credentials included.
 
-  Checked when the address is stored rather than when it is dialled, so the
-  owner is told at the point they can act on it. That leaves the value trusted
-  afterwards; a name that resolves elsewhere later is not covered, and closing
-  that would mean re-resolving on the connect path in three call sites. The
-  attacker this is worth defending against is a second account on someone's
-  instance, not one who also controls DNS.
+  Checked here so the owner is told at the point they can act on it, and again
+  at every dial (lib/runtime-url.ts), because what is stored here is not what
+  gets dialled later: a name can be re-pointed after it was saved.
 */
 async function assertDialableBaseUrl(provider: string, apiKey: string): Promise<void> {
   if (!llmProvider(provider)?.keyIsBaseUrl) return;
@@ -90,18 +81,17 @@ async function assertDialableBaseUrl(provider: string, apiKey: string): Promise<
         400,
       );
     }
-    // A name that does not resolve is not a block. Store it and let the dial
-    // fail on its own, the same way a runtime that is merely switched off does.
+    // A name that does not resolve is not a block. Store it, the same way a
+    // runtime that is merely switched off is stored; the dial re-checks the
+    // address and refuses one that still does not resolve.
     //
     // SsrfUnresolvedError lands here too, deliberately, and unlike the DID
     // resolver and contact lookup — which refuse it. Those two guard a host
-    // someone else named, so "no answer" has to refuse or a resolver that
-    // stalls past the deadline slips past the guard into an unguarded fetch.
-    // Here the host is one the owner typed into their own settings, and the
-    // comment above already declines to defend against an attacker who
-    // controls DNS. Refusing would only mean a slow resolver stops an owner
-    // saving their own Ollama address. The bound still matters: it turns a
-    // black-holed resolver from a hung request into a 5s one.
+    // someone else named and dial it straight away, so "no answer" has to
+    // refuse. Here nothing is dialled yet, and refusing would only mean a slow
+    // resolver stops an owner saving their own Ollama address. The bound still
+    // matters: it turns a black-holed resolver from a hung request into a 5s
+    // one.
   }
 }
 
@@ -303,10 +293,12 @@ async function fetchProviderModels(
   spec: LlmProviderSpec,
   key: string,
 ): Promise<{ models: { id: string }[]; error?: ModelsFailure }> {
-  const url = `${providerBaseUrl(spec, key)}${spec.modelsPath}`;
+  const base = providerBaseUrl(spec, key);
+  const url = `${base}${spec.modelsPath}`;
   const headers = modelsAuthHeaders(spec, key);
 
   try {
+    if (spec.keyIsBaseUrl) await assertDialableRuntimeUrl(base);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10_000);
     const resp = await fetch(url, { headers, signal: controller.signal });

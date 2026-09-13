@@ -113,6 +113,7 @@ const FAILURE_NOTICE: Record<A2AFailure, string> = {
  * question, marked `system_notice` and carrying the machine code — that is what
  * the owner reads, what an A2A Task reports as `TASK_STATE_FAILED` instead of a
  * turn stuck at `WORKING`, and what stops `/stream/{id}` answering `pending`
+  invalid_base_url: 'The agent you asked is configured with a model address that cannot be used.',
  * for good. And a `notification` goes to the asker, which cannot provoke a
  * reply the way an `answer` would. Both carry the code rather than relying on
  * the sentence: the peer is another instance and the owner another locale, so

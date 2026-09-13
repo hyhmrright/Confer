@@ -6,6 +6,7 @@ import {
   VECTOR_SIZE,
 } from './rag-config.js';
 import { HttpError, retryWithBackoff } from './retry.js';
+import { assertDialableRuntimeUrl } from './runtime-url.js';
 
 // Re-exported so existing importers keep resolving VECTOR_SIZE from embedding.
 export { VECTOR_SIZE };
@@ -97,8 +98,15 @@ async function embedBatch(
     });
 
     if (!res.ok) {
-      const text = await res.text();
-      throw new HttpError(res.status, `${provider} embeddings failed (${res.status}): ${text}`);
+      // The status only. For a local runtime the far side is any host the owner
+      // can name, this gateway's own internal services included, and this
+      // message travels as far as a `tool_result` event in their browser. The
+      // body still reaches the operator's log.
+      console.error(
+        `${provider} embeddings failed (${res.status}):`,
+        (await res.text()).slice(0, 500),
+      );
+      throw new HttpError(res.status, `${provider} embeddings failed (${res.status})`);
     }
 
     const data = (await res.json()) as EmbeddingResponse;
@@ -115,6 +123,7 @@ export async function embedTexts(
 ): Promise<number[][]> {
   if (!apiKey) throw new Error('API key required for embeddings');
   if (texts.length === 0) return [];
+  if (PROVIDERS[provider].keyIsBaseUrl) await assertDialableRuntimeUrl(apiKey);
 
   const batches: string[][] = [];
   for (let i = 0; i < texts.length; i += BATCH_SIZE) {

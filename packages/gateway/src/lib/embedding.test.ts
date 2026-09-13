@@ -67,4 +67,27 @@ describe('ollama (local) provider', () => {
     expect(vector?.[0]).toBe(1);
     expect(vector?.slice(768).every((v) => v === 0)).toBe(true);
   });
+
+  // Checked when dialled, not only when saved: a value stored before the
+  // query rule existed, or a name re-pointed after saving, stops here.
+  test('refuses an address that fails the dial-time check, without dialling', async () => {
+    const { calls } = stubEmbeddings(VECTOR_SIZE);
+    for (const base of ['http://qdrant:6333/collections/x/snapshots?', 'http://169.254.169.254']) {
+      await expect(embedTexts(['text'], base, 'ollama')).rejects.toThrow();
+    }
+    expect(calls).toHaveLength(0);
+  });
+
+  // The message reaches the owner's browser as a tool result, and a local
+  // runtime's far side can be one of this gateway's own internal services.
+  test('reports a failed call by status, never by the response body', async () => {
+    globalThis.fetch = mock(
+      async () => new Response('internal detail', { status: 400 }),
+    ) as unknown as typeof fetch;
+    const error = await embedTexts(['text'], 'http://127.0.0.1:11434', 'ollama').catch(
+      (e: Error) => e,
+    );
+    expect(String(error)).toContain('(400)');
+    expect(String(error)).not.toContain('internal detail');
+  });
 });

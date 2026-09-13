@@ -214,6 +214,23 @@ describe('agent LLM keys', () => {
     expect(keys.find((k: { provider: string }) => k.provider === 'ollama').configured).toBe(false);
   });
 
+  // Every dialer appends its own path. A `?` or `#` in the stored value turned
+  // that path into a query string, aiming the gateway's POST at any path on any
+  // host it can reach — Qdrant's snapshot endpoint, for one.
+  test('refuses a local-runtime address that would swallow the appended path', async () => {
+    for (const api_key of [
+      'http://qdrant:6333/collections/knowledge_chunks/snapshots?',
+      'http://host.docker.internal:11434#',
+      'http://user:pw@host.docker.internal:11434',
+    ]) {
+      const res = await put('/api/v1/agents/me/llm-keys', {
+        token: user.token,
+        body: { provider: 'ollama', api_key },
+      });
+      expect(res.status).toBe(400);
+    }
+  });
+
   test('still accepts the loopback and LAN addresses a local runtime uses', async () => {
     for (const api_key of ['http://127.0.0.1:11434', 'http://192.168.1.50:11434']) {
       const res = await put('/api/v1/agents/me/llm-keys', {
