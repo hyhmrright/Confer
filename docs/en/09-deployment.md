@@ -132,7 +132,7 @@ anyone else.
 
 | Variable | Default (`.env.example`) | Notes |
 |----------|--------------------------|-------|
-| `JWT_SECRET` | `change-me-in-production` | **Change this.** Signs user session tokens. |
+| `JWT_SECRET` | `change-me-in-production` | **Change this.** Signs user session tokens. The gateway refuses to start with this placeholder or with anything under 32 characters. Generate: `openssl rand -hex 32`. |
 | `ENCRYPTION_KEY` | 64 zeros | **Change this.** Must be 32 bytes as 64 hex chars. Generate: `openssl rand -hex 32`. Encrypts stored LLM keys. |
 | `POSTGRES_PASSWORD` | `confer` (compose default) | Database password. |
 | `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` | `confer` / `confer-secret` | Object storage credentials. |

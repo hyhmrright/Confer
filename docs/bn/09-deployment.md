@@ -88,7 +88,7 @@ docker compose -f docker-compose.prod.yml logs -f gateway
 
 | চলক | ডিফল্ট (`.env.example`) | টীকা |
 |----------|--------------------------|-------|
-| `JWT_SECRET` | `change-me-in-production` | **এটি বদলান।** ব্যবহারকারীর সেশন টোকেনে স্বাক্ষর করে। |
+| `JWT_SECRET` | `change-me-in-production` | **এটি বদলান।** ব্যবহারকারীর সেশন টোকেনে স্বাক্ষর করে। এই নমুনা মান, বা ৩২ অক্ষরের কম কোনো মান থাকলে gateway চালু হতে অস্বীকার করে। তৈরি করুন: `openssl rand -hex 32`। |
 | `ENCRYPTION_KEY` | ৬৪টি শূন্য | **এটি বদলান।** ৩২ বাইট, অর্থাৎ ৬৪টি হেক্স অক্ষর হতে হবে। বানান: `openssl rand -hex 32`। জমা রাখা LLM চাবি এনক্রিপ্ট করে। |
 | `POSTGRES_PASSWORD` | `confer` (compose-এর ডিফল্ট) | ডেটাবেসের পাসওয়ার্ড। |
 | `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` | `confer` / `confer-secret` | বস্তু-ভাণ্ডারের পরিচয়পত্র। |

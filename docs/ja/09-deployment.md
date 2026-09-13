@@ -88,7 +88,7 @@ docker compose -f docker-compose.prod.yml logs -f gateway
 
 | 変数 | 既定値（`.env.example`） | 備考 |
 |----------|--------------------------|-------|
-| `JWT_SECRET` | `change-me-in-production` | **変更すること。** ユーザーのセッショントークンに署名する。 |
+| `JWT_SECRET` | `change-me-in-production` | **変更すること。** ユーザーのセッショントークンに署名する。gateway はこのプレースホルダーのままでは、また 32 文字未満の値では起動を拒否する。生成方法：`openssl rand -hex 32`。 |
 | `ENCRYPTION_KEY` | ゼロ 64 個 | **変更すること。** 32 バイト、すなわち 64 桁の 16 進文字でなければならない。生成: `openssl rand -hex 32`。保存された LLM キーを暗号化する。 |
 | `POSTGRES_PASSWORD` | `confer` （compose の既定値） | データベースのパスワード。 |
 | `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` | `confer` / `confer-secret` | オブジェクトストレージの資格情報。 |

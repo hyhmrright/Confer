@@ -88,7 +88,7 @@ O `.env` comanda a pilha de produção. Os padrões do `.env.example` funcionam 
 
 | Variável | Padrão (`.env.example`) | Notas |
 |----------|--------------------------|-------|
-| `JWT_SECRET` | `change-me-in-production` | **Troque.** Assina os tokens de sessão dos usuários. |
+| `JWT_SECRET` | `change-me-in-production` | **Troque.** Assina os tokens de sessão dos usuários. O gateway se recusa a iniciar com esse valor de exemplo ou com qualquer valor de menos de 32 caracteres. Gere com `openssl rand -hex 32`. |
 | `ENCRYPTION_KEY` | 64 zeros | **Troque.** Precisa ter 32 bytes em 64 caracteres hexadecimais. Gerar: `openssl rand -hex 32`. Cifra as chaves de LLM guardadas. |
 | `POSTGRES_PASSWORD` | `confer` (padrão do compose) | Senha do banco de dados. |
 | `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` | `confer` / `confer-secret` | Credenciais do armazenamento de objetos. |

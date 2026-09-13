@@ -88,7 +88,7 @@ docker compose -f docker-compose.prod.yml logs -f gateway
 
 | Variable | Défaut (`.env.example`) | Notes |
 |----------|--------------------------|-------|
-| `JWT_SECRET` | `change-me-in-production` | **À changer.** Signe les jetons de session des utilisateurs. |
+| `JWT_SECRET` | `change-me-in-production` | **À changer.** Signe les jetons de session des utilisateurs. Le gateway refuse de démarrer avec cette valeur d'exemple ou avec toute valeur de moins de 32 caractères. Pour en générer une : `openssl rand -hex 32`. |
 | `ENCRYPTION_KEY` | 64 zéros | **À changer.** Doit faire 32 octets, soit 64 caractères hexadécimaux. Générer : `openssl rand -hex 32`. Chiffre les clés de LLM stockées. |
 | `POSTGRES_PASSWORD` | `confer` (défaut de compose) | Mot de passe de la base de données. |
 | `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` | `confer` / `confer-secret` | Identifiants du stockage objet. |

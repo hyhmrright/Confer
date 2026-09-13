@@ -12,9 +12,24 @@ function isParsableHost(value: string): boolean {
   }
 }
 
+// Published in `.env.example`, so anyone who has read the repository can sign
+// an access token for any account on an instance still using it — admins
+// included. `cp .env.example .env` is the documented way to start.
+const PLACEHOLDER_JWT_SECRET = 'change-me-in-production';
+
 const envSchema = z.object({
   DATABASE_URL: z.string().url(),
-  JWT_SECRET: z.string().min(16),
+  // HS256: the secret is the whole of what stands between a guessed user id and
+  // a working token for it. 32 characters is the floor, and the placeholder is
+  // refused outright rather than warned about — a warning is a log line on an
+  // instance that is already forgeable.
+  JWT_SECRET: z
+    .string()
+    .min(32, 'must be at least 32 characters; generate one with `openssl rand -hex 32`')
+    .refine(
+      (value) => value !== PLACEHOLDER_JWT_SECRET,
+      'is the published placeholder; generate one with `openssl rand -hex 32`',
+    ),
   JWT_ISSUER: z.string().default('confer'),
   // Comma-separated usernames promoted to the 'admin' role on gateway startup
   // (idempotent — already-admin accounts are skipped). This is how the first

@@ -12,7 +12,7 @@ const TEST_ENV: Record<string, string> = {
   MINIO_ACCESS_KEY: 'confer',
   MINIO_SECRET_KEY: 'confer-secret',
   MINIO_BUCKET: 'knowledge-docs-test',
-  JWT_SECRET: 'test-jwt-secret-0123456789',
+  JWT_SECRET: 'test-jwt-secret-0123456789abcdef0123456789',
   JWT_ISSUER: 'confer',
   ENCRYPTION_KEY: '0'.repeat(64),
   NODE_ENV: 'test',

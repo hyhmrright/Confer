@@ -88,7 +88,7 @@ docker compose -f docker-compose.prod.yml logs -f gateway
 
 | المتغيّر | الافتراضي (`.env.example`) | ملاحظات |
 |----------|--------------------------|-------|
-| `JWT_SECRET` | `change-me-in-production` | **غيّره.** يوقّع رموز جلسات المستخدمين. |
+| `JWT_SECRET` | `change-me-in-production` | **غيّره.** يوقّع رموز جلسات المستخدمين. ترفض البوابة أن تبدأ بهذه القيمة النائبة أو بأي قيمة أقصر من 32 حرفًا. التوليد: `openssl rand -hex 32`. |
 | `ENCRYPTION_KEY` | أربعة وستون صفرًا | **غيّره.** يجب أن يكون 32 بايتًا في صورة 64 محرفًا ستّ عشريًا. للتوليد: `openssl rand -hex 32`. يشفّر مفاتيح النماذج المخزَّنة. |
 | `POSTGRES_PASSWORD` | `confer` (افتراضي compose) | كلمة مرور قاعدة البيانات. |
 | `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` | `confer` / `confer-secret` | بيانات اعتماد مخزن الكائنات. |

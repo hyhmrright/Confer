@@ -88,7 +88,7 @@ docker compose -f docker-compose.prod.yml logs -f gateway
 
 | متغیر | طے شدہ (`.env.example`) | نوٹ |
 |----------|--------------------------|-------|
-| `JWT_SECRET` | `change-me-in-production` | **اسے بدلیں۔** صارف کے session ٹوکن پر دستخط کرتی ہے۔ |
+| `JWT_SECRET` | `change-me-in-production` | **اسے بدلیں۔** صارف کے session ٹوکن پر دستخط کرتی ہے۔ اس نمونہ قدر، یا 32 حروف سے چھوٹی کسی بھی قدر کے ساتھ gateway شروع ہونے سے انکار کر دیتا ہے۔ بنانے کا طریقہ: `openssl rand -hex 32`۔ |
 | `ENCRYPTION_KEY` | 64 صفر | **اسے بدلیں۔** 32 بائٹ، یعنی 64 ہیکس حروف ہونے چاہئیں۔ بنائیں: `openssl rand -hex 32`۔ محفوظ LLM کلیدوں کو مشفّر کرتی ہے۔ |
 | `POSTGRES_PASSWORD` | `confer` (compose کی طے شدہ) | ڈیٹابیس کا پاس ورڈ۔ |
 | `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` | `confer` / `confer-secret` | شے-ذخیرے کی اسناد۔ |

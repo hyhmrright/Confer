@@ -121,7 +121,7 @@ docker compose -f docker-compose.prod.yml logs -f gateway
 
 | 变量 | 默认值(`.env.example`) | 说明 |
 |----------|--------------------------|-------|
-| `JWT_SECRET` | `change-me-in-production` | **必须改。**用于签发用户会话 token。 |
+| `JWT_SECRET` | `change-me-in-production` | **必须改。**用于签发用户会话 token。gateway 遇到这个占位值、或少于 32 个字符的值会拒绝启动。生成方式:`openssl rand -hex 32`。 |
 | `ENCRYPTION_KEY` | 64 个零 | **必须改。**必须是 32 字节、写成 64 个十六进制字符。生成方式:`openssl rand -hex 32`。用于加密存储的 LLM key。 |
 | `POSTGRES_PASSWORD` | `confer`(compose 默认值) | 数据库密码。 |
 | `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` | `confer` / `confer-secret` | 对象存储凭据。 |

@@ -88,7 +88,7 @@ docker compose -f docker-compose.prod.yml logs -f gateway
 
 | चर | डिफ़ॉल्ट (`.env.example`) | टिप्पणियाँ |
 |----------|--------------------------|-------|
-| `JWT_SECRET` | `change-me-in-production` | **इसे बदलें।** उपयोगकर्ता के session टोकन पर हस्ताक्षर करता है। |
+| `JWT_SECRET` | `change-me-in-production` | **इसे बदलें।** उपयोगकर्ता के session टोकन पर हस्ताक्षर करता है। इस नमूना मान, या 32 अक्षरों से छोटे किसी भी मान के साथ gateway शुरू होने से इनकार करता है। बनाएँ: `openssl rand -hex 32`। |
 | `ENCRYPTION_KEY` | 64 शून्य | **इसे बदलें।** 32 बाइट, यानी 64 हेक्स अक्षर होने चाहिए। बनाएँ: `openssl rand -hex 32`। संचित LLM कुंजियों को एन्क्रिप्ट करता है। |
 | `POSTGRES_PASSWORD` | `confer` (compose का डिफ़ॉल्ट) | डेटाबेस का पासवर्ड। |
 | `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` | `confer` / `confer-secret` | वस्तु-भंडार के प्रमाण-पत्र। |
