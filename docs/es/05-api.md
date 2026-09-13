@@ -410,7 +410,7 @@ GET    /a2a/v1/stream/{message_id}       # recoge la respuesta en flujo (SSE)
 GET    /a2a/v1/agent-facts/{agent_did}   # AgentFacts público
 ```
 
-Todos los endpoints A2A exigen verificación de la firma HTTP del mensaje.
+Todos los endpoints A2A exigen verificación de la firma HTTP del mensaje, salvo `agent-facts`: igual que `/.well-known/agents.json`, es un documento público de descubrimiento con la misma visibilidad, así que un Agente no público o dado de baja devuelve 404 siempre. Sus `capabilities` solo incluyen lo que el dueño guardó con la forma NANDA (`{type, scope, languages}`).
 
 ## .well-known endpoints
 

@@ -1,4 +1,4 @@
-import { assertNotLinkLocalHostname, SsrfBlockedError } from '@confer/identity';
+import { assertNotMetadataHostname, SsrfBlockedError } from '@confer/identity';
 import type { EncryptedValue, LlmProviderSpec } from '@confer/shared';
 import {
   AppError,
@@ -7,6 +7,7 @@ import {
   LLM_PROVIDER_IDS,
   llmProvider,
   providerBaseUrl,
+  readCappedText,
   updateAgentRequestSchema,
   updateProfileRequestSchema,
 } from '@confer/shared';
@@ -18,7 +19,7 @@ import { agents, users } from '../db/schema.js';
 import { getEnv } from '../env.js';
 import { uniqueViolation } from '../lib/db-errors.js';
 import { getUserLlmKeys } from '../lib/llm-keys.js';
-import { assertDialableRuntimeUrl, isRuntimeBaseUrl } from '../lib/runtime-url.js';
+import { isRuntimeBaseUrl, runtimeFetcher } from '../lib/runtime-url.js';
 import { authMiddleware } from '../middleware/auth.js';
 import type { AppEnv } from '../types.js';
 
@@ -55,9 +56,10 @@ const llmKeyBodySchema = z
   usual answer, blocking private ranges, is the wrong one here: `localhost`,
   `host.docker.internal` and a LAN address are exactly how a local runtime is
   reached, and the settings screen recommends the second by name. So the guard
-  is narrowed to the one range that has no legitimate use and is worth the
-  attempt — 169.254.0.0/16, where every major cloud answers instance metadata to
-  anyone who can send it a packet, this instance's own credentials included.
+  is narrowed to the addresses that have no legitimate use and are worth the
+  attempt — cloud instance metadata (169.254.0.0/16, and Alibaba's
+  100.100.100.200), which answers anyone who can send it a packet, this
+  instance's own credentials included.
 
   Checked here so the owner is told at the point they can act on it, and again
   at every dial (lib/runtime-url.ts), because what is stored here is not what
@@ -69,7 +71,7 @@ async function assertDialableBaseUrl(provider: string, apiKey: string): Promise<
   // Strip IPv6-literal brackets so the guard sees a bare address.
   const hostname = new URL(apiKey).hostname.replace(/^\[|\]$/g, '');
   try {
-    await assertNotLinkLocalHostname(hostname);
+    await assertNotMetadataHostname(hostname);
   } catch (e) {
     if (e instanceof SsrfBlockedError) {
       // English prose, like the sibling refine above it and every other AppError
@@ -77,7 +79,7 @@ async function assertDialableBaseUrl(provider: string, apiKey: string): Promise<
       // it actionable for a reader who does not read English.
       throw new AppError(
         'invalid_base_url',
-        'That address is not allowed (169.254.0.0/16 is cloud metadata)',
+        'That address is not allowed (cloud metadata: 169.254.0.0/16, 100.100.100.200)',
         400,
       );
     }
@@ -289,6 +291,11 @@ function modelsAuthHeaders(spec: LlmProviderSpec, key: string): Record<string, s
   return { Authorization: `Bearer ${key}` };
 }
 
+// The most of a model list read into memory. OpenRouter's, the largest in the
+// catalogue, was 735 KB in September 2026; a local runtime's address is any host
+// the owner can name, and that host otherwise decided how much was buffered.
+const MAX_MODELS_BYTES = 8 * 1024 * 1024;
+
 async function fetchProviderModels(
   spec: LlmProviderSpec,
   key: string,
@@ -298,13 +305,16 @@ async function fetchProviderModels(
   const headers = modelsAuthHeaders(spec, key);
 
   try {
-    if (spec.keyIsBaseUrl) await assertDialableRuntimeUrl(base);
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10_000);
-    const resp = await fetch(url, { headers, signal: controller.signal });
-    clearTimeout(timeout);
+    const fetcher = spec.keyIsBaseUrl ? await runtimeFetcher(base) : fetch;
+    // One deadline over the whole exchange. It used to be cleared once the
+    // headers arrived, leaving a host that then trickles its body free to hold
+    // the request open for as long as it likes.
+    const resp = await fetcher(url, { headers, signal: AbortSignal.timeout(10_000) });
 
-    if (resp.status === 401 || resp.status === 403) {
+    // Nothing is sent to a local runtime that a 401 could be about, so for one
+    // "unauthorized" named no key to fix — only what kind of service answers at
+    // the address the owner typed.
+    if (!spec.keyIsBaseUrl && (resp.status === 401 || resp.status === 403)) {
       return { models: [], error: 'unauthorized' };
     }
     if (!resp.ok) return { models: [], error: 'unreachable' };
@@ -313,7 +323,9 @@ async function fetchProviderModels(
     // unused, and for a local runtime the address came from the owner — this
     // endpoint should not become a way to read back whatever a chosen host
     // puts in a `data` array.
-    const body = (await resp.json()) as { data?: { id?: unknown }[] };
+    const body = JSON.parse(await readCappedText(resp, MAX_MODELS_BYTES)) as {
+      data?: { id?: unknown }[];
+    };
     const models = (body.data ?? [])
       .filter((m) => typeof m.id === 'string')
       .map((m) => ({ id: m.id as string }));

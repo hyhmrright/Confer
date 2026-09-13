@@ -1,6 +1,5 @@
-import { err, ok, type Result } from '@confer/shared';
-import { readCappedText } from '../net/read-capped.js';
-import { assertPublicHostname, SsrfBlockedError, SsrfUnresolvedError } from '../net/ssrf-guard.js';
+import { err, ok, type Result, readCappedText } from '@confer/shared';
+import { assertPublicHostname } from '../net/ssrf-guard.js';
 import type { DIDDocument } from './document.js';
 import { didDocumentSchema, parseDidWeb } from './document.js';
 
@@ -81,16 +80,15 @@ export async function resolveDID(did: string): Promise<Result<DIDDocument, strin
   // resolve used to fall through on the grounds that the fetch would fail the
   // same way — but the fetch resolves the name again, and whoever runs that
   // name's DNS decides what the second answer is.
+  //
+  // And every failure reads the same. This reaches whoever sent an
+  // unauthenticated request naming the host, so "private address" against
+  // "does not resolve" told them, for any name they cared to try, whether it
+  // exists on our internal network.
   try {
     await assertPublicHostname(loc.hostname);
-  } catch (e) {
-    if (e instanceof SsrfBlockedError) {
-      return err(`Refusing to resolve DID pointing at a private address: ${did}`);
-    }
-    if (e instanceof SsrfUnresolvedError) {
-      return err(`Refusing to resolve DID whose host did not resolve in time: ${did}`);
-    }
-    return err(`Refusing to resolve DID whose host does not resolve: ${did}`);
+  } catch {
+    return err(`Refusing to resolve DID whose host is not a public address: ${did}`);
   }
 
   // Sub-identifier DIDs (path segments) resolve to `.../did.json` under their

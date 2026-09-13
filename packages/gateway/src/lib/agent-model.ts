@@ -1,7 +1,7 @@
-import { createProvider, type LLMProvider } from '@confer/agent-runtime';
+import { createProvider, type Fetcher, type LLMProvider } from '@confer/agent-runtime';
 import { err, llmProvider, ok, providerBaseUrl, type Result } from '@confer/shared';
 import { decryptUserKey } from './llm-keys.js';
-import { assertDialableRuntimeUrl } from './runtime-url.js';
+import { runtimeFetcher } from './runtime-url.js';
 
 /** Why an agent has no model to run a turn on. Machine codes: the client words them. */
 export type ModelConfigError =
@@ -43,15 +43,16 @@ export async function resolveAgentModel(
   // nothing, so an empty slot there means the catalogue's default address, not
   // a missing credential.
   if (!apiKey && !spec.keyIsBaseUrl) return err('no_key_for_provider');
+  let fetcher: Fetcher | undefined;
   if (spec.keyIsBaseUrl) {
     try {
-      await assertDialableRuntimeUrl(providerBaseUrl(spec, apiKey));
+      fetcher = await runtimeFetcher(providerBaseUrl(spec, apiKey));
     } catch {
       return err('invalid_base_url');
     }
   }
 
-  const provider = createProvider(name, apiKey);
+  const provider = createProvider(name, apiKey, fetcher);
   if (!provider) return err('unknown_provider');
 
   const model = typeof modelConfig?.model === 'string' ? modelConfig.model || undefined : undefined;

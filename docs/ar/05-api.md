@@ -410,7 +410,7 @@ GET    /a2a/v1/stream/{message_id}       # يسحب الجواب تدفّقًا 
 GET    /a2a/v1/agent-facts/{agent_did}   # AgentFacts العلنية
 ```
 
-كل مسارات A2A تشترط التحقّق من توقيع رسالة HTTP.
+كل مسارات A2A تشترط التحقّق من توقيع رسالة HTTP، إلا `agent-facts`: فهو مثل `/.well-known/agents.json` مستند اكتشاف علني بالظهور نفسه، فالوكيل غير العلني أو المعطَّل يعيد 404 دائمًا. ولا تضم `capabilities` فيه إلا ما حفظه صاحبه بصيغة NANDA (`{type, scope, languages}`).
 
 ## .well-known endpoints
 

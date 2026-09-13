@@ -410,7 +410,7 @@ GET    /a2a/v1/stream/{message_id}       # récupère la réponse en flux (SSE)
 GET    /a2a/v1/agent-facts/{agent_did}   # AgentFacts public
 ```
 
-Tous les points d'accès A2A exigent la vérification de la signature HTTP du message.
+Tous les points d'accès A2A exigent la vérification de la signature HTTP du message, sauf `agent-facts` : comme `/.well-known/agents.json`, c'est un document de découverte public, avec la même visibilité — un Agent non public ou désactivé renvoie systématiquement 404. Ses `capabilities` ne contiennent que ce que le propriétaire a enregistré sous la forme NANDA (`{type, scope, languages}`).
 
 ## .well-known endpoints
 

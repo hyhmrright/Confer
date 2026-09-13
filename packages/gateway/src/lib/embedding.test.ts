@@ -1,23 +1,5 @@
-import { afterEach, describe, expect, mock, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
 import { EMBEDDING_PROVIDER_PRIORITY, embedTexts, VECTOR_SIZE } from './embedding.js';
-
-const realFetch = globalThis.fetch;
-afterEach(() => {
-  globalThis.fetch = realFetch;
-});
-
-// Capture the one outbound embeddings call and answer it with `dimensions`
-// values, so a test can assert both what we sent and what we do with a reply
-// that is narrower than VECTOR_SIZE.
-function stubEmbeddings(dimensions: number): { calls: Array<[string, RequestInit]> } {
-  const calls: Array<[string, RequestInit]> = [];
-  globalThis.fetch = mock(async (url: string, init: RequestInit) => {
-    calls.push([String(url), init]);
-    const embedding = Array.from({ length: dimensions }, (_, i) => (i === 0 ? 1 : 0));
-    return Response.json({ data: [{ embedding, index: 0 }] });
-  }) as unknown as typeof fetch;
-  return { calls };
-}
 
 describe('embedding contracts', () => {
   test('auto-select priority is openai -> glm -> qwen -> ollama', () => {
@@ -42,26 +24,62 @@ describe('embedTexts guards', () => {
 });
 
 describe('ollama (local) provider', () => {
+  // A local runtime is dialled at the address its check saw (runtimeFetcher),
+  // over node:http rather than the global fetch — so these need a listener, not
+  // a fetch stub.
+  let server: ReturnType<typeof Bun.serve> | undefined;
+  afterEach(() => {
+    server?.stop(true);
+    server = undefined;
+  });
+
+  function localRuntime(respond: () => Response): {
+    base: string;
+    calls: Array<{ path: string; authorization: string | null; body: string }>;
+  } {
+    const calls: Array<{ path: string; authorization: string | null; body: string }> = [];
+    server = Bun.serve({
+      hostname: '127.0.0.1',
+      port: 0,
+      async fetch(req) {
+        calls.push({
+          path: new URL(req.url).pathname,
+          authorization: req.headers.get('authorization'),
+          body: await req.text(),
+        });
+        return respond();
+      },
+    });
+    return { base: `http://127.0.0.1:${server.port}`, calls };
+  }
+
+  // Answer with `dimensions` values, so a test can see what we do with a reply
+  // narrower than VECTOR_SIZE.
+  function vectorOf(dimensions: number): Response {
+    const embedding = Array.from({ length: dimensions }, (_, i) => (i === 0 ? 1 : 0));
+    return Response.json({ data: [{ embedding, index: 0 }] });
+  }
+
   // Ollama has no API key: the settings UI reuses that slot for the base URL,
   // exactly as the chat provider does.
   test('treats the key as a base URL and sends no Authorization header', async () => {
-    const { calls } = stubEmbeddings(VECTOR_SIZE);
+    const { base, calls } = localRuntime(() => vectorOf(VECTOR_SIZE));
 
-    await embedTexts(['text'], 'http://host.docker.internal:11434/', 'ollama');
+    await embedTexts(['text'], `${base}/`, 'ollama');
 
-    const [url, init] = calls[0] ?? [];
-    expect(url).toBe('http://host.docker.internal:11434/v1/embeddings');
-    expect((init?.headers as Record<string, string> | undefined)?.Authorization).toBeUndefined();
-    expect(JSON.parse(String(init?.body)).model).toBe('nomic-embed-text');
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.path).toBe('/v1/embeddings');
+    expect(calls[0]?.authorization).toBeNull();
+    expect(JSON.parse(calls[0]?.body ?? '{}').model).toBe('nomic-embed-text');
   });
 
   // nomic-embed-text is 768-dim and ignores the requested `dimensions`, while
   // the Qdrant collection is fixed at VECTOR_SIZE. Zero-padding reconciles them
   // without changing cosine similarity.
   test('zero-pads a short vector up to VECTOR_SIZE', async () => {
-    stubEmbeddings(768);
+    const { base } = localRuntime(() => vectorOf(768));
 
-    const [vector] = await embedTexts(['text'], 'http://localhost:11434', 'ollama');
+    const [vector] = await embedTexts(['text'], base, 'ollama');
 
     expect(vector).toHaveLength(VECTOR_SIZE);
     expect(vector?.[0]).toBe(1);
@@ -70,23 +88,23 @@ describe('ollama (local) provider', () => {
 
   // Checked when dialled, not only when saved: a value stored before the
   // query rule existed, or a name re-pointed after saving, stops here.
-  test('refuses an address that fails the dial-time check, without dialling', async () => {
-    const { calls } = stubEmbeddings(VECTOR_SIZE);
-    for (const base of ['http://qdrant:6333/collections/x/snapshots?', 'http://169.254.169.254']) {
+  test('refuses an address that fails the dial-time check', async () => {
+    for (const base of [
+      'http://qdrant:6333/collections/x/snapshots?',
+      'http://169.254.169.254',
+      'http://100.100.100.200',
+    ]) {
       await expect(embedTexts(['text'], base, 'ollama')).rejects.toThrow();
     }
-    expect(calls).toHaveLength(0);
   });
 
   // The message reaches the owner's browser as a tool result, and a local
   // runtime's far side can be one of this gateway's own internal services.
   test('reports a failed call by status, never by the response body', async () => {
-    globalThis.fetch = mock(
-      async () => new Response('internal detail', { status: 400 }),
-    ) as unknown as typeof fetch;
-    const error = await embedTexts(['text'], 'http://127.0.0.1:11434', 'ollama').catch(
-      (e: Error) => e,
-    );
+    const { base } = localRuntime(() => new Response('internal detail', { status: 400 }));
+
+    const error = await embedTexts(['text'], base, 'ollama').catch((e: Error) => e);
+
     expect(String(error)).toContain('(400)');
     expect(String(error)).not.toContain('internal detail');
   });

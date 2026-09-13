@@ -410,7 +410,7 @@ GET    /a2a/v1/stream/{message_id}       # 回答をストリームで取得（S
 GET    /a2a/v1/agent-facts/{agent_did}   # 公開 AgentFacts
 ```
 
-すべての A2A エンドポイントで HTTP Message Signature の検証を要求する。
+すべての A2A エンドポイントで HTTP Message Signature の検証を要求する。例外は `agent-facts` だけで、`/.well-known/agents.json` と同じ公開の発見ドキュメントとして可視性もそろえている。非公開または停止中の Agent は一律 404。`capabilities` に載るのは、持ち主が保存した NANDA 形式(`{type, scope, languages}`)の能力だけである。
 
 ## .well-known endpoints
 

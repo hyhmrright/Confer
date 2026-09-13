@@ -410,7 +410,7 @@ GET    /a2a/v1/stream/{message_id}       # جواب رواں صورت میں ک�
 GET    /a2a/v1/agent-facts/{agent_did}   # عوامی AgentFacts
 ```
 
-تمام A2A راستوں پر HTTP پیغام کے دستخط کی جانچ لازم ہے۔
+تمام A2A راستوں پر HTTP پیغام کے دستخط کی جانچ لازم ہے، سوائے `agent-facts` کے: `/.well-known/agents.json` کی طرح یہ اسی نمائش والی عوامی دریافت دستاویز ہے، اس لیے غیر عوامی یا معطل Agent ہمیشہ 404 دیتا ہے۔ اس کی `capabilities` میں صرف وہی صلاحیتیں ہوتی ہیں جو مالک نے NANDA شکل (`{type, scope, languages}`) میں محفوظ کی ہیں۔
 
 ## .well-known endpoints
 

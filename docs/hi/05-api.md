@@ -410,7 +410,7 @@ GET    /a2a/v1/stream/{message_id}       # उत्तर धारा-रू�
 GET    /a2a/v1/agent-facts/{agent_did}   # सार्वजनिक AgentFacts
 ```
 
-सभी A2A endpoint पर HTTP संदेश-हस्ताक्षर की जाँच अनिवार्य है।
+सभी A2A endpoint पर HTTP संदेश-हस्ताक्षर की जाँच अनिवार्य है, सिवाय `agent-facts` के: `/.well-known/agents.json` की तरह यह उसी दृश्यता वाला सार्वजनिक खोज-दस्तावेज़ है, इसलिए ग़ैर-सार्वजनिक या निष्क्रिय Agent हमेशा 404 देता है। इसकी `capabilities` में सिर्फ़ वही क्षमताएँ होती हैं जो मालिक ने NANDA रूप (`{type, scope, languages}`) में सहेजी हैं।
 
 ## .well-known endpoints
 

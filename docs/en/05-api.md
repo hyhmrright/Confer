@@ -410,7 +410,7 @@ GET    /a2a/v1/stream/{message_id}       # pulls the answer as a stream (SSE)
 GET    /a2a/v1/agent-facts/{agent_did}   # public AgentFacts
 ```
 
-Every A2A endpoint requires HTTP Message Signature verification.
+Every A2A endpoint requires HTTP Message Signature verification, except `agent-facts`: like `/.well-known/agents.json` it is a public discovery document with the same visibility, so a non-public or disabled Agent always 404s. Its `capabilities` list only what the owner saved in the NANDA shape (`{type, scope, languages}`).
 
 ## .well-known endpoints
 

@@ -166,13 +166,14 @@ describe('sendA2AMessage', () => {
     expect(res).toEqual({ ok: false, error: 'Remote returned a response that is not JSON' });
   });
 
-  test('err when the transport throws', async () => {
+  // What the connection failed with describes whatever answers at the peer's
+  // address, so it is logged and never handed back.
+  test('err when the transport throws, without its message', async () => {
     stubFetch(() => {
       throw new Error('connection refused');
     });
     const res = await sendA2AMessage('https://peer.test/a2a/v1', MSG, 'did:web:me#k1', signingJwk);
-    expect(res.ok).toBe(false);
-    if (!res.ok) expect(res.error).toContain('connection refused');
+    expect(res).toEqual({ ok: false, error: 'sendA2AMessage failed' });
   });
 
   test('err when the private key JWK is malformed', async () => {

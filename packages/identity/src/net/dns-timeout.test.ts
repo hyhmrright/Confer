@@ -12,17 +12,23 @@ import { describe, expect, mock, test } from 'bun:test';
 // test does start depending on a lookup, it should fail saying so, not quietly
 // dial out.
 const STALLED = 'resolver-never-answers.test';
+const MISSING = 'no-such-host.test';
 
 mock.module('node:dns/promises', () => ({
   lookup: (hostname: string) => {
     if (hostname === STALLED) return new Promise(() => {}); // never settles
+    if (hostname === MISSING) {
+      return Promise.reject(
+        Object.assign(new Error(`getaddrinfo ENOTFOUND ${hostname}`), { code: 'ENOTFOUND' }),
+      );
+    }
     throw new Error(
       `dns-timeout.test has node:dns/promises mocked; unexpected lookup: ${hostname}`,
     );
   },
 }));
 
-const { assertNotLinkLocalHostname, assertPublicHostname, SsrfBlockedError, SsrfUnresolvedError } =
+const { assertNotMetadataHostname, assertPublicHostname, SsrfBlockedError, SsrfUnresolvedError } =
   await import('./ssrf-guard.js');
 
 describe('DNS deadline', () => {
@@ -38,7 +44,7 @@ describe('DNS deadline', () => {
   });
 
   test('the link-local guard shares the deadline', async () => {
-    await expect(assertNotLinkLocalHostname(STALLED, { dnsTimeoutMs: 25 })).rejects.toBeInstanceOf(
+    await expect(assertNotMetadataHostname(STALLED, { dnsTimeoutMs: 25 })).rejects.toBeInstanceOf(
       SsrfUnresolvedError,
     );
   });
@@ -66,5 +72,24 @@ describe('DNS deadline', () => {
     const unresolved = new SsrfUnresolvedError(STALLED, 25);
     expect(unresolved).not.toBeInstanceOf(SsrfBlockedError);
     expect(new SsrfBlockedError(STALLED, '10.0.0.1')).not.toBeInstanceOf(SsrfUnresolvedError);
+  });
+});
+
+// Here rather than in resolver.test.ts because it needs a name that does not
+// exist, and only this file answers lookups without asking a real resolver.
+describe('DID resolution error text', () => {
+  // It reaches an unauthenticated A2A sender as the reason its request failed,
+  // so a private address and a name that does not exist must read the same —
+  // otherwise it answers, for any name they try, what exists on our network.
+  test('a private host and a missing one are refused in the same words', async () => {
+    const { resolveDID } = await import('../did/resolver.js');
+    const privateHost = await resolveDID('did:web:10.0.0.5');
+    const missingHost = await resolveDID(`did:web:${MISSING}`);
+    expect(privateHost.ok || missingHost.ok).toBe(false);
+    if (!privateHost.ok && !missingHost.ok) {
+      expect(privateHost.error.replace('10.0.0.5', 'HOST')).toBe(
+        missingHost.error.replace(MISSING, 'HOST'),
+      );
+    }
   });
 });

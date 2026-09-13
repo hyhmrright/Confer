@@ -74,17 +74,23 @@ describe('buildAgentCard', () => {
     expect(build()).not.toHaveProperty('securitySchemes');
   });
 
+  // The shape PATCH /agents/me stores and AgentFacts publish.
+  const capability = (type: string, scope: string[] = []) => ({ type, scope, languages: [] });
+
   test('maps declared capabilities to skills one for one', () => {
-    const card = build({ capabilities_json: ['产品咨询', 'code review'] });
+    const card = build({
+      capabilities_json: [capability('产品咨询', ['X100', 'Modbus']), capability('code review')],
+    });
     expect(card.skills).toHaveLength(2);
     expect(card.skills.map((s) => s.name)).toEqual(['产品咨询', 'code review']);
+    expect(card.skills[0]).toMatchObject({ description: 'X100, Modbus', tags: ['X100', 'Modbus'] });
     expect(card.skills[1]?.id).toBe('code-review');
   });
 
   test('gives Chinese capabilities distinct ids rather than colliding on empty', () => {
     // Slugifying Chinese leaves nothing, and two skills sharing an id is a
     // malformed Card.
-    const card = build({ capabilities_json: ['产品咨询', '技术支持'] });
+    const card = build({ capabilities_json: [capability('产品咨询'), capability('技术支持')] });
     const ids = card.skills.map((s) => s.id);
     expect(new Set(ids).size).toBe(2);
     expect(ids.every((id) => id.length > 0)).toBe(true);
@@ -95,9 +101,10 @@ describe('buildAgentCard', () => {
     expect(build({ capabilities_json: null }).skills).toHaveLength(1);
   });
 
-  test('ignores non-string entries in a free-form capabilities list', () => {
-    // capabilities_json is jsonb and nothing constrains its contents.
-    const card = build({ capabilities_json: ['ok', 42, null, { a: 1 }] });
+  test('ignores entries that are not capabilities', () => {
+    // capabilities_json is jsonb, and the route that writes it checks only that
+    // each entry is an object.
+    const card = build({ capabilities_json: ['ok', 42, null, { a: 1 }, capability('ok')] });
     expect(card.skills).toHaveLength(1);
     expect(card.skills[0]?.name).toBe('ok');
   });

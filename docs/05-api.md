@@ -428,7 +428,7 @@ GET    /a2a/v1/stream/{message_id}       # 流式拉回答（SSE）
 GET    /a2a/v1/agent-facts/{agent_did}   # 公开 AgentFacts
 ```
 
-所有 A2A 端点都要 HTTP Message Signature 验证。
+所有 A2A 端点都要 HTTP Message Signature 验证,只有 `agent-facts` 例外:它和 `/.well-known/agents.json` 一样是公开的发现文档,可见性也一致——非公开或已停用的 Agent 一律 404。它的 `capabilities` 只列出主人保存过、且符合 NANDA 形态(`{type, scope, languages}`)的能力。
 
 ## .well-known endpoints
 

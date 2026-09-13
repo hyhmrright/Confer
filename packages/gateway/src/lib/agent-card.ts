@@ -35,6 +35,8 @@
  *     refused with `ExtensionSupportRequiredError` rather than a bare 401.
  */
 
+import { declaredCapabilities } from './agent-facts.js';
+
 /** The protocol version this Card describes. */
 const A2A_PROTOCOL_VERSION = '1.0';
 
@@ -158,19 +160,20 @@ export function buildAgentCard(input: AgentCardInput): AgentCard {
 /**
  * Map the agent's declared capabilities onto AgentSkill entries.
  *
- * `capabilities_json` is a free-form list of strings (the NANDA AgentFacts
- * shape). Skills require id, name, description and tags, so each capability
- * becomes one skill with the string carried through rather than embellished —
- * inventing descriptions the owner never wrote would put words in their agent's
- * mouth for anyone browsing the directory.
+ * `capabilities_json` holds NANDA capabilities (`{type, scope, languages}`) —
+ * what `PATCH /agents/me` stores and AgentFacts publish. This read it as a list
+ * of strings, which nothing writes, so every Card showed only the fallback
+ * below. Skills require id, name, description and tags, so each capability
+ * becomes one skill named by its type and described and tagged by its scope:
+ * carried through rather than embellished, since inventing descriptions the
+ * owner never wrote would put words in their agent's mouth for anyone browsing
+ * the directory.
  *
  * Skills are required and must be non-empty, so an agent that declared no
  * capabilities gets the one skill that is true of every agent here.
  */
 function buildSkills(capabilities: unknown, agentName: string): AgentCard['skills'] {
-  const list = Array.isArray(capabilities)
-    ? capabilities.filter((entry): entry is string => typeof entry === 'string' && entry.length > 0)
-    : [];
+  const list = declaredCapabilities(capabilities);
 
   if (list.length === 0) {
     return [
@@ -184,10 +187,10 @@ function buildSkills(capabilities: unknown, agentName: string): AgentCard['skill
   }
 
   return list.map((capability, index) => ({
-    id: slugify(capability, index),
-    name: capability,
-    description: capability,
-    tags: ['capability'],
+    id: slugify(capability.type, index),
+    name: capability.type,
+    description: capability.scope.length > 0 ? capability.scope.join(', ') : capability.type,
+    tags: capability.scope.length > 0 ? capability.scope : ['capability'],
   }));
 }
 

@@ -196,45 +196,58 @@ export function assertPublicHostname(hostname: string, opts?: SsrfGuardOptions):
   return assertAddresses(hostname, isBlockedIp, opts?.dnsTimeoutMs ?? DNS_TIMEOUT_MS);
 }
 
-// True for the link-local ranges: IPv4 169.254.0.0/16 and IPv6 fe80::/10.
-// 169.254.169.254 is the cloud instance-metadata address on AWS, GCP, Azure,
-// OCI, DigitalOcean and Alibaba alike, and `fd00:ec2::254` its AWS IPv6 twin —
-// the single highest-value SSRF target on any hosted deployment, since the
-// metadata service authenticates callers by nothing but their ability to reach
-// it. Nothing legitimate is ever addressed this way.
-function isLinkLocalIp(ip: string): boolean {
-  if (isIP(ip) === 4) {
-    const value = ipv4ToInt(ip);
-    return value !== null && inCidr(value, '169.254.0.0', 16);
-  }
+// IPv4 addresses cloud instance metadata answers on. 169.254.169.254 serves AWS,
+// GCP, Azure, OCI and DigitalOcean, and the rest of 169.254.0.0/16 has no
+// legitimate use to lose. Alibaba Cloud answers on 100.100.100.200 instead. That
+// one sits inside 100.64.0.0/10, which Tailscale assigns to every machine on a
+// tailnet — somewhere a local runtime genuinely lives — so the address is
+// refused and its range is not.
+const METADATA_V4_CIDRS: ReadonlyArray<readonly [string, number]> = [
+  ['169.254.0.0', 16],
+  ['100.100.100.200', 32],
+];
+
+function isMetadataIpv4(ip: string): boolean {
+  const value = ipv4ToInt(ip);
+  return value !== null && METADATA_V4_CIDRS.some(([base, prefix]) => inCidr(value, base, prefix));
+}
+
+// GCP's metadata server over IPv6, `fd20:ce::254`, as expanded hextets.
+const GCP_METADATA_V6 = [0xfd20, 0xce, 0, 0, 0, 0, 0, 0x254] as const;
+
+// True for an address instance metadata can answer on: the IPv4 ones above in
+// any IPv6 encoding, IPv6 link-local fe80::/10, and the IPv6 addresses AWS
+// (`fd00:ec2::254`) and GCP (`fd20:ce::254`) serve it on. It is the single
+// highest-value SSRF target on any hosted deployment, since the metadata
+// service authenticates callers by nothing but their ability to reach it.
+function isMetadataIp(ip: string): boolean {
+  if (isIP(ip) === 4) return isMetadataIpv4(ip);
   const addr = ip.toLowerCase();
   const groups = expandIpv6(addr);
   if (!groups) return true; // unparseable but claims to be IPv6 → fail closed
   const embedded = embeddedIpv4(groups);
-  if (embedded) {
-    const value = ipv4ToInt(embedded);
-    return value !== null && inCidr(value, '169.254.0.0', 16);
-  }
+  if (embedded) return isMetadataIpv4(embedded);
   if (/^fe[89ab]/.test(addr)) return true; // fe80::/10
-  return groups[0] === 0xfd00 && groups[1] === 0x0ec2; // fd00:ec2::/32 (AWS IMDS over IPv6)
+  if (groups[0] === 0xfd00 && groups[1] === 0x0ec2) return true; // fd00:ec2::/32 (AWS IMDS over IPv6)
+  return GCP_METADATA_V6.every((hextet, i) => groups[i] === hextet);
 }
 
 /**
- * Reject a hostname that resolves to a link-local address, while leaving every
- * other private range reachable.
+ * Reject a hostname that resolves to a cloud metadata address, while leaving
+ * every private range reachable.
  *
  * This is the gate for addresses the owner deliberately points us at — a local
  * LLM runtime is the case that exists — where `assertPublicHostname` would be
  * wrong: `host.docker.internal`, `localhost` and a LAN address are the
  * documented ways to run Ollama, so blocking private ranges would block the
- * feature rather than an attack. What stays blocked is the one range with no
- * legitimate use, which is also the one worth reaching: cloud metadata.
+ * feature rather than an attack. What stays blocked is the one kind of address
+ * with no legitimate use, which is also the one worth reaching.
  */
-export function assertNotLinkLocalHostname(
+export function assertNotMetadataHostname(
   hostname: string,
   opts?: SsrfGuardOptions,
 ): Promise<string[]> {
-  return assertAddresses(hostname, isLinkLocalIp, opts?.dnsTimeoutMs ?? DNS_TIMEOUT_MS);
+  return assertAddresses(hostname, isMetadataIp, opts?.dnsTimeoutMs ?? DNS_TIMEOUT_MS);
 }
 
 // Resolve `hostname` to its addresses and throw SsrfBlockedError if `blocked`

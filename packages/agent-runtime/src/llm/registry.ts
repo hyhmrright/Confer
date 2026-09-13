@@ -1,7 +1,7 @@
 import { llmProvider, providerBaseUrl } from '@confer/shared';
 import { AnthropicProvider } from './anthropic.js';
 import { OpenAICompatibleProvider } from './openai-compatible.js';
-import type { LLMProvider } from './provider.js';
+import type { Fetcher, LLMProvider } from './provider.js';
 
 const providers = new Map<string, LLMProvider>();
 
@@ -20,9 +20,14 @@ export function getProvider(name: string): LLMProvider | undefined {
  * Now a catalogue entry is the whole change.
  *
  * Returns null for an unknown name so callers can report a misconfiguration
- * rather than dial an arbitrary host.
+ * rather than dial an arbitrary host. `fetcher` is how an OpenAI-compatible
+ * provider reaches its vendor; the gateway passes one for a local runtime.
  */
-export function createProvider(name: string, apiKey: string): LLMProvider | null {
+export function createProvider(
+  name: string,
+  apiKey: string,
+  fetcher?: Fetcher,
+): LLMProvider | null {
   const spec = llmProvider(name);
   if (!spec) return null;
 
@@ -38,5 +43,6 @@ export function createProvider(name: string, apiKey: string): LLMProvider | null
     providerBaseUrl(spec, apiKey),
     spec.defaultModel ?? '',
     spec.completionsPath,
+    fetcher,
   );
 }

@@ -1,15 +1,17 @@
+import { assertPublicHostname } from '@confer/identity';
 import {
-  assertPublicHostname,
+  AppError,
+  contactLookupSchema,
+  newId,
+  policyOverridesSchema,
   readCappedText,
-  SsrfBlockedError,
-  SsrfUnresolvedError,
-} from '@confer/identity';
-import { AppError, contactLookupSchema, newId, policyOverridesSchema } from '@confer/shared';
+} from '@confer/shared';
 import { and, count, desc, eq, like } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { getDb } from '../db/connection.js';
 import { agents, peerAgents, peerContacts } from '../db/schema.js';
+import { buildAgentFacts, withValidAgentFacts } from '../lib/agent-facts.js';
 import { resolveDidDocument } from '../lib/did-resolution.js';
 import { parseLimit, parseOffset } from '../lib/pagination.js';
 import {
@@ -41,11 +43,16 @@ const patchContactSchema = z
   .partial();
 
 // Shape of an entry in a remote `/.well-known/agents.json`. Only `did` is
-// required; the rest is best-effort metadata we surface to the user.
+// required; the rest is best-effort metadata we surface to the user. A Confer
+// instance publishes `name` and `description` as null for an agent that never
+// set them, so null has to pass — refusing it skipped every such agent.
+// `capabilities_json` feeds AgentFacts, which keep only real capabilities, and
+// a malformed one costs that field rather than the whole entry.
 const remoteAgentSchema = z.object({
   did: z.string().min(1),
-  name: z.string().max(128).optional(),
-  description: z.string().optional(),
+  name: z.string().max(128).nullish(),
+  description: z.string().max(4000).nullish().catch(undefined),
+  capabilities_json: z.array(z.unknown()).max(64).optional().catch(undefined),
 });
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
@@ -105,7 +112,7 @@ contactRoutes.get('/', async (c) => {
   return c.json({
     contacts: contacts.map((row) => ({
       ...row.peer_contacts,
-      peer: row.peer_agents,
+      peer: withValidAgentFacts(row.peer_agents),
     })),
     total: totals?.value ?? 0,
   });
@@ -168,7 +175,7 @@ contactRoutes.get('/:id', async (c) => {
     throw new AppError('not_found', 'Contact not found', 404);
   }
 
-  return c.json({ contact: { ...row.peer_contacts, peer: row.peer_agents } });
+  return c.json({ contact: { ...row.peer_contacts, peer: withValidAgentFacts(row.peer_agents) } });
 });
 
 contactRoutes.patch('/:id', async (c) => {
@@ -280,11 +287,15 @@ const MAX_DIRECTORY_BYTES = 512 * 1024;
 
 // Run a network lookup body, mapping any thrown error to the uniform
 // LookupResult error shape so a single transport failure can't bubble a 500.
+// The detail goes to the log and not the response: what a connection to a host
+// the user named failed with — refused, reset, a certificate for some other
+// name — describes whatever answers at that address.
 async function safeLookup(fn: () => Promise<LookupResult>): Promise<LookupResult> {
   try {
     return await fn();
   } catch (e) {
-    return { candidates: [], error: (e as Error).message };
+    console.error('Contact lookup failed:', e instanceof Error ? e.message : String(e));
+    return { candidates: [], error: 'Lookup failed' };
   }
 }
 
@@ -294,17 +305,13 @@ function lookupByDomain(value: string): Promise<LookupResult> {
     const hostname = new URL(`https://${value}`).hostname.replace(/^\[|\]$/g, '');
     try {
       await assertPublicHostname(hostname);
-    } catch (e) {
-      if (e instanceof SsrfUnresolvedError) {
-        return { candidates: [], error: 'Address could not be resolved in time' };
-      }
-      if (e instanceof SsrfBlockedError) {
-        return { candidates: [], error: 'Private addresses not allowed' };
-      }
-      // Refused as well, not left for the fetch to fail on its own: the fetch
-      // resolves the name a second time, and a name that failed here can answer
-      // with a private address there.
-      return { candidates: [], error: 'Address could not be resolved' };
+    } catch {
+      // A name that does not resolve is refused too, not left for the fetch to
+      // fail on its own: the fetch resolves the name a second time, and a name
+      // that failed here can answer with a private address there. One message
+      // for every failure, because "private" against "does not resolve" told
+      // the asker which names exist on the network this gateway sits in.
+      return { candidates: [], error: 'Address does not resolve to a public host' };
     }
     // AbortSignal rather than withTimeout: racing a promise rejects the wrapper
     // but leaves the request running, and the body is read after that race has
@@ -342,10 +349,10 @@ function lookupByDomain(value: string): Promise<LookupResult> {
       seen.add(parsed.data.did);
       wanted.push({
         did: parsed.data.did,
-        name: parsed.data.name,
-        description: parsed.data.description,
+        name: parsed.data.name ?? undefined,
+        description: parsed.data.description ?? undefined,
         endpoint,
-        agentFacts: raw,
+        agentFacts: buildAgentFacts(parsed.data, endpoint),
       });
     }
     const candidates = await Promise.all(wanted.map((input) => upsertPeerAgent(input)));
@@ -369,7 +376,10 @@ function lookupByDid(value: string): Promise<LookupResult> {
     if (!endpoint) {
       return { candidates: [], error: 'DID document has no service endpoint' };
     }
-    const row = await upsertPeerAgent({ did: value, endpoint, agentFacts: doc });
+    // No AgentFacts: a DID document is keys and a service endpoint, and storing
+    // it under that name put a document the host wrote wherever AgentFacts are
+    // read — the MCP discovery tool hands them to Claude Code as capabilities.
+    const row = await upsertPeerAgent({ did: value, endpoint });
     return { candidates: [row] };
   });
 }
@@ -427,5 +437,9 @@ contactRoutes.post('/lookup', async (c) => {
     result = { candidates: [] };
   }
 
-  return c.json({ ...result, method: body.method });
+  return c.json({
+    ...result,
+    candidates: result.candidates.map(withValidAgentFacts),
+    method: body.method,
+  });
 });

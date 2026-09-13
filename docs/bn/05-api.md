@@ -410,7 +410,7 @@ GET    /a2a/v1/stream/{message_id}       # উত্তর ধারা-আক�
 GET    /a2a/v1/agent-facts/{agent_did}   # প্রকাশ্য AgentFacts
 ```
 
-সব A2A প্রান্তবিন্দুতে HTTP বার্তা-স্বাক্ষরের যাচাই বাধ্যতামূলক।
+সব A2A প্রান্তবিন্দুতে HTTP বার্তা-স্বাক্ষরের যাচাই বাধ্যতামূলক, ব্যতিক্রম কেবল `agent-facts`: `/.well-known/agents.json`-এর মতোই এটি একই দৃশ্যমানতার প্রকাশ্য আবিষ্কার-নথি, তাই অপ্রকাশ্য বা নিষ্ক্রিয় Agent সবসময় 404 দেয়। এর `capabilities`-এ থাকে কেবল মালিকের সংরক্ষিত NANDA আকারের (`{type, scope, languages}`) সক্ষমতা।
 
 ## .well-known endpoints
 

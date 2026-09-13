@@ -47,9 +47,27 @@ export async function findAgents(
 ): Promise<AgentSummary[]> {
   const needle = capability.toLowerCase();
   const agents = await listAgents(client);
-  return agents.filter((a) =>
-    JSON.stringify(a.capabilities ?? '')
-      .toLowerCase()
-      .includes(needle),
-  );
+  return agents.filter((a) => describedAs(a.capabilities).includes(needle));
+}
+
+// What a peer's AgentFacts say about it, lowercased for matching: its name,
+// description, and each capability's type and scope. Values only — the rest of
+// the document is a schema URL and an A2A endpoint every peer shares, and key
+// names such as "scope" sit in every capability, so matching the raw JSON found
+// everyone.
+function describedAs(facts: unknown): string {
+  const { name, description, capabilities } = (facts ?? {}) as {
+    name?: unknown;
+    description?: unknown;
+    capabilities?: unknown;
+  };
+  const words: unknown[] = [name, description];
+  for (const capability of Array.isArray(capabilities) ? capabilities : []) {
+    const { type, scope } = (capability ?? {}) as { type?: unknown; scope?: unknown };
+    words.push(type, ...(Array.isArray(scope) ? scope : []));
+  }
+  return words
+    .filter((word): word is string => typeof word === 'string')
+    .join('\n')
+    .toLowerCase();
 }

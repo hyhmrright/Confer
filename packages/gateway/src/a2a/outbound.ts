@@ -1,10 +1,5 @@
-import {
-  assertPublicHostname,
-  importPrivateKey,
-  readCappedText,
-  signRequest,
-} from '@confer/identity';
-import { err, ok, type Result } from '@confer/shared';
+import { assertPublicHostname, importPrivateKey, signRequest } from '@confer/identity';
+import { err, ok, type Result, readCappedText } from '@confer/shared';
 import { dialableEndpoint, selfA2AEndpoint } from '../lib/public-identity.js';
 
 export interface OutboundA2AMessage {
@@ -84,8 +79,11 @@ export async function sendA2AMessage(
       return err('Remote returned a response that is not JSON');
     }
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
-    return err(`sendA2AMessage failed: ${message}`);
+    // Logged, not returned. This reaches the consult route's 502, and what a
+    // connection to the peer's address failed with — refused, reset, a
+    // certificate for some other name — describes whatever answers there.
+    console.error('sendA2AMessage failed:', e instanceof Error ? e.message : String(e));
+    return err('sendA2AMessage failed');
   }
 }
 

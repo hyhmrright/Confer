@@ -240,7 +240,7 @@ describe('resolveDID', () => {
     mockFetch(() => jsonResponse(document));
     const res = await resolveDID('did:web:127.0.0.1%3A6333');
     expect(res.ok).toBe(false);
-    if (!res.ok) expect(res.error).toContain('private address');
+    if (!res.ok) expect(res.error).toContain('not a public address');
     expect(calls).toHaveLength(0);
   });
 
@@ -275,7 +275,7 @@ describe('resolveDID', () => {
     mockFetch(() => jsonResponse(document));
     const res = await resolveDID('did:web:%5B%3A%3Affff%3A169.254.169.254%5D');
     expect(res.ok).toBe(false);
-    if (!res.ok) expect(res.error).toContain('private address');
+    if (!res.ok) expect(res.error).toContain('not a public address');
     expect(calls).toHaveLength(0);
   });
 

@@ -1,4 +1,6 @@
+import { readCappedText } from '@confer/shared';
 import type {
+  Fetcher,
   LLMChatOptions,
   LLMMessage,
   LLMProvider,
@@ -6,6 +8,12 @@ import type {
   LLMStreamEvent,
 } from './provider.js';
 import { readSSEData } from './stream-utils.js';
+
+// The most of a reply read into memory. A completion stops at max_tokens, so
+// this is generous; without it the far side — for a local runtime, any host the
+// owner can name — decided how much this process buffered.
+const MAX_RESPONSE_BYTES = 1024 * 1024;
+const MAX_ERROR_BYTES = 16 * 1024;
 
 function toOpenAIMessage(m: LLMMessage): Record<string, unknown> {
   if (m.role === 'tool') {
@@ -23,6 +31,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
   private baseUrl: string;
   private defaultModel: string;
   private completionsPath: string;
+  private fetcher: Fetcher;
 
   constructor(
     name: string,
@@ -30,12 +39,14 @@ export class OpenAICompatibleProvider implements LLMProvider {
     baseUrl: string,
     defaultModel: string,
     completionsPath = '/v1/chat/completions',
+    fetcher: Fetcher = fetch,
   ) {
     this.name = name;
     this.apiKey = apiKey;
     this.baseUrl = baseUrl;
     this.defaultModel = defaultModel;
     this.completionsPath = completionsPath;
+    this.fetcher = fetcher;
   }
 
   // Catalogue entries only carry a default model where we can name a current
@@ -64,7 +75,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
   // One address, one set of headers. The vendor's path is configurable, so the
   // two calls must not each build it.
   private post(body: Record<string, unknown>): Promise<Response> {
-    return fetch(`${this.baseUrl}${this.completionsPath}`, {
+    return this.fetcher(`${this.baseUrl}${this.completionsPath}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -78,11 +89,14 @@ export class OpenAICompatibleProvider implements LLMProvider {
     const response = await this.post(this.baseBody(messages, options));
 
     if (!response.ok) {
-      const text = await response.text();
+      const text = await readCappedText(response, MAX_ERROR_BYTES).catch(() => '');
       throw new Error(`${this.name} API error (${response.status}): ${text}`);
     }
 
-    const data = (await response.json()) as Record<string, unknown>;
+    const data = JSON.parse(await readCappedText(response, MAX_RESPONSE_BYTES)) as Record<
+      string,
+      unknown
+    >;
     const choices = data.choices as Array<Record<string, unknown>>;
     const choice = choices[0];
     if (!choice) {

@@ -410,7 +410,7 @@ GET    /a2a/v1/stream/{message_id}       # забирает ответ пото�
 GET    /a2a/v1/agent-facts/{agent_did}   # публичные AgentFacts
 ```
 
-Все эндпоинты A2A требуют проверки HTTP-подписи сообщения.
+Все эндпоинты A2A требуют проверки HTTP-подписи сообщения, кроме `agent-facts`: как и `/.well-known/agents.json`, это публичный документ обнаружения с той же видимостью, поэтому непубличный или отключённый Агент всегда отдаёт 404. В его `capabilities` попадает только то, что хозяин сохранил в форме NANDA (`{type, scope, languages}`).
 
 ## .well-known endpoints
 

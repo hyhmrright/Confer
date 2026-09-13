@@ -13,9 +13,8 @@ export {
 export type { DIDDocument, DidWebLocation } from './did/document.js';
 export { buildDIDDocument, didFromDomain, domainFromDid, parseDidWeb } from './did/document.js';
 export { clearDIDCache, resolveDID } from './did/resolver.js';
-export { readCappedText } from './net/read-capped.js';
 export {
-  assertNotLinkLocalHostname,
+  assertNotMetadataHostname,
   assertPublicHostname,
   isBlockedIp,
   SsrfBlockedError,

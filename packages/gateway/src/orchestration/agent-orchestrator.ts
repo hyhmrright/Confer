@@ -203,7 +203,15 @@ async function executeToolCall(
     }
     return `未知工具: ${tc.name}`;
   } catch (err) {
-    return `工具调用失败: ${err instanceof Error ? err.message : String(err)}`;
+    const detail = err instanceof Error ? err.message : String(err);
+    // No detail on a peer's turn. A tool's error names what the gateway talks
+    // to — a runtime's address, an internal service — and the model can repeat
+    // whatever it is handed straight back over the wire.
+    if (ctx.audience !== 'owner') {
+      console.error(`Tool ${tc.name} failed on a peer turn:`, detail);
+      return '工具调用失败';
+    }
+    return `工具调用失败: ${detail}`;
   }
 }
 
