@@ -151,8 +151,8 @@ export const useContactsStore = create<ContactsState>((set, get) => ({
       method: query.startsWith('did:') ? 'did' : 'domain',
       value: query,
     });
-    // Surface the backend's reason (e.g. "Private addresses not allowed",
-    // resolution timeout) instead of silently collapsing to "未找到 Agent".
+    // Surface the backend's reason (e.g. an address that does not resolve to a
+    // public host) instead of silently collapsing to "未找到 Agent".
     if (data.error && data.candidates.length === 0) {
       set({ error: data.error });
     }

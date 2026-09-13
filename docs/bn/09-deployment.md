@@ -88,7 +88,7 @@ docker compose -f docker-compose.prod.yml logs -f gateway
 
 | চলক | ডিফল্ট (`.env.example`) | টীকা |
 |----------|--------------------------|-------|
-| `JWT_SECRET` | `change-me-in-production` | **এটি বদলান।** ব্যবহারকারীর সেশন টোকেনে স্বাক্ষর করে। |
+| `JWT_SECRET` | `change-me-in-production` | **এটি বদলান।** ব্যবহারকারীর সেশন টোকেনে স্বাক্ষর করে। এই নমুনা মান, বা ৩২ অক্ষরের কম কোনো মান থাকলে gateway চালু হতে অস্বীকার করে। তৈরি করুন: `openssl rand -hex 32`। |
 | `ENCRYPTION_KEY` | ৬৪টি শূন্য | **এটি বদলান।** ৩২ বাইট, অর্থাৎ ৬৪টি হেক্স অক্ষর হতে হবে। বানান: `openssl rand -hex 32`। জমা রাখা LLM চাবি এনক্রিপ্ট করে। |
 | `POSTGRES_PASSWORD` | `confer` (compose-এর ডিফল্ট) | ডেটাবেসের পাসওয়ার্ড। |
 | `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` | `confer` / `confer-secret` | বস্তু-ভাণ্ডারের পরিচয়পত্র। |
@@ -110,6 +110,8 @@ docker compose -f docker-compose.prod.yml up -d
 git pull
 docker compose -f docker-compose.prod.yml up -d --build   # migrate আপনা-আপনিই আবার চলে
 ```
+
+> ২০২৬-০৯-১৩ থেকে `JWT_SECRET` যদি এখনও `change-me-in-production` থাকে বা ৩২ অক্ষরের কম হয়, gateway চালু হতে রাজি হয় না। পুরোনো ইনস্ট্যান্স হালনাগাদ করার আগে `.env` দেখে নিন; শর্ত না মিললে `openssl rand -hex 32` দিয়ে তৈরি একটি মান বসান। মান বদলালে খোলা সব সেশন বাতিল হয়ে যায়, তাই সবাইকে একবার আবার লগ ইন করতে হবে। `npx confer-cli` বা Oracle স্ক্রিপ্ট দিয়ে বসানো ইনস্ট্যান্সে শুরু থেকেই এলোমেলো মান থাকে, সেগুলোর কিছু করতে হবে না।
 
 ### সব মুছে নতুন করা (সমস্ত তথ্য যায়)
 

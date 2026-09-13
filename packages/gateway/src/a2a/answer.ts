@@ -1,6 +1,6 @@
 import type { LLMMessage } from '@confer/agent-runtime';
 import { newId, type SystemNotice } from '@confer/shared';
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull, ne, or } from 'drizzle-orm';
 import { getDb } from '../db/connection.js';
 import { agents, messages, peerAgents, type permissions } from '../db/schema.js';
 import { getEnv } from '../env.js';
@@ -36,11 +36,28 @@ export interface ProcessA2AMessageParams {
 // chat path was fixed for, left here because it could not surface while every
 // inbound message opened a conversation of its own. Now that a thread persists
 // past twenty messages, it would have. Both paths share `historyBefore`.
+//
+// Only what has actually crossed the wire with this peer: rows that arrived
+// over A2A or were sent over it (`via = 'a2a'`), minus a consult question that
+// never got delivered. An A2A thread is also an ordinary conversation in the
+// owner's list, and the owner's own turns in it — their instructions, and
+// answers drawn from every knowledge base and their memory — were loaded here
+// as this agent's earlier replies. The peer-audience limits on what a turn may
+// search do nothing about text already in the prompt, so one "repeat your last
+// messages" read it all back out.
 async function loadA2AHistory(
   conversationId: string,
   inboundMessageId: string,
 ): Promise<LLMMessage[]> {
-  const rows = await historyBefore(conversationId, inboundMessageId, 20);
+  const rows = await historyBefore(
+    conversationId,
+    inboundMessageId,
+    20,
+    and(
+      eq(messages.via, 'a2a'),
+      or(isNull(messages.delivery_status), ne(messages.delivery_status, 'failed')),
+    ),
+  );
 
   return rows.map((m) => ({
     role: m.sender_type === 'peer_agent' ? 'user' : 'assistant',
@@ -96,6 +113,7 @@ const FAILURE_NOTICE: Record<A2AFailure, string> = {
   no_model_configured: 'The agent you asked has no model configured yet.',
   unknown_provider: 'The agent you asked is configured with an unknown model provider.',
   no_key_for_provider: 'The agent you asked has no API key for its configured provider.',
+  invalid_base_url: 'The agent you asked is configured with a model address that cannot be used.',
   agent_error: 'The agent you asked could not complete this turn.',
 };
 

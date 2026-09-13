@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import {
-  assertNotLinkLocalHostname,
+  assertNotMetadataHostname,
   assertPublicHostname,
   isBlockedIp,
   SsrfBlockedError,
@@ -118,43 +118,23 @@ describe('assertPublicHostname', () => {
     await expect(assertPublicHostname('[not-an-ip]')).rejects.toBeInstanceOf(SsrfBlockedError);
   });
 
-  test('allowLoopback permits a bracketed ::1 literal too', async () => {
-    await expect(assertPublicHostname('[::1]', { allowLoopback: true })).resolves.toEqual(['::1']);
-    // A bracketed non-loopback private address stays blocked.
-    await expect(
-      assertPublicHostname('[::ffff:169.254.169.254]', { allowLoopback: true }),
-    ).rejects.toBeInstanceOf(SsrfBlockedError);
-  });
-
   test('returns the address for a literal public IP without DNS', async () => {
     await expect(assertPublicHostname('8.8.8.8')).resolves.toEqual(['8.8.8.8']);
   });
 
   test('rejects a hostname that resolves to loopback (localhost)', async () => {
     // `localhost` resolves via the hosts file (no network) to ::1 / 127.0.0.1.
-    await expect(assertPublicHostname('localhost')).rejects.toBeInstanceOf(SsrfBlockedError);
-  });
-
-  test('allowLoopback permits loopback but still blocks other private ranges', async () => {
-    // Loopback is admitted (a single-machine did:web:localhost deployment).
-    await expect(assertPublicHostname('127.0.0.1', { allowLoopback: true })).resolves.toEqual([
-      '127.0.0.1',
-    ]);
-    await expect(assertPublicHostname('::1', { allowLoopback: true })).resolves.toEqual(['::1']);
-    // LAN and metadata ranges remain blocked even with allowLoopback.
-    await expect(assertPublicHostname('10.0.0.1', { allowLoopback: true })).rejects.toBeInstanceOf(
+    // A refused name is held until the DNS deadline, so this one is short.
+    await expect(assertPublicHostname('localhost', { dnsTimeoutMs: 1_000 })).rejects.toBeInstanceOf(
       SsrfBlockedError,
     );
-    await expect(
-      assertPublicHostname('169.254.169.254', { allowLoopback: true }),
-    ).rejects.toBeInstanceOf(SsrfBlockedError);
   });
 });
 
 // The inverse policy, for addresses the owner deliberately chose: a local LLM
 // runtime lives on loopback, on the Docker host, or on the LAN, so those must
 // stay reachable. Only the metadata range is refused.
-describe('assertNotLinkLocalHostname', () => {
+describe('assertNotMetadataHostname', () => {
   test('rejects the cloud metadata address in every form it can be written', async () => {
     for (const host of [
       '169.254.169.254',
@@ -164,25 +144,36 @@ describe('assertNotLinkLocalHostname', () => {
       '2002:a9fe:a9fe::', // 6to4-encoded 169.254.169.254
       'fe80::1', // IPv6 link-local
       'fd00:ec2::254', // AWS IMDS over IPv6
+      'fd20:ce::254', // GCP's metadata server over IPv6
+      '100.100.100.200', // Alibaba Cloud's metadata, outside the /16
+      '::ffff:100.100.100.200',
     ]) {
-      await expect(assertNotLinkLocalHostname(host)).rejects.toBeInstanceOf(SsrfBlockedError);
+      await expect(assertNotMetadataHostname(host)).rejects.toBeInstanceOf(SsrfBlockedError);
     }
   });
 
   test('admits the private addresses a local runtime actually uses', async () => {
     // Each of these is documented somewhere as the way to reach Ollama; a guard
     // that blocked them would be blocking the feature, not an attack.
-    for (const host of ['127.0.0.1', '::1', '192.168.1.50', '172.17.0.1', '10.0.0.5', '8.8.8.8']) {
-      await expect(assertNotLinkLocalHostname(host)).resolves.toContain(host);
+    // 100.101.102.103 is a Tailscale address: Alibaba's metadata sits in the
+    // same 100.64.0.0/10, and only its one address may be refused.
+    for (const host of [
+      '127.0.0.1',
+      '::1',
+      '192.168.1.50',
+      '172.17.0.1',
+      '10.0.0.5',
+      '100.101.102.103',
+      '8.8.8.8',
+    ]) {
+      await expect(assertNotMetadataHostname(host)).resolves.toContain(host);
     }
-    await expect(assertNotLinkLocalHostname('localhost')).resolves.not.toHaveLength(0);
+    await expect(assertNotMetadataHostname('localhost')).resolves.not.toHaveLength(0);
   });
 
   test('fails closed on malformed bracket notation, like its sibling', async () => {
-    await expect(assertNotLinkLocalHostname('[]')).rejects.toBeInstanceOf(SsrfBlockedError);
-    await expect(assertNotLinkLocalHostname('[not-an-ip]')).rejects.toBeInstanceOf(
-      SsrfBlockedError,
-    );
+    await expect(assertNotMetadataHostname('[]')).rejects.toBeInstanceOf(SsrfBlockedError);
+    await expect(assertNotMetadataHostname('[not-an-ip]')).rejects.toBeInstanceOf(SsrfBlockedError);
   });
 
   // `http://2852039166/` reaches the same host as `http://169.254.169.254/`,
@@ -193,7 +184,7 @@ describe('assertNotLinkLocalHostname', () => {
   // hostnames that don't look like IPs would reopen exactly this.
   test('rejects the numeric and octal spellings of the metadata address', async () => {
     for (const host of ['2852039166', '0251.0376.0251.0376']) {
-      await expect(assertNotLinkLocalHostname(host)).rejects.toBeInstanceOf(SsrfBlockedError);
+      await expect(assertNotMetadataHostname(host)).rejects.toBeInstanceOf(SsrfBlockedError);
     }
   });
 });

@@ -200,6 +200,7 @@ describe('agent LLM keys', () => {
       'http://169.254.169.254',
       'http://169.254.169.254/latest/meta-data/',
       'http://[::ffff:169.254.169.254]:11434',
+      'http://100.100.100.200',
     ]) {
       const res = await put('/api/v1/agents/me/llm-keys', {
         token: user.token,
@@ -212,6 +213,23 @@ describe('agent LLM keys', () => {
     const listed = await get('/api/v1/agents/me/llm-keys', { token: user.token });
     const { keys } = await listed.json();
     expect(keys.find((k: { provider: string }) => k.provider === 'ollama').configured).toBe(false);
+  });
+
+  // Every dialer appends its own path. A `?` or `#` in the stored value turned
+  // that path into a query string, aiming the gateway's POST at any path on any
+  // host it can reach — Qdrant's snapshot endpoint, for one.
+  test('refuses a local-runtime address that would swallow the appended path', async () => {
+    for (const api_key of [
+      'http://qdrant:6333/collections/knowledge_chunks/snapshots?',
+      'http://host.docker.internal:11434#',
+      'http://user:pw@host.docker.internal:11434',
+    ]) {
+      const res = await put('/api/v1/agents/me/llm-keys', {
+        token: user.token,
+        body: { provider: 'ollama', api_key },
+      });
+      expect(res.status).toBe(400);
+    }
   });
 
   test('still accepts the loopback and LAN addresses a local runtime uses', async () => {
@@ -307,20 +325,47 @@ describe('agent model listing', () => {
   });
 
   // A local runtime authenticates with nothing and stores its address in the
-  // key slot, so that address is where the listing has to go.
+  // key slot, so that address is where the listing has to go. It is dialled
+  // over node:http at the address its check saw, so it needs a real listener.
   test('asks a local runtime at its configured address, without a credential', async () => {
-    await put('/api/v1/agents/me/llm-keys', {
-      token: user.token,
-      body: { provider: 'ollama', api_key: 'http://host.docker.internal:11434/' },
+    let seen: { path: string; auth: string | null } | undefined;
+    const runtime = Bun.serve({
+      hostname: '127.0.0.1',
+      port: 0,
+      fetch(req) {
+        seen = { path: new URL(req.url).pathname, auth: req.headers.get('authorization') };
+        return Response.json({ data: [{ id: 'qwen3.8:27b' }] });
+      },
     });
-    let auth: string | null = 'unset';
-    restoreFetch = mockFetch((url, init) => {
-      if (!url.startsWith('http://host.docker.internal:11434')) return undefined;
-      auth = new Headers(init?.headers).get('authorization');
-      return Response.json({ data: [{ id: 'qwen3.8:27b' }] });
+    try {
+      await put('/api/v1/agents/me/llm-keys', {
+        token: user.token,
+        body: { provider: 'ollama', api_key: `http://127.0.0.1:${runtime.port}/` },
+      });
+      expect(await models('ollama')).toEqual({ models: [{ id: 'qwen3.8:27b' }] });
+      expect(seen).toEqual({ path: '/v1/models', auth: null });
+    } finally {
+      runtime.stop(true);
+    }
+  });
+
+  // Nothing is sent to a local runtime that a 401 could be about, so reporting
+  // one only told the owner what kind of service answers at that address.
+  test('reports a local runtime that demands credentials as unreachable', async () => {
+    const runtime = Bun.serve({
+      hostname: '127.0.0.1',
+      port: 0,
+      fetch: () => new Response('login required', { status: 401 }),
     });
-    expect(await models('ollama')).toEqual({ models: [{ id: 'qwen3.8:27b' }] });
-    expect(auth).toBeNull();
+    try {
+      await put('/api/v1/agents/me/llm-keys', {
+        token: user.token,
+        body: { provider: 'ollama', api_key: `http://127.0.0.1:${runtime.port}` },
+      });
+      expect(await models('ollama')).toEqual({ models: [], error: 'unreachable' });
+    } finally {
+      runtime.stop(true);
+    }
   });
 });
 

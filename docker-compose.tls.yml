@@ -27,6 +27,12 @@ services:
     # merges sequences by default, and a plain empty list here would leave the
     # base mapping in place.
     ports: !override []
+    # nginx now sees every request arrive from Caddy. This tells it to take the
+    # visitor's address from the header Caddy sets instead (see the include in
+    # infra/nginx.conf), or the gateway rate-limits everyone as one client.
+    configs:
+      - source: trusted-proxy
+        target: /etc/nginx/trusted-proxy.conf
 
   caddy:
     image: caddy:2-alpine
@@ -61,3 +67,16 @@ services:
 volumes:
   caddydata:
   caddyconfig:
+
+# Inline, for the same reason Caddy is configured by flags: `npx confer-cli`
+# ships compose files, not a config directory. Only the private ranges are
+# trusted, and the client publishes no port under this overlay, so the only
+# peer that can reach nginx at all is Caddy — which sets X-Forwarded-For to the
+# address it accepted the connection from, not to whatever a client sent.
+configs:
+  trusted-proxy:
+    content: |
+      set_real_ip_from 10.0.0.0/8;
+      set_real_ip_from 172.16.0.0/12;
+      set_real_ip_from 192.168.0.0/16;
+      real_ip_header X-Forwarded-For;

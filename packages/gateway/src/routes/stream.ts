@@ -138,10 +138,18 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
       // historyBefore for why the window is taken newest-first and reversed.
       const historyRows = await historyBefore(conversationId, messageId, HISTORY_WINDOW);
 
-      const history: LLMMessage[] = historyRows.map((m) => ({
-        role: m.sender_type === 'user' ? 'user' : 'assistant',
-        content: m.content ?? '',
-      }));
+      // A peer's message is not something this agent said. Mapped to
+      // `assistant`, a connected peer's text in an A2A thread reached the
+      // owner's turn — the one with every knowledge base, memory and the
+      // contact list — as the agent's own earlier words, to be continued.
+      // It goes in as input, and labelled, since it is not the owner's either.
+      const history = historyRows.map((m): LLMMessage => {
+        const content = m.content ?? '';
+        if (m.sender_type === 'peer_agent') {
+          return { role: 'user', content: `[Message from a connected peer agent]\n${content}` };
+        }
+        return { role: m.sender_type === 'user' ? 'user' : 'assistant', content };
+      });
 
       const { embeddingKey, embeddingProvider, tavilyApiKey, hasKb, recallMemory } =
         await resolveAgentCapabilities(user.sub, llmKeys, env, 'owner');

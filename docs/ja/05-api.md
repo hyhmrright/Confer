@@ -265,6 +265,8 @@ WSS  /ws?token=<access_token>&device_id=<device_id>
 
 ハンドシェイクの認証は REST と完全に同じで、「署名が通れば通す」ではない。`typ` は `access` でなければならず、`sid` はまだ存在するセッションを指していなければならず、アカウントは `disabled` であってはならない。3 つとも欠かせない。これらが無ければ、凍結されたアカウントもトークンが失効していない限り再接続してメッセージを受け取り続けられる一方、凍結そのもの（全セッションの削除）はこの経路では何も取り消せない。凍結は同時に、そのユーザーが**すでに開いている socket も閉じる**。nginx は `/ws` の `proxy_read_timeout` に 1 日を与えているので、次のハンドシェイクを止めても既に繋がっている接続は止まらない。
 
+ハンドシェイクで確認したトークンが socket をいつまでも保証し続けるわけでもない。access token が失効するとサーバーは `4001` で接続を閉じ、クライアントはトークンを更新してから再接続する。ログアウトやリフレッシュトークンの再利用検知がセッションを削除したときも、そのセッションで開かれた socket を `1008` で閉じる。
+
 ### メッセージ形式
 
 WS のメッセージはすべて JSON で、`type` フィールドを持つ:
@@ -408,7 +410,7 @@ GET    /a2a/v1/stream/{message_id}       # 回答をストリームで取得（S
 GET    /a2a/v1/agent-facts/{agent_did}   # 公開 AgentFacts
 ```
 
-すべての A2A エンドポイントで HTTP Message Signature の検証を要求する。
+すべての A2A エンドポイントで HTTP Message Signature の検証を要求する。例外は `agent-facts` だけで、`/.well-known/agents.json` と同じ公開の発見ドキュメントとして可視性もそろえている。非公開または停止中の Agent は一律 404。`capabilities` に載るのは、持ち主が保存した NANDA 形式(`{type, scope, languages}`)の能力だけである。
 
 ## .well-known endpoints
 
@@ -476,7 +478,7 @@ DELETE /api/v1/webhooks/{id}
 | `/api/v1/auth/login` | 10/分 per IP |
 | `/api/v1/auth/register` | 3/時 per IP |
 | `/api/v1/conversations/*/messages` POST | 60/分 per user |
-| `/a2a/v1/*` | 100/分 per peer-domain（ホワイトリストはより高い） |
+| `/a2a/v1/*` | 60/分 per IP・パス、`/a2a/v1` 全体で 300/分 per IP |
 | WSS | 1 ユーザーあたり同時接続は最大 10 |
 
 制限に掛かったときのレスポンス:

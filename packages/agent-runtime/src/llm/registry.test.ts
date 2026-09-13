@@ -42,6 +42,28 @@ describe('createProvider', () => {
     expect(createProvider('anthropic', 'test-key')?.name).toBe('anthropic');
   });
 
+  // The gateway pins a local runtime's connection through the fetcher it hands
+  // in; a provider that dropped it would dial with a lookup of its own.
+  test('sends through the fetcher it is given, whatever the wire shape', async () => {
+    // A provider that ignored the fetcher would reach this instead of the network.
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (() =>
+      Promise.reject(new Error('dialled without the fetcher'))) as unknown as typeof fetch;
+    try {
+      for (const name of ['anthropic', 'ollama']) {
+        const dialled: string[] = [];
+        const provider = createProvider(name, '', async (url) => {
+          dialled.push(url);
+          return new Response('{}', { status: 500 });
+        });
+        await provider?.chat([{ role: 'user', content: 'hi' }], { model: 'm' }).catch(() => {});
+        expect(dialled).toHaveLength(1);
+      }
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
   test('allows ollama without an api key', () => {
     expect(createProvider('ollama', '')).not.toBeNull();
     expect(wire(createProvider('ollama', '')).baseUrl).toBe('http://localhost:11434');

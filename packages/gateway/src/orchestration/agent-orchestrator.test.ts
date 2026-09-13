@@ -247,3 +247,33 @@ describe('owner-only tools on a peer turn', () => {
     expect(turn.content).toBe('已回答');
   });
 });
+
+// A tool's error names what the gateway talks to — a local runtime's address,
+// an internal service — and on a peer's turn the model can repeat whatever it is
+// handed straight back over the wire. `web_search` with arguments that are not
+// JSON is a tool that throws without needing a network or a database.
+describe('a tool that fails', () => {
+  async function failedToolResult(audience: 'owner' | 'peer'): Promise<string> {
+    const results: string[] = [];
+    await runAgentTurn({
+      ...baseOpts,
+      audience,
+      recallMemory: false,
+      provider: scriptedProvider([[toolCall('web_search', 'not json')], [token('ok')]]),
+      emit: {
+        onToolResult: (result) => {
+          results.push(result);
+        },
+      },
+    });
+    return results[0] ?? '';
+  }
+
+  test('tells the owner why', async () => {
+    expect(await failedToolResult('owner')).toMatch(/^工具调用失败: .+/);
+  });
+
+  test('tells a peer only that it failed', async () => {
+    expect(await failedToolResult('peer')).toBe('工具调用失败');
+  });
+});

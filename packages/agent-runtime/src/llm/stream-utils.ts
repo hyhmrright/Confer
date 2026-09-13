@@ -9,6 +9,11 @@
  * vs OpenAI `delta`/`tool_calls`, `message_stop` vs `[DONE]`) stays in each
  * provider's `stream()` — this only owns the transport-level framing.
  */
+// Longer than any real event. The far side decides when a newline comes, and
+// one that never sends it was buffered until the process ran out of memory —
+// for a local runtime, that side is any host the owner can name.
+const MAX_LINE_CHARS = 1024 * 1024;
+
 export async function* readSSEData(body: ReadableStream<Uint8Array>): AsyncIterable<string> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
@@ -21,6 +26,10 @@ export async function* readSSEData(body: ReadableStream<Uint8Array>): AsyncItera
     buffer += decoder.decode(value, { stream: true });
     const lines = buffer.split('\n');
     buffer = lines.pop() ?? '';
+    if (buffer.length > MAX_LINE_CHARS) {
+      await reader.cancel();
+      throw new Error('Stream sent a line longer than any event');
+    }
 
     for (const line of lines) {
       if (!line.startsWith('data: ')) continue;

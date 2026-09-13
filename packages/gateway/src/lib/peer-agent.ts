@@ -1,3 +1,4 @@
+import type { AgentFacts } from '@confer/identity';
 import { newId } from '@confer/shared';
 import { getDb } from '../db/connection.js';
 import { peerAgents } from '../db/schema.js';
@@ -10,7 +11,8 @@ export interface UpsertPeerAgentInput {
   endpoint: string;
   name?: string;
   description?: string;
-  agentFacts?: unknown;
+  /** From buildAgentFacts. Rows older than that hold anything; see withValidAgentFacts. */
+  agentFacts?: AgentFacts;
 }
 
 // Persist (insert or refresh) a peer agent keyed by its unique DID, returning
@@ -23,13 +25,12 @@ export interface UpsertPeerAgentInput {
 // stored for the same peer.
 export async function upsertPeerAgent(input: UpsertPeerAgentInput): Promise<PeerAgentRow> {
   const db = getDb();
-  const agentFacts = (input.agentFacts ?? {}) as Record<string, unknown>;
 
   const updateSet: Record<string, unknown> = {
-    agent_facts_json: agentFacts,
     fetched_at: new Date(),
     updated_at: new Date(),
   };
+  if (input.agentFacts !== undefined) updateSet.agent_facts_json = input.agentFacts;
   if (input.name !== undefined) updateSet.name = input.name;
   if (input.description !== undefined) updateSet.description = input.description;
   // An empty endpoint means "could not work out where this peer lives", never
@@ -49,7 +50,7 @@ export async function upsertPeerAgent(input: UpsertPeerAgentInput): Promise<Peer
       description: input.description,
       endpoint: input.endpoint,
       public_key_json: {},
-      agent_facts_json: agentFacts,
+      agent_facts_json: input.agentFacts ?? {},
     })
     .onConflictDoUpdate({
       target: peerAgents.did,

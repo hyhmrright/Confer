@@ -276,6 +276,10 @@ WSS  /ws?token=<access_token>&device_id=<device_id>
 在这条路径上什么都没撤销。封禁同时会**关掉该用户已经打开的 socket**：nginx 给
 `/ws` 的 `proxy_read_timeout` 是一天，只拦下一次握手拦不住已连上的那条。
 
+握手时验过的 token 也不会一直替这条 socket 担保下去：access token 到期时服务端以
+`4001` 关闭连接，客户端先刷新 token 再重连。登出、或 refresh token 复用检测删除某个
+session 时，该 session 下已经打开的 socket 会以 `1008` 关闭。
+
 ### 消息格式
 
 所有 WS 消息都是 JSON，含 `type` 字段：
@@ -424,7 +428,7 @@ GET    /a2a/v1/stream/{message_id}       # 流式拉回答（SSE）
 GET    /a2a/v1/agent-facts/{agent_did}   # 公开 AgentFacts
 ```
 
-所有 A2A 端点都要 HTTP Message Signature 验证。
+所有 A2A 端点都要 HTTP Message Signature 验证,只有 `agent-facts` 例外:它和 `/.well-known/agents.json` 一样是公开的发现文档,可见性也一致——非公开或已停用的 Agent 一律 404。它的 `capabilities` 只列出主人保存过、且符合 NANDA 形态(`{type, scope, languages}`)的能力。
 
 ## .well-known endpoints
 
@@ -492,7 +496,7 @@ DELETE /api/v1/webhooks/{id}
 | `/api/v1/auth/login` | 10/分钟 per IP |
 | `/api/v1/auth/register` | 3/小时 per IP |
 | `/api/v1/conversations/*/messages` POST | 60/分钟 per user |
-| `/a2a/v1/*` | 100/分钟 per peer-domain（白名单更高） |
+| `/a2a/v1/*` | 60/分钟 per IP + 路径；整个 `/a2a/v1` 合计 300/分钟 per IP |
 | WSS | 单用户最多 10 个并发连接 |
 
 限流响应：

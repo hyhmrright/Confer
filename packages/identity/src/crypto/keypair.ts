@@ -9,6 +9,13 @@ const MULTIBASE_PREFIX = 'z';
 // multicodec prefix for an Ed25519 public key (0xed varint), per the
 // did:key / multibase spec — prepended to the raw key before base58btc.
 const ED25519_MULTICODEC = [0xed, 0x01] as const;
+const ED25519_PUBLIC_KEY_BYTES = 32;
+// A real key encodes to 48 characters. The decoder below is quadratic in its
+// input, and the input is whatever a remote DID document publishes — read
+// before any signature is checked — so a two-million-character "key" held the
+// gateway's only thread for minutes. Anything longer than a key could be is
+// refused before it is decoded.
+const MAX_MULTIBASE_LENGTH = 64;
 
 export async function generateEd25519KeyPair(): Promise<KeyPair> {
   const pair = await crypto.subtle.generateKey('Ed25519', true, ['sign', 'verify']);
@@ -27,6 +34,9 @@ export async function multibaseToPublicKey(multibase: string): Promise<Result<Cr
   if (!multibase.startsWith(MULTIBASE_PREFIX)) {
     return err('Invalid multibase prefix');
   }
+  if (multibase.length > MAX_MULTIBASE_LENGTH) {
+    return err('Invalid Ed25519 public key length');
+  }
 
   const decoded = base58btcDecode(multibase.slice(1));
   if (!decoded) {
@@ -35,10 +45,16 @@ export async function multibaseToPublicKey(multibase: string): Promise<Result<Cr
   if (decoded[0] !== ED25519_MULTICODEC[0] || decoded[1] !== ED25519_MULTICODEC[1]) {
     return err('Invalid Ed25519 multicodec prefix');
   }
+  if (decoded.length !== ED25519_MULTICODEC.length + ED25519_PUBLIC_KEY_BYTES) {
+    return err('Invalid Ed25519 public key length');
+  }
 
   const raw = decoded.slice(ED25519_MULTICODEC.length);
-  const key = await crypto.subtle.importKey('raw', raw, 'Ed25519', true, ['verify']);
-  return ok(key);
+  try {
+    return ok(await crypto.subtle.importKey('raw', raw, 'Ed25519', true, ['verify']));
+  } catch {
+    return err('Invalid Ed25519 public key');
+  }
 }
 
 export async function exportPrivateKey(key: CryptoKey): Promise<JsonWebKey> {

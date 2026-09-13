@@ -1,5 +1,5 @@
-import { err, ok, type Result } from '@confer/shared';
-import { assertPublicHostname, SsrfBlockedError, SsrfUnresolvedError } from '../net/ssrf-guard.js';
+import { err, ok, type Result, readCappedText } from '@confer/shared';
+import { assertPublicHostname } from '../net/ssrf-guard.js';
 import type { DIDDocument } from './document.js';
 import { didDocumentSchema, parseDidWeb } from './document.js';
 
@@ -15,6 +15,11 @@ const TTL_MS = 60_000;
 // key document in our cache for weeks.
 const MAX_TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_CACHE_ENTRIES = 500;
+// A DID document is a few keys and service entries — ours are under 1 KB. The
+// host is whoever an unauthenticated request's keyid named, so neither how much
+// it sends nor how long it takes to send it is left to that host.
+const MAX_DOCUMENT_BYTES = 64 * 1024;
+const FETCH_TIMEOUT_MS = 10_000;
 
 // Derive this resolution's cache TTL from the response's Cache-Control:
 // - no-store / no-cache / max-age=0 → null (don't cache this result)
@@ -62,22 +67,28 @@ export async function resolveDID(did: string): Promise<Result<DIDDocument, strin
     return err(`Invalid DID format: ${did}`);
   }
 
-  // SSRF guard: refuse a DID whose host resolves to a LAN / metadata / reserved
-  // address. The guard receives only the bare hostname — never a path — so a
-  // sub-identifier DID can't smuggle a private target past it. Loopback stays
-  // allowed because a single-machine deployment serves its own agents at
-  // `did:web:localhost`. A DNS-resolution *failure* is not a block — the fetch
-  // below fails the same way — but a resolver that never answers is, because
-  // the fetch would then resolve the name a second time, unguarded.
+  // SSRF guard: refuse a DID whose host resolves to a loopback / LAN / metadata
+  // / reserved address. The guard receives only the bare hostname — never a
+  // path — so a sub-identifier DID can't smuggle a private target past it.
+  //
+  // Loopback used to be exempt, for single-machine `did:web:localhost`
+  // deployments. Those never reach here: the gateway answers its own DIDs from
+  // its own database (`lib/did-resolution.ts`), so the exemption only ever
+  // served a remote DID naming a port on our loopback.
+  //
+  // Every failure refuses, not just the two SSRF errors. A name that did not
+  // resolve used to fall through on the grounds that the fetch would fail the
+  // same way — but the fetch resolves the name again, and whoever runs that
+  // name's DNS decides what the second answer is.
+  //
+  // And every failure reads the same. This reaches whoever sent an
+  // unauthenticated request naming the host, so "private address" against
+  // "does not resolve" told them, for any name they cared to try, whether it
+  // exists on our internal network.
   try {
-    await assertPublicHostname(loc.hostname, { allowLoopback: true });
-  } catch (e) {
-    if (e instanceof SsrfUnresolvedError) {
-      return err(`Refusing to resolve DID whose host did not resolve in time: ${did}`);
-    }
-    if (e instanceof SsrfBlockedError) {
-      return err(`Refusing to resolve DID pointing at a private address: ${did}`);
-    }
+    await assertPublicHostname(loc.hostname);
+  } catch {
+    return err(`Refusing to resolve DID whose host is not a public address: ${did}`);
   }
 
   // Sub-identifier DIDs (path segments) resolve to `.../did.json` under their
@@ -90,7 +101,22 @@ export async function resolveDID(did: string): Promise<Result<DIDDocument, strin
       headers['If-None-Match'] = cached.etag;
     }
 
-    const response = await fetch(url, { headers });
+    // The guard vetted this host, not wherever it redirects to: a followed
+    // `302 Location: http://169.254.169.254/` went straight past it. A 3xx is
+    // therefore a failure (`!response.ok` below), never a hop.
+    //
+    // The fetch still resolves the name a second time, so a record that
+    // changes between the two lookups is not closed here. What contains it is
+    // the scheme: this is https to the DID's own name, so an internal service
+    // would have to present a valid certificate for that name before a byte of
+    // the request reached it. That is also why the catch below returns no
+    // exception text — "connection refused" against "handshake failed" is the
+    // one thing such a rebinding could still learn.
+    const response = await fetch(url, {
+      headers,
+      redirect: 'manual',
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
     const ttl = ttlFromCacheControl(response.headers.get('cache-control'));
 
     if (response.status === 304 && cached) {
@@ -105,7 +131,7 @@ export async function resolveDID(did: string): Promise<Result<DIDDocument, strin
       return err(`Failed to fetch DID document: HTTP ${response.status}`);
     }
 
-    const json = await response.json();
+    const json: unknown = JSON.parse(await readCappedText(response, MAX_DOCUMENT_BYTES));
     const parsed = didDocumentSchema.safeParse(json);
     if (!parsed.success) {
       return err(`Invalid DID document: ${parsed.error.message}`);
@@ -120,8 +146,10 @@ export async function resolveDID(did: string): Promise<Result<DIDDocument, strin
     }
 
     return ok(parsed.data);
-  } catch (e) {
-    return err(`Failed to resolve DID ${did}: ${e}`);
+  } catch {
+    // Reaches an unauthenticated caller verbatim, as the reason its request was
+    // refused (`did_resolution_failed`) — see the comment on the fetch above.
+    return err(`Failed to resolve DID ${did}`);
   }
 }
 

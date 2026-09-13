@@ -15,8 +15,8 @@ import { getEnv } from '../env.js';
 import { get, post, resetDb, type SeededUser, seedUser } from '../test/helpers.js';
 
 const CONSULT = '/api/v1/consult';
-const PEER_DID = 'did:web:localhost';
-const PEER_KEY_ID = 'did:web:localhost#key-1';
+const PEER_DID = 'did:web:peer.example';
+const PEER_KEY_ID = 'did:web:peer.example#key-1';
 
 let user: SeededUser;
 let myAgentDid: string;
@@ -314,10 +314,10 @@ describe('consult', () => {
 
   test('a connected peer cannot inject an answer into another peer thread', async () => {
     await seedOwnAgent();
-    const peerAId = await seedPeerContact(); // consult target (did:web:localhost)
+    const peerAId = await seedPeerContact(); // consult target (did:web:peer.example)
 
     // Peer B: a different connected peer with its own signing key.
-    const bDid = 'did:web:localhost:agents:peerb';
+    const bDid = 'did:web:peerb.example:agents:peerb';
     const bKeyId = `${bDid}#key-1`;
     const db = getDb();
     const bPeerId = newId();
@@ -333,7 +333,7 @@ describe('consult', () => {
       .values({ id: newId(), user_id: user.id, peer_id: bPeerId, added_via: 'manual' });
 
     const bKp = await generateEd25519KeyPair();
-    // B's sub-identifier DID resolves to https://localhost/agents/peerb/did.json
+    // B's sub-identifier DID resolves to https://peerb.example/agents/peerb/did.json
     // (not the instance root); mockOutbound serves any */did.json, so B's doc is
     // returned when the resolver fetches it for signature verification.
     const bDoc = {

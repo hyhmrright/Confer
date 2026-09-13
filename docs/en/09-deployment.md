@@ -132,7 +132,7 @@ anyone else.
 
 | Variable | Default (`.env.example`) | Notes |
 |----------|--------------------------|-------|
-| `JWT_SECRET` | `change-me-in-production` | **Change this.** Signs user session tokens. |
+| `JWT_SECRET` | `change-me-in-production` | **Change this.** Signs user session tokens. The gateway refuses to start with this placeholder or with anything under 32 characters. Generate: `openssl rand -hex 32`. |
 | `ENCRYPTION_KEY` | 64 zeros | **Change this.** Must be 32 bytes as 64 hex chars. Generate: `openssl rand -hex 32`. Encrypts stored LLM keys. |
 | `POSTGRES_PASSWORD` | `confer` (compose default) | Database password. |
 | `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` | `confer` / `confer-secret` | Object storage credentials. |
@@ -156,6 +156,8 @@ docker compose -f docker-compose.prod.yml up -d
 git pull
 docker compose -f docker-compose.prod.yml up -d --build   # migrate re-runs automatically
 ```
+
+> Since 2026-09-13 the gateway refuses to start while `JWT_SECRET` is still `change-me-in-production` or shorter than 32 characters. Before upgrading an older instance, check `.env` and replace a value that fails with one from `openssl rand -hex 32`. Changing it signs everyone out once. Instances installed with `npx confer-cli` or the Oracle script were given a random value from the start and are unaffected.
 
 ### Resetting (wipes all data)
 

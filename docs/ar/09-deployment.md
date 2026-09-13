@@ -88,7 +88,7 @@ docker compose -f docker-compose.prod.yml logs -f gateway
 
 | المتغيّر | الافتراضي (`.env.example`) | ملاحظات |
 |----------|--------------------------|-------|
-| `JWT_SECRET` | `change-me-in-production` | **غيّره.** يوقّع رموز جلسات المستخدمين. |
+| `JWT_SECRET` | `change-me-in-production` | **غيّره.** يوقّع رموز جلسات المستخدمين. ترفض البوابة أن تبدأ بهذه القيمة النائبة أو بأي قيمة أقصر من 32 حرفًا. التوليد: `openssl rand -hex 32`. |
 | `ENCRYPTION_KEY` | أربعة وستون صفرًا | **غيّره.** يجب أن يكون 32 بايتًا في صورة 64 محرفًا ستّ عشريًا. للتوليد: `openssl rand -hex 32`. يشفّر مفاتيح النماذج المخزَّنة. |
 | `POSTGRES_PASSWORD` | `confer` (افتراضي compose) | كلمة مرور قاعدة البيانات. |
 | `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` | `confer` / `confer-secret` | بيانات اعتماد مخزن الكائنات. |
@@ -110,6 +110,8 @@ docker compose -f docker-compose.prod.yml up -d
 git pull
 docker compose -f docker-compose.prod.yml up -d --build   # migrate يعاد تشغيله تلقائيًا
 ```
+
+> ابتداءً من 2026-09-13 ترفض البوابة أن تبدأ ما دام `JWT_SECRET` هو `change-me-in-production` أو أقصر من 32 حرفًا. قبل ترقية نسخة قديمة افحص `.env`، فإن لم تستوفِ القيمة الشرط فاستبدلها بقيمة يولّدها `openssl rand -hex 32`. تغيير القيمة يُنهي كل الجلسات المفتوحة، فيلزم تسجيل الدخول مرة أخرى. أما النسخ المثبّتة عبر `npx confer-cli` أو سكربت Oracle فقيمتها عشوائية منذ البداية ولا تتأثر.
 
 ### التصفير (يمحو كل البيانات)
 

@@ -88,7 +88,7 @@ docker compose -f docker-compose.prod.yml logs -f gateway
 
 | 変数 | 既定値（`.env.example`） | 備考 |
 |----------|--------------------------|-------|
-| `JWT_SECRET` | `change-me-in-production` | **変更すること。** ユーザーのセッショントークンに署名する。 |
+| `JWT_SECRET` | `change-me-in-production` | **変更すること。** ユーザーのセッショントークンに署名する。gateway はこのプレースホルダーのままでは、また 32 文字未満の値では起動を拒否する。生成方法：`openssl rand -hex 32`。 |
 | `ENCRYPTION_KEY` | ゼロ 64 個 | **変更すること。** 32 バイト、すなわち 64 桁の 16 進文字でなければならない。生成: `openssl rand -hex 32`。保存された LLM キーを暗号化する。 |
 | `POSTGRES_PASSWORD` | `confer` （compose の既定値） | データベースのパスワード。 |
 | `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` | `confer` / `confer-secret` | オブジェクトストレージの資格情報。 |
@@ -110,6 +110,8 @@ docker compose -f docker-compose.prod.yml up -d
 git pull
 docker compose -f docker-compose.prod.yml up -d --build   # migrate は自動で再実行される
 ```
+
+> 2026-09-13 以降、`JWT_SECRET` が `change-me-in-production` のまま、または 32 文字未満だと gateway は起動を拒否する。古いインスタンスを更新する前に `.env` を確認し、満たしていなければ `openssl rand -hex 32` で生成した値に置き換える。値を変えるとログイン中のセッションはすべて無効になり、一度ログインし直すことになる。`npx confer-cli` や Oracle スクリプトで導入したインスタンスは最初からランダムな値なので影響はない。
 
 ### リセット（すべてのデータを消去）
 

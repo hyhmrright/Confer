@@ -132,7 +132,7 @@ async function connectPeer(did: string): Promise<string> {
   await db.insert(peerAgents).values({
     id: peerId,
     did,
-    endpoint: 'https://localhost/a2a/v1',
+    endpoint: 'https://peer.example/a2a/v1',
     public_key_json: {},
     agent_facts_json: {},
   });
@@ -154,7 +154,7 @@ async function connectPeerWithOverride(
   await db.insert(peerAgents).values({
     id: peerId,
     did,
-    endpoint: 'https://localhost/a2a/v1',
+    endpoint: 'https://peer.example/a2a/v1',
     public_key_json: {},
     agent_facts_json: {},
   });
@@ -233,7 +233,7 @@ describe('A2A signature rejection', () => {
 });
 
 describe('A2A signed message (real Ed25519, mocked DID resolution)', () => {
-  const KEY_ID = 'did:web:localhost#key-1';
+  const KEY_ID = 'did:web:peer.example#key-1';
   let restoreFetch: () => void;
 
   afterEach(() => {
@@ -252,12 +252,12 @@ describe('A2A signed message (real Ed25519, mocked DID resolution)', () => {
     const publicKeyMultibase = await publicKeyToMultibase(publicKey);
     const didDocument = {
       '@context': ['https://www.w3.org/ns/did/v1'],
-      id: 'did:web:localhost',
+      id: 'did:web:peer.example',
       verificationMethod: [
         {
           id: KEY_ID,
           type: 'Ed25519VerificationKey2020',
-          controller: 'did:web:localhost',
+          controller: 'did:web:peer.example',
           publicKeyMultibase,
         },
       ],
@@ -284,7 +284,7 @@ describe('A2A signed message (real Ed25519, mocked DID resolution)', () => {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        from: 'did:web:localhost',
+        from: 'did:web:peer.example',
         to: targetDid,
         message: { type: 'question', content },
       }),
@@ -294,7 +294,7 @@ describe('A2A signed message (real Ed25519, mocked DID resolution)', () => {
   test('accepts a correctly signed message from a connected peer and persists it', async () => {
     const targetDid = 'did:web:localhost:agents:target';
     await seedTargetAgent(targetDid);
-    await connectPeer('did:web:localhost');
+    await connectPeer('did:web:peer.example');
     const privateKey = await signingKeyResolvedViaDid();
 
     const signed = await signRequest(
@@ -309,7 +309,7 @@ describe('A2A signed message (real Ed25519, mocked DID resolution)', () => {
     expect(json.message_id).toBeTruthy();
 
     const [stored] = await getDb().select().from(messages).where(eq(messages.id, json.message_id));
-    expect(stored?.sender_did).toBe('did:web:localhost');
+    expect(stored?.sender_did).toBe('did:web:peer.example');
     expect(stored?.content).toBe('Hello target agent');
     expect(stored?.via).toBe('a2a');
   });
@@ -345,7 +345,7 @@ describe('A2A signed message (real Ed25519, mocked DID resolution)', () => {
     await seedTargetAgent(targetDid);
     const privateKey = await signingKeyResolvedViaDid();
 
-    // Signed by did:web:localhost but claiming to be from another domain.
+    // Signed by did:web:peer.example but claiming to be from another domain.
     const req = new Request(MESSAGES, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -371,7 +371,7 @@ describe('A2A signed message (real Ed25519, mocked DID resolution)', () => {
       method: 'POST',
       headers: signed.headers,
       body: JSON.stringify({
-        from: 'did:web:localhost',
+        from: 'did:web:peer.example',
         to: targetDid,
         message: { type: 'question', content: 'tampered' },
       }),
@@ -457,7 +457,7 @@ describe('A2A signed message (real Ed25519, mocked DID resolution)', () => {
   test('holds a connected peer question for owner review when policy is ask_user (202)', async () => {
     const targetDid = 'did:web:localhost:agents:held';
     await seedTargetAgent(targetDid, ASK_USER);
-    await connectPeer('did:web:localhost');
+    await connectPeer('did:web:peer.example');
     const privateKey = await signingKeyResolvedViaDid();
 
     const signed = await signRequest(
@@ -489,7 +489,7 @@ describe('A2A signed message (real Ed25519, mocked DID resolution)', () => {
   test('a held question appears in the owner pending inbox with the question text', async () => {
     const targetDid = 'did:web:localhost:agents:held2';
     await seedTargetAgent(targetDid, ASK_USER);
-    await connectPeer('did:web:localhost');
+    await connectPeer('did:web:peer.example');
     const privateKey = await signingKeyResolvedViaDid();
     await app.request(
       await signRequest(messageRequest(targetDid, 'Ship dates?'), privateKey, KEY_ID),
@@ -511,7 +511,7 @@ describe('A2A signed message (real Ed25519, mocked DID resolution)', () => {
   test('approving a held question lets the agent answer it (own_agent reply appears)', async () => {
     const targetDid = 'did:web:localhost:agents:held3';
     await seedTargetAgent(targetDid, ASK_USER);
-    await connectPeer('did:web:localhost');
+    await connectPeer('did:web:peer.example');
     await seedUserLlmKey();
     const privateKey = await signingKeyResolvedViaDid({ llmReply: 'Our SLA is 99.9% uptime.' });
 
@@ -544,7 +544,7 @@ describe('A2A signed message (real Ed25519, mocked DID resolution)', () => {
   test('denying a held question produces no reply', async () => {
     const targetDid = 'did:web:localhost:agents:held4';
     await seedTargetAgent(targetDid, ASK_USER);
-    await connectPeer('did:web:localhost');
+    await connectPeer('did:web:peer.example');
     const privateKey = await signingKeyResolvedViaDid();
 
     const inbound = await app.request(
@@ -574,7 +574,7 @@ describe('A2A signed message (real Ed25519, mocked DID resolution)', () => {
   test('a connected peer under the default (allow) policy is answered immediately (201)', async () => {
     const targetDid = 'did:web:localhost:agents:allow';
     await seedTargetAgent(targetDid); // empty policy => default allow (connection is consent)
-    await connectPeer('did:web:localhost');
+    await connectPeer('did:web:peer.example');
     await seedUserLlmKey();
     const privateKey = await signingKeyResolvedViaDid({ llmReply: 'Sure — happy to help.' });
 
@@ -606,7 +606,7 @@ describe('A2A signed message (real Ed25519, mocked DID resolution)', () => {
     // Agent default is `allow` (empty policy) — only the per-contact override
     // turns this peer's questions into held approvals.
     await seedTargetAgent(targetDid);
-    await connectPeerWithOverride('did:web:localhost', { default: 'ask_user' });
+    await connectPeerWithOverride('did:web:peer.example', { default: 'ask_user' });
     const privateKey = await signingKeyResolvedViaDid();
 
     const res = await app.request(
@@ -638,7 +638,7 @@ describe('A2A signed message (real Ed25519, mocked DID resolution)', () => {
   test('an ask_user policy holds only questions — an inbound answer is accepted (201)', async () => {
     const targetDid = 'did:web:localhost:agents:hold-nonquestion';
     await seedTargetAgent(targetDid, { default: 'ask_user' });
-    await connectPeer('did:web:localhost');
+    await connectPeer('did:web:peer.example');
     const privateKey = await signingKeyResolvedViaDid();
 
     const res = await app.request(
@@ -647,7 +647,7 @@ describe('A2A signed message (real Ed25519, mocked DID resolution)', () => {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
-            from: 'did:web:localhost',
+            from: 'did:web:peer.example',
             to: targetDid,
             message: { type: 'answer', content: 'Our SLA is 24 hours.' },
           }),
@@ -676,7 +676,7 @@ describe('A2A signed message (real Ed25519, mocked DID resolution)', () => {
     const targetDid = 'did:web:localhost:agents:perpeer-empty';
     await seedTargetAgent(targetDid); // agent default allow
     // An explicit but empty override must be a no-op (identity merge).
-    await connectPeerWithOverride('did:web:localhost', {});
+    await connectPeerWithOverride('did:web:peer.example', {});
     await seedUserLlmKey();
     const privateKey = await signingKeyResolvedViaDid({ llmReply: 'Sure — happy to help.' });
 
@@ -706,7 +706,7 @@ describe('A2A signed message (real Ed25519, mocked DID resolution)', () => {
   test('a held question is not answered if the contact was removed before approval', async () => {
     const targetDid = 'did:web:localhost:agents:held5';
     await seedTargetAgent(targetDid, ASK_USER);
-    const peerId = await connectPeer('did:web:localhost');
+    const peerId = await connectPeer('did:web:peer.example');
     await seedUserLlmKey();
     const privateKey = await signingKeyResolvedViaDid({ llmReply: 'should not be sent' });
 
@@ -740,7 +740,7 @@ describe('A2A signed message (real Ed25519, mocked DID resolution)', () => {
 });
 
 describe('A2A agent reply with KB tool calls + citations', () => {
-  const KEY_ID = 'did:web:localhost#key-1';
+  const KEY_ID = 'did:web:peer.example#key-1';
   let restoreFetch: () => void;
 
   beforeEach(async () => {
@@ -759,7 +759,7 @@ describe('A2A agent reply with KB tool calls + citations', () => {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        from: 'did:web:localhost',
+        from: 'did:web:peer.example',
         to: targetDid,
         message: { type: 'question', content },
       }),
@@ -815,7 +815,7 @@ describe('A2A agent reply with KB tool calls + citations', () => {
   test('answers a connected peer from a SHARED KB and persists citations', async () => {
     const targetDid = 'did:web:localhost:agents:kb';
     await seedTargetAgent(targetDid);
-    await connectPeer('did:web:localhost');
+    await connectPeer('did:web:peer.example');
     await seedChatAndEmbeddingKeys();
     const docName = await seedKbChunk('runbook.md', 'Our SLA target is 99.95% uptime.');
 
@@ -823,12 +823,12 @@ describe('A2A agent reply with KB tool calls + citations', () => {
     const publicKeyMultibase = await publicKeyToMultibase(publicKey);
     const didDocument = {
       '@context': ['https://www.w3.org/ns/did/v1'],
-      id: 'did:web:localhost',
+      id: 'did:web:peer.example',
       verificationMethod: [
         {
           id: KEY_ID,
           type: 'Ed25519VerificationKey2020',
-          controller: 'did:web:localhost',
+          controller: 'did:web:peer.example',
           publicKeyMultibase,
         },
       ],
@@ -881,7 +881,7 @@ describe('A2A agent reply with KB tool calls + citations', () => {
   test('cannot reach an unshared KB even when the model calls the tool anyway', async () => {
     const targetDid = 'did:web:localhost:agents:private';
     await seedTargetAgent(targetDid);
-    await connectPeer('did:web:localhost');
+    await connectPeer('did:web:peer.example');
     await seedChatAndEmbeddingKeys();
     await seedKbChunk('salaries.md', 'Alice earns 250000 per year.', false);
 
@@ -889,12 +889,12 @@ describe('A2A agent reply with KB tool calls + citations', () => {
     const publicKeyMultibase = await publicKeyToMultibase(publicKey);
     const didDocument = {
       '@context': ['https://www.w3.org/ns/did/v1'],
-      id: 'did:web:localhost',
+      id: 'did:web:peer.example',
       verificationMethod: [
         {
           id: KEY_ID,
           type: 'Ed25519VerificationKey2020',
-          controller: 'did:web:localhost',
+          controller: 'did:web:peer.example',
           publicKeyMultibase,
         },
       ],
@@ -952,7 +952,7 @@ describe('A2A agent reply with KB tool calls + citations', () => {
   test('degrades gracefully with no embedding/tavily key: answers, no citations', async () => {
     const targetDid = 'did:web:localhost:agents:plain';
     await seedTargetAgent(targetDid);
-    await connectPeer('did:web:localhost');
+    await connectPeer('did:web:peer.example');
     // Only an Anthropic chat key — no OpenAI (embeddings) → no KB/recall/extract.
     await seedUserLlmKey();
 
@@ -960,12 +960,12 @@ describe('A2A agent reply with KB tool calls + citations', () => {
     const publicKeyMultibase = await publicKeyToMultibase(publicKey);
     const didDocument = {
       '@context': ['https://www.w3.org/ns/did/v1'],
-      id: 'did:web:localhost',
+      id: 'did:web:peer.example',
       verificationMethod: [
         {
           id: KEY_ID,
           type: 'Ed25519VerificationKey2020',
-          controller: 'did:web:localhost',
+          controller: 'did:web:peer.example',
           publicKeyMultibase,
         },
       ],
@@ -1007,8 +1007,8 @@ describe('A2A agent reply with KB tool calls + citations', () => {
 });
 
 describe('A2A reply stream authorization (IDOR)', () => {
-  const SENDER_DID = 'did:web:localhost';
-  const SENDER_KEY = 'did:web:localhost#key-1';
+  const SENDER_DID = 'did:web:peer.example';
+  const SENDER_KEY = 'did:web:peer.example#key-1';
   const OTHER_DID = 'did:web:peer-b.example';
   const OTHER_KEY = 'did:web:peer-b.example#key-1';
   let restoreFetch: () => void;
@@ -1035,7 +1035,7 @@ describe('A2A reply stream authorization (IDOR)', () => {
     const sender = await generateEd25519KeyPair();
     const other = await generateEd25519KeyPair();
     const docs: Record<string, unknown> = {
-      'localhost/.well-known/did.json': didDoc(
+      'peer.example/.well-known/did.json': didDoc(
         SENDER_DID,
         SENDER_KEY,
         await publicKeyToMultibase(sender.publicKey),
@@ -1117,9 +1117,9 @@ describe('A2A reply stream authorization (IDOR)', () => {
 });
 
 describe('A2A authentication-relationship enforcement (Finding E)', () => {
-  const DID = 'did:web:localhost';
-  const KEY_ID = 'did:web:localhost#key-1';
-  const OTHER_KEY_ID = 'did:web:localhost#key-2';
+  const DID = 'did:web:peer.example';
+  const KEY_ID = 'did:web:peer.example#key-1';
+  const OTHER_KEY_ID = 'did:web:peer.example#key-2';
   let restoreFetch: () => void;
 
   afterEach(() => {
@@ -1198,8 +1198,8 @@ describe('A2A authentication-relationship enforcement (Finding E)', () => {
 });
 
 describe('A2A thread scoping', () => {
-  const KEY_ID = 'did:web:localhost#key-1';
-  const PEER_DID = 'did:web:localhost';
+  const KEY_ID = 'did:web:peer.example#key-1';
+  const PEER_DID = 'did:web:peer.example';
   let restoreFetch: () => void;
 
   afterEach(() => {
@@ -1261,7 +1261,7 @@ describe('A2A thread scoping', () => {
     await db.insert(peerAgents).values({
       id: peerId,
       did: PEER_DID,
-      endpoint: 'https://localhost/a2a/v1',
+      endpoint: 'https://peer.example/a2a/v1',
       public_key_json: {},
       agent_facts_json: {},
     });

@@ -78,7 +78,31 @@ export const RERANK_TIMEOUT_MS = 8_000;
  * Scope worth being exact about: this bounds what leaves the parser, so it
  * bounds embedding spend and Qdrant growth. It does NOT bound the memory the
  * parse itself takes — both `mammoth` and `exceljs` materialize the whole
- * document before returning a character. Bounding that needs streaming
- * extraction, which neither library does by default.
+ * document before returning a character. The OOXML budgets below do that.
  */
 export const MAX_EXTRACTED_CHARS = 2_000_000;
+
+/**
+ * How far a .docx/.xlsx may expand before a parser is handed it
+ * (`assertOoxmlWithinBudget`).
+ *
+ * Both parsers hold the whole document in memory at a multiple of its XML that
+ * the compressed upload size says nothing about. Measured on bun 1.4: mammoth
+ * peaked at 2.8 GB of RSS on 20 MB of paragraph XML that zipped to 130 KB, and
+ * 6.9 GB on 60 MB; exceljs at 1.2 GB on 20 MB of sheet XML. One upload was
+ * enough to take down the gateway's only process.
+ *
+ * What the parsers spend memory on is nodes, so the tight budget is markup —
+ * the `<` and `=` bytes that open every element and carry every attribute —
+ * rather than bytes. At 500,000 the densest shape measured peaked at 611 MB
+ * (mammoth, 3.5 MB of `<w:p><w:r><w:t>` runs); an attribute flood at 236 MB;
+ * exceljs held 250,000 cells in 487 MB at twice that. Ordinary Word XML runs
+ * at roughly 17 markup bytes per 280, so that is a document of several hundred
+ * pages, about where its text would pass MAX_EXTRACTED_CHARS anyway. The byte
+ * budget is the looser one and exists for images, which parse to little more
+ * than their own size: room for a 10 MB upload that is mostly pictures.
+ */
+export const MAX_OOXML_MARKUP = 500_000;
+export const MAX_OOXML_TOTAL_BYTES = 32 * 1024 * 1024;
+/** A real document has dozens of parts; the zip reader keeps an object for each. */
+export const MAX_OOXML_ENTRIES = 5_000;

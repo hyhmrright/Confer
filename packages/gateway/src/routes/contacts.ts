@@ -1,10 +1,17 @@
-import { assertPublicHostname, SsrfBlockedError, SsrfUnresolvedError } from '@confer/identity';
-import { AppError, contactLookupSchema, newId, policyOverridesSchema } from '@confer/shared';
+import { assertPublicHostname } from '@confer/identity';
+import {
+  AppError,
+  contactLookupSchema,
+  newId,
+  policyOverridesSchema,
+  readCappedText,
+} from '@confer/shared';
 import { and, count, desc, eq, like } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { getDb } from '../db/connection.js';
 import { agents, peerAgents, peerContacts } from '../db/schema.js';
+import { buildAgentFacts, withValidAgentFacts } from '../lib/agent-facts.js';
 import { resolveDidDocument } from '../lib/did-resolution.js';
 import { parseLimit, parseOffset } from '../lib/pagination.js';
 import {
@@ -36,19 +43,17 @@ const patchContactSchema = z
   .partial();
 
 // Shape of an entry in a remote `/.well-known/agents.json`. Only `did` is
-// required; the rest is best-effort metadata we surface to the user.
+// required; the rest is best-effort metadata we surface to the user. A Confer
+// instance publishes `name` and `description` as null for an agent that never
+// set them, so null has to pass — refusing it skipped every such agent.
+// `capabilities_json` feeds AgentFacts, which keep only real capabilities, and
+// a malformed one costs that field rather than the whole entry.
 const remoteAgentSchema = z.object({
   did: z.string().min(1),
-  name: z.string().max(128).optional(),
-  description: z.string().optional(),
+  name: z.string().max(128).nullish(),
+  description: z.string().max(4000).nullish().catch(undefined),
+  capabilities_json: z.array(z.unknown()).max(64).optional().catch(undefined),
 });
-
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), ms)),
-  ]);
-}
 
 // Scope a contact row to its owner. Used both to load the contact and to target
 // the subsequent write, so a contact id from another user is never reachable.
@@ -100,7 +105,7 @@ contactRoutes.get('/', async (c) => {
   return c.json({
     contacts: contacts.map((row) => ({
       ...row.peer_contacts,
-      peer: row.peer_agents,
+      peer: withValidAgentFacts(row.peer_agents),
     })),
     total: totals?.value ?? 0,
   });
@@ -163,7 +168,7 @@ contactRoutes.get('/:id', async (c) => {
     throw new AppError('not_found', 'Contact not found', 404);
   }
 
-  return c.json({ contact: { ...row.peer_contacts, peer: row.peer_agents } });
+  return c.json({ contact: { ...row.peer_contacts, peer: withValidAgentFacts(row.peer_agents) } });
 });
 
 contactRoutes.patch('/:id', async (c) => {
@@ -251,8 +256,8 @@ interface LookupResult {
   error?: string;
 }
 
-// Shared timeout for the two network-bound lookups (well-known fetch, DID
-// resolution).
+// Deadline for fetching a domain's `/.well-known/agents.json`. A DID lookup sets
+// none of its own; see lookupByDid.
 const LOOKUP_TIMEOUT_MS = 5000;
 
 // How many agents a remote instance's directory may contribute to one lookup.
@@ -273,44 +278,17 @@ const MAX_REMOTE_AGENTS = 20;
 // gigabyte is the whole instance. Twenty agents of metadata is a few kilobytes.
 const MAX_DIRECTORY_BYTES = 512 * 1024;
 
-// Read a response body, refusing to buffer more than `limit` bytes.
-//
-// The cap has to be enforced while reading, not after: checking Content-Length
-// trusts the sender to describe itself, and checking the finished string means
-// the memory was already spent.
-async function readCapped(res: Response, limit: number): Promise<string> {
-  const reader = res.body?.getReader();
-  if (!reader) return '';
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      size += value.length;
-      if (size > limit) throw new Error('directory too large');
-      chunks.push(value);
-    }
-  } finally {
-    // Drops the connection rather than letting the rest arrive unread.
-    await reader.cancel().catch(() => {});
-  }
-  const body = new Uint8Array(size);
-  let at = 0;
-  for (const chunk of chunks) {
-    body.set(chunk, at);
-    at += chunk.length;
-  }
-  return new TextDecoder().decode(body);
-}
-
 // Run a network lookup body, mapping any thrown error to the uniform
 // LookupResult error shape so a single transport failure can't bubble a 500.
+// The detail goes to the log and not the response: what a connection to a host
+// the user named failed with — refused, reset, a certificate for some other
+// name — describes whatever answers at that address.
 async function safeLookup(fn: () => Promise<LookupResult>): Promise<LookupResult> {
   try {
     return await fn();
   } catch (e) {
-    return { candidates: [], error: (e as Error).message };
+    console.error('Contact lookup failed:', e instanceof Error ? e.message : String(e));
+    return { candidates: [], error: 'Lookup failed' };
   }
 }
 
@@ -320,26 +298,29 @@ function lookupByDomain(value: string): Promise<LookupResult> {
     const hostname = new URL(`https://${value}`).hostname.replace(/^\[|\]$/g, '');
     try {
       await assertPublicHostname(hostname);
-    } catch (e) {
-      if (e instanceof SsrfUnresolvedError) {
-        return { candidates: [], error: 'Address could not be resolved in time' };
-      }
-      if (e instanceof SsrfBlockedError) {
-        return { candidates: [], error: 'Private addresses not allowed' };
-      }
-      // A name that doesn't resolve isn't an SSRF block; fall through and let
-      // the fetch below fail on its own (safeLookup maps transport errors to
-      // the uniform empty-candidates result). A resolver that never answered is
-      // a different matter — see SsrfUnresolvedError — and is handled above.
+    } catch {
+      // A name that does not resolve is refused too, not left for the fetch to
+      // fail on its own: the fetch resolves the name a second time, and a name
+      // that failed here can answer with a private address there. One message
+      // for every failure, because "private" against "does not resolve" told
+      // the asker which names exist on the network this gateway sits in.
+      return { candidates: [], error: 'Address does not resolve to a public host' };
     }
-    // AbortSignal rather than withTimeout: racing a promise rejects the wrapper
-    // but leaves the request running, and the body is read after that race has
+    // AbortSignal rather than racing the promise: a race rejects the wrapper but
+    // leaves the request running, and the body is read after that race has
     // already been decided. One deadline over the whole exchange, and a socket
     // that actually closes when it expires.
     const res = await fetch(`https://${hostname}/.well-known/agents.json`, {
+      // The guard vetted this host, not wherever a 3xx points next.
+      redirect: 'manual',
       signal: AbortSignal.timeout(LOOKUP_TIMEOUT_MS),
     });
-    const data = JSON.parse(await readCapped(res, MAX_DIRECTORY_BYTES)) as { agents?: unknown[] };
+    if (!res.ok) {
+      return { candidates: [], error: `Directory request failed (HTTP ${res.status})` };
+    }
+    const data = JSON.parse(await readCappedText(res, MAX_DIRECTORY_BYTES)) as {
+      agents?: unknown[];
+    };
     // Every agent on a did:web:<host> instance shares the instance A2A
     // endpoint, mirroring the service entry we publish in did.json.
     const endpoint = `https://${hostname}/a2a/v1`;
@@ -361,10 +342,10 @@ function lookupByDomain(value: string): Promise<LookupResult> {
       seen.add(parsed.data.did);
       wanted.push({
         did: parsed.data.did,
-        name: parsed.data.name,
-        description: parsed.data.description,
+        name: parsed.data.name ?? undefined,
+        description: parsed.data.description ?? undefined,
         endpoint,
-        agentFacts: raw,
+        agentFacts: buildAgentFacts(parsed.data, endpoint),
       });
     }
     const candidates = await Promise.all(wanted.map((input) => upsertPeerAgent(input)));
@@ -374,7 +355,10 @@ function lookupByDomain(value: string): Promise<LookupResult> {
 
 function lookupByDid(value: string): Promise<LookupResult> {
   return safeLookup(async () => {
-    const result = await withTimeout(resolveDidDocument(value), LOOKUP_TIMEOUT_MS);
+    // No deadline of our own: resolution has one for each step, DNS and then the
+    // fetch. A 5s race here ended in the same millisecond as the guard's hold on
+    // a refused name, so which answer came back depended on timer order.
+    const result = await resolveDidDocument(value);
     if (!result.ok) {
       return { candidates: [], error: result.error };
     }
@@ -388,7 +372,10 @@ function lookupByDid(value: string): Promise<LookupResult> {
     if (!endpoint) {
       return { candidates: [], error: 'DID document has no service endpoint' };
     }
-    const row = await upsertPeerAgent({ did: value, endpoint, agentFacts: doc });
+    // No AgentFacts: a DID document is keys and a service endpoint, and storing
+    // it under that name put a document the host wrote wherever AgentFacts are
+    // read — the MCP discovery tool hands them to Claude Code as capabilities.
+    const row = await upsertPeerAgent({ did: value, endpoint });
     return { candidates: [row] };
   });
 }
@@ -446,5 +433,9 @@ contactRoutes.post('/lookup', async (c) => {
     result = { candidates: [] };
   }
 
-  return c.json({ ...result, method: body.method });
+  return c.json({
+    ...result,
+    candidates: result.candidates.map(withValidAgentFacts),
+    method: body.method,
+  });
 });

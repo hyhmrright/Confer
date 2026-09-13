@@ -1,4 +1,5 @@
 import type {
+  Fetcher,
   LLMChatOptions,
   LLMMessage,
   LLMProvider,
@@ -38,10 +39,12 @@ export class AnthropicProvider implements LLMProvider {
   readonly name = 'anthropic';
   private apiKey: string;
   private baseUrl: string;
+  private fetcher: Fetcher;
 
-  constructor(apiKey: string, baseUrl = 'https://api.anthropic.com') {
+  constructor(apiKey: string, baseUrl = 'https://api.anthropic.com', fetcher: Fetcher = fetch) {
     this.apiKey = apiKey;
     this.baseUrl = baseUrl;
+    this.fetcher = fetcher;
   }
 
   // The fields both entry points always send. Note the asymmetry in what each
@@ -61,7 +64,7 @@ export class AnthropicProvider implements LLMProvider {
   // One endpoint, one set of headers — the API version in particular has to stay
   // the same for both calls, so it is written once.
   private post(body: Record<string, unknown>): Promise<Response> {
-    return fetch(`${this.baseUrl}/v1/messages`, {
+    return this.fetcher(`${this.baseUrl}/v1/messages`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

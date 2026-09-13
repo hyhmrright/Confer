@@ -88,7 +88,7 @@ docker compose -f docker-compose.prod.yml logs -f gateway
 
 | Variable | Défaut (`.env.example`) | Notes |
 |----------|--------------------------|-------|
-| `JWT_SECRET` | `change-me-in-production` | **À changer.** Signe les jetons de session des utilisateurs. |
+| `JWT_SECRET` | `change-me-in-production` | **À changer.** Signe les jetons de session des utilisateurs. Le gateway refuse de démarrer avec cette valeur d'exemple ou avec toute valeur de moins de 32 caractères. Pour en générer une : `openssl rand -hex 32`. |
 | `ENCRYPTION_KEY` | 64 zéros | **À changer.** Doit faire 32 octets, soit 64 caractères hexadécimaux. Générer : `openssl rand -hex 32`. Chiffre les clés de LLM stockées. |
 | `POSTGRES_PASSWORD` | `confer` (défaut de compose) | Mot de passe de la base de données. |
 | `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` | `confer` / `confer-secret` | Identifiants du stockage objet. |
@@ -110,6 +110,8 @@ docker compose -f docker-compose.prod.yml up -d
 git pull
 docker compose -f docker-compose.prod.yml up -d --build   # migrate se relance tout seul
 ```
+
+> Depuis le 2026-09-13, le gateway refuse de démarrer tant que `JWT_SECRET` vaut encore `change-me-in-production` ou compte moins de 32 caractères. Avant de mettre à jour une instance plus ancienne, vérifiez `.env` et, si la valeur ne convient pas, remplacez-la par une valeur générée avec `openssl rand -hex 32`. La changer ferme toutes les sessions ouvertes : chacun devra se reconnecter une fois. Les instances installées avec `npx confer-cli` ou le script Oracle ont reçu une valeur aléatoire dès le départ et ne sont pas concernées.
 
 ### Repartir de zéro (efface toutes les données)
 

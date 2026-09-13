@@ -19,6 +19,7 @@ import { uniqueViolation } from '../lib/db-errors.js';
 import { userDid } from '../lib/public-identity.js';
 import { authMiddleware, TOKEN_TYPE } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rate-limit.js';
+import { disconnectSession, disconnectUser } from '../ws/handler.js';
 
 export const authRoutes = new Hono();
 
@@ -295,6 +296,7 @@ authRoutes.post('/refresh', rateLimit(30, 60_000), async (c) => {
     // the sweep isn't left to a table that only ever grows.
     if (session.expires_at.getTime() <= Date.now()) {
       await db.delete(sessions).where(eq(sessions.id, sid));
+      disconnectSession(session.user_id, sid);
       throw new AppError('unauthorized', 'Invalid or expired refresh token', 401);
     }
 
@@ -308,6 +310,9 @@ authRoutes.post('/refresh', rateLimit(30, 60_000), async (c) => {
       !timingSafeEqualHex(presentedHash, session.refresh_token_hash)
     ) {
       await db.delete(sessions).where(eq(sessions.id, sid));
+      // Reuse means one of the two token holders is not the owner, and the
+      // sockets under this session are that holder's live feed.
+      disconnectSession(session.user_id, sid);
       throw new AppError('unauthorized', 'Invalid or expired refresh token', 401);
     }
 
@@ -337,12 +342,14 @@ authRoutes.post('/logout', authMiddleware, async (c) => {
   const { sub, sid } = c.get('user');
   const db = getDb();
   if (sid) {
-    // Revoke exactly this device's session.
+    // Revoke exactly this device's session, and the sockets opened under it.
     await db.delete(sessions).where(and(eq(sessions.user_id, sub), eq(sessions.id, sid)));
+    disconnectSession(sub, sid);
   } else {
     // Legacy access token minted before `sid` existed: fail safe toward
     // revocation by clearing every session this user holds.
     await db.delete(sessions).where(eq(sessions.user_id, sub));
+    disconnectUser(sub);
   }
   return c.json({ ok: true });
 });

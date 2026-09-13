@@ -121,7 +121,7 @@ docker compose -f docker-compose.prod.yml logs -f gateway
 
 | 变量 | 默认值(`.env.example`) | 说明 |
 |----------|--------------------------|-------|
-| `JWT_SECRET` | `change-me-in-production` | **必须改。**用于签发用户会话 token。 |
+| `JWT_SECRET` | `change-me-in-production` | **必须改。**用于签发用户会话 token。gateway 遇到这个占位值、或少于 32 个字符的值会拒绝启动。生成方式:`openssl rand -hex 32`。 |
 | `ENCRYPTION_KEY` | 64 个零 | **必须改。**必须是 32 字节、写成 64 个十六进制字符。生成方式:`openssl rand -hex 32`。用于加密存储的 LLM key。 |
 | `POSTGRES_PASSWORD` | `confer`(compose 默认值) | 数据库密码。 |
 | `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` | `confer` / `confer-secret` | 对象存储凭据。 |
@@ -144,6 +144,8 @@ docker compose -f docker-compose.prod.yml up -d
 git pull
 docker compose -f docker-compose.prod.yml up -d --build   # migrate 会自动重跑
 ```
+
+> 从 2026-09-13 起,`JWT_SECRET` 还是 `change-me-in-production` 或少于 32 个字符时,gateway 会拒绝启动。升级旧实例前先看一眼 `.env`,不合格就换成 `openssl rand -hex 32` 生成的值。换了之后所有已登录的会话都会失效,需要重新登录一次。用 `npx confer-cli` 或 Oracle 脚本安装的实例一开始就是随机生成的值,不受影响。
 
 ### 重置(会清空所有数据)
 

@@ -8,7 +8,7 @@ beforeEach(resetDb);
 
 async function seedAgent(
   user: SeededUser,
-  opts: { isPublic?: boolean; status?: string; capabilities?: string[] } = {},
+  opts: { isPublic?: boolean; status?: string; capabilities?: unknown[] } = {},
 ): Promise<void> {
   await getDb()
     .insert(agents)
@@ -27,7 +27,9 @@ async function seedAgent(
 describe('GET /agents/:username/agent-card.json', () => {
   test('serves a conformant card for a public agent', async () => {
     const user = await seedUser('alice');
-    await seedAgent(user, { capabilities: ['产品咨询'] });
+    await seedAgent(user, {
+      capabilities: [{ type: '产品咨询', scope: ['X100'], languages: ['zh'] }],
+    });
 
     const res = await get(`/agents/${user.username}/agent-card.json`);
     expect(res.status).toBe(200);

@@ -14,8 +14,10 @@ import {
 import { mintToken, resetDb, type SeededUser, seedUser } from '../test/helpers.js';
 import {
   broadcastToConversation,
+  disconnectSession,
   disconnectUser,
   getPresenceAudience,
+  WS_TOKEN_EXPIRED,
   websocket,
 } from './handler.js';
 
@@ -107,19 +109,27 @@ describe('websocket.upgrade authentication', () => {
 // cannot reach. Subscribe through `subscribeTo` instead.
 function fakeSocket(seeded: SeededUser) {
   const sent: string[] = [];
-  const state = { closed: false };
+  const state: { closed: boolean; code?: number } = { closed: false };
   const ws = {
     data: {
       user: { sub: seeded.id, username: seeded.username, sid: seeded.sessionId },
       subscriptions: new Set<string>(),
+      expiresAt: Date.now() + 15 * 60_000,
     },
     send: (payload: string) => sent.push(payload),
-    close: () => {
+    close: (code?: number) => {
       state.closed = true;
+      state.code = code;
       websocket.close(ws as never);
     },
   };
   return { sent, state, ws };
+}
+
+async function waitFor(condition: () => boolean): Promise<void> {
+  for (let i = 0; i < 100 && !condition(); i++) {
+    await new Promise((r) => setTimeout(r, 10));
+  }
 }
 
 // A conversation `ownerId` is a participant of, which is what the subscribe
@@ -302,6 +312,52 @@ describe('disconnectUser', () => {
 
   test('is a no-op for a user with no sockets', () => {
     expect(() => disconnectUser(user.id)).not.toThrow();
+  });
+});
+
+// Authentication used to happen once, at the upgrade: a socket then carried a
+// fifteen-minute token's identity for as long as the connection lived, and a
+// logout or reuse detection deleted a session row no open socket looked at.
+describe('socket lifetime', () => {
+  test('closes a socket when the access token it was opened with expires', async () => {
+    const socket = fakeSocket(user);
+    socket.ws.data.expiresAt = Date.now() + 20;
+    websocket.open(socket.ws as never);
+
+    await waitFor(() => socket.state.closed);
+    expect(socket.state.code).toBe(WS_TOKEN_EXPIRED);
+  });
+
+  test('closes a socket whose session was revoked before it registered', async () => {
+    await getDb().delete(sessions).where(eq(sessions.id, user.sessionId));
+    const socket = fakeSocket(user);
+    websocket.open(socket.ws as never);
+
+    await waitFor(() => socket.state.closed);
+    expect(socket.state.code).toBe(1008);
+  });
+
+  test('disconnectSession closes that session and leaves the others open', async () => {
+    const laptopSession = newId();
+    await getDb()
+      .insert(sessions)
+      .values({
+        id: laptopSession,
+        user_id: user.id,
+        device_id: 'laptop',
+        expires_at: new Date(Date.now() + 60_000),
+      });
+    const phone = fakeSocket(user);
+    const laptop = fakeSocket(user);
+    laptop.ws.data.user.sid = laptopSession;
+    websocket.open(phone.ws as never);
+    websocket.open(laptop.ws as never);
+
+    disconnectSession(user.id, user.sessionId);
+
+    expect(phone.state.code).toBe(1008);
+    expect(laptop.state.closed).toBe(false);
+    websocket.close(laptop.ws as never);
   });
 });
 

@@ -88,7 +88,7 @@ docker compose -f docker-compose.prod.yml logs -f gateway
 
 | चर | डिफ़ॉल्ट (`.env.example`) | टिप्पणियाँ |
 |----------|--------------------------|-------|
-| `JWT_SECRET` | `change-me-in-production` | **इसे बदलें।** उपयोगकर्ता के session टोकन पर हस्ताक्षर करता है। |
+| `JWT_SECRET` | `change-me-in-production` | **इसे बदलें।** उपयोगकर्ता के session टोकन पर हस्ताक्षर करता है। इस नमूना मान, या 32 अक्षरों से छोटे किसी भी मान के साथ gateway शुरू होने से इनकार करता है। बनाएँ: `openssl rand -hex 32`। |
 | `ENCRYPTION_KEY` | 64 शून्य | **इसे बदलें।** 32 बाइट, यानी 64 हेक्स अक्षर होने चाहिए। बनाएँ: `openssl rand -hex 32`। संचित LLM कुंजियों को एन्क्रिप्ट करता है। |
 | `POSTGRES_PASSWORD` | `confer` (compose का डिफ़ॉल्ट) | डेटाबेस का पासवर्ड। |
 | `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` | `confer` / `confer-secret` | वस्तु-भंडार के प्रमाण-पत्र। |
@@ -110,6 +110,8 @@ docker compose -f docker-compose.prod.yml up -d
 git pull
 docker compose -f docker-compose.prod.yml up -d --build   # migrate अपने-आप फिर चलती है
 ```
+
+> 2026-09-13 से, अगर `JWT_SECRET` अब भी `change-me-in-production` है या 32 अक्षरों से छोटा है, तो gateway शुरू होने से मना कर देता है। किसी पुराने इंस्टेंस को अद्यतन करने से पहले `.env` देख लें; शर्त पूरी न हो तो उसे `openssl rand -hex 32` से बने मान से बदल दें। मान बदलते ही सभी खुले सत्र खत्म हो जाते हैं, इसलिए सबको एक बार फिर लॉग इन करना होगा। `npx confer-cli` या Oracle स्क्रिप्ट से लगाए गए इंस्टेंस में शुरू से ही बेतरतीब मान होता है, उन पर इसका असर नहीं पड़ता।
 
 ### सब मिटाकर नया करना (सारा डेटा जाता है)
 

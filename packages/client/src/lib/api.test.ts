@@ -150,6 +150,51 @@ describe('api client', () => {
     expect(stored.user).toEqual({ id: 'u1' });
   });
 
+  // Tabs share one refresh token, and presenting it twice destroys the
+  // session. A tab whose session another tab already rotated must take the
+  // stored pair, not spend the token it holds.
+  test('takes the pair another tab rotated for the same session instead of refreshing', async () => {
+    const tokenFor = (sid: string, n: number) => `h.${btoa(JSON.stringify({ sid, n }))}.s`;
+    localStorage.setItem(
+      'confer_auth',
+      JSON.stringify({ access_token: tokenFor('s1', 2), refresh_token: 'refresh-2' }),
+    );
+    setToken(tokenFor('s1', 1));
+    setRefreshToken('refresh-1');
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({}, 401))
+      .mockResolvedValueOnce(jsonResponse({ ok: true }));
+
+    await api.get('/secure');
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const retry = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect((retry[1].headers as Record<string, string>).Authorization).toBe(
+      `Bearer ${tokenFor('s1', 2)}`,
+    );
+  });
+
+  // A different session in storage is another login, not a rotation of ours.
+  test('refreshes its own session when storage holds a different one', async () => {
+    const tokenFor = (sid: string) => `h.${btoa(JSON.stringify({ sid }))}.s`;
+    localStorage.setItem(
+      'confer_auth',
+      JSON.stringify({ access_token: tokenFor('other'), refresh_token: 'refresh-x' }),
+    );
+    setToken(tokenFor('s1'));
+    setRefreshToken('refresh-1');
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({}, 401))
+      .mockResolvedValueOnce(jsonResponse({ access_token: 'fresh', refresh_token: 'refresh-2' }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true }));
+
+    await api.get('/secure');
+
+    const refreshCall = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect(refreshCall[0]).toBe('/api/v1/auth/refresh');
+    expect(JSON.parse(String(refreshCall[1].body)).refresh_token).toBe('refresh-1');
+  });
+
   test('throws a 401 ApiError when the refresh itself fails', async () => {
     setToken('stale');
     setRefreshToken('refresh-1');

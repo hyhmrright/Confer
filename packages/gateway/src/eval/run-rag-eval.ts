@@ -27,7 +27,7 @@
  */
 
 import { createProvider } from '@confer/agent-runtime';
-import { newId } from '@confer/shared';
+import { llmProvider, newId, providerBaseUrl } from '@confer/shared';
 import { eq } from 'drizzle-orm';
 import { getDb } from '../db/connection.js';
 import { users } from '../db/schema.js';
@@ -44,6 +44,7 @@ import {
 } from '../lib/qdrant.js';
 import { BATCH_SIZE, CROSS_LINGUAL_SLOTS, RECALL_DEPTH } from '../lib/rag-config.js';
 import { rerankCandidates } from '../lib/rerank.js';
+import { runtimeFetcher } from '../lib/runtime-url.js';
 import { detectLang } from '../lib/text-lang.js';
 import { type CaseKind, CORPUS_FILES, DOC_LANG, GOLDEN_SET } from './golden-set.js';
 import {
@@ -175,15 +176,24 @@ async function ingestCorpus(key: string, provider: EmbeddingProvider): Promise<n
  * The reranking model, when `--rerank` is passed.
  *
  * Separate from the embedding credential: reranking needs a chat model, and on
- * a local runtime those are different models behind the same address.
+ * a local runtime those are different models behind the same address. A local
+ * runtime is dialled the way the product dials one, pinned to the addresses its
+ * name was checked at.
  */
-function resolveReranker():
-  | { provider: ReturnType<typeof createProvider>; model?: string }
-  | undefined {
+async function resolveReranker(): Promise<
+  { provider: ReturnType<typeof createProvider>; model?: string } | undefined
+> {
   if (!process.argv.includes('--rerank')) return undefined;
   const name = process.env.EVAL_RERANK_PROVIDER ?? 'ollama';
   const credential = process.env.EVAL_RERANK_KEY ?? 'http://localhost:11434';
-  const provider = createProvider(name, credential);
+  const spec = llmProvider(name);
+  const fetcher = spec?.keyIsBaseUrl
+    ? await runtimeFetcher(providerBaseUrl(spec, credential)).catch((error: unknown) => {
+        console.error(`Cannot use rerank runtime ${credential}: ${String(error)}`);
+        return process.exit(1);
+      })
+    : undefined;
+  const provider = createProvider(name, credential, fetcher);
   if (!provider) {
     console.error(`Unknown rerank provider: ${name}`);
     process.exit(1);
@@ -195,7 +205,7 @@ async function runCases(
   key: string,
   provider: EmbeddingProvider,
   k: number,
-  reranker: ReturnType<typeof resolveReranker>,
+  reranker: Awaited<ReturnType<typeof resolveReranker>>,
 ): Promise<CaseResult[]> {
   const results: CaseResult[] = [];
 
@@ -339,7 +349,7 @@ if (process.argv.includes('--skip-ingest')) {
 }
 
 const k = Number(readFlag('--k') ?? EVAL_K);
-const reranker = resolveReranker();
+const reranker = await resolveReranker();
 console.log(
   `\nRunning ${GOLDEN_SET.length} queries at k=${k}` +
     (reranker ? ` (recall ${RECALL_DEPTH} → rerank ${k})` : '') +

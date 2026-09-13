@@ -13,6 +13,7 @@ mock.module('../lib/api.js', () => ({
   setToken: mock(() => {}),
   setRefreshToken: mock(() => {}),
   setOnAuthExpired: mock(() => {}),
+  refreshSession: mock(async () => false),
   setOnTokenRefreshed: mock(() => {}),
   getToken: mock(() => null),
 }));

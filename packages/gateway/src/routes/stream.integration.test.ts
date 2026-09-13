@@ -442,4 +442,49 @@ describe('GET /stream conversation history window', () => {
     expect(sent).not.toContain('earlier-0\n');
     expect(sent).not.toContain('earlier-9\n');
   });
+
+  // A connected peer's message in an A2A thread is not something the agent
+  // said. As `assistant` it reached the owner's turn — every knowledge base,
+  // memory and the contact list — as the agent's own words to carry on from.
+  test("sends a peer's message as labelled input, never as the agent's own turn", async () => {
+    const convId = await seedConversation(user.id);
+    await seedParticipant(convId, user.id);
+    await seedAgent(user.id, { provider: 'openai', model: 'gpt-4.1-mini' });
+    await put('/api/v1/agents/me/llm-keys', {
+      token: user.token,
+      body: { provider: 'openai', api_key: 'sk-test-llm' },
+    });
+    await getDb().insert(messages).values({
+      id: newId(),
+      conversation_id: convId,
+      sender_type: 'peer_agent',
+      sender_id: user.id,
+      content: 'PEER-SAID-THIS',
+      via: 'a2a',
+    });
+    const msgId = await seedMessage(convId, user.id);
+
+    let sentHistory: Array<{ role: string; content: string }> = [];
+    restoreFetch = mockFetch((url, init) => {
+      if (url.includes('/embeddings')) {
+        const v = new Array(1536).fill(0);
+        v[0] = 1;
+        return Response.json({ data: [{ embedding: v, index: 0 }] });
+      }
+      if (!url.includes('/chat/completions')) return undefined;
+      if (sentHistory.length === 0) {
+        sentHistory = JSON.parse(String(init?.body)).messages;
+      }
+      return new Response('data: {"choices":[{"delta":{"content":"Hi."}}]}\n\ndata: [DONE]\n\n', {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+      });
+    });
+
+    await (await get(`/api/v1/stream/${convId}/${msgId}`, { token: user.token })).text();
+
+    const fromPeer = sentHistory.find((m) => m.content.includes('PEER-SAID-THIS'));
+    expect(fromPeer?.role).toBe('user');
+    expect(fromPeer?.content).toContain('connected peer agent');
+  });
 });

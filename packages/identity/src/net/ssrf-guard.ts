@@ -3,10 +3,9 @@ import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 
 // Thrown when a hostname resolves to (or literally is) a private, loopback,
-// link-local, or otherwise reserved address. Callers distinguish this from a
-// plain DNS-resolution failure: a blocked address must abort the request, while
-// a name that simply doesn't resolve is harmless (the subsequent fetch fails on
-// its own with nothing to connect to).
+// link-local, or otherwise reserved address. A blocked address always aborts
+// the request; whether a DNS failure does too is the caller's decision, and the
+// separate type is what lets it make one.
 export class SsrfBlockedError extends Error {
   readonly hostname: string;
   readonly address: string;
@@ -23,9 +22,10 @@ export class SsrfBlockedError extends Error {
 //
 // Every call site has to decide about this one; it is a sibling of
 // SsrfBlockedError, not a subclass, so a `catch` that handles only the block
-// lets this one fall through to the fetch it was guarding — silently. All three
-// callers therefore account for it in so many words, two by refusing it and
-// routes/users.ts by admitting it on purpose.
+// lets this one fall through to the fetch it was guarding — silently. Every
+// caller therefore accounts for it in so many words: the ones guarding a host
+// someone else named refuse it, and routes/users.ts admits it on purpose when an
+// owner saves their own runtime's address.
 //
 // It is deliberately not folded into the harmless "name doesn't resolve" case,
 // even though both leave us without an address. A definitive negative —
@@ -181,28 +181,11 @@ export function isBlockedIp(ip: string): boolean {
   return true;
 }
 
-// True for the loopback range (127.0.0.0/8, ::1, ::ffff:127.x). Callers that
-// legitimately talk to their own host (e.g. DID resolution against a
-// single-machine `did:web:localhost` deployment) opt loopback back in via
-// `allowLoopback` without also re-admitting the LAN / metadata ranges.
-function isLoopbackIp(ip: string): boolean {
-  if (isIP(ip) === 4) {
-    const value = ipv4ToInt(ip);
-    return value !== null && inCidr(value, '127.0.0.0', 8);
-  }
-  const groups = expandIpv6(ip.toLowerCase());
-  if (!groups) return false; // unparseable → not additionally allowed; isBlockedIpv6 already fails closed on it
-  const embedded = embeddedIpv4(groups);
-  if (embedded) {
-    const value = ipv4ToInt(embedded);
-    return value !== null && inCidr(value, '127.0.0.0', 8);
-  }
-  return isZeroExceptLast(groups) && groups[7] === 1; // ::1 only — :: (unspecified) is not loopback
-}
-
-/** `dnsTimeoutMs` bounds the lookup; past it the guard throws SsrfUnresolvedError. */
+/**
+ * `dnsTimeoutMs` bounds the lookup; past it the guard throws SsrfUnresolvedError.
+ * assertPublicHostname also refuses a name no sooner than it.
+ */
 export interface SsrfGuardOptions {
-  allowLoopback?: boolean;
   dnsTimeoutMs?: number;
 }
 
@@ -211,60 +194,81 @@ export interface SsrfGuardOptions {
 // IP is checked directly; otherwise DNS resolution decides. Throws
 // SsrfBlockedError for a blocked target, SsrfUnresolvedError when the resolver
 // never answered, and propagates the DNS error for a name that answered with a
-// definitive negative. `allowLoopback` permits 127.0.0.0/8 and ::1 (still
-// blocking every other private/reserved range) for callers whose own service
-// lives on loopback.
-export async function assertPublicHostname(
-  hostname: string,
-  opts?: SsrfGuardOptions,
-): Promise<string[]> {
-  const allowLoopback = opts?.allowLoopback ?? false;
-  return assertAddresses(
-    hostname,
-    (address) => isBlockedIp(address) && !(allowLoopback && isLoopbackIp(address)),
-    opts?.dnsTimeoutMs ?? DNS_TIMEOUT_MS,
-  );
+// definitive negative. A name is refused no sooner than the DNS deadline,
+// whichever of the three refused it.
+export function assertPublicHostname(hostname: string, opts?: SsrfGuardOptions): Promise<string[]> {
+  return assertAddresses(hostname, {
+    blocked: isBlockedIp,
+    dnsTimeoutMs: opts?.dnsTimeoutMs ?? DNS_TIMEOUT_MS,
+    holdRefusals: true,
+  });
 }
 
-// True for the link-local ranges: IPv4 169.254.0.0/16 and IPv6 fe80::/10.
-// 169.254.169.254 is the cloud instance-metadata address on AWS, GCP, Azure,
-// OCI, DigitalOcean and Alibaba alike, and `fd00:ec2::254` its AWS IPv6 twin —
-// the single highest-value SSRF target on any hosted deployment, since the
-// metadata service authenticates callers by nothing but their ability to reach
-// it. Nothing legitimate is ever addressed this way.
-function isLinkLocalIp(ip: string): boolean {
-  if (isIP(ip) === 4) {
-    const value = ipv4ToInt(ip);
-    return value !== null && inCidr(value, '169.254.0.0', 16);
-  }
+// IPv4 addresses cloud instance metadata answers on. 169.254.169.254 serves AWS,
+// GCP, Azure, OCI and DigitalOcean, and the rest of 169.254.0.0/16 has no
+// legitimate use to lose. Alibaba Cloud answers on 100.100.100.200 instead. That
+// one sits inside 100.64.0.0/10, which Tailscale assigns to every machine on a
+// tailnet — somewhere a local runtime genuinely lives — so the address is
+// refused and its range is not.
+const METADATA_V4_CIDRS: ReadonlyArray<readonly [string, number]> = [
+  ['169.254.0.0', 16],
+  ['100.100.100.200', 32],
+];
+
+function isMetadataIpv4(ip: string): boolean {
+  const value = ipv4ToInt(ip);
+  return value !== null && METADATA_V4_CIDRS.some(([base, prefix]) => inCidr(value, base, prefix));
+}
+
+// GCP's metadata server over IPv6, `fd20:ce::254`, as expanded hextets.
+const GCP_METADATA_V6 = [0xfd20, 0xce, 0, 0, 0, 0, 0, 0x254] as const;
+
+// True for an address instance metadata can answer on: the IPv4 ones above in
+// any IPv6 encoding, IPv6 link-local fe80::/10, and the IPv6 addresses AWS
+// (`fd00:ec2::254`) and GCP (`fd20:ce::254`) serve it on. It is the single
+// highest-value SSRF target on any hosted deployment, since the metadata
+// service authenticates callers by nothing but their ability to reach it.
+function isMetadataIp(ip: string): boolean {
+  if (isIP(ip) === 4) return isMetadataIpv4(ip);
   const addr = ip.toLowerCase();
   const groups = expandIpv6(addr);
   if (!groups) return true; // unparseable but claims to be IPv6 → fail closed
   const embedded = embeddedIpv4(groups);
-  if (embedded) {
-    const value = ipv4ToInt(embedded);
-    return value !== null && inCidr(value, '169.254.0.0', 16);
-  }
+  if (embedded) return isMetadataIpv4(embedded);
   if (/^fe[89ab]/.test(addr)) return true; // fe80::/10
-  return groups[0] === 0xfd00 && groups[1] === 0x0ec2; // fd00:ec2::/32 (AWS IMDS over IPv6)
+  if (groups[0] === 0xfd00 && groups[1] === 0x0ec2) return true; // fd00:ec2::/32 (AWS IMDS over IPv6)
+  return GCP_METADATA_V6.every((hextet, i) => groups[i] === hextet);
 }
 
 /**
- * Reject a hostname that resolves to a link-local address, while leaving every
- * other private range reachable.
+ * Reject a hostname that resolves to a cloud metadata address, while leaving
+ * every private range reachable.
  *
  * This is the gate for addresses the owner deliberately points us at — a local
  * LLM runtime is the case that exists — where `assertPublicHostname` would be
  * wrong: `host.docker.internal`, `localhost` and a LAN address are the
  * documented ways to run Ollama, so blocking private ranges would block the
- * feature rather than an attack. What stays blocked is the one range with no
- * legitimate use, which is also the one worth reaching: cloud metadata.
+ * feature rather than an attack. What stays blocked is the one kind of address
+ * with no legitimate use, which is also the one worth reaching.
  */
-export function assertNotLinkLocalHostname(
+export function assertNotMetadataHostname(
   hostname: string,
   opts?: SsrfGuardOptions,
 ): Promise<string[]> {
-  return assertAddresses(hostname, isLinkLocalIp, opts?.dnsTimeoutMs ?? DNS_TIMEOUT_MS);
+  return assertAddresses(hostname, {
+    blocked: isMetadataIp,
+    dnsTimeoutMs: opts?.dnsTimeoutMs ?? DNS_TIMEOUT_MS,
+    // The owner already reaches our network through the address they set, so
+    // how long a refusal takes has nothing to tell them.
+    holdRefusals: false,
+  });
+}
+
+interface AddressCheck {
+  blocked: (address: string) => boolean;
+  dnsTimeoutMs: number;
+  /** Refuse a name no sooner than the DNS deadline. */
+  holdRefusals: boolean;
 }
 
 // Resolve `hostname` to its addresses and throw SsrfBlockedError if `blocked`
@@ -272,8 +276,7 @@ export function assertNotLinkLocalHostname(
 // about bracket notation or about which addresses a name actually has.
 async function assertAddresses(
   hostname: string,
-  blocked: (address: string) => boolean,
-  dnsTimeoutMs: number,
+  { blocked, dnsTimeoutMs, holdRefusals }: AddressCheck,
 ): Promise<string[]> {
   const reject = (address: string): void => {
     if (blocked(address)) {
@@ -307,16 +310,37 @@ async function assertAddresses(
     return [bareHost];
   }
 
-  const resolved = await lookupWithin(bareHost, dnsTimeoutMs);
-  const addresses = resolved.map((entry) => entry.address);
-  for (const address of addresses) reject(address);
-  return addresses;
+  // A name on the internal network, one that does not exist and one whose
+  // resolver hung are refused in the same words, but each still took its own
+  // time — as long as the resolver that knows the name, as long as whoever
+  // denies it, the whole deadline — so a stopwatch told a peer what the message
+  // no longer did. Every refusal therefore waits on one timer, started before
+  // the lookup's deadline timer: a hang rejects on that second one, and a hold
+  // computed after it landed a tick later than the rest. An IP literal is
+  // refused on sight above, since whoever wrote it already knows what it is.
+  let holdTimer: ReturnType<typeof setTimeout> | undefined;
+  const hold = holdRefusals
+    ? new Promise<void>((resolve) => {
+        holdTimer = setTimeout(resolve, dnsTimeoutMs);
+      })
+    : undefined;
+  try {
+    const resolved = await lookupWithin(bareHost, dnsTimeoutMs);
+    const addresses = resolved.map((entry) => entry.address);
+    for (const address of addresses) reject(address);
+    clearTimeout(holdTimer);
+    return addresses;
+  } catch (error) {
+    await hold;
+    throw error;
+  }
 }
 
 // `dns.promises.lookup` takes no AbortSignal, so the deadline has to be a race.
 // The losing lookup keeps its libuv threadpool slot until the OS resolver gives
-// up, which is the cost of not having a cancel; it is bounded by the rate
-// limiter in front of every caller, and the alternative — `dns.Resolver`, which
+// up, which is the cost of not having a cancel; it is bounded by what admits
+// each caller — a per-address rate limit on inbound A2A, a signed-in account on
+// contact lookup and consult — and the alternative — `dns.Resolver`, which
 // does support a timeout — asks c-ares directly and so cannot see /etc/hosts,
 // where `host.docker.internal` lives. Losing the local LLM runtime to fix a
 // hang would be trading a whole feature for a deadline.

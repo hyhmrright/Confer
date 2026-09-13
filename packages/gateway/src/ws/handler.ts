@@ -18,7 +18,17 @@ import { type AuthPayload, TOKEN_TYPE } from '../middleware/auth.js';
 export interface WsData {
   user: AuthPayload;
   subscriptions: Set<string>;
+  /** When the access token this socket was opened with expires, in epoch ms. */
+  expiresAt: number;
+  expiryTimer?: ReturnType<typeof setTimeout>;
 }
+
+/**
+ * Close code for a socket whose access token has expired. The client renews
+ * its token before reconnecting, rather than retrying with the one just
+ * refused.
+ */
+export const WS_TOKEN_EXPIRED = 4001;
 
 // Process-local: a socket is only reachable from the instance that accepted it.
 // This is one of the three things that pin the gateway to a single replica (with
@@ -108,7 +118,9 @@ export function sendToUser(userId: string, message: WsServerMessage): void {
  * socket is a read channel over the same data the REST API serves; it gets the
  * same door.
  */
-async function authenticateUpgrade(req: Request): Promise<AuthPayload | null> {
+async function authenticateUpgrade(
+  req: Request,
+): Promise<{ user: AuthPayload; expiresAt: number } | null> {
   const url = new URL(req.url);
   const token = url.searchParams.get('token');
   if (!token) return null;
@@ -119,33 +131,46 @@ async function authenticateUpgrade(req: Request): Promise<AuthPayload | null> {
   let sub: string;
   let username: string;
   let sid: string;
+  let expiresAt: number;
   try {
     const { payload } = await jose.jwtVerify(token, secret, { issuer: env.JWT_ISSUER });
     if (payload.typ !== TOKEN_TYPE.access) return null;
-    if (typeof payload.sid !== 'string') return null;
+    if (typeof payload.sid !== 'string' || typeof payload.exp !== 'number') return null;
     sub = payload.sub as string;
     username = payload.username as string;
     sid = payload.sid;
+    expiresAt = payload.exp * 1000;
   } catch {
     return null;
   }
 
+  if (!(await sessionIsLive(sub, sid))) return null;
+  return { user: { sub, username, sid }, expiresAt };
+}
+
+/** The account is enabled and the session behind the token still exists. */
+async function sessionIsLive(userId: string, sid: string): Promise<boolean> {
   const db = getDb();
   const [row] = await db
     .select({ status: users.status })
     .from(users)
-    .where(eq(users.id, sub))
+    .where(eq(users.id, userId))
     .limit(1);
-  if (!row || row.status === 'disabled') return null;
+  if (!row || row.status === 'disabled') return false;
 
   const [session] = await db
     .select({ id: sessions.id })
     .from(sessions)
     .where(eq(sessions.id, sid))
     .limit(1);
-  if (!session) return null;
+  return session !== undefined;
+}
 
-  return { sub, username, sid };
+// A logout or ban that lands between the upgrade's check and the socket being
+// registered finds nothing to close, so the socket looks again once it is.
+async function closeIfRevoked(ws: ServerWebSocket<WsData>): Promise<void> {
+  const { sub, sid } = ws.data.user;
+  if (!sid || !(await sessionIsLive(sub, sid))) ws.close(1008, 'Session revoked');
 }
 
 /**
@@ -165,22 +190,41 @@ export function disconnectUser(userId: string): void {
   }
 }
 
+/**
+ * Close the sockets opened under one session — what logging out of one device,
+ * or refresh-token reuse detection, revokes. Deleting the session row stops the
+ * next upgrade and nothing already open, the same gap `disconnectUser` closes
+ * for a ban: a socket opened with a stolen token went on receiving the victim's
+ * messages after they had logged out.
+ */
+export function disconnectSession(userId: string, sid: string): void {
+  const connections = connectionsByUser.get(userId);
+  if (!connections) return;
+  for (const ws of [...connections]) {
+    if (ws.data.user.sid === sid) ws.close(1008, 'Session revoked');
+  }
+}
+
 export const websocket = {
   async upgrade(req: Request, server: Server<unknown>): Promise<Response | undefined> {
-    const user = await authenticateUpgrade(req);
-    if (!user) {
+    const auth = await authenticateUpgrade(req);
+    if (!auth) {
       return new Response('Unauthorized', { status: 401 });
     }
 
     // Per-user connection cap. Only user-scoped: /ws has no XFF, so every user
     // shares nginx's upstream IP and an IP-based cap would throttle collectively.
-    const existing = connectionsByUser.get(user.sub);
+    const existing = connectionsByUser.get(auth.user.sub);
     if (existing && existing.size >= MAX_CONNECTIONS_PER_USER) {
       return new Response('Too many connections', { status: 429 });
     }
 
     const success = server.upgrade(req, {
-      data: { user, subscriptions: new Set<string>() } satisfies WsData,
+      data: {
+        user: auth.user,
+        subscriptions: new Set<string>(),
+        expiresAt: auth.expiresAt,
+      } satisfies WsData,
     });
     if (success) return undefined;
     return new Response('WebSocket upgrade failed', { status: 500 });
@@ -195,9 +239,19 @@ export const websocket = {
     }
     set.add(ws);
 
+    // The token was checked once, at the upgrade, and then vouched for the
+    // socket for as long as the connection lasted — a day, by nginx's read
+    // timeout — though it was good for fifteen minutes. The socket ends when
+    // the token does; the client renews it and reconnects.
+    ws.data.expiryTimer = setTimeout(
+      () => ws.close(WS_TOKEN_EXPIRED, 'Token expired'),
+      Math.max(0, ws.data.expiresAt - Date.now()),
+    );
+
     // `open`, `message` and `close` are synchronous, so the database work they
     // start is detached by construction. `runDetached` keeps the promise so a
     // test's `resetDb` can join it rather than truncate over it.
+    runDetached(closeIfRevoked(ws), (e) => console.error('session recheck failed:', e));
     runDetached(broadcastPresence(userId, ws.data.user.username, true), (e) =>
       console.error('presence broadcast failed:', e),
     );
@@ -267,6 +321,7 @@ export const websocket = {
 
   close(ws: ServerWebSocket<WsData>) {
     const userId = ws.data.user.sub;
+    clearTimeout(ws.data.expiryTimer);
     forget(ws);
     const set = connectionsByUser.get(userId);
     if (set) {

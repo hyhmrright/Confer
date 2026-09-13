@@ -265,6 +265,8 @@ WSS  /ws?token=<access_token>&device_id=<device_id>
 
 La autenticación del handshake es idéntica a la de REST, no un «si la firma vale, que pase»: `typ` tiene que ser `access`, `sid` tiene que apuntar a una sesión que siga existiendo y la cuenta no puede estar `disabled`. Las tres cosas son imprescindibles: sin ellas, a una cuenta bloqueada le basta con que su token no haya caducado para reconectarse y seguir recibiendo mensajes, mientras que el bloqueo en sí (borrar todas sus sesiones) no revoca nada por esta vía. Bloquear a alguien **cierra también los sockets que ya tuviera abiertos**: nginx da a `/ws` un `proxy_read_timeout` de un día, y detener el siguiente handshake no detiene la conexión ya establecida.
 
+Tampoco el token comprobado en el handshake avala el socket para siempre: cuando el token de acceso caduca, el servidor cierra la conexión con `4001` y el cliente renueva su token antes de reconectar. Cerrar sesión, o que se detecte la reutilización de un token de refresco, cierra con `1008` los sockets abiertos bajo la sesión que se borra.
+
 ### Formato de los mensajes
 
 Todos los mensajes WS son JSON y llevan un campo `type`:
@@ -408,7 +410,7 @@ GET    /a2a/v1/stream/{message_id}       # recoge la respuesta en flujo (SSE)
 GET    /a2a/v1/agent-facts/{agent_did}   # AgentFacts público
 ```
 
-Todos los endpoints A2A exigen verificación de la firma HTTP del mensaje.
+Todos los endpoints A2A exigen verificación de la firma HTTP del mensaje, salvo `agent-facts`: igual que `/.well-known/agents.json`, es un documento público de descubrimiento con la misma visibilidad, así que un Agente no público o dado de baja devuelve 404 siempre. Sus `capabilities` solo incluyen lo que el dueño guardó con la forma NANDA (`{type, scope, languages}`).
 
 ## .well-known endpoints
 
@@ -476,7 +478,7 @@ Eventos admitidos: `message.new.peer`, `permission.granted`, `thread.archived`.
 | `/api/v1/auth/login` | 10/minuto por IP |
 | `/api/v1/auth/register` | 3/hora por IP |
 | `/api/v1/conversations/*/messages` POST | 60/minuto por usuario |
-| `/a2a/v1/*` | 100/minuto por dominio de peer (más si está en la lista blanca) |
+| `/a2a/v1/*` | 60/minuto por IP y ruta, y 300/minuto por IP en todo `/a2a/v1` |
 | WSS | como mucho 10 conexiones simultáneas por usuario |
 
 Respuesta al superar el límite:

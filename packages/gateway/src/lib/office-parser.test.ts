@@ -1,6 +1,9 @@
 import { describe, expect, test } from 'bun:test';
+import { randomBytes } from 'node:crypto';
 import { createRequire } from 'node:module';
+import { crc32, deflateRawSync } from 'node:zlib';
 import { extractDocxText, extractXlsxText } from './office-parser.js';
+import { MAX_OOXML_MARKUP } from './rag-config.js';
 
 // The .docx is a committed fixture: writing one takes a document generator this
 // package has no other reason to depend on. The .xlsx side builds its input
@@ -135,5 +138,143 @@ describe('extractXlsxText', () => {
     expect(text).toContain('## 有数据');
     expect(text).not.toContain('## 全空');
     expect(text.split('\n').filter((line) => line.trim() === '|  |')).toHaveLength(0);
+  });
+});
+
+// A deflated zip, built by hand: the hostile shapes below are exactly what a
+// document writer would refuse to produce.
+function zipOf(entries: Record<string, string | Buffer>): ArrayBuffer {
+  const parts: Buffer[] = [];
+  const directory: Buffer[] = [];
+  let offset = 0;
+  for (const [name, text] of Object.entries(entries)) {
+    const raw = Buffer.from(text);
+    const packed = deflateRawSync(raw);
+    const nameBytes = Buffer.from(name);
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(20, 4);
+    local.writeUInt16LE(8, 8);
+    local.writeUInt32LE(crc32(raw), 14);
+    local.writeUInt32LE(packed.length, 18);
+    local.writeUInt32LE(raw.length, 22);
+    local.writeUInt16LE(nameBytes.length, 26);
+    const central = Buffer.alloc(46);
+    central.writeUInt32LE(0x02014b50, 0);
+    central.writeUInt16LE(20, 4);
+    central.writeUInt16LE(20, 6);
+    central.writeUInt16LE(8, 10);
+    central.writeUInt32LE(crc32(raw), 16);
+    central.writeUInt32LE(packed.length, 20);
+    central.writeUInt32LE(raw.length, 24);
+    central.writeUInt16LE(nameBytes.length, 28);
+    central.writeUInt32LE(offset, 42);
+    parts.push(local, nameBytes, packed);
+    directory.push(central, nameBytes);
+    offset += local.length + nameBytes.length + packed.length;
+  }
+  const directoryBytes = Buffer.concat(directory);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(directory.length / 2, 8);
+  end.writeUInt16LE(directory.length / 2, 10);
+  end.writeUInt32LE(directoryBytes.length, 12);
+  end.writeUInt32LE(offset, 16);
+  const out = Buffer.concat([...parts, directoryBytes, end]);
+  return out.buffer.slice(out.byteOffset, out.byteOffset + out.length) as ArrayBuffer;
+}
+
+// `part` is where the main document lives; mammoth finds it through `_rels`, so
+// it need not be called document.xml at all.
+function docxWithBody(
+  body: string,
+  {
+    part = 'word/document.xml',
+    extra = {},
+  }: { part?: string; extra?: Record<string, Buffer> } = {},
+): ArrayBuffer {
+  return zipOf({
+    '[Content_Types].xml':
+      '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>',
+    '_rels/.rels': `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="${part}"/></Relationships>`,
+    [part]: `<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}</w:body></w:document>`,
+    ...extra,
+  });
+}
+
+describe('hostile office documents', () => {
+  // Trailing whitespace was stripped with `/[^\S\n]+\n/g`, which retries a
+  // whitespace run from every position inside it when the run does not end at
+  // a newline. A million spaces — a few kilobytes zipped — was ~10¹² steps on
+  // the gateway's only thread.
+  test('a long run of spaces extracts in linear time', async () => {
+    const run = `<w:p><w:r><w:t xml:space="preserve">${' '.repeat(1_000_000)}x</w:t></w:r></w:p>`;
+    const started = performance.now();
+    expect(await extractDocxText(docxWithBody(run))).toBe('x');
+    expect(performance.now() - started).toBeLessThan(2000);
+  });
+
+  // mammoth peaked at 2.8 GB of RSS on 20 MB of paragraph XML that zipped to
+  // 130 KB. The archive has to be refused before a parser sees it.
+  const paragraph = '<w:p><w:r><w:t>hello world</w:t></w:r></w:p>'; // six `<`
+  const paragraphs = paragraph.repeat(Math.ceil(MAX_OOXML_MARKUP / 6) + 1);
+
+  test('refuses a .docx whose markup passes the budget', async () => {
+    const bomb = docxWithBody(paragraphs);
+    expect(bomb.byteLength).toBeLessThan(100_000);
+    await expect(extractDocxText(bomb)).rejects.toThrow('expands past');
+  });
+
+  // The main document is found through `_rels`, so a budget keyed on the
+  // `.xml` suffix was one rename away from not applying.
+  test('refuses the same document under a name that is not .xml', async () => {
+    const bomb = docxWithBody(paragraphs, { part: 'word/document.bin' });
+    await expect(extractDocxText(bomb)).rejects.toThrow('expands past');
+  });
+
+  test('refuses a .xlsx whose markup passes the budget', async () => {
+    const bomb = zipOf({ 'xl/worksheets/sheet1.xml': '<c/>'.repeat(MAX_OOXML_MARKUP + 1) });
+    await expect(extractXlsxText(bomb)).rejects.toThrow('expands past');
+  });
+
+  // Binary parts hold `<` and `=` only by chance, so a document that is mostly
+  // pictures must not be mistaken for a markup bomb.
+  test('admits a document carrying megabytes of image data', async () => {
+    const image = randomBytes(12 * 1024 * 1024);
+    const archive = docxWithBody('<w:p><w:r><w:t>caption</w:t></w:r></w:p>', {
+      extra: { 'word/media/image1.png': image },
+    });
+    expect(await extractDocxText(archive)).toBe('caption');
+  });
+
+  // JSZip shifts every offset when the central directory does not end where
+  // the end record sits, so a harmless directory at the stated offset could
+  // front for the one the parser actually reads.
+  test('refuses an archive whose central directory is not where it says', async () => {
+    const archive = docxWithBody('<w:p/>');
+    const bytes = Buffer.from(archive);
+    const end = bytes.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+    bytes.writeUInt32LE(bytes.readUInt32LE(end + 12) - 1, end + 12);
+    await expect(extractDocxText(archive)).rejects.toThrow('Not a readable');
+  });
+
+  // JSZip reads directory records for as long as their signature continues,
+  // whatever count the end record declares, so a walk bound by that count
+  // missed every record past it — the main document included.
+  test('refuses an archive whose end record understates its entries', async () => {
+    const archive = docxWithBody('<w:p/>');
+    const bytes = Buffer.from(archive);
+    const end = bytes.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+    bytes.writeUInt16LE(1, end + 8);
+    bytes.writeUInt16LE(1, end + 10);
+    await expect(extractDocxText(archive)).rejects.toThrow('Not a readable');
+  });
+
+  test('refuses an end record that sends the zip reader to ZIP64', async () => {
+    const archive = docxWithBody('<w:p/>');
+    const bytes = Buffer.from(archive);
+    const end = bytes.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+    bytes.writeUInt16LE(0xffff, end + 4);
+    await expect(extractDocxText(archive)).rejects.toThrow('Not a readable');
   });
 });

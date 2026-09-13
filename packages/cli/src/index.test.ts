@@ -139,8 +139,8 @@ describe('generateSecrets', () => {
     expect(encryptionKey).toMatch(/^[0-9a-f]{64}$/);
   });
 
-  test('produces a JWT_SECRET past the 16-character minimum', () => {
-    expect(generateSecrets().jwtSecret.length).toBeGreaterThanOrEqual(16);
+  test('produces a JWT_SECRET past the 32-character minimum', () => {
+    expect(generateSecrets().jwtSecret.length).toBeGreaterThanOrEqual(32);
   });
 
   test('never repeats itself', () => {

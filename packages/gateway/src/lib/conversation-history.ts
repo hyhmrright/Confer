@@ -1,4 +1,4 @@
-import { and, desc, eq, lt } from 'drizzle-orm';
+import { and, desc, eq, lt, type SQL } from 'drizzle-orm';
 import { getDb } from '../db/connection.js';
 import { messages } from '../db/schema.js';
 
@@ -27,11 +27,16 @@ type MessageRow = typeof messages.$inferSelect;
  * `now()` — the TRANSACTION timestamp, shared by every row a transaction
  * writes — and loses its microseconds on the way back into a JS Date, so a
  * value read from one row cannot even be compared against another reliably.
+ *
+ * `only` narrows which rows count, inside the same window query — filtering
+ * after the fact would hand back fewer than `limit` rows whenever the newest
+ * ones were filtered out.
  */
 export async function historyBefore(
   conversationId: string,
   beforeId: string | undefined,
   limit: number,
+  only?: SQL,
 ): Promise<MessageRow[]> {
   const rows = await getDb()
     .select()
@@ -41,6 +46,7 @@ export async function historyBefore(
         eq(messages.conversation_id, conversationId),
         eq(messages.moderation_status, 'visible'),
         beforeId ? lt(messages.id, beforeId) : undefined,
+        only,
       ),
     )
     .orderBy(desc(messages.id))

@@ -101,6 +101,48 @@ describe('chat finish_reason mapping', () => {
 // and default models now come from the shared catalogue, and `createProvider`
 // in registry.test.ts covers reading them. Only the escape hatch for an
 // uncatalogued endpoint is still this file's to test.
+describe('reading what the vendor sends', () => {
+  const replyingWith = (reply: () => Response) =>
+    new OpenAICompatibleProvider('test', 'k', 'https://api.test', 'm', undefined, async () =>
+      reply(),
+    );
+  const hi = [{ role: 'user' as const, content: 'hi' }];
+
+  // The gateway pins a local runtime's connection by handing in its own fetcher.
+  test('sends through the fetcher it was given', async () => {
+    const urls: string[] = [];
+    const provider = new OpenAICompatibleProvider(
+      'test',
+      'k',
+      'https://api.test',
+      'm',
+      undefined,
+      async (url) => {
+        urls.push(url);
+        return chatResponse({});
+      },
+    );
+    await provider.chat(hi);
+    expect(urls).toEqual(['https://api.test/v1/chat/completions']);
+  });
+
+  // For a local runtime the far side is any host the owner can name.
+  test('refuses a reply larger than any completion', async () => {
+    const huge = `{"pad":"${'x'.repeat(2 * 1024 * 1024)}"}`;
+    await expect(replyingWith(() => new Response(huge)).chat(hi)).rejects.toThrow();
+  });
+
+  test('refuses a stream line longer than any event', async () => {
+    const provider = replyingWith(() => new Response(`data: ${'x'.repeat(2 * 1024 * 1024)}`));
+    const drain = async () => {
+      const events: unknown[] = [];
+      for await (const event of provider.stream(hi)) events.push(event);
+      return events;
+    };
+    await expect(drain()).rejects.toThrow('longer than any event');
+  });
+});
+
 describe('createOpenAICompatibleProvider', () => {
   test('applies defaults and overrides', () => {
     const def = createOpenAICompatibleProvider('custom', 'k');

@@ -88,7 +88,7 @@ O `.env` comanda a pilha de produção. Os padrões do `.env.example` funcionam 
 
 | Variável | Padrão (`.env.example`) | Notas |
 |----------|--------------------------|-------|
-| `JWT_SECRET` | `change-me-in-production` | **Troque.** Assina os tokens de sessão dos usuários. |
+| `JWT_SECRET` | `change-me-in-production` | **Troque.** Assina os tokens de sessão dos usuários. O gateway se recusa a iniciar com esse valor de exemplo ou com qualquer valor de menos de 32 caracteres. Gere com `openssl rand -hex 32`. |
 | `ENCRYPTION_KEY` | 64 zeros | **Troque.** Precisa ter 32 bytes em 64 caracteres hexadecimais. Gerar: `openssl rand -hex 32`. Cifra as chaves de LLM guardadas. |
 | `POSTGRES_PASSWORD` | `confer` (padrão do compose) | Senha do banco de dados. |
 | `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` | `confer` / `confer-secret` | Credenciais do armazenamento de objetos. |
@@ -110,6 +110,8 @@ docker compose -f docker-compose.prod.yml up -d
 git pull
 docker compose -f docker-compose.prod.yml up -d --build   # migrate roda de novo sozinho
 ```
+
+> Desde 2026-09-13, o gateway se recusa a iniciar enquanto `JWT_SECRET` ainda for `change-me-in-production` ou tiver menos de 32 caracteres. Antes de atualizar uma instância antiga, confira o `.env` e, se o valor não servir, troque por um gerado com `openssl rand -hex 32`. A troca encerra todas as sessões abertas, e todo mundo precisa entrar de novo uma vez. Instâncias instaladas com `npx confer-cli` ou com o script da Oracle receberam um valor aleatório desde o início e não são afetadas.
 
 ### Zerar (apaga todos os dados)
 

@@ -8,9 +8,11 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 const realApi = await import('./api.js');
 let currentToken: string | null = 'tok-1';
 const getToken = mock(() => currentToken);
+const refreshSession = mock(async () => true);
 mock.module('./api.js', () => ({
   ...realApi,
   getToken,
+  refreshSession,
 }));
 
 // Minimal fake WebSocket capturing handlers + sent frames.
@@ -26,7 +28,7 @@ class FakeWebSocket {
   closed = false;
   onopen: (() => void) | null = null;
   onmessage: ((e: { data: string }) => void) | null = null;
-  onclose: (() => void) | null = null;
+  onclose: ((e: { code: number }) => void) | null = null;
 
   constructor(url: string) {
     this.url = url;
@@ -52,6 +54,7 @@ let timers: Array<() => void>;
 beforeEach(() => {
   currentToken = 'tok-1';
   getToken.mockClear();
+  refreshSession.mockClear();
   FakeWebSocket.instances = [];
   timers = [];
   globalThis.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
@@ -154,12 +157,24 @@ describe('ws layer', () => {
     connectWs();
     const sock = FakeWebSocket.instances[0];
 
-    sock.onclose?.();
+    sock.onclose?.({ code: 1006 });
     expect(timers).toHaveLength(1);
 
     // Run the scheduled reconnect.
     timers[0]();
     expect(FakeWebSocket.instances).toHaveLength(2);
+  });
+
+  // The gateway closes a socket when the token that opened it expires, and the
+  // same token would be refused on reconnect. Renewing it is what reconnects.
+  test('onclose for an expired token refreshes instead of scheduling a retry', async () => {
+    const { connectWs } = await importWs();
+    connectWs();
+
+    FakeWebSocket.instances[0].onclose?.({ code: 4001 });
+
+    expect(refreshSession).toHaveBeenCalledTimes(1);
+    expect(timers).toHaveLength(0);
   });
 
   test('subscribeConversation before OPEN records and flushes on open', async () => {
@@ -195,7 +210,7 @@ describe('ws layer', () => {
     });
 
     // Drop the socket and run the scheduled reconnect.
-    sock1.onclose?.();
+    sock1.onclose?.({ code: 1006 });
     timers[0]();
     const sock2 = FakeWebSocket.instances[1];
 
@@ -223,7 +238,7 @@ describe('ws layer', () => {
     });
 
     // Removed from the desired set: a reconnect must not replay it.
-    sock.onclose?.();
+    sock.onclose?.({ code: 1006 });
     timers[0]();
     const sock2 = FakeWebSocket.instances[1];
     sock2.readyState = FakeWebSocket.OPEN;

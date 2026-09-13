@@ -51,3 +51,13 @@ export interface LLMToolDefinition {
   description: string;
   parameters: Record<string, unknown>;
 }
+
+/**
+ * How a provider sends its HTTP requests: the global `fetch`, unless the caller
+ * has to decide where the connection goes. The gateway passes one pinned to the
+ * address it checked for a local runtime (`gateway/src/lib/runtime-url.ts`).
+ */
+export type Fetcher = (
+  url: string,
+  init?: { method?: string; headers?: Record<string, string>; body?: string; signal?: AbortSignal },
+) => Promise<Response>;

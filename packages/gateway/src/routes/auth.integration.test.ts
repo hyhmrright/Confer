@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import { getDb } from '../db/connection.js';
 import { sessions, users } from '../db/schema.js';
 import { apiRequest, headers, resetDb } from '../test/helpers.js';
+import { websocket } from '../ws/handler.js';
 
 const REGISTER = '/api/v1/auth/register';
 const LOGIN = '/api/v1/auth/login';
@@ -26,6 +27,28 @@ function post(path: string, body: Body, opts: { token?: string; ip?: string } = 
 }
 
 beforeEach(resetDb);
+
+// A stand-in socket opened under the only session in the database, reporting
+// the close code it receives.
+async function openSocketOnSession(): Promise<{ code?: number }> {
+  const [session] = await getDb().select().from(sessions).limit(1);
+  if (!session) throw new Error('expected a session');
+  const state: { code?: number } = {};
+  const ws = {
+    data: {
+      user: { sub: session.user_id, username: 'alice', sid: session.id },
+      subscriptions: new Set<string>(),
+      expiresAt: Date.now() + 60_000,
+    },
+    send: () => {},
+    close: (code?: number) => {
+      state.code = code;
+      websocket.close(ws as never);
+    },
+  };
+  websocket.open(ws as never);
+  return state;
+}
 
 describe('POST /auth/register', () => {
   test('creates a user, hashes the password, and returns tokens', async () => {
@@ -153,6 +176,17 @@ describe('POST /auth/refresh', () => {
     expect(reused.status).toBe(401);
   });
 
+  // Reuse detection destroys the session; a socket opened under it was still
+  // delivering every message to whichever of the two holders opened it.
+  test('reuse detection closes the sockets of the session it destroys', async () => {
+    const { refresh_token: first } = await (await post(REGISTER, registerBody())).json();
+    expect((await post(REFRESH, { refresh_token: first })).status).toBe(200);
+    const socket = await openSocketOnSession();
+
+    expect((await post(REFRESH, { refresh_token: first })).status).toBe(401);
+    expect(socket.code).toBe(1008);
+  });
+
   test('a freshly rotated refresh token is itself usable', async () => {
     const { refresh_token: first } = await (await post(REGISTER, registerBody())).json();
     const rotated = await (await post(REFRESH, { refresh_token: first })).json();
@@ -233,5 +267,13 @@ describe('POST /auth/logout', () => {
     // The backing session is gone, so the refresh token is now dead.
     const refreshed = await post(REFRESH, { refresh_token });
     expect(refreshed.status).toBe(401);
+  });
+
+  test('closes the sockets opened under the session it revokes', async () => {
+    const { access_token } = await (await post(REGISTER, registerBody())).json();
+    const socket = await openSocketOnSession();
+
+    expect((await post(LOGOUT, {}, { token: access_token })).status).toBe(200);
+    expect(socket.code).toBe(1008);
   });
 });

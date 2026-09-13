@@ -6,6 +6,7 @@ export {
   OpenAICompatibleProvider,
 } from './llm/openai-compatible.js';
 export type {
+  Fetcher,
   LLMChatOptions,
   LLMMessage,
   LLMProvider,

@@ -1,7 +1,11 @@
-import { getToken } from './api.js';
+import { getToken, refreshSession } from './api.js';
 import { websocketUrl } from './gateway.js';
 
 type MessageHandler = (data: unknown) => void;
+
+// The gateway closes a socket with this code when the access token it was
+// opened with expires (`WS_TOKEN_EXPIRED` in gateway/src/ws/handler.ts).
+const TOKEN_EXPIRED = 4001;
 
 let socket: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -46,8 +50,15 @@ export function connectWs(): void {
     }
   };
 
-  socket.onclose = () => {
+  socket.onclose = (event) => {
     socket = null;
+    // Retrying with the token just refused would be refused again. Renew it
+    // instead: a successful refresh reconnects through onTokenRefreshed, which
+    // ChatLayout points at reconnectWs, and a failed one ends the session.
+    if (event.code === TOKEN_EXPIRED) {
+      void refreshSession();
+      return;
+    }
     reconnectTimer = setTimeout(connectWs, 3000);
   };
 }

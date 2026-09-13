@@ -1,3 +1,5 @@
+import type { Fetcher } from '@confer/agent-runtime';
+import { readCappedText } from '@confer/shared';
 import { boundedMap } from './concurrency.js';
 import {
   BATCH_SIZE,
@@ -6,6 +8,7 @@ import {
   VECTOR_SIZE,
 } from './rag-config.js';
 import { HttpError, retryWithBackoff } from './retry.js';
+import { runtimeFetcher } from './runtime-url.js';
 
 // Re-exported so existing importers keep resolving VECTOR_SIZE from embedding.
 export { VECTOR_SIZE };
@@ -59,6 +62,11 @@ interface EmbeddingResponse {
   data: Array<{ embedding: number[]; index: number }>;
 }
 
+// A reply is one batch of vectors, and 32 bytes of JSON per number is generous.
+// For a local runtime the far side is any host the owner can name, and without
+// a cap it decided how much this single-process gateway buffered.
+const MAX_EMBEDDING_RESPONSE_BYTES = BATCH_SIZE * VECTOR_SIZE * 32;
+
 // Bring a provider's native output up to VECTOR_SIZE. Ollama ignores the
 // requested dimension and always returns nomic-embed-text's 768; zero-padding
 // leaves cosine similarity untouched (padding moves neither the dot product nor
@@ -79,6 +87,7 @@ async function embedBatch(
   texts: string[],
   apiKey: string,
   provider: EmbeddingProvider,
+  fetcher: Fetcher,
 ): Promise<number[][]> {
   const { url, model, dimensionParam, keyIsBaseUrl } = PROVIDERS[provider];
   const endpoint = keyIsBaseUrl ? `${apiKey.replace(/\/+$/, '')}/v1/embeddings` : url;
@@ -89,7 +98,7 @@ async function embedBatch(
   // Retry transient failures (429/5xx/timeout); 4xx fail fast. The thrown
   // HttpError carries the status so the retry classifier can decide.
   return retryWithBackoff(async () => {
-    const res = await fetch(endpoint, {
+    const res = await fetcher(endpoint, {
       method: 'POST',
       headers,
       body: JSON.stringify(body),
@@ -97,11 +106,20 @@ async function embedBatch(
     });
 
     if (!res.ok) {
-      const text = await res.text();
-      throw new HttpError(res.status, `${provider} embeddings failed (${res.status}): ${text}`);
+      // The status only. For a local runtime the far side is any host the owner
+      // can name, this gateway's own internal services included, and this
+      // message travels as far as a `tool_result` event in their browser. The
+      // body still reaches the operator's log.
+      console.error(
+        `${provider} embeddings failed (${res.status}):`,
+        (await res.text()).slice(0, 500),
+      );
+      throw new HttpError(res.status, `${provider} embeddings failed (${res.status})`);
     }
 
-    const data = (await res.json()) as EmbeddingResponse;
+    const data = JSON.parse(
+      await readCappedText(res, MAX_EMBEDDING_RESPONSE_BYTES),
+    ) as EmbeddingResponse;
     return data.data
       .sort((a, b) => a.index - b.index)
       .map((d) => toVectorSize(d.embedding, provider));
@@ -115,6 +133,7 @@ export async function embedTexts(
 ): Promise<number[][]> {
   if (!apiKey) throw new Error('API key required for embeddings');
   if (texts.length === 0) return [];
+  const fetcher = PROVIDERS[provider].keyIsBaseUrl ? await runtimeFetcher(apiKey) : fetch;
 
   const batches: string[][] = [];
   for (let i = 0; i < texts.length; i += BATCH_SIZE) {
@@ -124,7 +143,7 @@ export async function embedTexts(
   // Embed batches with bounded concurrency (rate-limit friendly), then
   // concatenate in batch order to preserve the caller's text/chunk order.
   const batchVectors = await boundedMap(batches, EMBED_BATCH_CONCURRENCY, (batch) =>
-    embedBatch(batch, apiKey, provider),
+    embedBatch(batch, apiKey, provider, fetcher),
   );
   return batchVectors.flat();
 }

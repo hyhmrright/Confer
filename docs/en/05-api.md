@@ -265,6 +265,8 @@ WSS  /ws?token=<access_token>&device_id=<device_id>
 
 Handshake authentication is identical to REST, not "the signature checks out, let it through": `typ` must be `access`, `sid` must point at a session that still exists, and the account must not be `disabled`. All three are needed — without them a banned account only needs an unexpired token to keep reconnecting and receiving messages, while the ban itself (deleting every session) revokes nothing on this path. Banning also **closes the sockets that user already has open**: nginx gives `/ws` a `proxy_read_timeout` of a day, and stopping the next handshake does not stop an established connection.
 
+Nor does the token checked at the handshake vouch for the socket indefinitely: when the access token expires the server closes the connection with `4001`, and the client refreshes its token before reconnecting. Logging out, or refresh-token reuse detection, closes the sockets opened under the session it deletes with `1008`.
+
 ### Message format
 
 Every WS message is JSON and carries a `type` field:
@@ -408,7 +410,7 @@ GET    /a2a/v1/stream/{message_id}       # pulls the answer as a stream (SSE)
 GET    /a2a/v1/agent-facts/{agent_did}   # public AgentFacts
 ```
 
-Every A2A endpoint requires HTTP Message Signature verification.
+Every A2A endpoint requires HTTP Message Signature verification, except `agent-facts`: like `/.well-known/agents.json` it is a public discovery document with the same visibility, so a non-public or disabled Agent always 404s. Its `capabilities` list only what the owner saved in the NANDA shape (`{type, scope, languages}`).
 
 ## .well-known endpoints
 
@@ -476,7 +478,7 @@ Supported events: `message.new.peer`, `permission.granted`, `thread.archived`.
 | `/api/v1/auth/login` | 10/minute per IP |
 | `/api/v1/auth/register` | 3/hour per IP |
 | `/api/v1/conversations/*/messages` POST | 60/minute per user |
-| `/a2a/v1/*` | 100/minute per peer-domain (higher when whitelisted) |
+| `/a2a/v1/*` | 60/minute per IP and path, and 300/minute per IP across all of `/a2a/v1` |
 | WSS | at most 10 concurrent connections per user |
 
 Response when the limit is exceeded:
