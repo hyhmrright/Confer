@@ -1,7 +1,8 @@
 // Text extraction for the two OOXML formats: .docx and .xlsx.
 //
 // Both are zip archives of XML, so both go through a library rather than any
-// hand-rolled unpacking. Kept out of `doc-parser.ts` so that file stays a
+// hand-rolled unpacking — once `assertOoxmlWithinBudget` has checked what the
+// archive inflates to. Kept out of `doc-parser.ts` so that file stays a
 // content-type dispatcher; everything here is about turning one office format
 // into text a retriever can actually match against.
 //
@@ -12,6 +13,7 @@
 // tables, which chunk cleanly and which every model reads natively.
 
 import { createRequire } from 'node:module';
+import { assertOoxmlWithinBudget } from './ooxml-budget.js';
 
 // Both libraries ship CJS only, same as pdf-parse in doc-parser.ts.
 const require_ = createRequire(import.meta.url);
@@ -60,6 +62,7 @@ const ExcelJS = require_('exceljs') as { Workbook: new () => ExcelWorkbook };
  * it as Markdown.
  */
 export async function extractDocxText(buffer: ArrayBuffer): Promise<string> {
+  assertOoxmlWithinBudget(buffer);
   const { value } = await mammoth.convertToHtml({ buffer: Buffer.from(buffer) });
   return htmlToText(value);
 }
@@ -72,6 +75,7 @@ export async function extractDocxText(buffer: ArrayBuffer): Promise<string> {
  * retrieves against nothing.
  */
 export async function extractXlsxText(buffer: ArrayBuffer): Promise<string> {
+  assertOoxmlWithinBudget(buffer);
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load(buffer);
 
@@ -214,10 +218,16 @@ function stripTags(html: string): string {
     .replace(/<(?:p|div|br|li|h[1-6])\b[^>]*>/gi, '\n')
     .replace(/<\/(?:p|div|li|h[1-6]|tr)\s*>/gi, '\n')
     .replace(/<[^>]+>/g, '');
-  return decodeEntities(text)
-    .replace(/[^\S\n]+\n/g, '\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
+  // Trailing whitespace is trimmed per line rather than with `/[^\S\n]+\n/g`.
+  // That regex retries a whitespace run from every position inside it whenever
+  // the run does not end in a newline, so a paragraph of a million spaces — a
+  // few kilobytes once zipped into a .docx — held the gateway's only thread
+  // for as long as ~10¹² steps take.
+  const trimmed = decodeEntities(text)
+    .split('\n')
+    .map((line) => line.trimEnd())
+    .join('\n');
+  return trimmed.replace(/\n{3,}/g, '\n\n').trim();
 }
 
 function decodeEntities(text: string): string {
