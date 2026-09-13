@@ -265,6 +265,8 @@ WSS  /ws?token=<access_token>&device_id=<device_id>
 
 Handshake authentication is identical to REST, not "the signature checks out, let it through": `typ` must be `access`, `sid` must point at a session that still exists, and the account must not be `disabled`. All three are needed — without them a banned account only needs an unexpired token to keep reconnecting and receiving messages, while the ban itself (deleting every session) revokes nothing on this path. Banning also **closes the sockets that user already has open**: nginx gives `/ws` a `proxy_read_timeout` of a day, and stopping the next handshake does not stop an established connection.
 
+Nor does the token checked at the handshake vouch for the socket indefinitely: when the access token expires the server closes the connection with `4001`, and the client refreshes its token before reconnecting. Logging out, or refresh-token reuse detection, closes the sockets opened under the session it deletes with `1008`.
+
 ### Message format
 
 Every WS message is JSON and carries a `type` field:

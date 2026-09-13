@@ -265,6 +265,8 @@ WSS  /ws?token=<access_token>&device_id=<device_id>
 
 L'authentification de la poignée de main est identique à celle de REST, et non un « la signature est bonne, on laisse passer » : `typ` doit valoir `access`, `sid` doit désigner une session qui existe encore, et le compte ne doit pas être `disabled`. Les trois sont indispensables : sans elles, un compte banni n'a qu'à avoir un jeton non expiré pour se reconnecter et continuer à recevoir des messages, tandis que le bannissement lui-même (effacer toutes ses sessions) ne révoque rien sur ce chemin. Bannir **ferme aussi les sockets déjà ouverts** de cet utilisateur : nginx donne à `/ws` un `proxy_read_timeout` d'une journée, et arrêter la prochaine poignée de main n'arrête pas la connexion déjà établie.
 
+Le jeton vérifié lors de la poignée de main ne se porte pas non plus garant du socket indéfiniment : quand le jeton d'accès expire, le serveur ferme la connexion avec `4001`, et le client renouvelle son jeton avant de se reconnecter. La déconnexion, ou la détection de réutilisation d'un jeton de rafraîchissement, ferme avec `1008` les sockets ouverts sous la session qu'elle supprime.
+
 ### Format des messages
 
 Tous les messages WS sont du JSON et portent un champ `type` :

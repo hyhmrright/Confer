@@ -276,6 +276,10 @@ WSS  /ws?token=<access_token>&device_id=<device_id>
 在这条路径上什么都没撤销。封禁同时会**关掉该用户已经打开的 socket**：nginx 给
 `/ws` 的 `proxy_read_timeout` 是一天，只拦下一次握手拦不住已连上的那条。
 
+握手时验过的 token 也不会一直替这条 socket 担保下去：access token 到期时服务端以
+`4001` 关闭连接，客户端先刷新 token 再重连。登出、或 refresh token 复用检测删除某个
+session 时，该 session 下已经打开的 socket 会以 `1008` 关闭。
+
 ### 消息格式
 
 所有 WS 消息都是 JSON，含 `type` 字段：

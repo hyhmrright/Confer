@@ -32,10 +32,36 @@ export function getToken(): string | null {
   return accessToken;
 }
 
-async function tryRefresh(): Promise<boolean> {
-  if (!refreshToken) return false;
+// Tabs share one session and one refresh token — restoreSession reads the same
+// stored copy — and the gateway reads a refresh token presented twice as theft
+// and destroys the session. So a second tab refreshing on its own logged every
+// tab out, and since the gateway closes a socket when its token expires, every
+// open tab now refreshes at the same moment. Refreshes are therefore serialised
+// across tabs where the browser can, and a tab whose session another tab has
+// already rotated takes that pair rather than spending its own.
+function tryRefresh(): Promise<boolean> {
+  return navigator.locks
+    ? navigator.locks.request('confer-token-refresh', refreshOnce)
+    : refreshOnce();
+}
 
+async function refreshOnce(): Promise<boolean> {
   try {
+    const stored = JSON.parse(localStorage.getItem('confer_auth') ?? 'null');
+    const session = sessionOf(accessToken);
+    if (
+      stored &&
+      session &&
+      stored.refresh_token !== refreshToken &&
+      sessionOf(stored.access_token) === session
+    ) {
+      accessToken = stored.access_token;
+      refreshToken = stored.refresh_token;
+      onTokenRefreshed?.();
+      return true;
+    }
+    if (!refreshToken) return false;
+
     const res = await fetch(`${apiBase()}/auth/refresh`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -47,18 +73,43 @@ async function tryRefresh(): Promise<boolean> {
     accessToken = data.access_token;
     refreshToken = data.refresh_token;
 
-    const stored = localStorage.getItem('confer_auth');
     if (stored) {
-      const parsed = JSON.parse(stored);
-      parsed.access_token = data.access_token;
-      parsed.refresh_token = data.refresh_token;
-      localStorage.setItem('confer_auth', JSON.stringify(parsed));
+      stored.access_token = data.access_token;
+      stored.refresh_token = data.refresh_token;
+      localStorage.setItem('confer_auth', JSON.stringify(stored));
     }
     onTokenRefreshed?.();
     return true;
   } catch {
     return false;
   }
+}
+
+// The session an access token belongs to, or undefined for anything that is
+// not one of ours. Read, not verified: it only decides whether a stored pair is
+// this tab's session rotated by another tab, or a different login altogether.
+function sessionOf(token: string | null): string | undefined {
+  try {
+    const payload = (token ?? '').split('.')[1] ?? '';
+    const claims = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
+    return typeof claims.sid === 'string' ? claims.sid : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// Renew the access token once, however many callers ask at the same moment. A
+// refresh that fails means the session is gone, which every caller handles the
+// same way, so onAuthExpired fires here rather than at each of them.
+export function refreshSession(): Promise<boolean> {
+  if (!refreshing) {
+    refreshing = tryRefresh().then((ok) => {
+      refreshing = null;
+      if (!ok) onAuthExpired?.();
+      return ok;
+    });
+  }
+  return refreshing;
 }
 
 // Runs `fetch`, and on a 401 attempts one refresh-and-retry. Any 401 that
@@ -83,14 +134,7 @@ async function fetchWithAuth(path: string, options: RequestInit): Promise<Respon
     return res;
   }
 
-  if (!refreshing) {
-    refreshing = tryRefresh().then((ok) => {
-      refreshing = null;
-      if (!ok) onAuthExpired?.();
-      return ok;
-    });
-  }
-  const ok = await refreshing;
+  const ok = await refreshSession();
   if (!ok) return res;
 
   const retry = await fetch(`${apiBase()}${path}`, withAuthHeader());

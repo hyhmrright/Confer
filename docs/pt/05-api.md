@@ -265,6 +265,8 @@ WSS  /ws?token=<access_token>&device_id=<device_id>
 
 A autenticação do handshake é idêntica à do REST, não um «a assinatura confere, pode passar»: `typ` tem de ser `access`, `sid` tem de apontar para uma sessão que ainda exista, e a conta não pode estar `disabled`. As três são indispensáveis: sem elas, basta a uma conta banida ter um token não expirado para reconectar e continuar recebendo mensagens, enquanto o próprio banimento (apagar todas as sessões) não revoga nada por esse caminho. Banir também **fecha os sockets já abertos** daquele usuário: o nginx dá a `/ws` um `proxy_read_timeout` de um dia, e barrar o próximo handshake não barra a conexão já estabelecida.
 
+Nem o token verificado no handshake serve de aval ao socket para sempre: quando o token de acesso expira, o servidor fecha a conexão com `4001`, e o cliente renova o token antes de reconectar. Sair da conta, ou a detecção de reutilização de um token de atualização, fecha com `1008` os sockets abertos sob a sessão que apaga.
+
 ### Formato das mensagens
 
 Todas as mensagens WS são JSON e trazem um campo `type`:
