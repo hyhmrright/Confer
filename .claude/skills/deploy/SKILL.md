@@ -1,6 +1,6 @@
 ---
 name: deploy
-description: Rebuild and redeploy changed services to the local production stack (gateway, client, and the separate migrate image when a migration was added)
+description: Rebuild and redeploy changed services to the local production stack (gateway, client, and the separate migrate image that now rides along with the gateway)
 ---
 
 用法：`/deploy [gateway|client|both]`
@@ -20,16 +20,17 @@ build **之前**先把即将被顶掉的镜像重 tag 为 `:previous`。`docker 
 会就地覆盖 `:latest`，旧镜像随即失去名字、被下一次 prune 回收 —— 那样出了问题就
 没有退路了。
 
-**2. 若本次改动含新迁移，必须额外重建 migrate**
+**2. 迁移由脚本自己带上，无需额外命令**
 
 `migrate` 与 `gateway` 是**两个独立镜像**（共用 `infra/gateway.Dockerfile`），
-`build gateway client` **不会**带上新的迁移文件。陈旧的 migrate 跑的是旧迁移集，
-却照样打印 `Migrations complete`，新表根本没建：
+迁移文件装在 migrate 里 —— 只 build gateway 的话，陈旧的 migrate 跑的是旧迁移集，
+却照样打印 `Migrations complete`，新表根本没建。所以 `deploy.sh` 在重建 gateway 时
+一并重建 migrate（2026-09-20）。
 
-```bash
-docker compose -f docker-compose.prod.yml build migrate && \
-  docker compose -f docker-compose.prod.yml run --rm migrate
-```
+**跑**它从来不是缺的那一半：`gateway` 的 `depends_on` 写了
+`migrate: condition: service_completed_successfully`，任何会起 gateway 的 `up`
+都会先把它拉起来、等它退出 0 再起 gateway —— 这也正是单向迁移需要的顺序。手动敲
+`docker compose build` 时仍要自己点名 `migrate`。
 
 **3. 验证（查实际状态，不要信日志行）**
 

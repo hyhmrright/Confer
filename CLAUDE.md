@@ -137,11 +137,7 @@ That cached base is also what hides a **new** Bun breaking the Dockerfile, which
 
 The build context is the other half of that story, and `.dockerignore` patterns are anchored at the context root: `node_modules/` excluded only the top-level directory, so every `packages/*/node_modules` — bun's per-workspace symlink farm — rode into the image, and `COPY packages/client` overwrote the links `bun install` had just created with the host's. Those point into the `.bun` store by a name that carries a hash bun computes per version (`react-i18next@17.0.13+ea9c…` from the host's 1.4.2, `+2102…` under the image's 1.4.0), so the moment the host's Bun moved past the base image's, the links dangled and `tsc` reported forty `Cannot find module` errors for packages that were installed. It had been latent since the file was written and CI could never see it — a runner's checkout has no `node_modules` to copy. `**/node_modules/` and `**/dist/` are the fix (2026-09-12); a host-only artefact such as `.vite-temp` showing up inside the image is the tell.
 
-**If the change includes a new migration**, also rebuild and re-run the `migrate` service — it is a *separate image* from `gateway` (same `infra/gateway.Dockerfile`), so `build gateway client` does **not** pick up new migration files. The stale `migrate` then runs the old set and still prints `Migrations complete`, leaving the new tables uncreated:
-```
-docker compose -f docker-compose.prod.yml build migrate && docker compose -f docker-compose.prod.yml run --rm migrate
-```
-Verify by querying the actual tables/columns (and the drizzle journal count), not by trusting the `Migrations complete` log line.
+Migration files ride inside `migrate`, which is a *separate image* from `gateway` built from the same `infra/gateway.Dockerfile` — so a `build gateway client` that leaves it alone keeps shipping the old migration set, and the stale image applies it and still prints `Migrations complete`, leaving the new tables uncreated. `deploy.sh` rebuilds it alongside the gateway for exactly that reason (2026-09-20); a `docker compose build` driven by hand still has to name it. *Running* it was never the missing half — `gateway` declares `depends_on: migrate: service_completed_successfully`, so any `up` that brings the gateway up starts it and waits for exit 0 first. Verify a migration landed by querying the actual tables/columns (and the drizzle journal count), not by trusting the `Migrations complete` log line.
 
 ## Environment
 
