@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.5.11/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.5.13/schema.json",
   "assist": { "actions": { "source": { "organizeImports": "on" } } },
   "linter": {
     "enabled": true,
@@ -37,7 +37,8 @@
       "!docs",
       "!**/src-tauri/target",
       "!**/src-tauri/gen",
-      "!**/eval/baselines"
+      "!**/eval/baselines",
+      "!CLAUDE-SECURITY-*"
     ]
   }
 }
