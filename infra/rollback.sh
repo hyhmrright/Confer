@@ -19,6 +19,13 @@ id_of() { docker image inspect --format '{{.Id}}' "$1" 2>/dev/null; }
 
 # Resolve every service before changing anything, so a missing rollback point on
 # the second service can't leave the first one already reverted.
+#
+# migrate and gateway share one image (docker-compose.prod.yml says why), so
+# `rollback.sh migrate` repoints the GATEWAY's :latest while recreating only the
+# migrate job — the gateway keeps running the newer image, and the next deploy
+# would then save that stale :latest as its rollback point. Roll the gateway
+# back by naming the gateway; there is nothing separate to undo for migrate,
+# since migrations are forward-only and an older image simply finds none pending.
 for svc in "${SERVICES[@]}"; do
   img=$(image_of "$svc")
   prev="${img%:*}:previous"

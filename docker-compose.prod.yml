@@ -42,12 +42,23 @@ services:
     volumes:
       - miniodata:/data
 
-  # The three built services name their images explicitly rather than letting
-  # compose derive `<project>-<service>`. infra/deploy.sh and infra/rollback.sh
-  # read these names straight out of this file, so the tag is a contract now,
-  # not an implementation detail of compose's naming rules.
+  # The built services name their images explicitly rather than letting compose
+  # derive `<project>-<service>`. infra/deploy.sh and infra/rollback.sh read
+  # these names straight out of this file, so the tag is a contract now, not an
+  # implementation detail of compose's naming rules.
+  #
+  # migrate and gateway deliberately share one tag, as they always have on the
+  # ghcr path. They are built from the same Dockerfile and the same context, so
+  # the only thing that ever told the two images apart was how long ago each
+  # was last built — which is exactly what went wrong: `deploy.sh` rebuilt
+  # `gateway`, left migrate on a month-old image, and migrate then applied the
+  # old migration set while still printing "Migrations complete". One tag makes
+  # that impossible rather than merely remembered. The build stanza stays on
+  # both: dropping it here would turn `docker compose build migrate` into a
+  # silent no-op ("No services to build") and send a bare `up -d migrate` off
+  # to a registry for an image that only ever exists locally.
   migrate:
-    image: confer-migrate:latest
+    image: confer-gateway:latest
     build:
       context: .
       dockerfile: infra/gateway.Dockerfile

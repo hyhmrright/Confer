@@ -10,25 +10,15 @@
 #
 # Usage: infra/deploy.sh [service...]     (default: gateway client)
 #
-# `migrate` is a second image built from the gateway's own Dockerfile, so it
-# carries the migration files and goes stale the moment the gateway is rebuilt
-# without it. Nothing announces that: the stale image applies the old set and
-# still prints "Migrations complete", leaving the new tables uncreated. It is
-# therefore rebuilt here whenever the gateway is. *Running* it was never the
-# missing half — gateway depends_on it with service_completed_successfully, so
-# `up` starts it and waits for exit 0 before the new gateway comes up, which is
-# the order a forward-only migration needs anyway.
+# Migrations need nothing extra here. The migrate service runs out of the
+# gateway's own image — one tag, two commands — so rebuilding the gateway is
+# what refreshes the migration set, and running it is compose's job: gateway
+# depends_on migrate with service_completed_successfully, so `up` starts it and
+# waits for exit 0 before the new gateway comes up, which is the order a
+# forward-only migration needs anyway.
 set -euo pipefail
 # shellcheck source=infra/compose-images.sh
 source "$(dirname "$0")/compose-images.sh"
-
-has_service() {
-  local svc
-  for svc in "${SERVICES[@]}"; do
-    if [ "$svc" = "$1" ]; then return 0; fi
-  done
-  return 1
-}
 
 for svc in "${SERVICES[@]}"; do
   img=$(image_of "$svc")
@@ -41,18 +31,11 @@ for svc in "${SERVICES[@]}"; do
   fi
 done
 
-# Pulled in this way, migrate is built but deliberately gets no :previous of its
-# own — rollback.sh reverts running code, and migrations are forward-only, so an
-# older migrate image is not something anyone would want to go back to. Naming
-# it explicitly puts it in SERVICES and does take a rollback point, which is the
-# operator asking for one rather than the deploy assuming it.
-build_services=("${SERVICES[@]}")
-if has_service gateway && ! has_service migrate; then
-  build_services+=(migrate)
-fi
-
 bun run build
-docker compose -f "$COMPOSE" build "${build_services[@]}"
+docker compose -f "$COMPOSE" build "${SERVICES[@]}"
 docker compose -f "$COMPOSE" up -d "${SERVICES[@]}"
 
-docker compose -f "$COMPOSE" ps --format 'table {{.Service}}\t{{.Status}}'
+# -a, so the migrate job appears. It has exited by the time this runs, and a
+# deploy whose closing report says nothing at all about the migration step is
+# how a failed one goes unnoticed.
+docker compose -f "$COMPOSE" ps -a --format 'table {{.Service}}\t{{.Status}}'

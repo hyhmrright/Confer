@@ -55,12 +55,9 @@ services:
     volumes:
       - miniodata:/data
 
-  # migrate and gateway are the same image here, differing only in command.
-  # docker-compose.prod.yml keeps them as two separately built tags, which is
-  # what makes it possible to rebuild `gateway` and leave a stale `migrate`
-  # running the old migration set while still printing "Migrations complete".
-  # Nothing is built on this path, so that split buys nothing and the shared
-  # image makes the failure impossible.
+  # migrate and gateway are the same image, differing only in command.
+  # docker-compose.prod.yml shares one tag between them too; the note there
+  # records what the two-tag split it used to have cost.
   migrate:
     image: ${CONFER_IMAGE_PREFIX:-ghcr.io/hyhmrright/confer}-gateway:${CONFER_VERSION:-latest}
     depends_on:

@@ -66,8 +66,8 @@ updates:
   # because no tool was watching image tags either. Both it and postgres were
   # migrated by hand on 2026-08-29 (1.19 / 18); the rules below are what keeps
   # the NEXT pair of those from arriving as a routine merge, not leftovers from
-  # the last one. confer-gateway/client/migrate are built locally by deploy.sh
-  # and exist in no registry to check.
+  # the last one. confer-gateway and confer-client are built locally by
+  # deploy.sh and exist in no registry to check.
   - package-ecosystem: docker-compose
     directory: /
     target-branch: dev

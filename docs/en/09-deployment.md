@@ -81,9 +81,10 @@ host you share.
 linux/arm64 on every push to `main`, and tagged `latest`, the commit SHA, and the
 release version. Pin one with `CONFER_VERSION` in `.env`.
 
-Unlike `docker-compose.prod.yml`, this file runs `migrate` and `gateway` from the
-*same* image. That is only safe because nothing is built here — see the warning
-under option B, which is where the two can drift apart.
+Both compose files run `migrate` and `gateway` from the *same* image, differing
+only in command. `docker-compose.prod.yml` used to build them as two tags, which
+is what let a rebuilt gateway leave `migrate` applying last month's migration set
+while still printing `Migrations complete`; one tag makes that drift impossible.
 
 Then open **http://localhost**, register the first account, and add an LLM API key
 in **Settings** — the same three steps listed under B below.
