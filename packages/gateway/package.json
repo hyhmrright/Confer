@@ -20,11 +20,11 @@
     "exceljs": "^4.4.0",
     "hono": "^4.13.7",
     "jose": "^6.2.12",
-    "mammoth": "^1.12.2",
+    "mammoth": "^1.12.3",
     "minio": "^8.0.7",
     "pdf-parse": "^2.4.5",
     "postgres": "^3.4.9",
-    "zod": "^4.5.4"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/bun": "^1.4.2",

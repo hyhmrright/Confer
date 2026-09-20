@@ -1,7 +1,7 @@
 {
   "name": "confer",
   "private": true,
-  "version": "0.6.0",
+  "version": "0.6.1",
   "workspaces": [
     "packages/*"
   ],
@@ -20,14 +20,14 @@
     "eval:rag": "bun run --filter @confer/gateway eval:rag"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.12",
+    "@biomejs/biome": "^2.5.13",
     "@types/bun": "^1.4.2",
     "typescript": "^7.0.2"
   },
   "overrides": {
     "@napi-rs/canvas": "0.1.80",
     "fast-uri": "^3.1.5",
-    "zod": "^4.5.4",
+    "zod": "^4.6.5",
     "ip-address": "^10.4.0",
     "postcss": "^8.5.26",
     "shell-quote": "^1.10.0",

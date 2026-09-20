@@ -178,13 +178,19 @@ jobs:
         with:
           targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android,i686-linux-android
 
-      - uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: temurin
           java-version: 17
 
       - name: Setup Android SDK
-        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4
+        # Pinned to an exact patch, not the moving v4 tag: 40fd30f was v4.0.1
+        # (April), and the SDK repository dropped the obsolete `tools` package
+        # some time after v0.6.0 shipped on 2026-09-13, which made sdkmanager
+        # exit 1 before anything was built. v4.0.2 is the upstream fix. Nothing
+        # reported the drift — Dependabot has never opened a PR for this action,
+        # and CI cannot reach this job, so only a release rehearsal finds it.
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
 
       - name: Install Android NDK
         run: sdkmanager "ndk;27.0.12077973"

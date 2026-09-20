@@ -40,3 +40,8 @@ coverage/
 _workspace/
 _workspace_prev/
 _workspace_prev_*/
+
+# claude-security run directories. Each one writes its own `.gitignore`
+# containing `*`, so git already ignores the contents — this entry covers the
+# directory itself and survives the tool ever dropping that file.
+CLAUDE-SECURITY-*/
