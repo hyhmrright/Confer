@@ -92,6 +92,13 @@
       "when": 1788253242325,
       "tag": "0012_reconcile_agent_memories_tags_default",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1790321466223,
+      "tag": "0013_normal_power_man",
+      "breakpoints": true
     }
   ]
 }

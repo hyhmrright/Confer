@@ -187,7 +187,13 @@ export const messages = pgTable(
     moderation_status: varchar('moderation_status', { length: 16 }).notNull().default('visible'),
   },
   (t) => [
-    index('idx_messages_conversation_created').on(t.conversation_id, t.created_at),
+    // Every read of a conversation's messages filters by conversation and
+    // orders or bounds by id — the history window, paging, `turnHistory`'s
+    // count — because id is exact insertion order and created_at is not (see
+    // lib/conversation-history.ts). This replaced (conversation_id, created_at),
+    // which nothing had queried by since that move, so every one of those
+    // reads walked the whole conversation to check the id.
+    index('idx_messages_conversation_id').on(t.conversation_id, t.id),
     index('idx_messages_thread_root').on(t.thread_root),
     // `ListTasks` in the A2A REST binding pages a peer's own inbound messages
     // by sender, newest first. Without this it is a sequential scan of every
