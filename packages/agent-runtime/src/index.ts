@@ -14,6 +14,7 @@ export type {
   LLMStreamEvent,
   LLMToolCall,
   LLMToolDefinition,
+  LLMUsage,
 } from './llm/provider.js';
 export { createProvider, getProvider, registerProvider } from './llm/registry.js';
 export type {

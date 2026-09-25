@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import i18n from '../i18n/index.js';
-import { DISABLED, DISABLED_FILLED, INPUT_CLS } from '../lib/styles.js';
+import { DISABLED, INPUT_CLS } from '../lib/styles.js';
 import { type KnowledgeDocument, useKbStore } from '../stores/knowledge-base.js';
 import { EmptyState } from './EmptyState.js';
-import { ChevronDown, Plus, Trash } from './Icons.js';
+import { ChevronDown, Trash } from './Icons.js';
 import { LoadingDots } from './LoadingDots.js';
 import { LoadMore } from './LoadMore.js';
+import { PanelForm } from './PanelForm.js';
+import { PanelHeader } from './PanelHeader.js';
 
 function statusBadge(status: string | null) {
   const s = status ?? 'processing';
@@ -251,24 +253,20 @@ export function KnowledgePage() {
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      {/* Header */}
-      <div className="px-4 py-3 flex items-center justify-between border-b border-dark-border shrink-0">
-        <span className="eyebrow text-ink-muted">{t('knowledge.title')}</span>
-        <button
-          type="button"
-          onClick={() => setShowForm((v) => !v)}
-          className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md
-            bg-primary-600/15 text-primary-400 border border-primary-600/20
-            hover:bg-primary-600/25 transition-all"
-        >
-          <Plus className="w-3 h-3" />
-          {t('common.new')}
-        </button>
-      </div>
+      <PanelHeader
+        title={t('knowledge.title')}
+        actionLabel={t('common.new')}
+        onAction={() => setShowForm((v) => !v)}
+      />
 
       {/* New KB form */}
       {showForm && (
-        <div className="px-3 py-3 border-b border-dark-border space-y-2 shrink-0 bg-dark-card/50">
+        <PanelForm
+          onCancel={() => setShowForm(false)}
+          onSubmit={handleCreate}
+          submitDisabled={!name.trim() || saving}
+          submitLabel={saving ? t('common.creating') : t('common.create')}
+        >
           <input
             type="text"
             placeholder={t('knowledge.namePlaceholder')}
@@ -283,25 +281,7 @@ export function KnowledgePage() {
             onChange={(e) => setDescription(e.target.value)}
             className={INPUT_CLS}
           />
-          <div className="flex gap-2 justify-end">
-            <button
-              type="button"
-              onClick={() => setShowForm(false)}
-              className="px-3 py-1.5 text-xs text-ink-muted hover:text-ink-secondary transition-colors"
-            >
-              {t('common.cancel')}
-            </button>
-            <button
-              type="button"
-              onClick={handleCreate}
-              disabled={!name.trim() || saving}
-              className={`px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg
-                hover:bg-primary-500 ${DISABLED_FILLED} transition-colors`}
-            >
-              {saving ? t('common.creating') : t('common.create')}
-            </button>
-          </div>
-        </div>
+        </PanelForm>
       )}
 
       {/* KB list */}

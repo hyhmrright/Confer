@@ -5,7 +5,6 @@ import * as jose from 'jose';
 import { getDb } from '../db/connection.js';
 import {
   conversationParticipants,
-  conversations,
   peerAgents,
   peerContacts,
   sessions,
@@ -13,7 +12,8 @@ import {
 } from '../db/schema.js';
 import { getEnv } from '../env.js';
 import { runDetached } from '../lib/background.js';
-import { type AuthPayload, TOKEN_TYPE } from '../middleware/auth.js';
+import { isConversationParticipant, ownsConversation } from '../lib/tenant.js';
+import { type AuthPayload, jwtSecret, TOKEN_TYPE } from '../middleware/auth.js';
 
 export interface WsData {
   user: AuthPayload;
@@ -99,6 +99,10 @@ export function sendToUser(userId: string, message: WsServerMessage): void {
   }
 }
 
+function sendError(ws: ServerWebSocket<WsData>, message: string): void {
+  ws.send(JSON.stringify({ type: 'error', data: { message } }));
+}
+
 /**
  * Authenticate a socket the way every other authenticated surface does.
  *
@@ -126,7 +130,7 @@ async function authenticateUpgrade(
   if (!token) return null;
 
   const env = getEnv();
-  const secret = new TextEncoder().encode(env.JWT_SECRET);
+  const secret = jwtSecret();
 
   let sub: string;
   let username: string;
@@ -264,13 +268,13 @@ export const websocket = {
     try {
       parsed = JSON.parse(text);
     } catch {
-      ws.send(JSON.stringify({ type: 'error', data: { message: 'Invalid JSON' } }));
+      sendError(ws, 'Invalid JSON');
       return;
     }
 
     const result = wsClientMessageSchema.safeParse(parsed);
     if (!result.success) {
-      ws.send(JSON.stringify({ type: 'error', data: { message: 'Invalid message format' } }));
+      sendError(ws, 'Invalid message format');
       return;
     }
 
@@ -347,34 +351,12 @@ async function authorizeSubscription(
   conversationId: string,
 ): Promise<void> {
   const userId = ws.data.user.sub;
-  const db = getDb();
-
-  const [participant] = await db
-    .select({ id: conversationParticipants.id })
-    .from(conversationParticipants)
-    .where(
-      and(
-        eq(conversationParticipants.conversation_id, conversationId),
-        eq(conversationParticipants.user_id, userId),
-      ),
-    )
-    .limit(1);
-
-  if (!participant) {
-    const [owned] = await db
-      .select({ id: conversations.id })
-      .from(conversations)
-      .where(and(eq(conversations.id, conversationId), eq(conversations.created_by, userId)))
-      .limit(1);
-    if (!owned) {
-      ws.send(
-        JSON.stringify({
-          type: 'error',
-          data: { message: 'Not a participant of that conversation' },
-        }),
-      );
-      return;
-    }
+  const entitled =
+    (await isConversationParticipant(userId, conversationId)) ||
+    (await ownsConversation(userId, conversationId));
+  if (!entitled) {
+    sendError(ws, 'Not a participant of that conversation');
+    return;
   }
 
   subscribe(ws, conversationId);

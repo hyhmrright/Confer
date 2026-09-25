@@ -6,7 +6,7 @@ import { agents, messages, peerAgents, type permissions } from '../db/schema.js'
 import { getEnv } from '../env.js';
 import { type ModelConfigError, resolveAgentModel } from '../lib/agent-model.js';
 import { runDetached } from '../lib/background.js';
-import { historyBefore } from '../lib/conversation-history.js';
+import { turnHistory } from '../lib/conversation-history.js';
 import { getUserLlmKeys, resolveAgentCapabilities } from '../lib/llm-keys.js';
 import { isContact } from '../lib/tenant.js';
 import { runAgentTurn } from '../orchestration/agent-orchestrator.js';
@@ -27,15 +27,16 @@ export interface ProcessA2AMessageParams {
   inboundMessageId: string;
 }
 
-// The most recent 20 visible messages of an A2A thread as LLM history,
-// excluding the current inbound message. The peer asking is the `user`; this
-// agent's own prior replies are `assistant`, mirroring the chat path's role
-// mapping. Moderator-hidden messages are excluded from the LLM context.
+// The recent visible messages of an A2A thread as LLM history (the window
+// `turnHistory` sizes), excluding the current inbound message. The peer asking
+// is the `user`; this agent's own prior replies are `assistant`, mirroring the
+// chat path's role mapping. Moderator-hidden messages are excluded from the LLM
+// context.
 //
 // This wrote the query itself and took the OLDEST twenty — the same defect the
 // chat path was fixed for, left here because it could not surface while every
 // inbound message opened a conversation of its own. Now that a thread persists
-// past twenty messages, it would have. Both paths share `historyBefore`.
+// past twenty messages, it would have. Both paths share `turnHistory`.
 //
 // Only what has actually crossed the wire with this peer: rows that arrived
 // over A2A or were sent over it (`via = 'a2a'`), minus a consult question that
@@ -49,10 +50,9 @@ async function loadA2AHistory(
   conversationId: string,
   inboundMessageId: string,
 ): Promise<LLMMessage[]> {
-  const rows = await historyBefore(
+  const rows = await turnHistory(
     conversationId,
     inboundMessageId,
-    20,
     and(
       eq(messages.via, 'a2a'),
       or(isNull(messages.delivery_status), ne(messages.delivery_status, 'failed')),
@@ -97,13 +97,28 @@ async function sendToPeer(
       thread_id: peerThreadId ?? conversationId,
       message,
     },
-    key.value.keyId,
-    key.value.privateKeyJwk,
+    key.value,
   );
 
   if (!result.ok) {
     console.error(`Failed to send A2A ${message.type} to ${senderDid}: ${result.error}`);
   }
+}
+
+/** Push this agent's reply to the inbound question to the owner's open sockets. */
+function broadcastReply(params: ProcessA2AMessageParams, id: string, content: string): void {
+  const { targetAgent, conversationId, inboundMessageId } = params;
+  broadcastToConversation(conversationId, {
+    type: 'message.new',
+    data: {
+      id,
+      conversation_id: conversationId,
+      sender_type: 'own_agent',
+      sender_id: targetAgent.id,
+      content,
+      in_reply_to: inboundMessageId,
+    },
+  });
 }
 
 type A2AFailure = ModelConfigError | 'agent_error';
@@ -158,17 +173,7 @@ async function notifyPeerOfFailure(
     via: 'a2a',
   });
 
-  broadcastToConversation(conversationId, {
-    type: 'message.new',
-    data: {
-      id: noticeId,
-      conversation_id: conversationId,
-      sender_type: 'own_agent',
-      sender_id: targetAgent.id,
-      content: prose,
-      in_reply_to: inboundMessageId,
-    },
-  });
+  broadcastReply(params, noticeId, prose);
 
   await sendToPeer(params, {
     type: 'notification',
@@ -251,17 +256,7 @@ export async function processA2AMessage(params: ProcessA2AMessageParams): Promis
     delivered_at: new Date(),
   });
 
-  broadcastToConversation(conversationId, {
-    type: 'message.new',
-    data: {
-      id: replyId,
-      conversation_id: conversationId,
-      sender_type: 'own_agent',
-      sender_id: targetAgent.id,
-      content: replyContent,
-      in_reply_to: inboundMessageId,
-    },
-  });
+  broadcastReply(params, replyId, replyContent);
 
   // Fire-and-forget: distil durable facts from this A2A turn into long-term
   // memory, mirroring the chat path. Runs before the outbound delivery block so

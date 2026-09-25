@@ -60,7 +60,7 @@ export function StreamingMessage({
         <ReactMarkdown remarkPlugins={[remarkGfm]}>{streamContent}</ReactMarkdown>
         <span className="inline-block w-[3px] h-4 bg-primary-400 animate-cursor-blink rounded-xs ms-0.5 align-text-bottom" />
       </div>
-      {streamCitations.length > 0 && <CitationCapsule citations={streamCitations} />}
+      <CitationCapsule citations={streamCitations} />
     </MessageEntry>
   );
 }

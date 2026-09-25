@@ -6,14 +6,9 @@ import type {
   LLMProvider,
   LLMResponse,
   LLMStreamEvent,
+  LLMUsage,
 } from './provider.js';
-import { readSSEData } from './stream-utils.js';
-
-// The most of a reply read into memory. A completion stops at max_tokens, so
-// this is generous; without it the far side — for a local runtime, any host the
-// owner can name — decided how much this process buffered.
-const MAX_RESPONSE_BYTES = 1024 * 1024;
-const MAX_ERROR_BYTES = 16 * 1024;
+import { MAX_ERROR_BYTES, MAX_RESPONSE_BYTES, readSSEData } from './stream-utils.js';
 
 function toOpenAIMessage(m: LLMMessage): Record<string, unknown> {
   if (m.role === 'tool') {
@@ -23,6 +18,24 @@ function toOpenAIMessage(m: LLMMessage): Record<string, unknown> {
     return { role: 'assistant', content: m.content, tool_calls: m.tool_calls };
   }
   return { role: m.role, content: m.content ?? '' };
+}
+
+/**
+ * Usage as reported. Cache hits are already inside `prompt_tokens` here, unlike
+ * Anthropic's; the hit count sits in OpenAI's `prompt_tokens_details`, in
+ * DeepSeek's `prompt_cache_hit_tokens`, or at the top level (Moonshot). None of
+ * them a number — absent or null — means not reported.
+ */
+function toUsage(u: Record<string, unknown>): LLMUsage {
+  const count = (v: unknown) => (typeof v === 'number' ? v : undefined);
+  const details = u.prompt_tokens_details as Record<string, unknown> | null | undefined;
+  const cached =
+    count(details?.cached_tokens) ?? count(u.prompt_cache_hit_tokens) ?? count(u.cached_tokens);
+  return {
+    prompt_tokens: count(u.prompt_tokens) ?? 0,
+    completion_tokens: count(u.completion_tokens) ?? 0,
+    ...(cached === undefined ? {} : { cached_tokens: cached }),
+  };
 }
 
 export class OpenAICompatibleProvider implements LLMProvider {
@@ -109,10 +122,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
       content: message.content ?? '',
       finish_reason:
         choiceFinish === 'tool_calls' ? 'tool_use' : choiceFinish === 'length' ? 'length' : 'stop',
-      usage: {
-        prompt_tokens: (data.usage as Record<string, number>).prompt_tokens ?? 0,
-        completion_tokens: (data.usage as Record<string, number>).completion_tokens ?? 0,
-      },
+      usage: toUsage(data.usage as Record<string, unknown>),
     };
   }
 
@@ -141,7 +151,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
     // body field is a 400 at some of them — and which ones is exactly the kind
     // of per-vendor claim this codebase got burned making before. A vendor that
     // stays silent is reported as UNMEASURED rather than as zero tokens.
-    let usage: { prompt_tokens: number; completion_tokens: number } | undefined;
+    let usage: LLMUsage | undefined;
 
     for await (const payload of readSSEData(response.body)) {
       const chunk = payload.trim();
@@ -157,13 +167,8 @@ export class OpenAICompatibleProvider implements LLMProvider {
       }
 
       const data = JSON.parse(chunk) as Record<string, unknown>;
-      const reported = data.usage as Record<string, number> | null | undefined;
-      if (reported) {
-        usage = {
-          prompt_tokens: reported.prompt_tokens ?? 0,
-          completion_tokens: reported.completion_tokens ?? 0,
-        };
-      }
+      const reported = data.usage as Record<string, unknown> | null | undefined;
+      if (reported) usage = toUsage(reported);
       // The chunk carrying usage has an EMPTY choices array, and some vendors
       // omit the field entirely on it — indexing into it unguarded would throw
       // and take down a turn that had already produced its whole answer.
@@ -209,6 +214,6 @@ export function createOpenAICompatibleProvider(
     apiKey,
     opts.baseUrl ?? 'https://api.openai.com',
     opts.model ?? 'gpt-4o',
-    opts.completionsPath ?? '/v1/chat/completions',
+    opts.completionsPath,
   );
 }

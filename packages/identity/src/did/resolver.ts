@@ -91,10 +91,6 @@ export async function resolveDID(did: string): Promise<Result<DIDDocument, strin
     return err(`Refusing to resolve DID whose host is not a public address: ${did}`);
   }
 
-  // Sub-identifier DIDs (path segments) resolve to `.../did.json` under their
-  // path; bare-domain DIDs fall back to `/.well-known/did.json` (parseDidWeb).
-  const url = loc.url;
-
   try {
     const headers: Record<string, string> = {};
     if (cached?.etag) {
@@ -112,7 +108,10 @@ export async function resolveDID(did: string): Promise<Result<DIDDocument, strin
     // the request reached it. That is also why the catch below returns no
     // exception text — "connection refused" against "handshake failed" is the
     // one thing such a rebinding could still learn.
-    const response = await fetch(url, {
+    //
+    // Sub-identifier DIDs (path segments) resolve to `.../did.json` under their
+    // path; bare-domain DIDs fall back to `/.well-known/did.json` (parseDidWeb).
+    const response = await fetch(loc.url, {
       headers,
       redirect: 'manual',
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),

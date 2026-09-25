@@ -1,6 +1,6 @@
 ---
 name: deploy
-description: Rebuild and redeploy changed services to the local production stack (gateway, client, and the separate migrate image when a migration was added)
+description: Rebuild and redeploy changed services to the local production stack (gateway, client, and the migrate job that shares the gateway's image)
 ---
 
 用法：`/deploy [gateway|client|both]`
@@ -20,21 +20,28 @@ build **之前**先把即将被顶掉的镜像重 tag 为 `:previous`。`docker 
 会就地覆盖 `:latest`，旧镜像随即失去名字、被下一次 prune 回收 —— 那样出了问题就
 没有退路了。
 
-**2. 若本次改动含新迁移，必须额外重建 migrate**
+**2. 迁移无需任何额外命令**
 
-`migrate` 与 `gateway` 是**两个独立镜像**（共用 `infra/gateway.Dockerfile`），
-`build gateway client` **不会**带上新的迁移文件。陈旧的 migrate 跑的是旧迁移集，
-却照样打印 `Migrations complete`，新表根本没建：
+`migrate` 跑的就是 **gateway 自己那个镜像**（一个 tag、两条 command），prod 和
+ghcr 两条路都是。所以重建 gateway 就等于刷新了迁移集。
 
-```bash
-docker compose -f docker-compose.prod.yml build migrate && \
-  docker compose -f docker-compose.prod.yml run --rm migrate
-```
+2026-09-20 之前 prod 把它单独建成 `confer-migrate:latest`，那个拆分正是这一步过去
+需要人记住的全部原因：`build gateway client` 不碰它，陈旧镜像跑旧迁移集，却照样打印
+`Migrations complete`，新表根本没建。共用 tag 之后这类失败不再可能发生。
+
+老机器上会剩一个没人引用的 `confer-migrate:latest`。它和 gateway 镜像的层完全相同，
+纯属死重量，但因为还带着名字，`docker image prune` 永远不会回收它 ——
+第一次按新布局部署后 `docker image rm confer-migrate:latest` 删掉即可。
+
+**跑**它从来不是缺的那一半：`gateway` 的 `depends_on` 写了
+`migrate: condition: service_completed_successfully`，任何会起 gateway 的 `up`
+都会先把它拉起来、等它退出 0 再起 gateway —— 这也正是单向迁移需要的顺序。
 
 **3. 验证（查实际状态，不要信日志行）**
 
 ```bash
-docker ps --filter name=confer- --format "{{.Names}}: {{.Status}}"
+# -a：migrate 是跑完就退的 job 容器，不带 -a 根本看不见它
+docker ps -a --filter name=confer- --format "{{.Names}}: {{.Status}}"
 docker logs confer-gateway-1 --tail 5
 curl -s -o /dev/null -w '%{http_code}\n' http://localhost/
 ```

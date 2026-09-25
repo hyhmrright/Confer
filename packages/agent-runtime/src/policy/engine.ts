@@ -88,9 +88,7 @@ export function mergePolicyConfig(agent: PolicyConfig, contactRaw: unknown): Pol
     contactRaw && typeof contactRaw === 'object' ? (contactRaw as Record<string, unknown>) : {};
 
   const contactDefault = validateDecision(c.default);
-  const contactRules = Array.isArray(c.rules)
-    ? c.rules.map(parseRule).filter((r): r is PolicyRule => r !== null)
-    : [];
+  const contactRules = parseRules(c.rules);
 
   return {
     default_decision: contactDefault ?? agent.default_decision,
@@ -106,10 +104,12 @@ export function parsePolicyConfig(json: unknown): PolicyConfig {
   const obj = json as Record<string, unknown>;
   return {
     default_decision: validateDecision(obj.default) ?? DEFAULT_CONFIG.default_decision,
-    rules: Array.isArray(obj.rules)
-      ? obj.rules.map(parseRule).filter((r): r is PolicyRule => r !== null)
-      : [],
+    rules: parseRules(obj.rules),
   };
+}
+
+function parseRules(raw: unknown): PolicyRule[] {
+  return Array.isArray(raw) ? raw.map(parseRule).filter((r): r is PolicyRule => r !== null) : [];
 }
 
 function parseRule(raw: unknown): PolicyRule | null {

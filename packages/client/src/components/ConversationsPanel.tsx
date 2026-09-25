@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { dateLocale } from '../i18n/index.js';
-import { FOCUS_RING } from '../lib/styles.js';
+import { formatShortDateTime } from '../lib/format-date.js';
 import { useChatStore } from '../stores/chat.js';
-import { Bot, Plus, Search, Trash } from './Icons.js';
+import { Bot, Trash } from './Icons.js';
+import { PanelHeader } from './PanelHeader.js';
+import { SearchField } from './SearchField.js';
 
 // `onNavigate` fires once a conversation becomes the active one. On a narrow
 // viewport the panel is inside the drawer covering the messages, so picking a
@@ -38,35 +39,17 @@ export function ConversationsPanel({ onNavigate }: { onNavigate?: () => void }) 
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      {/* Header */}
-      <div className="px-4 py-3 flex items-center justify-between border-b border-dark-border shrink-0">
-        <span className="eyebrow text-ink-muted">{t('conversations.title')}</span>
-        <button
-          type="button"
-          onClick={handleNew}
-          className={`flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md
-            bg-primary-600/15 text-primary-400 border border-primary-600/20
-            hover:bg-primary-600/25 hover:border-primary-600/35 transition-all ${FOCUS_RING}`}
-        >
-          <Plus className="w-3 h-3" />
-          {t('conversations.new')}
-        </button>
-      </div>
-
-      {/* Search */}
-      <div className="px-3 py-2 border-b border-dark-border shrink-0">
-        <div className="relative">
-          <Search className="absolute start-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-muted pointer-events-none" />
-          <input
-            name="conversation-search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={t('conversations.searchPlaceholder')}
-            className={`w-full ps-8 pe-3 py-1.5 bg-dark-input text-ink-secondary text-xs rounded-md
-              border border-dark-border placeholder:text-ink-muted ${FOCUS_RING} transition-colors`}
-          />
-        </div>
-      </div>
+      <PanelHeader
+        title={t('conversations.title')}
+        actionLabel={t('conversations.new')}
+        onAction={handleNew}
+      />
+      <SearchField
+        name="conversation-search"
+        value={query}
+        onChange={setQuery}
+        placeholder={t('conversations.searchPlaceholder')}
+      />
 
       {/* List */}
       <div className="flex-1 overflow-y-auto scrollbar-thin">
@@ -110,12 +93,7 @@ export function ConversationsPanel({ onNavigate }: { onNavigate?: () => void }) 
                       {conv.name ?? t('conversations.untitled', { id: conv.id.slice(0, 6) })}
                     </p>
                     <p className="eyebrow text-ink-muted mt-0.5">
-                      {new Date(conv.updated_at).toLocaleString(dateLocale(), {
-                        month: 'short',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
+                      {formatShortDateTime(conv.updated_at)}
                     </p>
                   </div>
                 </button>

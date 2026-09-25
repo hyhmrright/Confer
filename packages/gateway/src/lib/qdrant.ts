@@ -4,6 +4,7 @@ import {
   deleteQdrantPoints,
   ensureQdrantCollection,
   providerMatchFilter,
+  type QdrantSearchHit,
   searchQdrantCollection,
   upsertQdrantPoints,
 } from './qdrant-client.js';
@@ -48,7 +49,6 @@ export async function ensureCollection(): Promise<void> {
 }
 
 export async function upsertChunks(chunks: KnowledgeChunk[]): Promise<void> {
-  if (chunks.length === 0) return;
   const points = chunks.map((c) => ({
     id: toUUID(c.chunk_id),
     vector: c.vector,
@@ -104,29 +104,33 @@ export async function searchChunks(
   }
   if (provider) mustFilters.push(providerMatchFilter(provider));
 
-  const primary = await searchQdrantCollection(COLLECTION, vector, topK, {
+  const primarySearch = searchQdrantCollection(COLLECTION, vector, topK, {
     filter: { must: mustFilters },
     scoreThreshold,
   });
-
-  const results = primary.map(toSearchResult);
-  if (!crossLingual || crossLingual.slots <= 0) return results;
+  if (!crossLingual || crossLingual.slots <= 0) return (await primarySearch).map(toSearchResult);
 
   // The same filters plus a language constraint — never a fresh filter list.
   // This query returns document text to a caller, so every tenant and scope
-  // condition the primary search enforces has to hold here identically.
+  // condition the primary search enforces has to hold here identically. It
+  // does not depend on the primary's answer, so the two run concurrently.
   const otherLangs = OTHER_LANGS[crossLingual.queryLang];
-  const supplementary = await searchQdrantCollection(COLLECTION, vector, crossLingual.slots, {
-    filter: { must: [...mustFilters, { key: 'lang', match: { any: otherLangs } }] },
-    scoreThreshold,
-  });
+  const [primary, supplementary] = await Promise.all([
+    primarySearch,
+    searchQdrantCollection(COLLECTION, vector, crossLingual.slots, {
+      filter: { must: [...mustFilters, { key: 'lang', match: { any: otherLangs } }] },
+      scoreThreshold,
+    }),
+  ]);
+
+  const results = primary.map(toSearchResult);
 
   // Points written before `lang` existed carry none, so they match no language
   // and simply do not appear here. That is the right degradation: their
   // language is unknown, and they already competed in the primary search.
   const seen = new Set(results.map((r) => r.chunk_id));
   for (const point of supplementary) {
-    if (seen.has(point.id as string)) continue;
+    if (seen.has(point.id)) continue;
     results.push(toSearchResult(point));
   }
   return results;
@@ -138,13 +142,9 @@ const OTHER_LANGS: Record<TextLang, TextLang[]> = {
   en: ['zh', 'ja'],
 };
 
-function toSearchResult(r: {
-  id: unknown;
-  score: number;
-  payload: Record<string, unknown>;
-}): SearchResult {
+function toSearchResult(r: QdrantSearchHit): SearchResult {
   return {
-    chunk_id: r.id as string,
+    chunk_id: r.id,
     kb_id: r.payload.kb_id as string,
     kb_name: r.payload.kb_name as string,
     doc_id: r.payload.doc_id as string,

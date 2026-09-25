@@ -4,9 +4,8 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { getDb } from '../db/connection.js';
 import { agentMemories } from '../db/schema.js';
-import { getEnv } from '../env.js';
 import { type EmbeddingProvider, embedTexts } from '../lib/embedding.js';
-import { getUserLlmKeys, resolveEmbeddingKey } from '../lib/llm-keys.js';
+import { requireEmbeddingConfig } from '../lib/llm-keys.js';
 import { asMemorySource, deleteMemory, upsertMemory } from '../lib/memory-store.js';
 import { authMiddleware } from '../middleware/auth.js';
 import type { AppEnv } from '../types.js';
@@ -25,14 +24,7 @@ async function embedMemory(
   userId: string,
   text: string,
 ): Promise<{ vector: number[]; provider: EmbeddingProvider }> {
-  const config = await resolveEmbeddingKey(await getUserLlmKeys(userId), getEnv().ENCRYPTION_KEY);
-  if (!config) {
-    throw new AppError(
-      'embedding_unavailable',
-      'No embedding provider configured — please add an OpenAI, ZhipuAI (GLM), or Qwen API key in Settings',
-      400,
-    );
-  }
+  const config = await requireEmbeddingConfig(userId);
   const [vector] = await embedTexts([text], config.apiKey, config.provider);
   if (!vector) throw new AppError('embedding_failed', 'Could not embed this memory', 502);
   return { vector, provider: config.provider };

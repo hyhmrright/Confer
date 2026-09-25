@@ -45,8 +45,7 @@ export async function deliverConsult(
       thread_id: input.conversationId,
       message: { type: 'question', content: input.content },
     },
-    key.value.keyId,
-    key.value.privateKeyJwk,
+    key.value,
   );
 
   if (!result.ok) return err(result.error);

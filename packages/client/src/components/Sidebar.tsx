@@ -4,9 +4,10 @@ import { useContactsStore } from '../stores/contacts.js';
 import type { Tab } from './ChatLayout.js';
 import { ContactList } from './ContactList.js';
 import { ConversationsPanel } from './ConversationsPanel.js';
-import { LogOut, Plus } from './Icons.js';
+import { LogOut } from './Icons.js';
 import { KnowledgePage } from './KnowledgePage.js';
 import { MemoryPage } from './MemoryPage.js';
+import { PanelHeader } from './PanelHeader.js';
 
 /* ── Contacts panel ── */
 function ContactsPanel() {
@@ -14,19 +15,11 @@ function ContactsPanel() {
   const openDialog = useContactsStore((s) => s.openDialog);
   return (
     <div className="flex flex-col h-full min-h-0">
-      <div className="px-4 py-3 flex items-center justify-between border-b border-dark-border shrink-0">
-        <span className="eyebrow text-ink-muted">{t('contacts.title')}</span>
-        <button
-          type="button"
-          onClick={openDialog}
-          className={`flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md
-            bg-primary-600/15 text-primary-400 border border-primary-600/20
-            hover:bg-primary-600/25 hover:border-primary-600/35 transition-all ${FOCUS_RING}`}
-        >
-          <Plus className="w-3 h-3" />
-          {t('contacts.add')}
-        </button>
-      </div>
+      <PanelHeader
+        title={t('contacts.title')}
+        actionLabel={t('contacts.add')}
+        onAction={openDialog}
+      />
       <div className="flex-1 overflow-y-auto scrollbar-thin">
         <ContactList />
       </div>

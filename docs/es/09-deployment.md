@@ -15,7 +15,7 @@ Un solo comando levanta toda la plataforma:
 | `migrate` | de un solo uso | ejecuta las migraciones de Drizzle y termina |
 | `postgres` | `postgres:18-alpine` | almacén de datos principal |
 | `qdrant` | `qdrant/qdrant:v1.19.0` | búsqueda vectorial para la base de conocimiento RAG |
-| `minio` | `quay.io/minio/minio` | almacenamiento de ficheros compatible con S3 |
+| `minio` | `pgsty/silo` | almacenamiento de ficheros compatible con S3 |
 
 > **No escales `gateway` más allá de una réplica.** Las conexiones WebSocket, los nonces antirreplay de A2A y los contadores de límite de tasa viven en la memoria de ese proceso. Una segunda réplica aceptaría peticiones A2A reproducidas (su tabla de nonces está vacía), se perdería los envíos WS de los usuarios conectados a la otra réplica, y multiplicaría los límites de tasa por el número de réplicas. En `docs/02-architecture.md` está qué hay que mover primero.
 

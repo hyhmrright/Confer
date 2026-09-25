@@ -64,8 +64,6 @@ const PROTOCOL_VERSION = '1.0';
 const BLOCKING_WAIT_MS = 55_000;
 const POLL_INTERVAL_MS = 500;
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
 /** Respond with the binding's media type rather than plain `application/json`. */
 function a2aJson(c: Context, value: unknown, status = 200) {
   return c.body(JSON.stringify(value), status as 200, { 'content-type': A2A_MEDIA_TYPE });
@@ -302,7 +300,7 @@ async function waitForTask(
 ): Promise<A2ATask | undefined> {
   const deadline = Date.now() + BLOCKING_WAIT_MS;
   while (Date.now() < deadline && !(await hasReply(taskId))) {
-    await sleep(POLL_INTERVAL_MS);
+    await Bun.sleep(POLL_INTERVAL_MS);
   }
   return (await loadTask(taskId, caller, historyLength))?.task;
 }

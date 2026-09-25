@@ -7,6 +7,10 @@
 // here. Out-of-range and negative values get the same treatment: coerce to
 // something sane rather than trust it.
 
+import { count, type SQL } from 'drizzle-orm';
+import type { PgTable } from 'drizzle-orm/pg-core';
+import { getDb } from '../db/connection.js';
+
 // `Number` rather than `parseInt`, and `isSafeInteger` rather than `isFinite`:
 // parseInt stops at the first character it doesn't like, so `'1e400'` becomes 1
 // and `'50abc'` becomes 50 — it accepts junk by reading a prefix of it. Whole-
@@ -22,4 +26,12 @@ export function parseOffset(raw: string | undefined): number {
   const value = Number(raw);
   if (raw === undefined || !Number.isSafeInteger(value) || value < 0) return 0;
   return value;
+}
+
+// Count every row of a table (optionally filtered) — the `total` beside a page.
+// Drizzle returns a one-row result set; this unwraps it so list handlers read as
+// `total: await countOf(x)`.
+export async function countOf(table: PgTable, where?: SQL): Promise<number> {
+  const [row] = await getDb().select({ value: count() }).from(table).where(where);
+  return row?.value ?? 0;
 }

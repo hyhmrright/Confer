@@ -28,7 +28,6 @@ import type { AppEnv } from '../types.js';
 // the shared catalogue so a new vendor is one edit, not two.
 const TOOL_PROVIDERS = ['tavily'] as const;
 const PROVIDERS = [...LLM_PROVIDER_IDS, ...TOOL_PROVIDERS] as readonly string[];
-type Provider = string;
 
 type LlmKeysJson = Record<string, EncryptedValue>;
 
@@ -230,9 +229,9 @@ agentRoutes.put('/me/llm-keys', async (c) => {
 agentRoutes.delete('/me/llm-keys/:provider', async (c) => {
   const user = c.get('user');
   const db = getDb();
-  const provider = c.req.param('provider') as Provider;
+  const provider = c.req.param('provider');
 
-  if (!(PROVIDERS as readonly string[]).includes(provider)) {
+  if (!PROVIDERS.includes(provider)) {
     throw new AppError('invalid_provider', `Unknown provider: ${provider}`, 400);
   }
 

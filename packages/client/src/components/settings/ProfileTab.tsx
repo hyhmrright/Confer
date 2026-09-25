@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useAutoClear } from '../../hooks/use-auto-clear.js';
 import { api } from '../../lib/api.js';
 import { captureError } from '../../lib/error.js';
 import { INPUT_FIELD_CLS } from '../../lib/styles.js';
@@ -26,15 +27,10 @@ export function ProfileTab() {
     setPhone(user?.phone ?? '');
   }, [user]);
 
-  useEffect(() => {
-    if (success || error) {
-      const timer = setTimeout(() => {
-        setSuccess(null);
-        setError(null);
-      }, 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [success, error]);
+  useAutoClear(success, error, () => {
+    setSuccess(null);
+    setError(null);
+  });
 
   const handleSave = async () => {
     setSaving(true);

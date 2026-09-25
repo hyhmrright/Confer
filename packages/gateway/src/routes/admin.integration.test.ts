@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { newId } from '@confer/shared';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { getDb } from '../db/connection.js';
 import {
   agents,
   appConfig,
+  auditLog,
   conversationParticipants,
   conversations,
   messages,
@@ -267,6 +268,17 @@ describe('admin agent moderation', () => {
   });
 });
 
+// Both moderation routes are registered from one table, so their error codes and
+// audit action names are built from a template — pin the strings it produces.
+async function auditActionsFor(targetId: string): Promise<string[]> {
+  const rows = await getDb()
+    .select({ action: auditLog.action })
+    .from(auditLog)
+    .where(sql`${auditLog.details_json}->>'target_id' = ${targetId}`)
+    .orderBy(auditLog.created_at);
+  return rows.map((r) => r.action);
+}
+
 describe('admin conversation moderation', () => {
   test('hides a conversation from regular reads but keeps it for admins', async () => {
     const convId = await seedConversation(member.id);
@@ -299,6 +311,19 @@ describe('admin conversation moderation', () => {
     });
     const memberView = await get(`/api/v1/conversations/${convId}`, { token: member.token });
     expect(memberView.status).toBe(200);
+    expect(await auditActionsFor(convId)).toEqual([
+      'admin.conversation.hide',
+      'admin.conversation.restore',
+    ]);
+  });
+
+  test('returns conversation_not_found for an unknown conversation', async () => {
+    const res = await patch(`/api/v1/admin/conversations/${newId()}`, {
+      token: admin.token,
+      body: { moderation_status: 'hidden' },
+    });
+    expect(res.status).toBe(404);
+    expect((await res.json()).error.code).toBe('conversation_not_found');
   });
 });
 
@@ -316,6 +341,7 @@ describe('admin message moderation', () => {
     const list = await get(`/api/v1/conversations/${convId}/messages`, { token: member.token });
     const msgs = (await list.json()).messages as { id: string }[];
     expect(msgs.some((m) => m.id === msgId)).toBe(false);
+    expect(await auditActionsFor(msgId)).toEqual(['admin.message.hide']);
   });
 
   test('returns 404 for an unknown message', async () => {
@@ -324,6 +350,7 @@ describe('admin message moderation', () => {
       body: { moderation_status: 'hidden' },
     });
     expect(res.status).toBe(404);
+    expect((await res.json()).error.code).toBe('message_not_found');
   });
 });
 

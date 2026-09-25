@@ -3,6 +3,7 @@ import { getDb } from '../db/connection.js';
 import { knowledgeBases, peerAgents, peerContacts } from '../db/schema.js';
 import { type EmbeddingProvider, embedTexts } from '../lib/embedding.js';
 import { searchMemories } from '../lib/memory-store.js';
+import { formatMemoryLine } from './memory.js';
 
 // Tools that let the agent see what the owner actually has, rather than guess.
 //
@@ -115,11 +116,7 @@ export async function searchMemory(
   // Same attribution automatic recall uses: a fact distilled from a peer's
   // question describes that inquiry, not the owner, and listing it bare reads
   // as something the owner wants.
-  return hits
-    .map((hit) =>
-      hit.source === 'a2a' ? `- （来自外部 Agent 的提问）${hit.text}` : `- ${hit.text}`,
-    )
-    .join('\n');
+  return hits.map(formatMemoryLine).join('\n');
 }
 
 export const listContactsToolDefinition = {

@@ -1,7 +1,8 @@
-import { decrypt, type EncryptedValue } from '@confer/shared';
+import { AppError, decrypt, type EncryptedValue } from '@confer/shared';
 import { eq } from 'drizzle-orm';
 import { getDb } from '../db/connection.js';
 import { knowledgeBases, users } from '../db/schema.js';
+import { getEnv } from '../env.js';
 import { EMBEDDING_PROVIDER_PRIORITY, type EmbeddingProvider } from './embedding.js';
 
 // Helpers for reading a user's per-provider encrypted API keys
@@ -44,6 +45,22 @@ export async function resolveEmbeddingKey(
     if (apiKey) return { apiKey, provider };
   }
   return null;
+}
+
+// The owner's embedding config for a write that must be indexed, or 400 when no
+// provider is configured — the caller refuses rather than store something inert.
+export async function requireEmbeddingConfig(
+  userId: string,
+): Promise<{ apiKey: string; provider: EmbeddingProvider }> {
+  const config = await resolveEmbeddingKey(await getUserLlmKeys(userId), getEnv().ENCRYPTION_KEY);
+  if (!config) {
+    throw new AppError(
+      'embedding_unavailable',
+      'No embedding provider configured — please add an OpenAI, ZhipuAI (GLM), or Qwen API key in Settings',
+      400,
+    );
+  }
+  return config;
 }
 
 /**

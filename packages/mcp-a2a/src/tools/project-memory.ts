@@ -41,13 +41,13 @@ export async function readProjectMemory(
   client: GatewayClient,
   input: ReadMemoryInput,
 ): Promise<ReadMemoryResult> {
+  const ids = { projectId: input.projectId, peerId: input.peerId };
   const base = basePath(input.projectId, input.peerId);
 
   if (input.section === 'facts') {
     const r = await client.get<FactsResponse>(`${base}/facts`);
     return {
-      projectId: input.projectId,
-      peerId: input.peerId,
+      ...ids,
       facts: r.facts_md,
       version: r.version,
       updated_at: r.updated_at,
@@ -56,8 +56,7 @@ export async function readProjectMemory(
   if (input.section === 'decisions') {
     const r = await client.get<DecisionsResponse>(`${base}/decisions`);
     return {
-      projectId: input.projectId,
-      peerId: input.peerId,
+      ...ids,
       decisions: r.decisions_md,
       version: r.version,
       updated_at: r.updated_at,
@@ -69,8 +68,7 @@ export async function readProjectMemory(
     client.get<DecisionsResponse>(`${base}/decisions`),
   ]);
   return {
-    projectId: input.projectId,
-    peerId: input.peerId,
+    ...ids,
     facts: facts.facts_md,
     decisions: decisions.decisions_md,
     // facts and decisions live in the same row, so absent a write landing between
@@ -101,13 +99,13 @@ export async function writeProjectMemory(
   client: GatewayClient,
   input: WriteMemoryInput,
 ): Promise<WriteMemoryResult> {
+  const ids = { projectId: input.projectId, peerId: input.peerId };
   const base = basePath(input.projectId, input.peerId);
 
   if (input.section === 'facts') {
     const r = await client.put<FactsResponse>(`${base}/facts`, { facts_md: input.content });
     return {
-      projectId: input.projectId,
-      peerId: input.peerId,
+      ...ids,
       section: 'facts',
       version: r.version,
       updated_at: r.updated_at,
@@ -117,8 +115,7 @@ export async function writeProjectMemory(
     decisions_md: input.content,
   });
   return {
-    projectId: input.projectId,
-    peerId: input.peerId,
+    ...ids,
     section: 'decisions',
     version: r.version,
     updated_at: r.updated_at,

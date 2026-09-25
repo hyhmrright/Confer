@@ -18,7 +18,7 @@
 | `migrate` | 一次性任务 | 执行 Drizzle 迁移后退出 |
 | `postgres` | `postgres:18-alpine` | 主数据存储 |
 | `qdrant` | `qdrant/qdrant:v1.19.0` | RAG 知识库的向量检索 |
-| `minio` | `quay.io/minio/minio` | S3 兼容的文件存储 |
+| `minio` | `pgsty/silo` | S3 兼容的文件存储 |
 
 > **不要把 `gateway` 扩到一个副本以上。**WebSocket 连接、A2A 重放 nonce 和限流计数
 > 都存在那个进程的内存里。第二个副本会接受被重放的 A2A 请求(它的 nonce 表是空的)、
@@ -74,8 +74,9 @@ docker compose -f docker-compose.ghcr.yml up -d
 linux/amd64 和 linux/arm64 两个架构,并打上 `latest`、提交 SHA 和发布版本号三种标签。
 要固定某一个,在 `.env` 里设 `CONFER_VERSION`。
 
-与 `docker-compose.prod.yml` 不同,这个文件用**同一个**镜像跑 `migrate` 和 `gateway`。
-这只有在这里什么都不构建的前提下才安全——见方案 B 下面的警告,那里才是两者会漂移的地方。
+两个 compose 文件都用**同一个**镜像跑 `migrate` 和 `gateway`,只是 command 不同。
+`docker-compose.prod.yml` 曾把它们建成两个 tag,结果是重建 gateway 之后 migrate 还在
+跑上个月的迁移集,却照样打印 `Migrations complete`;共用一个 tag 让这种漂移不可能发生。
 
 然后打开 **http://localhost**,注册第一个账号,并在**设置**里添加一个 LLM API key——
 就是下面方案 B 列出的同样三步。

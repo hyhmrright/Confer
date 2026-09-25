@@ -17,7 +17,7 @@ import { getEnv } from '../env.js';
 import { getConfigValue } from '../lib/app-config.js';
 import { uniqueViolation } from '../lib/db-errors.js';
 import { userDid } from '../lib/public-identity.js';
-import { authMiddleware, TOKEN_TYPE } from '../middleware/auth.js';
+import { authMiddleware, jwtSecret, TOKEN_TYPE } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rate-limit.js';
 import { disconnectSession, disconnectUser } from '../ws/handler.js';
 
@@ -39,7 +39,7 @@ async function verifyPassword(hash: string, password: string): Promise<boolean> 
 // They also carry `typ` — see `TOKEN_TYPE` in middleware/auth.ts for why.
 async function issueTokens(userId: string, username: string, sessionId: string) {
   const env = getEnv();
-  const secret = new TextEncoder().encode(env.JWT_SECRET);
+  const secret = jwtSecret();
 
   // A fresh `jti` per issuance makes every token byte-unique. Without it, two
   // issuances in the same wall-clock second are identical (JWT `iat` is
@@ -81,6 +81,42 @@ function timingSafeEqualHex(a: string, b: string): boolean {
 }
 
 const REFRESH_TTL_MS = 90 * 24 * 60 * 60 * 1000;
+
+// Open a session for a freshly authenticated user and build the response body
+// both register and login return. The session is what lets the refresh token be
+// rotated and revoked, so neither path may mint tokens without one.
+async function openSession(
+  user: typeof users.$inferSelect,
+  device: Pick<z.infer<typeof loginRequestSchema>, 'device_id' | 'device_info'>,
+) {
+  const sessionId = newId();
+  const tokens = await issueTokens(user.id, user.username, sessionId);
+  await getDb()
+    .insert(sessions)
+    .values({
+      id: sessionId,
+      user_id: user.id,
+      device_id: device.device_id,
+      platform: device.device_info?.platform,
+      refresh_token_hash: sha256Hex(tokens.refreshToken),
+      last_active_at: new Date(),
+      expires_at: new Date(Date.now() + REFRESH_TTL_MS),
+    });
+
+  return {
+    access_token: tokens.accessToken,
+    refresh_token: tokens.refreshToken,
+    expires_in: tokens.expiresIn,
+    user: {
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      display_name: user.display_name,
+      did: user.did,
+      role: user.role,
+    },
+  };
+}
 
 authRoutes.post('/register', rateLimit(3, 3600_000), async (c) => {
   // Honor the global registration switch before doing any work.
@@ -160,34 +196,7 @@ authRoutes.post('/register', rateLimit(3, 3600_000), async (c) => {
   // Register gets a backing session too, so its freshly minted refresh token can
   // be rotated/revoked exactly like a login's (no more stranded, unrevocable
   // register tokens).
-  const sessionId = newId();
-  const tokens = await issueTokens(userId, body.username, sessionId);
-  await db.insert(sessions).values({
-    id: sessionId,
-    user_id: userId,
-    device_id: body.device_id,
-    platform: body.device_info?.platform,
-    refresh_token_hash: sha256Hex(tokens.refreshToken),
-    last_active_at: new Date(),
-    expires_at: new Date(Date.now() + REFRESH_TTL_MS),
-  });
-
-  return c.json(
-    {
-      access_token: tokens.accessToken,
-      refresh_token: tokens.refreshToken,
-      expires_in: tokens.expiresIn,
-      user: {
-        id: user.id,
-        username: user.username,
-        email: user.email,
-        display_name: user.display_name,
-        did: user.did,
-        role: user.role,
-      },
-    },
-    201,
-  );
+  return c.json(await openSession(user, body), 201);
 });
 
 authRoutes.post('/login', rateLimit(10, 60_000), async (c) => {
@@ -209,32 +218,7 @@ authRoutes.post('/login', rateLimit(10, 60_000), async (c) => {
     throw new AppError('account_disabled', 'This account has been disabled', 403);
   }
 
-  const sessionId = newId();
-  const tokens = await issueTokens(user.id, user.username, sessionId);
-
-  await db.insert(sessions).values({
-    id: sessionId,
-    user_id: user.id,
-    device_id: body.device_id,
-    platform: body.device_info?.platform,
-    refresh_token_hash: sha256Hex(tokens.refreshToken),
-    last_active_at: new Date(),
-    expires_at: new Date(Date.now() + REFRESH_TTL_MS),
-  });
-
-  return c.json({
-    access_token: tokens.accessToken,
-    refresh_token: tokens.refreshToken,
-    expires_in: tokens.expiresIn,
-    user: {
-      id: user.id,
-      username: user.username,
-      email: user.email,
-      display_name: user.display_name,
-      did: user.did,
-      role: user.role,
-    },
-  });
+  return c.json(await openSession(user, body));
 });
 
 const refreshRequestSchema = z.object({ refresh_token: z.string().min(1) });
@@ -248,7 +232,7 @@ authRoutes.post('/refresh', rateLimit(30, 60_000), async (c) => {
   const { refresh_token } = refreshRequestSchema.parse(await c.req.json());
 
   const env = getEnv();
-  const secret = new TextEncoder().encode(env.JWT_SECRET);
+  const secret = jwtSecret();
 
   try {
     const { payload } = await jose.jwtVerify(refresh_token, secret, {

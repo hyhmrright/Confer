@@ -47,8 +47,10 @@ describe('toAnthropicMessages (via request body)', () => {
     const sent = body.messages as Array<{ role: string }>;
     expect(sent).toHaveLength(1);
     expect(sent[0]?.role).toBe('user');
-    // system goes into the top-level `system` field
-    expect(body.system).toBe('be helpful');
+    // system goes into the top-level `system` field, as a cacheable block
+    expect(body.system).toEqual([
+      { type: 'text', text: 'be helpful', cache_control: { type: 'ephemeral' } },
+    ]);
   });
 
   test('maps a tool role message to user with tool_result content', async () => {
@@ -193,6 +195,15 @@ describe('chat', () => {
       new AnthropicProvider('k').chat([{ role: 'user', content: 'hi' }]),
     ).rejects.toThrow(/Anthropic API error \(500\)/);
   });
+
+  // The base URL is configurable, so the far side is not necessarily Anthropic.
+  test('refuses a reply larger than any completion', async () => {
+    const huge = `{"pad":"${'x'.repeat(2 * 1024 * 1024)}"}`;
+    const provider = new AnthropicProvider('k', 'https://api.test', async () => new Response(huge));
+    await expect(provider.chat([{ role: 'user', content: 'hi' }])).rejects.toThrow(
+      'response too large',
+    );
+  });
 });
 
 describe('stream', () => {
@@ -260,6 +271,199 @@ describe('stream', () => {
     mockFetch(() => new Response('nope', { status: 429 }));
     const it = new AnthropicProvider('k').stream([{ role: 'user', content: 'hi' }]);
     await expect(collect(it)).rejects.toThrow(/Anthropic stream error: 429/);
+  });
+});
+
+describe('prompt caching', () => {
+  const done = () => new Response(sseStream([{ type: 'message_stop' }]));
+
+  async function drain(it: AsyncIterable<LLMStreamEvent>): Promise<void> {
+    for await (const _ of it) {
+      // consume
+    }
+  }
+
+  test('marks a message the caller flagged, as well as the last one', async () => {
+    // The end of the stored history is what the next turn's prompt will start
+    // with; the current question carries per-turn context and will not.
+    mockFetch(done);
+    await drain(
+      new AnthropicProvider('k').stream([
+        { role: 'user', content: 'earlier question' },
+        { role: 'assistant', content: 'earlier answer', cache_breakpoint: true },
+        { role: 'user', content: 'memories\n\nnew question' },
+      ]),
+    );
+    const sent = lastBody().messages as Array<{ content: unknown }>;
+    expect(sent[0]?.content).toBe('earlier question');
+    expect(sent[1]?.content).toEqual([
+      { type: 'text', text: 'earlier answer', cache_control: { type: 'ephemeral' } },
+    ]);
+    expect(sent[2]?.content).toEqual([
+      { type: 'text', text: 'memories\n\nnew question', cache_control: { type: 'ephemeral' } },
+    ]);
+  });
+
+  // Anthropic refuses more than four. Counted on the serialized body, since
+  // that is what the API counts.
+  const breakpoints = () => JSON.stringify(lastBody()).split('"cache_control"').length - 1;
+
+  test('uses three breakpoints in a tool round: system, end of history, last block', async () => {
+    mockFetch(done);
+    await drain(
+      new AnthropicProvider('k').stream(
+        [
+          { role: 'system', content: 'instructions' },
+          { role: 'user', content: 'earlier' },
+          { role: 'assistant', content: 'answer', cache_breakpoint: true },
+          { role: 'user', content: 'question' },
+          {
+            role: 'assistant',
+            content: null,
+            tool_calls: [{ id: 't1', type: 'function', function: { name: 'f', arguments: '{}' } }],
+          },
+          { role: 'tool', content: 'result', tool_call_id: 't1' },
+        ],
+        { tools: [{ name: 'f', description: 'd', parameters: { type: 'object' } }] },
+      ),
+    );
+    expect(breakpoints()).toBe(3);
+  });
+
+  test('honours only the last flag when several messages carry one', async () => {
+    mockFetch(done);
+    await drain(
+      new AnthropicProvider('k').stream([
+        { role: 'system', content: 'instructions' },
+        { role: 'user', content: 'a', cache_breakpoint: true },
+        { role: 'assistant', content: 'b', cache_breakpoint: true },
+        { role: 'user', content: 'c', cache_breakpoint: true },
+        { role: 'assistant', content: 'd', cache_breakpoint: true },
+        { role: 'user', content: 'e' },
+      ]),
+    );
+    const sent = lastBody().messages as Array<{ content: unknown }>;
+    expect(sent[0]?.content).toBe('a');
+    expect(sent[3]?.content).toEqual([
+      { type: 'text', text: 'd', cache_control: { type: 'ephemeral' } },
+    ]);
+    expect(breakpoints()).toBe(3);
+  });
+
+  test('never sends the flag itself to the API', async () => {
+    mockFetch(done);
+    await drain(
+      new AnthropicProvider('k').stream([
+        { role: 'assistant', content: 'a', cache_breakpoint: true },
+        { role: 'user', content: 'q' },
+      ]),
+    );
+    expect(JSON.stringify(lastBody())).not.toContain('cache_breakpoint');
+  });
+
+  test("marks the conversation's last block, so later tool rounds reuse it", async () => {
+    mockFetch(done);
+    await drain(
+      new AnthropicProvider('k').stream([
+        { role: 'user', content: 'earlier' },
+        { role: 'assistant', content: 'reply' },
+        { role: 'tool', content: 'result', tool_call_id: 'call_1' },
+      ]),
+    );
+    const sent = lastBody().messages as Array<{ content: unknown }>;
+    expect(sent[0]?.content).toBe('earlier');
+    expect(sent[1]?.content).toBe('reply');
+    expect(sent[2]?.content).toEqual([
+      {
+        type: 'tool_result',
+        tool_use_id: 'call_1',
+        content: 'result',
+        cache_control: { type: 'ephemeral' },
+      },
+    ]);
+  });
+
+  test('turns a plain-text last message into a marked text block', async () => {
+    mockFetch(done);
+    await drain(new AnthropicProvider('k').stream([{ role: 'user', content: 'hi' }]));
+    expect((lastBody().messages as Array<{ content: unknown }>)[0]?.content).toEqual([
+      { type: 'text', text: 'hi', cache_control: { type: 'ephemeral' } },
+    ]);
+  });
+
+  test('leaves an empty last message alone, since an empty text block is rejected', async () => {
+    mockFetch(done);
+    await drain(new AnthropicProvider('k').stream([{ role: 'user', content: '' }]));
+    expect((lastBody().messages as Array<{ content: unknown }>)[0]?.content).toBe('');
+  });
+
+  test('counts cache writes and reads into the prompt, and reports the reads', async () => {
+    // input_tokens excludes both; reporting it alone would make a cached turn
+    // look like it had a 30-token prompt.
+    mockFetch(
+      () =>
+        new Response(
+          sseStream([
+            {
+              type: 'message_start',
+              message: {
+                usage: {
+                  input_tokens: 30,
+                  cache_creation_input_tokens: 200,
+                  cache_read_input_tokens: 1800,
+                  output_tokens: 0,
+                },
+              },
+            },
+            { type: 'message_delta', delta: {}, usage: { output_tokens: 9 } },
+            { type: 'message_stop' },
+          ]),
+        ),
+    );
+    const events: LLMStreamEvent[] = [];
+    for await (const ev of new AnthropicProvider('k').stream([{ role: 'user', content: 'hi' }])) {
+      events.push(ev);
+    }
+    expect(events.at(-1)).toEqual({
+      type: 'done',
+      usage: {
+        prompt_tokens: 2030,
+        completion_tokens: 9,
+        cached_tokens: 1800,
+        cache_write_tokens: 200,
+      },
+    });
+  });
+
+  test('reads null cache fields as unreported, not as a count', async () => {
+    mockFetch(
+      () =>
+        new Response(
+          JSON.stringify({
+            content: [{ type: 'text', text: 'x' }],
+            stop_reason: 'end_turn',
+            usage: {
+              input_tokens: 12,
+              output_tokens: 3,
+              cache_read_input_tokens: null,
+              cache_creation_input_tokens: null,
+            },
+          }),
+        ),
+    );
+    const res = await new AnthropicProvider('k').chat([{ role: 'user', content: 'hi' }]);
+    expect(res.usage).toStrictEqual({ prompt_tokens: 12, completion_tokens: 3 });
+  });
+
+  test('sends a blank system prompt as nothing, since a blank text block is rejected', async () => {
+    mockFetch(done);
+    await drain(
+      new AnthropicProvider('k').stream([
+        { role: 'system', content: '   ' },
+        { role: 'user', content: 'hi' },
+      ]),
+    );
+    expect(lastBody().system).toBeUndefined();
   });
 });
 

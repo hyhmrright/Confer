@@ -66,8 +66,8 @@ updates:
   # because no tool was watching image tags either. Both it and postgres were
   # migrated by hand on 2026-08-29 (1.19 / 18); the rules below are what keeps
   # the NEXT pair of those from arriving as a routine merge, not leftovers from
-  # the last one. confer-gateway/client/migrate are built locally by deploy.sh
-  # and exist in no registry to check.
+  # the last one. confer-gateway and confer-client are built locally by
+  # deploy.sh and exist in no registry to check.
   - package-ecosystem: docker-compose
     directory: /
     target-branch: dev
@@ -93,7 +93,9 @@ updates:
         # not major-versioned: v1.19 panics on storage written by v1.12, which
         # wrote a segment.json variant the newer reader rejects. Upgrades are
         # stepwise, so each bump has to arrive as its own reviewable PR.
-        exclude-patterns: ['qdrant/qdrant']
+        # SILO likewise: it calls MinIO compatibility best effort, so each bump
+        # is tested against a copy of the real volume before it merges.
+        exclude-patterns: ['qdrant/qdrant', 'pgsty/silo']
         update-types: [minor, patch]
 
   # infra/*.Dockerfile. alpine is pinned at 3.24 and needs review rather than a

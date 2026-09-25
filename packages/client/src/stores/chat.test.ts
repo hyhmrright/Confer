@@ -362,16 +362,6 @@ describe('chat store', () => {
     expect(noModel).not.toBe(noKey);
   });
 
-  test('setStreaming updates streaming flag and content', () => {
-    useChatStore.getState().setStreaming(true, 'partial');
-    expect(useChatStore.getState().streaming).toBe(true);
-    expect(useChatStore.getState().streamContent).toBe('partial');
-
-    useChatStore.getState().setStreaming(false);
-    expect(useChatStore.getState().streaming).toBe(false);
-    expect(useChatStore.getState().streamContent).toBe('');
-  });
-
   test('setAgentStatus updates the agent status', () => {
     useChatStore.getState().setAgentStatus('thinking');
     expect(useChatStore.getState().agentStatus).toBe('thinking');

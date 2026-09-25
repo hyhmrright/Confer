@@ -8,8 +8,7 @@ import {
   adminUserListQuerySchema,
   newId,
 } from '@confer/shared';
-import { count, desc, eq, like, type SQL } from 'drizzle-orm';
-import type { PgTable } from 'drizzle-orm/pg-core';
+import { desc, eq, like } from 'drizzle-orm';
 import { type Context, Hono } from 'hono';
 import { getDb } from '../db/connection.js';
 import {
@@ -23,6 +22,7 @@ import {
 } from '../db/schema.js';
 import { getAppConfig, setConfigValue } from '../lib/app-config.js';
 import { clientIp } from '../lib/client-ip.js';
+import { countOf } from '../lib/pagination.js';
 import { adminMiddleware } from '../middleware/admin.js';
 import { authMiddleware } from '../middleware/auth.js';
 import type { AppEnv } from '../types.js';
@@ -89,13 +89,6 @@ async function auditChange(
     after: change.after,
     reason: change.reason,
   });
-}
-
-// Count every row of a table (optionally filtered). Drizzle returns a one-row
-// result set; this unwraps it so list handlers read as `total: await countOf(x)`.
-async function countOf(table: PgTable, where?: SQL): Promise<number> {
-  const [row] = await getDb().select({ value: count() }).from(table).where(where);
-  return row?.value ?? 0;
 }
 
 adminRoutes.get('/users', async (c) => {
@@ -295,67 +288,42 @@ adminRoutes.get('/conversations', async (c) => {
   });
 });
 
-// Hide or restore a conversation. Soft — never deletes data.
-adminRoutes.patch('/conversations/:id', async (c) => {
-  const targetId = c.req.param('id');
-  const body = adminModerateSchema.parse(await c.req.json());
-  const db = getDb();
+// Hide or restore a conversation or a single message. Soft — never deletes
+// data. The two differ only in which table the flag lives on.
+for (const { noun, label, table } of [
+  { noun: 'conversation', label: 'Conversation', table: conversations },
+  { noun: 'message', label: 'Message', table: messages },
+] as const) {
+  adminRoutes.patch(`/${noun}s/:id`, async (c) => {
+    const targetId = c.req.param('id');
+    const body = adminModerateSchema.parse(await c.req.json());
+    const db = getDb();
 
-  const [target] = await db
-    .select({ moderation_status: conversations.moderation_status })
-    .from(conversations)
-    .where(eq(conversations.id, targetId))
-    .limit(1);
-  if (!target) {
-    throw new AppError('conversation_not_found', 'Conversation not found', 404);
-  }
+    const [target] = await db
+      .select({ moderation_status: table.moderation_status })
+      .from(table)
+      .where(eq(table.id, targetId))
+      .limit(1);
+    if (!target) {
+      throw new AppError(`${noun}_not_found`, `${label} not found`, 404);
+    }
 
-  await db
-    .update(conversations)
-    .set({ moderation_status: body.moderation_status, updated_at: new Date() })
-    .where(eq(conversations.id, targetId));
+    await db
+      .update(table)
+      .set({ moderation_status: body.moderation_status, updated_at: new Date() })
+      .where(eq(table.id, targetId));
 
-  await auditChange(c, {
-    action: `admin.conversation.${body.moderation_status === 'hidden' ? 'hide' : 'restore'}`,
-    targetId,
-    before: target.moderation_status,
-    after: body.moderation_status,
-    reason: body.reason,
+    await auditChange(c, {
+      action: `admin.${noun}.${body.moderation_status === 'hidden' ? 'hide' : 'restore'}`,
+      targetId,
+      before: target.moderation_status,
+      after: body.moderation_status,
+      reason: body.reason,
+    });
+
+    return c.json({ ok: true });
   });
-
-  return c.json({ ok: true });
-});
-
-// Hide or restore a single message. Soft — never deletes data.
-adminRoutes.patch('/messages/:id', async (c) => {
-  const targetId = c.req.param('id');
-  const body = adminModerateSchema.parse(await c.req.json());
-  const db = getDb();
-
-  const [target] = await db
-    .select({ moderation_status: messages.moderation_status })
-    .from(messages)
-    .where(eq(messages.id, targetId))
-    .limit(1);
-  if (!target) {
-    throw new AppError('message_not_found', 'Message not found', 404);
-  }
-
-  await db
-    .update(messages)
-    .set({ moderation_status: body.moderation_status, updated_at: new Date() })
-    .where(eq(messages.id, targetId));
-
-  await auditChange(c, {
-    action: `admin.message.${body.moderation_status === 'hidden' ? 'hide' : 'restore'}`,
-    targetId,
-    before: target.moderation_status,
-    after: body.moderation_status,
-    reason: body.reason,
-  });
-
-  return c.json({ ok: true });
-});
+}
 
 // --- 3c: global config ------------------------------------------------------
 

@@ -181,7 +181,7 @@ async function ingestCorpus(key: string, provider: EmbeddingProvider): Promise<n
  * name was checked at.
  */
 async function resolveReranker(): Promise<
-  { provider: ReturnType<typeof createProvider>; model?: string } | undefined
+  { provider: NonNullable<ReturnType<typeof createProvider>>; model?: string } | undefined
 > {
   if (!process.argv.includes('--rerank')) return undefined;
   const name = process.env.EVAL_RERANK_PROVIDER ?? 'ollama';
@@ -239,8 +239,7 @@ async function runCases(
           await rerankCandidates({
             query: testCase.query,
             candidates: hits.map((hit) => ({ text: hit.text })),
-            // biome-ignore lint/style/noNonNullAssertion: resolveReranker exits when it cannot build one
-            provider: reranker.provider!,
+            provider: reranker.provider,
             model: reranker.model,
             topN: k,
           })

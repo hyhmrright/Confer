@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useAutoClear } from '../../hooks/use-auto-clear.js';
 import { mergePolicyDefault } from '../../lib/policy.js';
 import { useSettingsStore } from '../../stores/settings.js';
 import { LoadingDots } from '../LoadingDots.js';
@@ -27,12 +28,7 @@ export function PolicyTab() {
     setDecision(agent?.policies_json?.default ?? '');
   }, [agent]);
 
-  useEffect(() => {
-    if (success || error) {
-      const timer = setTimeout(clearMessages, 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [success, error, clearMessages]);
+  useAutoClear(success, error, clearMessages);
 
   const handleSave = () => {
     // Whole-object replace: preserve any existing rules, only swap `default`.

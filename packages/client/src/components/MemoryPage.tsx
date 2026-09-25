@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { dateLocale } from '../i18n/index.js';
-import { DISABLED_FILLED, FOCUS_RING, INPUT_CLS } from '../lib/styles.js';
+import { formatShortDateTime } from '../lib/format-date.js';
+import { INPUT_CLS } from '../lib/styles.js';
 import { useMemoriesStore } from '../stores/memories.js';
 import { EmptyState } from './EmptyState.js';
-import { Plus, Search, Trash } from './Icons.js';
+import { Trash } from './Icons.js';
 import { LoadingDots } from './LoadingDots.js';
+import { PanelForm } from './PanelForm.js';
+import { PanelHeader } from './PanelHeader.js';
+import { SearchField } from './SearchField.js';
 
 export function MemoryPage() {
   const { t } = useTranslation();
@@ -61,39 +64,30 @@ export function MemoryPage() {
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      {/* Header */}
-      <div className="px-4 py-3 flex items-center justify-between border-b border-dark-border shrink-0">
-        <span className="eyebrow text-ink-muted">{t('memory.title')}</span>
-        <button
-          type="button"
-          onClick={() => setShowForm((v) => !v)}
-          className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md
-            bg-primary-600/15 text-primary-400 border border-primary-600/20
-            hover:bg-primary-600/25 transition-all"
-        >
-          <Plus className="w-3 h-3" />
-          {t('common.new')}
-        </button>
-      </div>
-
-      {/* Search */}
-      <div className="px-3 py-2 border-b border-dark-border shrink-0">
-        <div className="relative">
-          <Search className="absolute start-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-muted pointer-events-none" />
-          <input
-            name="memory-search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={t('memory.searchPlaceholder')}
-            className={`w-full ps-8 pe-3 py-1.5 bg-dark-input border border-dark-border text-ink-secondary
-              text-xs rounded-md placeholder:text-ink-muted ${FOCUS_RING} transition-colors`}
-          />
-        </div>
-      </div>
+      <PanelHeader
+        title={t('memory.title')}
+        actionLabel={t('common.new')}
+        onAction={() => setShowForm((v) => !v)}
+      />
+      <SearchField
+        name="memory-search"
+        value={query}
+        onChange={setQuery}
+        placeholder={t('memory.searchPlaceholder')}
+      />
 
       {/* New memory form */}
       {showForm && (
-        <div className="px-3 py-3 border-b border-dark-border space-y-2 shrink-0 bg-dark-card/50">
+        <PanelForm
+          error={saveError}
+          onCancel={() => {
+            setShowForm(false);
+            setSaveError(null);
+          }}
+          onSubmit={handleCreate}
+          submitDisabled={saving || !newTitle.trim() || !newContent.trim()}
+          submitLabel={saving ? t('common.saving') : t('common.save')}
+        >
           <input
             value={newTitle}
             onChange={(e) => setNewTitle(e.target.value)}
@@ -107,33 +101,7 @@ export function MemoryPage() {
             rows={3}
             className={`${INPUT_CLS} resize-none`}
           />
-          {saveError && (
-            <p role="alert" className="text-xs text-red-400">
-              {saveError}
-            </p>
-          )}
-          <div className="flex gap-2 justify-end">
-            <button
-              type="button"
-              onClick={() => {
-                setShowForm(false);
-                setSaveError(null);
-              }}
-              className="px-3 py-1.5 text-xs text-ink-muted hover:text-ink-secondary transition-colors"
-            >
-              {t('common.cancel')}
-            </button>
-            <button
-              type="button"
-              onClick={handleCreate}
-              disabled={saving || !newTitle.trim() || !newContent.trim()}
-              className={`px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg
-                hover:bg-primary-500 ${DISABLED_FILLED} transition-colors`}
-            >
-              {saving ? t('common.saving') : t('common.save')}
-            </button>
-          </div>
-        </div>
+        </PanelForm>
       )}
 
       {/* Memory list */}
@@ -199,12 +167,7 @@ export function MemoryPage() {
                     </div>
                   )}
                   <p className="eyebrow text-ink-muted mt-1.5">
-                    {new Date(mem.updated_at).toLocaleString(dateLocale(), {
-                      month: 'short',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
+                    {formatShortDateTime(mem.updated_at)}
                   </p>
                 </div>
                 <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">

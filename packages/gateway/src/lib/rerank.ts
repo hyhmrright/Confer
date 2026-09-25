@@ -157,10 +157,10 @@ async function collectReply(
  * turn to produce an improvement the turn can do without.
  */
 function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
-  return Promise.race([
-    work,
-    new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error(`rerank timed out after ${ms}ms`)), ms),
-    ),
-  ]);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`rerank timed out after ${ms}ms`)), ms);
+  });
+  // Cleared either way, so a rerank that answers in time leaves no timer behind.
+  return Promise.race([work, timeout]).finally(() => clearTimeout(timer));
 }

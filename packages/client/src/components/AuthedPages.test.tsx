@@ -31,7 +31,7 @@ const get = mock(async (path: string) => {
   if (path.startsWith('/conversations')) return { conversations: [], messages: [] };
   if (path.startsWith('/permissions')) return { permissions: [] };
   if (path.startsWith('/contacts')) return { contacts: [] };
-  if (path.startsWith('/errands')) return { errands: [] };
+  if (path.startsWith('/errands/cards/pending')) return { cards: [] };
   if (path === '/users/me') return { user: { username: 'tester', preferences: {} } };
   if (path === '/agents/me') return { agent: { model_config: {}, policies_json: {} } };
   return {};

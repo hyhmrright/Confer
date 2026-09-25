@@ -1,6 +1,7 @@
 import { AppError } from '@confer/shared';
 import { and, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
+import { discoverableAgent } from '../a2a/target-agent.js';
 import { getDb } from '../db/connection.js';
 import { agents, users } from '../db/schema.js';
 import { buildAgentCard } from '../lib/agent-card.js';
@@ -28,12 +29,11 @@ async function loadPublicAgent(username: string) {
     .where(
       and(
         eq(users.username, username),
-        // Same two conditions the public directory applies. A Card is a
-        // discovery document, so anything undiscoverable there must be
-        // undiscoverable here — otherwise this route quietly becomes a way to
-        // enumerate agents their owners never published.
-        eq(agents.is_public, true),
-        eq(agents.status, 'active'),
+        // Same condition the public directory applies. A Card is a discovery
+        // document, so anything undiscoverable there must be undiscoverable
+        // here — otherwise this route quietly becomes a way to enumerate agents
+        // their owners never published.
+        discoverableAgent,
       ),
     )
     .limit(1);
@@ -85,7 +85,7 @@ export async function wellKnownAgentCard(): Promise<ReturnType<typeof buildAgent
     })
     .from(agents)
     .innerJoin(users, eq(agents.user_id, users.id))
-    .where(and(eq(agents.is_public, true), eq(agents.status, 'active')))
+    .where(discoverableAgent)
     // Two is enough to know it is ambiguous; no reason to read the rest.
     .limit(2);
 

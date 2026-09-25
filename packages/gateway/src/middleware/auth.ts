@@ -17,6 +17,11 @@ import { getEnv } from '../env.js';
 // and a route is the wrong owner for a rule the middleware enforces.
 export const TOKEN_TYPE = { access: 'access', refresh: 'refresh' } as const;
 
+// The HMAC key every token is signed and verified with.
+export function jwtSecret(): Uint8Array {
+  return new TextEncoder().encode(getEnv().JWT_SECRET);
+}
+
 export interface AuthPayload {
   sub: string;
   username: string;
@@ -35,7 +40,7 @@ export const authMiddleware = createMiddleware<{
 
   const token = header.slice(7);
   const env = getEnv();
-  const secret = new TextEncoder().encode(env.JWT_SECRET);
+  const secret = jwtSecret();
 
   let sub: string;
   let username: string;

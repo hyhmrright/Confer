@@ -15,6 +15,7 @@ import {
   peerAgents,
   probeAsks,
 } from '../db/schema.js';
+import { conversationPeerId } from '../lib/conversation-peer.js';
 import { parseLimit } from '../lib/pagination.js';
 import { authMiddleware } from '../middleware/auth.js';
 import type { AppEnv } from '../types.js';
@@ -38,12 +39,19 @@ const RELAY_DID = 'did:web:localhost:probe-wizard-relay';
 
 async function getOrCreateRelayPeerId(): Promise<string> {
   const db = getDb();
-  const [existing] = await db
-    .select({ id: peerAgents.id })
-    .from(peerAgents)
-    .where(eq(peerAgents.did, RELAY_DID))
-    .limit(1);
-  if (existing) return existing.id;
+  // `onConflictDoNothing` returns no row on conflict, so a lost create race has
+  // to read the winner back with the same lookup the fast path uses.
+  const findRelayId = async () =>
+    (
+      await db
+        .select({ id: peerAgents.id })
+        .from(peerAgents)
+        .where(eq(peerAgents.did, RELAY_DID))
+        .limit(1)
+    )[0]?.id;
+
+  const existing = await findRelayId();
+  if (existing) return existing;
 
   const id = newId();
   const [row] = await db
@@ -61,14 +69,9 @@ async function getOrCreateRelayPeerId(): Promise<string> {
     .returning({ id: peerAgents.id });
   if (row) return row.id;
 
-  // Lost the create race: read back the winner's row.
-  const [winner] = await db
-    .select({ id: peerAgents.id })
-    .from(peerAgents)
-    .where(eq(peerAgents.did, RELAY_DID))
-    .limit(1);
+  const winner = await findRelayId();
   if (!winner) throw new AppError('relay_unavailable', 'Probe relay peer unavailable', 500);
-  return winner.id;
+  return winner;
 }
 
 // Record one ask and open its placeholder conversation. The question is stored
@@ -183,20 +186,10 @@ probeRoutes.post('/ask-person/:id/fill', async (c) => {
 
   // The reply must be attributed to the conversation's peer_agent participant so
   // the consult reply endpoint can correlate it.
-  const [peerParticipant] = await db
-    .select({ peer_id: conversationParticipants.peer_id })
-    .from(conversationParticipants)
-    .where(
-      and(
-        eq(conversationParticipants.conversation_id, conversationId),
-        eq(conversationParticipants.participant_type, 'peer_agent'),
-      ),
-    )
-    .limit(1);
-  if (!peerParticipant?.peer_id) {
+  const relayPeerId = await conversationPeerId(conversationId);
+  if (!relayPeerId) {
     throw new AppError('no_relay', 'Probe conversation missing relay participant', 409);
   }
-  const relayPeerId = peerParticipant.peer_id;
 
   await db.transaction(async (tx) => {
     await tx.insert(messages).values({

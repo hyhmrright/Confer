@@ -36,7 +36,7 @@ const card = (id: string) => ({
 beforeEach(() => {
   get.mockReset();
   post.mockReset();
-  useErrandsStore.setState({ errands: [], pendingCards: [], creating: false, error: null });
+  useErrandsStore.setState({ pendingCards: [], creating: false, error: null });
 });
 
 afterEach(() => {
@@ -59,15 +59,13 @@ describe('errands store', () => {
     expect(useErrandsStore.getState().pendingCards.map((c) => c.id)).toEqual(['existing']);
   });
 
-  test('createErrand posts the title then reloads errands', async () => {
+  test('createErrand posts the title', async () => {
     post.mockResolvedValueOnce({ id: 'e1', status: 'in_progress' });
-    get.mockResolvedValueOnce({ errands: [] });
     await useErrandsStore.getState().createErrand('Dispute a charge', 'billing');
     expect(post).toHaveBeenCalledWith('/errands', {
       title: 'Dispute a charge',
       kind: 'billing',
     });
-    expect(get).toHaveBeenCalledWith('/errands');
     expect(useErrandsStore.getState().creating).toBe(false);
   });
 

@@ -15,19 +15,16 @@ export function EmptyState({
   icon: Icon,
   title,
   hint,
-  action,
 }: {
   icon?: (props: SVGProps<SVGSVGElement>) => ReactNode;
   title: string;
   hint?: string;
-  action?: ReactNode;
 }) {
   return (
     <div className="flex flex-col items-center justify-center gap-2 px-6 py-12 text-center">
       {Icon && <Icon className="w-7 h-7 text-ink-muted opacity-40 mb-1" />}
       <p className="text-sm font-medium text-ink-secondary">{title}</p>
       {hint && <p className="max-w-[34ch] text-xs leading-relaxed text-ink-muted">{hint}</p>}
-      {action && <div className="mt-2">{action}</div>}
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { buildDIDDocument } from '@confer/identity';
 import { AppError } from '@confer/shared';
 import { and, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
+import { discoverableAgent } from '../a2a/target-agent.js';
 import { getDb } from '../db/connection.js';
 import { agents, keypairs } from '../db/schema.js';
 import { instanceDid, selfA2AEndpoint } from '../lib/public-identity.js';
@@ -70,7 +71,7 @@ wellKnownRoutes.get('/agents.json', async (c) => {
     // Suspended agents (moderation 3b) are filtered from the public discovery
     // list. This only drops the row from the listing — it does not modify any
     // agent's AgentFacts/DID document (Contract 3 stays untouched).
-    .where(and(eq(agents.is_public, true), eq(agents.status, 'active')));
+    .where(discoverableAgent);
 
   return c.json({ agents: publicAgents });
 });

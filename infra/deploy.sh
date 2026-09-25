@@ -10,17 +10,19 @@
 #
 # Usage: infra/deploy.sh [service...]     (default: gateway client)
 #
-# A change that adds a migration also needs the separate migrate image, which
-# `build gateway client` does not touch:
-#   docker compose -f docker-compose.prod.yml build migrate
-#   docker compose -f docker-compose.prod.yml run --rm migrate
+# Migrations need nothing extra here. The migrate service runs out of the
+# gateway's own image — one tag, two commands — so rebuilding the gateway is
+# what refreshes the migration set, and running it is compose's job: gateway
+# depends_on migrate with service_completed_successfully, so `up` starts it and
+# waits for exit 0 before the new gateway comes up, which is the order a
+# forward-only migration needs anyway.
 set -euo pipefail
 # shellcheck source=infra/compose-images.sh
 source "$(dirname "$0")/compose-images.sh"
 
 for svc in "${SERVICES[@]}"; do
   img=$(image_of "$svc")
-  prev="${img%:*}:previous"
+  prev=$(previous_of "$img")
   if docker image inspect "$img" >/dev/null 2>&1; then
     docker tag "$img" "$prev"
     echo "kept $prev as a rollback point"
@@ -33,4 +35,7 @@ bun run build
 docker compose -f "$COMPOSE" build "${SERVICES[@]}"
 docker compose -f "$COMPOSE" up -d "${SERVICES[@]}"
 
-docker compose -f "$COMPOSE" ps --format 'table {{.Service}}\t{{.Status}}'
+# -a, so the migrate job appears. It has exited by the time this runs, and a
+# deploy whose closing report says nothing at all about the migration step is
+# how a failed one goes unnoticed.
+docker compose -f "$COMPOSE" ps -a --format 'table {{.Service}}\t{{.Status}}'

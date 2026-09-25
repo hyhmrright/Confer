@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useAutoClear } from '../hooks/use-auto-clear.js';
 import { mergePolicyDefault } from '../lib/policy.js';
 import { useContactsStore } from '../stores/contacts.js';
 import { Bot } from './Icons.js';
@@ -36,12 +37,7 @@ export function ContactDetail() {
     setDecision(overrides?.default ?? '');
   }, [overrides]);
 
-  useEffect(() => {
-    if (success || error) {
-      const timer = setTimeout(clearDetailMessages, 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [success, error, clearDetailMessages]);
+  useAutoClear(success, error, clearDetailMessages);
 
   if (!selectedContact) return null;
 

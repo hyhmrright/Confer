@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, gte, inArray, isNull, lt } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gte, inArray, isNull, lt, type SQL } from 'drizzle-orm';
 import { getDb } from '../db/connection.js';
 import { conversations, messages, permissions } from '../db/schema.js';
 import { isSenderAuthorized } from '../lib/a2a-admission.js';
@@ -34,6 +34,14 @@ const DENIED_NOTICE = "This agent's owner declined to answer the question.";
 /** Rows a peer may be shown: not moderator-hidden, not deleted. */
 function isVisible(row: MessageRow): boolean {
   return row.moderation_status === 'visible' && row.deleted_at === null;
+}
+
+/**
+ * Replies matching `inReplyTo` that count as an answer: the same visibility
+ * rule as `isVisible`, as SQL. `describeTasks` and `hasReply` must agree on it.
+ */
+function visibleReplies(inReplyTo: SQL): SQL | undefined {
+  return and(inReplyTo, isNull(messages.deleted_at), eq(messages.moderation_status, 'visible'));
 }
 
 export interface LoadedTask {
@@ -78,13 +86,11 @@ export async function describeTasks(
     .select()
     .from(messages)
     .where(
-      and(
+      visibleReplies(
         inArray(
           messages.in_reply_to,
           inbound.map((row) => row.id),
         ),
-        isNull(messages.deleted_at),
-        eq(messages.moderation_status, 'visible'),
       ),
     )
     // Oldest first, so the map keeps the NEWEST of any duplicates rather than
@@ -219,13 +225,7 @@ export async function hasReply(taskId: string): Promise<boolean> {
   const [row] = await getDb()
     .select({ id: messages.id })
     .from(messages)
-    .where(
-      and(
-        eq(messages.in_reply_to, taskId),
-        isNull(messages.deleted_at),
-        eq(messages.moderation_status, 'visible'),
-      ),
-    )
+    .where(visibleReplies(eq(messages.in_reply_to, taskId)))
     .limit(1);
   return row !== undefined;
 }

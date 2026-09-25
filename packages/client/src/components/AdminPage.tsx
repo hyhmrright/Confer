@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { dateLocale, type TranslationKey } from '../i18n/index.js';
 import { DISABLED, FOCUS_RING } from '../lib/styles.js';
@@ -201,6 +201,31 @@ function UserRow({ u, selfId }: { u: AdminUser; selfId: string | undefined }) {
   );
 }
 
+// Table shell shared by all three admin lists; the last column is the actions
+// column and aligns to the end.
+function AdminTable({ columns, children }: { columns: TranslationKey[]; children: ReactNode }) {
+  const { t } = useTranslation();
+  return (
+    <div className="overflow-x-auto scrollbar-thin">
+      <table className="w-full min-w-[520px]">
+        <thead>
+          <tr className="text-start">
+            {columns.map((key, i) => (
+              <th
+                key={key}
+                className={`py-2 px-3 text-[11px] font-medium text-ink-muted${i === columns.length - 1 ? ' text-end' : ''}`}
+              >
+                {t(key)}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>{children}</tbody>
+      </table>
+    </div>
+  );
+}
+
 // Shared by all three admin lists. Extracted when Content moderation turned out
 // to load `{page: 1}` and then render no controls at all, leaving every agent
 // and conversation past the twentieth unreachable — the store had been tracking
@@ -282,34 +307,19 @@ function UserManagement() {
 
       {error && <p className="text-xs text-red-400">{t('admin.loadError')}</p>}
 
-      <div className="overflow-x-auto scrollbar-thin">
-        <table className="w-full min-w-[520px]">
-          <thead>
-            <tr className="text-start">
-              <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
-                {t('admin.usersColUser')}
-              </th>
-              <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
-                {t('admin.usersColRole')}
-              </th>
-              <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
-                {t('admin.usersColStatus')}
-              </th>
-              <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
-                {t('admin.usersColCreated')}
-              </th>
-              <th className="py-2 px-3 text-[11px] font-medium text-ink-muted text-end">
-                {t('admin.usersColActions')}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map((u) => (
-              <UserRow key={u.id} u={u} selfId={selfId} />
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <AdminTable
+        columns={[
+          'admin.usersColUser',
+          'admin.usersColRole',
+          'admin.usersColStatus',
+          'admin.usersColCreated',
+          'admin.usersColActions',
+        ]}
+      >
+        {users.map((u) => (
+          <UserRow key={u.id} u={u} selfId={selfId} />
+        ))}
+      </AdminTable>
 
       {!loadingUsers && users.length === 0 && (
         <p className="text-sm text-ink-muted py-4">{t('admin.empty')}</p>
@@ -437,28 +447,13 @@ function ContentModeration() {
 
       <section>
         <h3 className="text-sm font-medium text-ink-secondary mb-3">{t('admin.contentAgents')}</h3>
-        <div className="overflow-x-auto scrollbar-thin">
-          <table className="w-full min-w-[520px]">
-            <thead>
-              <tr className="text-start">
-                <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
-                  {t('admin.agentColName')}
-                </th>
-                <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
-                  {t('admin.agentColStatus')}
-                </th>
-                <th className="py-2 px-3 text-[11px] font-medium text-ink-muted text-end">
-                  {t('admin.agentColActions')}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {agents.map((a) => (
-                <AgentRow key={a.id} a={a} />
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <AdminTable
+          columns={['admin.agentColName', 'admin.agentColStatus', 'admin.agentColActions']}
+        >
+          {agents.map((a) => (
+            <AgentRow key={a.id} a={a} />
+          ))}
+        </AdminTable>
         {agents.length === 0 && <p className="text-sm text-ink-muted py-4">{t('admin.empty')}</p>}
         <Pager
           total={agentsTotal}
@@ -473,31 +468,18 @@ function ContentModeration() {
         <h3 className="text-sm font-medium text-ink-secondary mb-3">
           {t('admin.contentConversations')}
         </h3>
-        <div className="overflow-x-auto scrollbar-thin">
-          <table className="w-full min-w-[520px]">
-            <thead>
-              <tr className="text-start">
-                <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
-                  {t('admin.convColName')}
-                </th>
-                <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
-                  {t('admin.convColStatus')}
-                </th>
-                <th className="py-2 px-3 text-[11px] font-medium text-ink-muted">
-                  {t('admin.convColCreated')}
-                </th>
-                <th className="py-2 px-3 text-[11px] font-medium text-ink-muted text-end">
-                  {t('admin.convColActions')}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {conversations.map((conv) => (
-                <ConversationRow key={conv.id} conv={conv} />
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <AdminTable
+          columns={[
+            'admin.convColName',
+            'admin.convColStatus',
+            'admin.convColCreated',
+            'admin.convColActions',
+          ]}
+        >
+          {conversations.map((conv) => (
+            <ConversationRow key={conv.id} conv={conv} />
+          ))}
+        </AdminTable>
         {conversations.length === 0 && (
           <p className="text-sm text-ink-muted py-4">{t('admin.empty')}</p>
         )}
