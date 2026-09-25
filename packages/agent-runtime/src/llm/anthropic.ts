@@ -6,13 +6,89 @@ import type {
   LLMProvider,
   LLMResponse,
   LLMStreamEvent,
+  LLMUsage,
 } from './provider.js';
 import { MAX_ERROR_BYTES, MAX_RESPONSE_BYTES, readSSEData } from './stream-utils.js';
 
-function toAnthropicMessages(messages: LLMMessage[]): unknown[] {
+type AnthropicBlock = Record<string, unknown>;
+interface AnthropicMessage {
+  role: string;
+  content: string | AnthropicBlock[];
+}
+
+// Anthropic caches a prompt only up to a block that asks for it, and the cache
+// is a PREFIX match in the order tools → system → messages: any byte that
+// differs invalidates everything after it. A prompt below the model's minimum
+// cacheable length is simply not cached — the request succeeds either way.
+const CACHE_BREAKPOINT = { type: 'ephemeral' } as const;
+
+/**
+ * One text block per system message, the FIRST marked as a cache breakpoint.
+ * The caller's contract: what is identical turn after turn goes in the first
+ * system message, and anything that varies per turn (recalled memories) in a
+ * later one. Joining them into one string, as this did, put the per-turn part
+ * inside the only block there was, so nothing before it could be reused.
+ */
+function toAnthropicSystem(messages: LLMMessage[]): AnthropicBlock[] | undefined {
+  const blocks: AnthropicBlock[] = messages
+    // A whitespace-only text block is rejected just like an empty one.
+    .filter((m) => m.role === 'system' && m.content?.trim())
+    .map((m) => ({ type: 'text', text: m.content }));
+  const [first] = blocks;
+  if (!first) return undefined;
+  first.cache_control = CACHE_BREAKPOINT;
+  return blocks;
+}
+
+/**
+ * Mark the conversation's last block as a breakpoint too. Within a turn every
+ * tool round resends the whole conversation plus one more exchange, so round
+ * two onward reads everything up to here from the cache instead of paying for
+ * it again; across turns the same holds for the history, as long as nothing
+ * earlier in the prompt changed.
+ */
+function withTrailingBreakpoint(messages: AnthropicMessage[]): AnthropicMessage[] {
+  const last = messages.at(-1);
+  if (!last) return messages;
+  let blocks: AnthropicBlock[];
+  if (typeof last.content !== 'string') {
+    blocks = last.content;
+  } else if (last.content.trim()) {
+    blocks = [{ type: 'text', text: last.content }];
+  } else {
+    // An empty or blank text block is a 400, so such a message is left as the
+    // plain string it was.
+    return messages;
+  }
+  const tail = blocks.at(-1);
+  if (!tail) return messages;
+  return [
+    ...messages.slice(0, -1),
+    { ...last, content: [...blocks.slice(0, -1), { ...tail, cache_control: CACHE_BREAKPOINT }] },
+  ];
+}
+
+/**
+ * Input usage from one of Anthropic's usage objects. `input_tokens` counts only
+ * the tokens that were neither written to nor read from the cache, so reporting
+ * it alone as the prompt size would make every cached turn look nearly free.
+ * The two cache fields are declared `number | null`; null means not reported.
+ */
+function inputUsage(u: Record<string, unknown>): Omit<LLMUsage, 'completion_tokens'> {
+  const count = (v: unknown) => (typeof v === 'number' ? v : undefined);
+  const read = count(u.cache_read_input_tokens);
+  const written = count(u.cache_creation_input_tokens);
+  return {
+    prompt_tokens: (count(u.input_tokens) ?? 0) + (written ?? 0) + (read ?? 0),
+    ...(read === undefined ? {} : { cached_tokens: read }),
+    ...(written === undefined ? {} : { cache_write_tokens: written }),
+  };
+}
+
+function toAnthropicMessages(messages: LLMMessage[]): AnthropicMessage[] {
   return messages
     .filter((m) => m.role !== 'system')
-    .map((m) => {
+    .map((m): AnthropicMessage => {
       if (m.role === 'tool') {
         return {
           role: 'user',
@@ -20,7 +96,7 @@ function toAnthropicMessages(messages: LLMMessage[]): unknown[] {
         };
       }
       if (m.tool_calls?.length) {
-        const content: unknown[] = [];
+        const content: AnthropicBlock[] = [];
         if (m.content) content.push({ type: 'text', text: m.content });
         for (const tc of m.tool_calls) {
           content.push({
@@ -52,13 +128,13 @@ export class AnthropicProvider implements LLMProvider {
   // adds on top: `chat` sends `temperature` and no `tools`, `stream` the
   // reverse. That predates this helper and is left as it was.
   private baseBody(messages: LLMMessage[], options?: LLMChatOptions): Record<string, unknown> {
-    const systemMessage = messages.find((m) => m.role === 'system');
     const body: Record<string, unknown> = {
       model: options?.model ?? 'claude-sonnet-4-20250514',
       max_tokens: options?.max_tokens ?? 4096,
       messages: toAnthropicMessages(messages),
     };
-    if (systemMessage) body.system = systemMessage.content;
+    const system = toAnthropicSystem(messages);
+    if (system) body.system = system;
     return body;
   }
 
@@ -102,15 +178,13 @@ export class AnthropicProvider implements LLMProvider {
       content,
       finish_reason:
         stopReason === 'max_tokens' ? 'length' : stopReason === 'tool_use' ? 'tool_use' : 'stop',
-      usage: {
-        prompt_tokens: u.input_tokens ?? 0,
-        completion_tokens: u.output_tokens ?? 0,
-      },
+      usage: { ...inputUsage(u), completion_tokens: u.output_tokens ?? 0 },
     };
   }
 
   async *stream(messages: LLMMessage[], options?: LLMChatOptions): AsyncIterable<LLMStreamEvent> {
     const body = this.baseBody(messages, options);
+    body.messages = withTrailingBreakpoint(body.messages as AnthropicMessage[]);
     body.stream = true;
     if (options?.tools?.length) {
       body.tools = options.tools.map((t) => ({
@@ -134,7 +208,7 @@ export class AnthropicProvider implements LLMProvider {
     // learns what the turn cost. `LLMStreamEvent.usage` has been declared since
     // the interface was written and no provider ever set it, which made every
     // streamed turn (all of them, on both the chat and A2A paths) unmeasurable.
-    let usage: { prompt_tokens: number; completion_tokens: number } | undefined;
+    let usage: LLMUsage | undefined;
 
     for await (const payload of readSSEData(response.body)) {
       const data = JSON.parse(payload) as Record<string, unknown>;
@@ -144,15 +218,13 @@ export class AnthropicProvider implements LLMProvider {
           | Record<string, number>
           | undefined;
         if (reported) {
-          usage = {
-            prompt_tokens: reported.input_tokens ?? 0,
-            completion_tokens: reported.output_tokens ?? 0,
-          };
+          usage = { ...inputUsage(reported), completion_tokens: reported.output_tokens ?? 0 };
         }
       } else if (data.type === 'message_delta') {
         const reported = data.usage as Record<string, number> | undefined;
         if (reported) {
           usage = {
+            ...usage,
             prompt_tokens: usage?.prompt_tokens ?? 0,
             completion_tokens: reported.output_tokens ?? usage?.completion_tokens ?? 0,
           };

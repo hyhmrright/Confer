@@ -3,11 +3,12 @@ import type {
   LLMMessage,
   LLMProvider,
   LLMToolDefinition,
+  LLMUsage,
 } from '@confer/agent-runtime';
 import { getEnv } from '../env.js';
+import { boundedMap } from '../lib/concurrency.js';
 import type { EmbeddingProvider } from '../lib/embedding.js';
 import type { TurnAudience } from '../lib/llm-keys.js';
-import { ensureMemoryCollection } from '../lib/memory-store.js';
 import { recordAgentTurn } from '../lib/telemetry.js';
 import {
   listContacts,
@@ -42,8 +43,8 @@ export interface AgentTurnEmit {
 
 export interface RunAgentTurnOptions {
   provider: LLMProvider;
-  // Base system prompt before the KB instruction + memory fragment are layered
-  // on. Sourced per caller (chat: model_config.system_prompt; A2A: agent.description).
+  // Base system prompt; the KB instruction is appended to it, and recalled
+  // memories go in a separate system message after it. Sourced per caller (chat: model_config.system_prompt; A2A: agent.description).
   systemPromptBase: string;
   // Model id from the owner's agent settings (`model_config.model`). Undefined
   // falls back to the provider's own default — which for Ollama is a model the
@@ -152,12 +153,15 @@ export function narrowKbIds(
 }
 
 // Execute a single tool call and return its textual result. Knowledge-base
-// citations are appended to `ctx.citations` and surfaced live via `emit.onCitation`
-// so the streaming capsule shows during the response. Tool errors are caught and
-// returned as text so a failing tool never aborts the agent loop.
+// citations go into `citations`, which belongs to this one call: calls in a
+// round run concurrently, so a shared list would fill in completion order and
+// the stored citations would change from one run of the same turn to the next.
+// Tool errors are caught and returned as text so a failing tool never aborts
+// the agent loop.
 async function executeToolCall(
   tc: { id: string; name: string; arguments: string },
   ctx: ToolExecContext,
+  citations: KbCitation[],
 ): Promise<string> {
   try {
     if (tc.name === 'web_search') {
@@ -177,10 +181,7 @@ async function executeToolCall(
         ctx.embeddingProvider,
         ctx.rerank,
       );
-      ctx.citations.push(...kbResult.citations);
-      for (const cite of kbResult.citations) {
-        await ctx.emit?.onCitation?.(cite);
-      }
+      citations.push(...kbResult.citations);
       return kbResult.text;
     }
     if (tc.name === 'list_knowledge_bases') {
@@ -213,6 +214,8 @@ async function executeToolCall(
     return `工具调用失败: ${detail}`;
   }
 }
+
+const MAX_PARALLEL_TOOL_CALLS = 4;
 
 // Drive the agentic tool loop (up to 5 rounds), consuming `provider.stream`.
 // Tokens, tool calls, and tool results are surfaced via the optional `emit`
@@ -249,13 +252,7 @@ async function runAgentWithTools(
           // Summed across rounds, because a tool loop is several model calls
           // and the owner pays for the prompt again on each one — the round
           // count beside it is what makes a large number explicable.
-          if (event.usage) {
-            spend.usage = {
-              prompt_tokens: (spend.usage?.prompt_tokens ?? 0) + event.usage.prompt_tokens,
-              completion_tokens:
-                (spend.usage?.completion_tokens ?? 0) + event.usage.completion_tokens,
-            };
-          }
+          if (event.usage) spend.usage = addUsage(spend.usage, event.usage);
           break;
       }
     }
@@ -276,12 +273,31 @@ async function runAgentWithTools(
       },
     ];
 
+    // Announced in order, run together, reported in order. A model that asks
+    // for a knowledge-base search and a web search in one round used to wait
+    // for each in turn, and each is an embedding or search API round trip; the
+    // round now takes as long as its slowest call. Every tool here only reads,
+    // so none can depend on another's effect. Emits stay sequential because
+    // they are writes to one SSE stream.
     for (const tc of pendingToolCalls) {
       ctx.toolsUsed.push(tc.name);
       await ctx.emit?.onTool?.(tc.name);
+    }
 
-      const result = await executeToolCall(tc, ctx);
+    // Bounded, because the model decides how many calls a round has — on an
+    // A2A turn, a peer's question steers it — and each can be an embedding, a
+    // Tavily search or, with reranking on, a model call of its own.
+    const outcomes = await boundedMap(pendingToolCalls, MAX_PARALLEL_TOOL_CALLS, async (tc) => {
+      const citations: KbCitation[] = [];
+      const result = await executeToolCall(tc, ctx, citations);
+      return { tc, result, citations };
+    });
 
+    for (const { tc, result, citations } of outcomes) {
+      ctx.citations.push(...citations);
+      for (const cite of citations) {
+        await ctx.emit?.onCitation?.(cite);
+      }
       await ctx.emit?.onToolResult?.(result);
 
       agentMessages = [...agentMessages, { role: 'tool', content: result, tool_call_id: tc.id }];
@@ -294,7 +310,24 @@ async function runAgentWithTools(
 /** What one turn spent, accumulated across the rounds of the tool loop. */
 interface TurnSpend {
   rounds: number;
-  usage?: { prompt_tokens: number; completion_tokens: number };
+  usage?: LLMUsage;
+}
+
+// The cache counts stay unreported until some round reports them: a vendor that
+// never says is not a vendor that never hit.
+function addOptional(a: number | undefined, b: number | undefined): number | undefined {
+  return a === undefined && b === undefined ? undefined : (a ?? 0) + (b ?? 0);
+}
+
+function addUsage(total: LLMUsage | undefined, round: LLMUsage): LLMUsage {
+  const cached = addOptional(total?.cached_tokens, round.cached_tokens);
+  const written = addOptional(total?.cache_write_tokens, round.cache_write_tokens);
+  return {
+    prompt_tokens: (total?.prompt_tokens ?? 0) + round.prompt_tokens,
+    completion_tokens: (total?.completion_tokens ?? 0) + round.completion_tokens,
+    ...(cached === undefined ? {} : { cached_tokens: cached }),
+    ...(written === undefined ? {} : { cache_write_tokens: written }),
+  };
 }
 
 function recallState(opts: RunAgentTurnOptions, recall: MemoryRecall | undefined): string {
@@ -312,15 +345,14 @@ function kbState(hasKb: boolean, toolsUsed: string[]): string {
   return toolsUsed.includes('search_knowledge_base') ? 'searched' : 'unsearched';
 }
 
-// Run one agent turn: recall durable memories, layer the KB instruction +
-// memory fragment onto the base system prompt, offer the resolved tools, and
-// drive the tool loop. Memory recall is best-effort — a failure is logged
+// Run one agent turn: recall durable memories, append the KB instruction to the
+// base system prompt, put recalled memories in a second system message, offer
+// the resolved tools, and drive the tool loop. Memory recall is best-effort — a failure is logged
 // (userId only, never message content) and the turn proceeds without it.
 export async function runAgentTurn(opts: RunAgentTurnOptions): Promise<RunAgentTurnResult> {
   let recall: MemoryRecall | undefined;
   if (opts.embeddingKey && opts.recallMemory) {
     try {
-      await ensureMemoryCollection();
       recall = await recallMemories(
         opts.userMessage,
         opts.userId,
@@ -332,12 +364,19 @@ export async function runAgentTurn(opts: RunAgentTurnOptions): Promise<RunAgentT
     }
   }
 
-  const effectiveSystemPrompt =
-    buildSystemPrompt(opts.systemPromptBase, opts.hasKb) + (recall?.fragment ?? '');
   const tools = buildToolDefinitions(opts);
 
+  // Two system messages, stable first. Recalled memories depend on this turn's
+  // question, so they change nearly every turn, and a prompt cache is a prefix
+  // match: whatever follows a changed part misses with it. Kept apart, the
+  // agent's own instructions and the tool set before them are still reused;
+  // folded into one string, as before, nothing was. OpenAI-shape
+  // providers fold the two back into one message with a newline between, which
+  // is the prompt this used to build.
+  const memoryFragment = recall?.fragment;
   const initialMessages: LLMMessage[] = [
-    { role: 'system', content: effectiveSystemPrompt },
+    { role: 'system', content: buildSystemPrompt(opts.systemPromptBase, opts.hasKb) },
+    ...(memoryFragment ? [{ role: 'system' as const, content: memoryFragment }] : []),
     ...opts.history,
     { role: 'user', content: opts.userMessage },
   ];

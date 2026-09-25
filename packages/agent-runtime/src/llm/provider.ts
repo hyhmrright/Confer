@@ -17,18 +17,35 @@ export interface LLMToolCall {
   arguments: string;
 }
 
+export interface LLMUsage {
+  /** Every input token, cached or not — what the prompt was, not what it cost. */
+  prompt_tokens: number;
+  completion_tokens: number;
+  /**
+   * How many of `prompt_tokens` the vendor served from its prompt cache.
+   * Undefined when it did not say, which is not the same as zero.
+   */
+  cached_tokens?: number;
+  /**
+   * How many of `prompt_tokens` were written INTO the cache — billed above the
+   * normal input rate by vendors with explicit caching (Anthropic: 1.25×), so a
+   * write nothing later reads is a cost, not a saving. Undefined as above.
+   */
+  cache_write_tokens?: number;
+}
+
 export interface LLMResponse {
   content: string;
   tool_calls?: LLMToolCall[];
   finish_reason: 'stop' | 'tool_use' | 'length';
-  usage: { prompt_tokens: number; completion_tokens: number };
+  usage: LLMUsage;
 }
 
 export interface LLMStreamEvent {
   type: 'token' | 'tool_call' | 'done';
   text?: string;
   tool_call?: LLMToolCall;
-  usage?: { prompt_tokens: number; completion_tokens: number };
+  usage?: LLMUsage;
 }
 
 export interface LLMProvider {

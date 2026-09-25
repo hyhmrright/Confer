@@ -4,7 +4,12 @@ import { getDb } from '../db/connection.js';
 import { agentMemories } from '../db/schema.js';
 import { type EmbeddingProvider, embedTexts } from '../lib/embedding.js';
 import { extractFacts } from '../lib/memory-extract.js';
-import { type MemoryHit, searchMemories, upsertMemory } from '../lib/memory-store.js';
+import {
+  ensureMemoryCollection,
+  type MemoryHit,
+  searchMemories,
+  upsertMemory,
+} from '../lib/memory-store.js';
 
 // Above this cosine similarity, a candidate fact is considered already known
 // and is skipped (Mem0's NOOP semantics).
@@ -96,7 +101,14 @@ export async function recallMemories(
   embeddingKey: string,
   embeddingProvider: EmbeddingProvider,
 ): Promise<MemoryRecall> {
-  const vectors = await embedTexts([query], embeddingKey, embeddingProvider);
+  // Together, because only the search needs the collection to exist, and this
+  // whole function sits between the owner's question and the model's first
+  // token: the embedding call is a vendor round trip, and making the Qdrant
+  // check wait behind it — or it behind the check — only lengthened that gap.
+  const [vectors] = await Promise.all([
+    embedTexts([query], embeddingKey, embeddingProvider),
+    ensureMemoryCollection(),
+  ]);
   const vector = vectors[0];
   if (!vector) return { fragment: '', hits: [] };
   const hits = await searchMemories(
@@ -107,7 +119,7 @@ export async function recallMemories(
     embeddingProvider,
   );
   if (hits.length === 0) return { fragment: '', hits };
-  const fragment = `\n关于该用户你已知道：\n${hits.map(formatMemoryLine).join('\n')}`;
+  const fragment = `关于该用户你已知道：\n${hits.map(formatMemoryLine).join('\n')}`;
   return { fragment, hits };
 }
 

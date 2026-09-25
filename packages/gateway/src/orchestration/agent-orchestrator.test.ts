@@ -248,6 +248,140 @@ describe('owner-only tools on a peer turn', () => {
   });
 });
 
+describe('several tool calls in one round', () => {
+  const realFetch = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+  });
+
+  // Counts searches in flight rather than timing the round: a peak above one is
+  // proof they overlapped, where a wall-clock bound is a race on a slow runner.
+  // A query named `slow…` answers later than the rest, so the one asked first
+  // finishes last, and a result list built in completion order comes back
+  // reversed.
+  let inFlight = 0;
+  let peak = 0;
+  function countingTavily(): void {
+    inFlight = 0;
+    peak = 0;
+    globalThis.fetch = (async (_url: string, init?: { body?: string }) => {
+      const { query } = JSON.parse(init?.body ?? '{}') as { query: string };
+      peak = Math.max(peak, ++inFlight);
+      await Bun.sleep(query.startsWith('slow') ? 30 : 10);
+      inFlight--;
+      return Response.json({ results: [], answer: query });
+    }) as unknown as typeof fetch;
+  }
+
+  function search(id: string, query: string): LLMStreamEvent {
+    return {
+      type: 'tool_call',
+      tool_call: { id, name: 'web_search', arguments: JSON.stringify({ query }) },
+    };
+  }
+
+  // One round asking for these searches, then a plain answer; returns what the
+  // second round was sent and the results as the stream reported them.
+  async function runRound(queries: string[]) {
+    let secondRound: LLMMessage[] = [];
+    let round = 0;
+    const provider: LLMProvider = {
+      name: 'scripted',
+      async chat(): Promise<LLMResponse> {
+        throw new Error('not used');
+      },
+      async *stream(messages): AsyncGenerator<LLMStreamEvent> {
+        if (round++ === 0) {
+          for (const q of queries) yield search(`call_${q}`, q);
+        } else {
+          secondRound = messages;
+          yield token('done');
+        }
+      },
+    };
+    const results: string[] = [];
+    await runAgentTurn({
+      ...baseOpts,
+      tavilyApiKey: 'test-key',
+      provider,
+      emit: { onToolResult: (r) => void results.push(r) },
+    });
+    return { secondRound, results };
+  }
+
+  test('run together, and come back in the order the model asked for them', async () => {
+    countingTavily();
+    const { secondRound, results } = await runRound(['slow', 'fast']);
+
+    expect(peak).toBe(2);
+    expect(results).toEqual(['摘要：slow', '摘要：fast']);
+    expect(secondRound.filter((m) => m.role === 'tool').map((m) => m.tool_call_id)).toEqual([
+      'call_slow',
+      'call_fast',
+    ]);
+  });
+
+  test('never run more than four at once, however many the model asks for', async () => {
+    countingTavily();
+    const queries = ['slow1', 'q2', 'q3', 'q4', 'q5', 'q6'];
+    const { results } = await runRound(queries);
+
+    expect(peak).toBe(4);
+    expect(results).toEqual(queries.map((q) => `摘要：${q}`));
+  });
+});
+
+describe('prompt cache accounting', () => {
+  function roundWithUsage(usage: LLMStreamEvent['usage'], ...events: LLMStreamEvent[]) {
+    return [...events, { type: 'done', usage } as LLMStreamEvent];
+  }
+
+  test('sums cache hits across the rounds of a turn', async () => {
+    const provider = scriptedProvider([
+      roundWithUsage(
+        { prompt_tokens: 1000, completion_tokens: 10, cached_tokens: 0, cache_write_tokens: 900 },
+        toolCall('list_contacts_unknown'),
+      ),
+      roundWithUsage(
+        { prompt_tokens: 1100, completion_tokens: 20, cached_tokens: 1000 },
+        token('ok'),
+      ),
+    ]);
+    await runAgentTurn({ ...baseOpts, recallMemory: false, provider });
+    const line = groundingLine();
+    expect(line).toContain('gen_ai.usage.input_tokens=2100');
+    expect(line).toContain('gen_ai.usage.cache_read.input_tokens=1000');
+    // Only the first round wrote; the second round reported no writes at all.
+    expect(line).toContain('gen_ai.usage.cache_creation.input_tokens=900');
+  });
+
+  test('says nothing about hits when no round reported them', async () => {
+    const provider = scriptedProvider([
+      roundWithUsage({ prompt_tokens: 50, completion_tokens: 5 }, token('ok')),
+    ]);
+    await runAgentTurn({ ...baseOpts, recallMemory: false, provider });
+    expect(groundingLine()).not.toContain('cache_read');
+  });
+
+  test('sends the stable system prompt as its own message when nothing was recalled', async () => {
+    let sent: LLMMessage[] = [];
+    const provider: LLMProvider = {
+      name: 'scripted',
+      async chat(): Promise<LLMResponse> {
+        throw new Error('not used');
+      },
+      async *stream(messages): AsyncGenerator<LLMStreamEvent> {
+        sent = messages;
+        yield token('ok');
+      },
+    };
+    await runAgentTurn({ ...baseOpts, provider });
+    expect(sent.filter((m) => m.role === 'system')).toEqual([
+      { role: 'system', content: 'You are a test agent.' },
+    ]);
+  });
+});
+
 // A tool's error names what the gateway talks to — a local runtime's address,
 // an internal service — and on a peer's turn the model can repeat whatever it is
 // handed straight back over the wire. `web_search` with arguments that are not

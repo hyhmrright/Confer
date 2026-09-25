@@ -66,6 +66,75 @@ describe('toOpenAIMessage (via request body)', () => {
     const sent = lastBody().messages as Array<Record<string, unknown>>;
     expect(sent[0]).toEqual({ role: 'user', content: 'hi' });
   });
+
+  test('folds split system messages back into the single one vendors expect', async () => {
+    // The orchestrator splits them for Anthropic's cache breakpoints; a local
+    // model's chat template may read only one system message.
+    mockFetch(() => chatResponse({}));
+    await provider().chat([
+      { role: 'system', content: 'stable' },
+      { role: 'system', content: 'per turn' },
+      { role: 'user', content: 'hi' },
+    ]);
+    expect(lastBody().messages).toEqual([
+      { role: 'system', content: 'stable\nper turn' },
+      { role: 'user', content: 'hi' },
+    ]);
+  });
+});
+
+describe('prompt cache hits', () => {
+  const usageOf = async (usage: unknown) => {
+    mockFetch(
+      () =>
+        new Response(
+          JSON.stringify({
+            choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
+            usage,
+          }),
+        ),
+    );
+    return (
+      await new OpenAICompatibleProvider('test', 'k', 'https://api.test', 'm').chat([
+        { role: 'user', content: 'hi' },
+      ])
+    ).usage;
+  };
+
+  test("reads OpenAI's prompt_tokens_details, without adding it to the prompt again", async () => {
+    expect(
+      await usageOf({
+        prompt_tokens: 2000,
+        completion_tokens: 5,
+        prompt_tokens_details: { cached_tokens: 1536 },
+      }),
+    ).toEqual({ prompt_tokens: 2000, completion_tokens: 5, cached_tokens: 1536 });
+  });
+
+  test("reads DeepSeek's prompt_cache_hit_tokens", async () => {
+    expect(
+      await usageOf({ prompt_tokens: 800, completion_tokens: 5, prompt_cache_hit_tokens: 640 }),
+    ).toEqual({ prompt_tokens: 800, completion_tokens: 5, cached_tokens: 640 });
+  });
+
+  test('reads a top-level cached_tokens (Moonshot)', async () => {
+    expect(await usageOf({ prompt_tokens: 800, completion_tokens: 5, cached_tokens: 512 })).toEqual(
+      { prompt_tokens: 800, completion_tokens: 5, cached_tokens: 512 },
+    );
+  });
+
+  test('reads a null hit count as unreported', async () => {
+    expect(
+      await usageOf({ prompt_tokens: 800, completion_tokens: 5, prompt_cache_hit_tokens: null }),
+    ).toStrictEqual({ prompt_tokens: 800, completion_tokens: 5 });
+  });
+
+  test('leaves hits unreported when the vendor says nothing about them', async () => {
+    expect(await usageOf({ prompt_tokens: 800, completion_tokens: 5 })).toEqual({
+      prompt_tokens: 800,
+      completion_tokens: 5,
+    });
+  });
 });
 
 describe('chat finish_reason mapping', () => {

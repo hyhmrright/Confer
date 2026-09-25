@@ -1,3 +1,5 @@
+import type { LLMUsage } from '@confer/agent-runtime';
+
 /**
  * What one agent turn was grounded in, and what it cost.
  *
@@ -47,7 +49,7 @@ export interface AgentTurnRecord {
    * and must not be logged as if it were: OpenAI gates streamed usage behind an
    * opt-in this code deliberately does not send.
    */
-  usage?: { prompt_tokens: number; completion_tokens: number };
+  usage?: LLMUsage;
   /** Long-term memory recall: `withheld` / `off` / `failed` / `0` / `3@0.62`. */
   recall: string;
   /** Knowledge base: `none` / `searched` / `unsearched`. */
@@ -62,7 +64,16 @@ function usageFields(usage: AgentTurnRecord['usage']): string {
   if (!usage) return ' gen_ai.usage=unreported';
   return (
     ` gen_ai.usage.input_tokens=${usage.prompt_tokens}` +
-    ` gen_ai.usage.output_tokens=${usage.completion_tokens}`
+    ` gen_ai.usage.output_tokens=${usage.completion_tokens}` +
+    // Both are part of input_tokens, not in addition to it, and absent when the
+    // vendor did not say. Reads are the evidence the prompt cache is working;
+    // writes are what it costs, billed above the plain input rate.
+    (usage.cached_tokens === undefined
+      ? ''
+      : ` gen_ai.usage.cache_read.input_tokens=${usage.cached_tokens}`) +
+    (usage.cache_write_tokens === undefined
+      ? ''
+      : ` gen_ai.usage.cache_creation.input_tokens=${usage.cache_write_tokens}`)
   );
 }
 

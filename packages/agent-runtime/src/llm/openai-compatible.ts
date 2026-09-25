@@ -6,6 +6,7 @@ import type {
   LLMProvider,
   LLMResponse,
   LLMStreamEvent,
+  LLMUsage,
 } from './provider.js';
 import { MAX_ERROR_BYTES, MAX_RESPONSE_BYTES, readSSEData } from './stream-utils.js';
 
@@ -17,6 +18,40 @@ function toOpenAIMessage(m: LLMMessage): Record<string, unknown> {
     return { role: 'assistant', content: m.content, tool_calls: m.tool_calls };
   }
   return { role: m.role, content: m.content ?? '' };
+}
+
+/**
+ * Several system messages are the caller marking where the stable part of the
+ * prompt ends, for Anthropic's explicit cache breakpoints (see anthropic.ts).
+ * OpenAI-shape vendors cache a matching prefix on their own with no marker, and
+ * not every one of them — nor every local model's chat template — honours more
+ * than one system message, so they still go out as the single one they were.
+ */
+function foldSystemMessages(messages: LLMMessage[]): LLMMessage[] {
+  const system = messages
+    .filter((m) => m.role === 'system' && m.content)
+    .map((m) => m.content)
+    .join('\n');
+  const rest = messages.filter((m) => m.role !== 'system');
+  return system ? [{ role: 'system', content: system }, ...rest] : rest;
+}
+
+/**
+ * Usage as reported. Cache hits are already inside `prompt_tokens` here, unlike
+ * Anthropic's; the hit count sits in OpenAI's `prompt_tokens_details`, in
+ * DeepSeek's `prompt_cache_hit_tokens`, or at the top level (Moonshot). None of
+ * them a number — absent or null — means not reported.
+ */
+function toUsage(u: Record<string, unknown>): LLMUsage {
+  const count = (v: unknown) => (typeof v === 'number' ? v : undefined);
+  const details = u.prompt_tokens_details as Record<string, unknown> | null | undefined;
+  const cached =
+    count(details?.cached_tokens) ?? count(u.prompt_cache_hit_tokens) ?? count(u.cached_tokens);
+  return {
+    prompt_tokens: count(u.prompt_tokens) ?? 0,
+    completion_tokens: count(u.completion_tokens) ?? 0,
+    ...(cached === undefined ? {} : { cached_tokens: cached }),
+  };
 }
 
 export class OpenAICompatibleProvider implements LLMProvider {
@@ -60,7 +95,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
   private baseBody(messages: LLMMessage[], options?: LLMChatOptions): Record<string, unknown> {
     return {
       model: this.resolveModel(options),
-      messages: messages.map(toOpenAIMessage),
+      messages: foldSystemMessages(messages).map(toOpenAIMessage),
       temperature: options?.temperature,
       max_tokens: options?.max_tokens ?? 4096,
     };
@@ -99,15 +134,11 @@ export class OpenAICompatibleProvider implements LLMProvider {
     const message = choice.message as Record<string, string>;
 
     const choiceFinish = choice.finish_reason as string | undefined;
-    const u = data.usage as Record<string, number>;
     return {
       content: message.content ?? '',
       finish_reason:
         choiceFinish === 'tool_calls' ? 'tool_use' : choiceFinish === 'length' ? 'length' : 'stop',
-      usage: {
-        prompt_tokens: u.prompt_tokens ?? 0,
-        completion_tokens: u.completion_tokens ?? 0,
-      },
+      usage: toUsage(data.usage as Record<string, unknown>),
     };
   }
 
@@ -136,7 +167,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
     // body field is a 400 at some of them — and which ones is exactly the kind
     // of per-vendor claim this codebase got burned making before. A vendor that
     // stays silent is reported as UNMEASURED rather than as zero tokens.
-    let usage: { prompt_tokens: number; completion_tokens: number } | undefined;
+    let usage: LLMUsage | undefined;
 
     for await (const payload of readSSEData(response.body)) {
       const chunk = payload.trim();
@@ -152,13 +183,8 @@ export class OpenAICompatibleProvider implements LLMProvider {
       }
 
       const data = JSON.parse(chunk) as Record<string, unknown>;
-      const reported = data.usage as Record<string, number> | null | undefined;
-      if (reported) {
-        usage = {
-          prompt_tokens: reported.prompt_tokens ?? 0,
-          completion_tokens: reported.completion_tokens ?? 0,
-        };
-      }
+      const reported = data.usage as Record<string, unknown> | null | undefined;
+      if (reported) usage = toUsage(reported);
       // The chunk carrying usage has an EMPTY choices array, and some vendors
       // omit the field entirely on it — indexing into it unguarded would throw
       // and take down a turn that had already produced its whole answer.
