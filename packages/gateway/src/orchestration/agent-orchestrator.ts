@@ -382,8 +382,8 @@ export async function runAgentTurn(opts: RunAgentTurnOptions): Promise<RunAgentT
   // provider with explicit caching (Anthropic) write that shared prefix, rather
   // than only the full prompt, which nothing will send again.
   //
-  // All of this holds while the conversation fits the caller's history window
-  // (20 messages). Past that, each turn drops the oldest messages, the history
+  // The caller's history window (`turnHistory`) keeps its first message in
+  // place for several turns at a time. On the turn it steps forward, the history
   // no longer begins as it did, and only the system prompt and tools still hit.
   const history = opts.history.map((m, i) =>
     i === opts.history.length - 1 ? { ...m, cache_breakpoint: true } : m,

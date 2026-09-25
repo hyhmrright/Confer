@@ -1,6 +1,7 @@
 import { and, desc, eq, lt, type SQL } from 'drizzle-orm';
 import { getDb } from '../db/connection.js';
 import { messages } from '../db/schema.js';
+import { countOf } from './pagination.js';
 
 type MessageRow = typeof messages.$inferSelect;
 
@@ -41,16 +42,61 @@ export async function historyBefore(
   const rows = await getDb()
     .select()
     .from(messages)
-    .where(
-      and(
-        eq(messages.conversation_id, conversationId),
-        eq(messages.moderation_status, 'visible'),
-        beforeId ? lt(messages.id, beforeId) : undefined,
-        only,
-      ),
-    )
+    .where(visibleBefore(conversationId, beforeId, only))
     .orderBy(desc(messages.id))
     .limit(limit);
 
   return rows.reverse();
+}
+
+function visibleBefore(
+  conversationId: string,
+  beforeId: string | undefined,
+  only?: SQL,
+): SQL | undefined {
+  return and(
+    eq(messages.conversation_id, conversationId),
+    eq(messages.moderation_status, 'visible'),
+    beforeId ? lt(messages.id, beforeId) : undefined,
+    only,
+  );
+}
+
+/** The most history a turn is shown. */
+const TURN_HISTORY_MAX = 20;
+/** How many of the oldest messages leave the window at once. */
+const TURN_HISTORY_STEP = 10;
+
+/**
+ * How many of `total` earlier messages a turn is shown: all of them up to
+ * `max`, and past that a count whose START only moves in whole `step`s.
+ *
+ * The plain rule — always the newest `max` — drops the oldest message every
+ * time one arrives, so the history the model sees begins somewhere new on
+ * every turn. Every provider's prompt cache is a prefix match, so from the
+ * moment a conversation outgrew the window, none of its history was ever
+ * reused. Here the first message shown stays put while the conversation grows
+ * by `step`, then jumps forward by `step` at once: with the defaults, a long
+ * conversation shows between 11 and 20 messages, and five turns in a row share
+ * the same opening.
+ */
+export function stableWindowSize(total: number, max: number, step: number): number {
+  if (total <= max) return total;
+  const dropped = Math.ceil((total - max) / step) * step;
+  return total - dropped;
+}
+
+/**
+ * The history an agent turn is shown: `historyBefore`, with the window sized by
+ * `stableWindowSize` so its opening survives from one turn to the next. Paging
+ * through a conversation is a different question and keeps `historyBefore`.
+ */
+export async function turnHistory(
+  conversationId: string,
+  beforeId: string,
+  only?: SQL,
+): Promise<MessageRow[]> {
+  const total = await countOf(messages, visibleBefore(conversationId, beforeId, only));
+  const size = stableWindowSize(total, TURN_HISTORY_MAX, TURN_HISTORY_STEP);
+  return size === 0 ? [] : historyBefore(conversationId, beforeId, size, only);
 }

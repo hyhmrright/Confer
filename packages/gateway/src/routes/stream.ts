@@ -8,7 +8,7 @@ import { agents, messages } from '../db/schema.js';
 import { getEnv } from '../env.js';
 import { resolveAgentModel } from '../lib/agent-model.js';
 import { runDetached } from '../lib/background.js';
-import { historyBefore } from '../lib/conversation-history.js';
+import { turnHistory } from '../lib/conversation-history.js';
 import { getUserLlmKeys, resolveAgentCapabilities } from '../lib/llm-keys.js';
 import { assertIsConversationParticipant } from '../lib/tenant.js';
 import { authMiddleware } from '../middleware/auth.js';
@@ -23,9 +23,6 @@ streamRoutes.use('/*', authMiddleware);
 
 const DEFAULT_SYSTEM_PROMPT =
   '你是一个智能助手，能够帮助用户回答问题、处理任务。你可以使用 web_search 工具搜索实时信息。回答时请用用户使用的语言。';
-
-/** How many earlier messages the model is shown. */
-const HISTORY_WINDOW = 20;
 
 /** A stream that emits a fixed set of events and ends. */
 function sseEvents(c: Context<AppEnv>, events: Array<{ event: string; data: unknown }>): Response {
@@ -135,8 +132,8 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
       const { provider, model } = resolved.value;
 
       // Moderator-hidden messages stay out of the model's context; see
-      // historyBefore for why the window is taken newest-first and reversed.
-      const historyRows = await historyBefore(conversationId, messageId, HISTORY_WINDOW);
+      // turnHistory for how the window is sized.
+      const historyRows = await turnHistory(conversationId, messageId);
 
       // A peer's message is not something this agent said. Mapped to
       // `assistant`, a connected peer's text in an A2A thread reached the
