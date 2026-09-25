@@ -74,100 +74,70 @@ async function readSection(userId: string, projectId: string, peerId: string) {
   return row;
 }
 
-projectsRoutes.get('/:projectId/peers/:peerId/facts', async (c) => {
-  const user = c.get('user');
-  const projectId = parseProjectId(c.req.param('projectId'));
-  const peerId = c.req.param('peerId');
-  const row = await readSection(user.sub, projectId, peerId);
-  return c.json({
-    facts_md: row?.facts_md ?? '',
-    version: row?.version ?? 0,
-    updated_at: row?.updated_at ?? null,
+// facts and decisions are two columns of one row, written independently: each
+// write sets only its own column on conflict, so a facts write can never clear
+// decisions_md and vice versa. Everything else about the two is identical.
+const SECTIONS = [
+  {
+    path: 'facts',
+    column: 'facts_md',
+    parse: (body: unknown) => projectFactsWriteSchema.parse(body).facts_md,
+    patch: (md: string) => ({ facts_md: md }),
+  },
+  {
+    path: 'decisions',
+    column: 'decisions_md',
+    parse: (body: unknown) => projectDecisionsWriteSchema.parse(body).decisions_md,
+    patch: (md: string) => ({ decisions_md: md }),
+  },
+] as const;
+
+for (const { path, column, parse, patch } of SECTIONS) {
+  projectsRoutes.get(`/:projectId/peers/:peerId/${path}`, async (c) => {
+    const user = c.get('user');
+    const projectId = parseProjectId(c.req.param('projectId'));
+    const peerId = c.req.param('peerId');
+    const row = await readSection(user.sub, projectId, peerId);
+    return c.json({
+      [column]: row?.[column] ?? '',
+      version: row?.version ?? 0,
+      updated_at: row?.updated_at ?? null,
+    });
   });
-});
 
-projectsRoutes.get('/:projectId/peers/:peerId/decisions', async (c) => {
-  const user = c.get('user');
-  const projectId = parseProjectId(c.req.param('projectId'));
-  const peerId = c.req.param('peerId');
-  const row = await readSection(user.sub, projectId, peerId);
-  return c.json({
-    decisions_md: row?.decisions_md ?? '',
-    version: row?.version ?? 0,
-    updated_at: row?.updated_at ?? null,
+  projectsRoutes.put(`/:projectId/peers/:peerId/${path}`, async (c) => {
+    const user = c.get('user');
+    const db = getDb();
+    const projectId = parseProjectId(c.req.param('projectId'));
+    const peerId = c.req.param('peerId');
+    const md = parse(await c.req.json());
+
+    await assertIsContact(user.sub, peerId);
+
+    const [row] = await db
+      .insert(projectMemory)
+      .values({
+        id: newId(),
+        user_id: user.sub,
+        project_id: projectId,
+        peer_id: peerId,
+        ...patch(md),
+        version: 1,
+      })
+      .onConflictDoUpdate({
+        target: [projectMemory.user_id, projectMemory.project_id, projectMemory.peer_id],
+        set: {
+          ...patch(md),
+          version: sql`${projectMemory.version} + 1`,
+          updated_at: new Date(),
+        },
+      })
+      .returning();
+
+    return c.json({
+      [column]: row?.[column] ?? '',
+      version: row?.version ?? 1,
+      updated_at: row?.updated_at ?? null,
+    });
   });
-});
-
-projectsRoutes.put('/:projectId/peers/:peerId/facts', async (c) => {
-  const user = c.get('user');
-  const db = getDb();
-  const projectId = parseProjectId(c.req.param('projectId'));
-  const peerId = c.req.param('peerId');
-  const body = projectFactsWriteSchema.parse(await c.req.json());
-
-  await assertIsContact(user.sub, peerId);
-
-  // Set only facts_md on conflict so a facts write can never clear decisions_md.
-  const [row] = await db
-    .insert(projectMemory)
-    .values({
-      id: newId(),
-      user_id: user.sub,
-      project_id: projectId,
-      peer_id: peerId,
-      facts_md: body.facts_md,
-      version: 1,
-    })
-    .onConflictDoUpdate({
-      target: [projectMemory.user_id, projectMemory.project_id, projectMemory.peer_id],
-      set: {
-        facts_md: body.facts_md,
-        version: sql`${projectMemory.version} + 1`,
-        updated_at: new Date(),
-      },
-    })
-    .returning();
-
-  return c.json({
-    facts_md: row?.facts_md ?? '',
-    version: row?.version ?? 1,
-    updated_at: row?.updated_at ?? null,
-  });
-});
-
-projectsRoutes.put('/:projectId/peers/:peerId/decisions', async (c) => {
-  const user = c.get('user');
-  const db = getDb();
-  const projectId = parseProjectId(c.req.param('projectId'));
-  const peerId = c.req.param('peerId');
-  const body = projectDecisionsWriteSchema.parse(await c.req.json());
-
-  await assertIsContact(user.sub, peerId);
-
-  // Set only decisions_md on conflict so a decisions write can never clear facts_md.
-  const [row] = await db
-    .insert(projectMemory)
-    .values({
-      id: newId(),
-      user_id: user.sub,
-      project_id: projectId,
-      peer_id: peerId,
-      decisions_md: body.decisions_md,
-      version: 1,
-    })
-    .onConflictDoUpdate({
-      target: [projectMemory.user_id, projectMemory.project_id, projectMemory.peer_id],
-      set: {
-        decisions_md: body.decisions_md,
-        version: sql`${projectMemory.version} + 1`,
-        updated_at: new Date(),
-      },
-    })
-    .returning();
-
-  return c.json({
-    decisions_md: row?.decisions_md ?? '',
-    version: row?.version ?? 1,
-    updated_at: row?.updated_at ?? null,
-  });
-});
+}
