@@ -169,13 +169,12 @@ describe('admin store — other actions', () => {
     expect(get).toHaveBeenCalledWith(expect.stringContaining('/admin/conversations?'));
   });
 
-  test('loadConfig stores config and clears loading', async () => {
+  test('loadConfig stores config', async () => {
     const config = { registration_open: true, instance_name: 'Confer' };
     get.mockResolvedValueOnce({ config });
     await useAdminStore.getState().loadConfig();
     expect(get).toHaveBeenCalledWith('/admin/config');
     expect(useAdminStore.getState().config).toEqual(config);
-    expect(useAdminStore.getState().loadingConfig).toBe(false);
   });
 
   test('updateConfig patches and replaces config from the response', async () => {

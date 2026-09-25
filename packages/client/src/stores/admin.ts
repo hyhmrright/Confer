@@ -85,7 +85,6 @@ interface AdminState {
   conversationsPage: number;
   loadingConversations: boolean;
   config: AppConfigValues | null;
-  loadingConfig: boolean;
 
   loadUsers: (opts?: { page?: number; query?: string }) => Promise<void>;
   loadStats: () => Promise<void>;
@@ -192,7 +191,6 @@ export const useAdminStore = create<AdminState>((set, get) => {
     conversationsPage: 1,
     loadingConversations: false,
     config: null,
-    loadingConfig: false,
 
     loadUsers: (opts) => usersLoader(set, get().pageSize, opts),
 
@@ -226,12 +224,12 @@ export const useAdminStore = create<AdminState>((set, get) => {
     },
 
     loadConfig: async () => {
-      set({ loadingConfig: true, error: null });
+      set({ error: null });
       try {
         const data = await api.get<{ config: AppConfigValues }>('/admin/config');
-        set({ config: data.config, loadingConfig: false });
+        set({ config: data.config });
       } catch (e) {
-        set({ loadingConfig: false, error: captureError(e, 'Failed to load config') });
+        set({ error: captureError(e, 'Failed to load config') });
       }
     },
 

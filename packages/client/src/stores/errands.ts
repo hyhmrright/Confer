@@ -16,24 +16,13 @@ export interface ErrandCard {
   created_at: string;
 }
 
-export interface Errand {
-  id: string;
-  owner_user_id: string;
-  title: string;
-  kind: string | null;
-  status: string;
-  created_at: string;
-}
-
 export type CardDecision = 'approve' | 'change_price' | 'reject';
 
 interface ErrandsState {
-  errands: Errand[];
   pendingCards: ErrandCard[];
   creating: boolean;
   error: string | null;
 
-  loadErrands: () => Promise<void>;
   loadPendingCards: () => Promise<void>;
   createErrand: (title: string, kind?: string) => Promise<void>;
   decideCard: (cardId: string, decision: CardDecision, newPriceCents?: number) => Promise<void>;
@@ -41,19 +30,9 @@ interface ErrandsState {
 }
 
 export const useErrandsStore = create<ErrandsState>((set, get) => ({
-  errands: [],
   pendingCards: [],
   creating: false,
   error: null,
-
-  loadErrands: async () => {
-    try {
-      const data = await api.get<{ errands: Errand[] }>('/errands');
-      set({ errands: data.errands });
-    } catch {
-      // endpoint might not exist yet
-    }
-  },
 
   loadPendingCards: async () => {
     try {
@@ -77,7 +56,6 @@ export const useErrandsStore = create<ErrandsState>((set, get) => ({
     set({ creating: true, error: null });
     try {
       await api.post('/errands', { title, kind });
-      await get().loadErrands();
       set({ creating: false });
     } catch (e) {
       set({ creating: false, error: captureError(e, 'Failed to create errand') });

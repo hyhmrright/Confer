@@ -80,7 +80,6 @@ interface ChatState {
   deleteConversation: (id: string) => Promise<void>;
   sendMessage: (content: string) => Promise<void>;
   addMessage: (msg: Message) => void;
-  setStreaming: (streaming: boolean, content?: string) => void;
   setAgentStatus: (status: string | null) => void;
 }
 
@@ -351,10 +350,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       if (s.messages.some((m) => m.id === msg.id)) return s;
       return { messages: [...s.messages, msg] };
     });
-  },
-
-  setStreaming: (streaming, content) => {
-    set({ streaming, streamContent: content ?? '' });
   },
 
   setAgentStatus: (status) => {
