@@ -15,6 +15,7 @@ import {
   peerAgents,
   probeAsks,
 } from '../db/schema.js';
+import { conversationPeerId } from '../lib/conversation-peer.js';
 import { parseLimit } from '../lib/pagination.js';
 import { authMiddleware } from '../middleware/auth.js';
 import type { AppEnv } from '../types.js';
@@ -183,20 +184,10 @@ probeRoutes.post('/ask-person/:id/fill', async (c) => {
 
   // The reply must be attributed to the conversation's peer_agent participant so
   // the consult reply endpoint can correlate it.
-  const [peerParticipant] = await db
-    .select({ peer_id: conversationParticipants.peer_id })
-    .from(conversationParticipants)
-    .where(
-      and(
-        eq(conversationParticipants.conversation_id, conversationId),
-        eq(conversationParticipants.participant_type, 'peer_agent'),
-      ),
-    )
-    .limit(1);
-  if (!peerParticipant?.peer_id) {
+  const relayPeerId = await conversationPeerId(conversationId);
+  if (!relayPeerId) {
     throw new AppError('no_relay', 'Probe conversation missing relay participant', 409);
   }
-  const relayPeerId = peerParticipant.peer_id;
 
   await db.transaction(async (tx) => {
     await tx.insert(messages).values({

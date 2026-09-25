@@ -170,10 +170,9 @@ async function executeToolCall(
         args.query,
         ctx.userId,
         ctx.embeddingKey,
-        // `kb_ids` is not in the tool schema, but the model can put it in the
-        // arguments anyway and this passes them straight through — so a scope
-        // enforced by omitting the parameter would be no scope at all. Narrow,
-        // never widen: within a scope the model may still choose a subset.
+        // `kb_ids` comes straight from the model's arguments, so the scope has to
+        // be enforced here rather than by what the schema offers. Narrow, never
+        // widen: within a scope the model may still choose a subset.
         narrowKbIds(args.kb_ids, ctx.kbScope),
         ctx.embeddingProvider,
         ctx.rerank,

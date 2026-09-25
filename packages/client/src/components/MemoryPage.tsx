@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { dateLocale } from '../i18n/index.js';
+import { formatShortDateTime } from '../lib/format-date.js';
 import { DISABLED_FILLED, FOCUS_RING, INPUT_CLS } from '../lib/styles.js';
 import { useMemoriesStore } from '../stores/memories.js';
 import { EmptyState } from './EmptyState.js';
@@ -199,12 +199,7 @@ export function MemoryPage() {
                     </div>
                   )}
                   <p className="eyebrow text-ink-muted mt-1.5">
-                    {new Date(mem.updated_at).toLocaleString(dateLocale(), {
-                      month: 'short',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
+                    {formatShortDateTime(mem.updated_at)}
                   </p>
                 </div>
                 <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">

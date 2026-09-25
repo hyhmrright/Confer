@@ -4,6 +4,7 @@ import { Hono } from 'hono';
 import { deliverConsult } from '../a2a/consult.js';
 import { getDb } from '../db/connection.js';
 import { conversationParticipants, conversations, messages } from '../db/schema.js';
+import { conversationPeerId } from '../lib/conversation-peer.js';
 import { derivedId } from '../lib/derived-id.js';
 import { assertIsContact, assertOwnsConversation } from '../lib/tenant.js';
 import { authMiddleware } from '../middleware/auth.js';
@@ -11,8 +12,6 @@ import type { AppEnv } from '../types.js';
 
 export const consultRoutes = new Hono<AppEnv>();
 consultRoutes.use('/*', authMiddleware);
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // Return the consult conversation for this (user, peer), creating it on first
 // use. The conversation id is deterministic and the insert is conflict-safe, so
@@ -148,17 +147,7 @@ consultRoutes.get('/:conversationId/reply', async (c) => {
 
   // Correlate only with replies from THIS thread's peer participant, so a
   // message from any other sender can never be returned as the answer.
-  const [peerParticipant] = await db
-    .select({ peer_id: conversationParticipants.peer_id })
-    .from(conversationParticipants)
-    .where(
-      and(
-        eq(conversationParticipants.conversation_id, convId),
-        eq(conversationParticipants.participant_type, 'peer_agent'),
-      ),
-    )
-    .limit(1);
-  const peerId = peerParticipant?.peer_id ?? null;
+  const peerId = await conversationPeerId(convId);
   // No peer participant => nothing can answer this thread; don't poll.
   if (!peerId) return c.json({ status: 'pending' });
 
@@ -182,7 +171,7 @@ consultRoutes.get('/:conversationId/reply', async (c) => {
 
     if (reply) return c.json({ status: 'answered', message: reply });
     if (Date.now() >= deadline) return c.json({ status: 'pending' });
-    await sleep(500);
+    await Bun.sleep(500);
   }
 });
 

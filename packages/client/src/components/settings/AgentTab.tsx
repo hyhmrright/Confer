@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useAutoClear } from '../../hooks/use-auto-clear.js';
 import { useProviderModelFetch } from '../../hooks/useProviderModelFetch.js';
 import type { TranslationKey } from '../../i18n/index.js';
 import { LLM_PROVIDERS, llmProviderName } from '../../lib/providers.js';
@@ -126,12 +127,7 @@ export function AgentTab() {
     }
   }, [agent]);
 
-  useEffect(() => {
-    if (success || error) {
-      const timer = setTimeout(clearMessages, 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [success, error, clearMessages]);
+  useAutoClear(success, error, clearMessages);
 
   const providerLabel = LLM_PROVIDERS.find((p) => p.id === provider)?.label ?? provider;
   // Worth flagging when the vendor no longer lists the model in use — that is

@@ -1,7 +1,8 @@
 import { create } from 'zustand';
-import i18n, { dateLocale } from '../i18n/index.js';
+import i18n from '../i18n/index.js';
 import { agentFailureText } from '../lib/agent-failure-text.js';
 import { api, getToken } from '../lib/api.js';
+import { formatShortDateTime } from '../lib/format-date.js';
 import { gatewayOrigin } from '../lib/gateway.js';
 import { prependNew } from '../lib/list.js';
 import { useAuthStore } from './auth.js';
@@ -85,8 +86,8 @@ interface ChatState {
 
 // Backend stores RAG citations as `citations_json` (an array of raw doc/kb/excerpt
 // rows). The UI renders the typed `citations` shape, so map at this boundary when
-// the message hasn't already been normalized. Pure — exported for testing.
-export function normalizeMessage(apiMsg: Message & { citations_json?: unknown }): Message {
+// the message hasn't already been normalized.
+function normalizeMessage(apiMsg: Message & { citations_json?: unknown }): Message {
   if (!apiMsg.citations && apiMsg.citations_json) {
     const raw = apiMsg.citations_json as Array<Record<string, unknown>>;
     return {
@@ -180,14 +181,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   // it opened a thread with that contact; it never did. Reaching a peer goes
   // through the consult routes, which derive their own thread per (user, peer).
   createConversation: async (name) => {
-    const autoName =
-      name ??
-      new Date().toLocaleString(dateLocale(), {
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
+    const autoName = name ?? formatShortDateTime(new Date());
     const data = await api.post<{ conversation: Conversation }>('/conversations', {
       type: 'direct_user_agent',
       name: autoName,
@@ -293,9 +287,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
         buffer = lines.pop() ?? '';
 
         for (const line of lines) {
-          if (line.startsWith('event:')) {
-            continue;
-          }
           if (!line.startsWith('data:')) continue;
 
           const jsonStr = line.slice(5).trim();

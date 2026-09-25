@@ -113,11 +113,11 @@ cat <<'EOF'
 EOF
 
 if has_content; then
-  [[ ${#feats[@]} -gt 0 ]]      && { echo "### ✨ 新功能"; for i in "${feats[@]}";      do echo "- $(echo "$i" | sed -E 's/^(feat)(\([^)]+\))?!?: //')"; done; echo ""; }
-  [[ ${#fixes[@]} -gt 0 ]]      && { echo "### 🐛 问题修复"; for i in "${fixes[@]}";      do echo "- $(echo "$i" | sed -E 's/^(fix)(\([^)]+\))?!?: //')"; done; echo ""; }
-  [[ ${#security[@]} -gt 0 ]]   && { echo "### 🔒 安全"; for i in "${security[@]}";   do echo "- $(echo "$i" | sed -E 's/^(fix|security)(\([^)]+\))?!?: //')"; done; echo ""; }
-  [[ ${#perf[@]} -gt 0 ]]       && { echo "### ⚡ 性能"; for i in "${perf[@]}";       do echo "- $(echo "$i" | sed -E 's/^(perf)(\([^)]+\))?!?: //')"; done; echo ""; }
-  [[ ${#docs_items[@]} -gt 0 ]] && { echo "### 📖 文档"; for i in "${docs_items[@]}"; do echo "- $(echo "$i" | sed -E 's/^(docs)(\([^)]+\))?!?: //')"; done; echo ""; }
+  emit_section "✨ 新功能" feats
+  emit_section "🐛 问题修复" fixes
+  emit_section "🔒 安全" security
+  emit_section "⚡ 性能" perf
+  emit_section "📖 文档" docs_items
 else
   echo "_暂无自动提取内容，请手动填写。_"
   echo ""
@@ -133,11 +133,11 @@ cat <<'EOF'
 EOF
 
 if has_content; then
-  [[ ${#feats[@]} -gt 0 ]]      && { echo "### ✨ 新機能"; for i in "${feats[@]}";      do echo "- $(echo "$i" | sed -E 's/^(feat)(\([^)]+\))?!?: //')"; done; echo ""; }
-  [[ ${#fixes[@]} -gt 0 ]]      && { echo "### 🐛 バグ修正"; for i in "${fixes[@]}";      do echo "- $(echo "$i" | sed -E 's/^(fix)(\([^)]+\))?!?: //')"; done; echo ""; }
-  [[ ${#security[@]} -gt 0 ]]   && { echo "### 🔒 セキュリティ"; for i in "${security[@]}";   do echo "- $(echo "$i" | sed -E 's/^(fix|security)(\([^)]+\))?!?: //')"; done; echo ""; }
-  [[ ${#perf[@]} -gt 0 ]]       && { echo "### ⚡ パフォーマンス"; for i in "${perf[@]}";       do echo "- $(echo "$i" | sed -E 's/^(perf)(\([^)]+\))?!?: //')"; done; echo ""; }
-  [[ ${#docs_items[@]} -gt 0 ]] && { echo "### 📖 ドキュメント"; for i in "${docs_items[@]}"; do echo "- $(echo "$i" | sed -E 's/^(docs)(\([^)]+\))?!?: //')"; done; echo ""; }
+  emit_section "✨ 新機能" feats
+  emit_section "🐛 バグ修正" fixes
+  emit_section "🔒 セキュリティ" security
+  emit_section "⚡ パフォーマンス" perf
+  emit_section "📖 ドキュメント" docs_items
 else
   echo "_自動抽出なし — 手動で記入してください。_"
   echo ""

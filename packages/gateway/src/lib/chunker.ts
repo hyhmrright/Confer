@@ -44,20 +44,11 @@ export function chunkText(
 // separator that appears in the text and recursing into any piece still too
 // large. Small pieces are greedily merged (with overlap) back up to CHUNK_SIZE.
 function splitRecursive(text: string, separators: string[]): string[] {
-  let separator = separators[separators.length - 1] as string;
-  let remaining: string[] = [];
-  for (let i = 0; i < separators.length; i++) {
-    const s = separators[i] as string;
-    if (s === '') {
-      separator = s;
-      break;
-    }
-    if (text.includes(s)) {
-      separator = s;
-      remaining = separators.slice(i + 1);
-      break;
-    }
-  }
+  // `separators` is always a suffix of SEPARATORS, so it ends in '' — which every
+  // string includes — and the search always lands, leaving nothing after ''.
+  const i = separators.findIndex((s) => text.includes(s));
+  const separator = separators[i] as string;
+  const remaining = separators.slice(i + 1);
 
   const finalChunks: string[] = [];
   let goodSplits: string[] = [];

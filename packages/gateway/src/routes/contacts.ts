@@ -6,14 +6,15 @@ import {
   policyOverridesSchema,
   readCappedText,
 } from '@confer/shared';
-import { and, count, desc, eq, like } from 'drizzle-orm';
+import { and, desc, eq, like } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { z } from 'zod';
+import { discoverableAgent } from '../a2a/target-agent.js';
 import { getDb } from '../db/connection.js';
 import { agents, peerAgents, peerContacts } from '../db/schema.js';
 import { buildAgentFacts, withValidAgentFacts } from '../lib/agent-facts.js';
 import { resolveDidDocument } from '../lib/did-resolution.js';
-import { parseLimit, parseOffset } from '../lib/pagination.js';
+import { countOf, parseLimit, parseOffset } from '../lib/pagination.js';
 import {
   type PeerAgentRow,
   type UpsertPeerAgentInput,
@@ -100,14 +101,12 @@ contactRoutes.get('/', async (c) => {
     .limit(limit)
     .offset(offset);
 
-  const [totals] = await db.select({ value: count() }).from(peerContacts).where(owned);
-
   return c.json({
     contacts: contacts.map((row) => ({
       ...row.peer_contacts,
       peer: withValidAgentFacts(row.peer_agents),
     })),
-    total: totals?.value ?? 0,
+    total: await countOf(peerContacts, owned),
   });
 });
 
@@ -161,7 +160,7 @@ contactRoutes.get('/:id', async (c) => {
     .select()
     .from(peerContacts)
     .innerJoin(peerAgents, eq(peerContacts.peer_id, peerAgents.id))
-    .where(and(eq(peerContacts.id, contactId), eq(peerContacts.user_id, user.sub)))
+    .where(contactScope(contactId, user.sub))
     .limit(1);
 
   if (!row) {
@@ -228,15 +227,7 @@ contactRoutes.delete('/:id', async (c) => {
   const db = getDb();
   const contactId = c.req.param('id');
 
-  const [contact] = await db
-    .select()
-    .from(peerContacts)
-    .where(and(eq(peerContacts.id, contactId), eq(peerContacts.user_id, user.sub)))
-    .limit(1);
-
-  if (!contact) {
-    throw new AppError('not_found', 'Contact not found', 404);
-  }
+  await loadContact(contactId, user.sub);
 
   await db.delete(peerContacts).where(eq(peerContacts.id, contactId));
 
@@ -391,9 +382,8 @@ async function lookupByUsername(value: string): Promise<LookupResult> {
     .where(
       and(
         like(agents.did, `%${value.replace(/[%_\\]/g, (c) => `\\${c}`)}%`),
-        eq(agents.is_public, true),
-        // Suspended agents are hidden from public discovery (moderation 3b).
-        eq(agents.status, 'active'),
+        // Private and suspended agents are hidden from public discovery.
+        discoverableAgent,
       ),
     )
     .limit(20);

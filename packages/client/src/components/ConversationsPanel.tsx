@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { dateLocale } from '../i18n/index.js';
+import { formatShortDateTime } from '../lib/format-date.js';
 import { FOCUS_RING } from '../lib/styles.js';
 import { useChatStore } from '../stores/chat.js';
 import { Bot, Plus, Search, Trash } from './Icons.js';
@@ -110,12 +110,7 @@ export function ConversationsPanel({ onNavigate }: { onNavigate?: () => void }) 
                       {conv.name ?? t('conversations.untitled', { id: conv.id.slice(0, 6) })}
                     </p>
                     <p className="eyebrow text-ink-muted mt-0.5">
-                      {new Date(conv.updated_at).toLocaleString(dateLocale(), {
-                        month: 'short',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
+                      {formatShortDateTime(conv.updated_at)}
                     </p>
                   </div>
                 </button>

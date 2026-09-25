@@ -107,11 +107,13 @@ export async function recallMemories(
     embeddingProvider,
   );
   if (hits.length === 0) return { fragment: '', hits };
-  // A fact distilled from a peer's question describes that inquiry, not the
-  // owner. Listed bare under "你已知道", "对方想了解我们的 Q3 数据" reads as
-  // something the owner wants — so the origin is stated where the model sees it.
-  const fragment = `\n关于该用户你已知道：\n${hits
-    .map((h) => (h.source === 'a2a' ? `- （来自外部 Agent 的提问）${h.text}` : `- ${h.text}`))
-    .join('\n')}`;
+  const fragment = `\n关于该用户你已知道：\n${hits.map(formatMemoryLine).join('\n')}`;
   return { fragment, hits };
+}
+
+// A fact distilled from a peer's question describes that inquiry, not the
+// owner. Listed bare under "你已知道", "对方想了解我们的 Q3 数据" reads as
+// something the owner wants — so the origin is stated where the model sees it.
+export function formatMemoryLine(h: MemoryHit): string {
+  return h.source === 'a2a' ? `- （来自外部 Agent 的提问）${h.text}` : `- ${h.text}`;
 }

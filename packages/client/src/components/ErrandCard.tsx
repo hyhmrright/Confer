@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { TranslationKey } from '../i18n/index.js';
 import { dateLocale } from '../i18n/index.js';
 import { DISABLED, DISABLED_FILLED, FOCUS_RING } from '../lib/styles.js';
-import type { ErrandCard as ErrandCardData } from '../stores/errands.js';
+import type { CardDecision, ErrandCard as ErrandCardData } from '../stores/errands.js';
 import { useErrandsStore } from '../stores/errands.js';
 import { DecisionRecord } from './DecisionRecord.js';
 import { Shield } from './Icons.js';
@@ -65,7 +65,7 @@ export function ErrandCard({ card }: { card: ErrandCardData }) {
 
   const { text: expiresIn, expired } = expiryLabel(card.expires_at, dateLocale());
 
-  const decide = async (decision: 'approve' | 'change_price' | 'reject', cents?: number) => {
+  const decide = async (decision: CardDecision, cents?: number) => {
     setDeciding(true);
     setError(null);
     try {

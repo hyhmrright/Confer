@@ -92,9 +92,7 @@ export const MessageBubble = memo(function MessageBubble({ message }: { message:
       <div className="markdown-content text-sm leading-relaxed">
         <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content ?? ''}</ReactMarkdown>
       </div>
-      {message.citations && message.citations.length > 0 && (
-        <CitationCapsule citations={message.citations} />
-      )}
+      {message.citations && <CitationCapsule citations={message.citations} />}
     </MessageEntry>
   );
 });

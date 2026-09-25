@@ -63,7 +63,9 @@ export function connectWs(): void {
   };
 }
 
-export function disconnectWs(): void {
+// Cancel any pending retry and close the current socket without letting its
+// onclose schedule a new one.
+function closeSocket(): void {
   if (reconnectTimer) {
     clearTimeout(reconnectTimer);
     reconnectTimer = null;
@@ -72,12 +74,16 @@ export function disconnectWs(): void {
     // Detach onclose first. close() is asynchronous, so leaving the handler
     // attached lets it fire *after* this function returns and schedule the
     // 3s retry we just cancelled — which reopens a socket with a live token
-    // and no registered handlers. reconnectWs has always done this; this one
-    // did not, so leaving ChatLayout for /settings left a zombie behind.
+    // and no registered handlers. disconnectWs once skipped this, so leaving
+    // ChatLayout for /settings left a zombie behind.
     socket.onclose = null;
     socket.close();
     socket = null;
   }
+}
+
+export function disconnectWs(): void {
+  closeSocket();
   // Logout/unmount: forget intended subscriptions so a later login as a
   // different user never replays a stale one. reconnectWs keeps them (same user,
   // new token) so onopen can re-establish the active conversation.
@@ -88,15 +94,7 @@ export function disconnectWs(): void {
 // a fresh one with the latest token. Used after a token refresh so a connection
 // that was opened with an expired token doesn't sit broken until it times out.
 export function reconnectWs(): void {
-  if (reconnectTimer) {
-    clearTimeout(reconnectTimer);
-    reconnectTimer = null;
-  }
-  if (socket) {
-    socket.onclose = null;
-    socket.close();
-    socket = null;
-  }
+  closeSocket();
   connectWs();
 }
 

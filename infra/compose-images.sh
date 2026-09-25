@@ -28,3 +28,8 @@ image_of() {
   docker compose -f "$COMPOSE" config --format json \
     | python3 -c "import json,sys; print(json.load(sys.stdin)['services'][sys.argv[1]]['image'])" "$1"
 }
+
+# The rollback point deploy.sh saves for an image: same name, :previous tag.
+previous_of() {
+  echo "${1%:*}:previous"
+}

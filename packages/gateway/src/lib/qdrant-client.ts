@@ -6,9 +6,6 @@
 import { QDRANT_HEALTHCHECK_TIMEOUT_MS, QDRANT_REQUEST_TIMEOUT_MS } from './rag-config.js';
 import { HttpError, retryWithBackoff } from './retry.js';
 
-// Re-exported so existing importers keep resolving these from qdrant-client.
-export { QDRANT_HEALTHCHECK_TIMEOUT_MS, QDRANT_REQUEST_TIMEOUT_MS };
-
 export function qdrantUrl(path: string): string {
   const base = process.env.QDRANT_URL ?? 'http://localhost:6333';
   return `${base}${path}`;

@@ -6,8 +6,6 @@ import { z } from 'zod';
 // OUTBOUND direction (the owner's own agent pauses to ask the owner) and is fully
 // separate from the inbound connection-consent permissions subsystem.
 
-export const errandStatusSchema = z.enum(['in_progress', 'done', 'cancelled']);
-
 // Card semantics. `approve` gates a straightforward go/no-go; `change_price`
 // carries a price delta the owner can accept or counter; `info` is a non-blocking
 // notice (no money/commitment).
@@ -69,5 +67,3 @@ export const decideCardSchema = z
     message: 'change_price decision requires new_price_cents',
     path: ['new_price_cents'],
   });
-
-export type CardDecision = z.infer<typeof cardDecisionSchema>;

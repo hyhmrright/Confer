@@ -28,7 +28,7 @@ async function resolvePeerEndpoint(did: string): Promise<string> {
 /**
  * The peer row this owner knows the sender by, created on first contact with
  * its endpoint resolved up front so a reply can be sent once the owner
- * approves. Null if the peer cannot be persisted.
+ * approves.
  *
  * One peer reaches us under two names, and which one arrives depends on how the
  * contact was added. `from` carries the AGENT did (`<owner>:agent`), which is
@@ -48,7 +48,7 @@ export async function ensurePeerAgent(
   ownerId: string,
   fromDid: string,
   signerDid?: string,
-): Promise<typeof peerAgents.$inferSelect | null> {
+): Promise<typeof peerAgents.$inferSelect> {
   const db = getDb();
   const names = signerDid && signerDid !== fromDid ? [fromDid, signerDid] : [fromDid];
   const known = await db.select().from(peerAgents).where(inArray(peerAgents.did, names));
@@ -59,11 +59,10 @@ export async function ensurePeerAgent(
   const existing = known.find((r) => r.did === fromDid) ?? known[0];
   if (existing) return existing;
 
-  const created = await upsertPeerAgent({
+  return upsertPeerAgent({
     did: fromDid,
     endpoint: await resolvePeerEndpoint(fromDid),
   });
-  return created ?? null;
 }
 
 // Whether `threadId` names a conversation this owner has with this peer — i.e.

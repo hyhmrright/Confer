@@ -28,7 +28,7 @@ id_of() { docker image inspect --format '{{.Id}}' "$1" 2>/dev/null; }
 # since migrations are forward-only and an older image simply finds none pending.
 for svc in "${SERVICES[@]}"; do
   img=$(image_of "$svc")
-  prev="${img%:*}:previous"
+  prev=$(previous_of "$img")
   if ! docker image inspect "$prev" >/dev/null 2>&1; then
     echo "error: $prev does not exist — no deploy has recorded a rollback point for $svc" >&2
     exit 1
@@ -40,7 +40,7 @@ done
 
 for svc in "${SERVICES[@]}"; do
   img=$(image_of "$svc")
-  docker tag "${img%:*}:previous" "$img"
+  docker tag "$(previous_of "$img")" "$img"
   echo "$svc -> $(id_of "$img" | cut -c8-19)"
 done
 

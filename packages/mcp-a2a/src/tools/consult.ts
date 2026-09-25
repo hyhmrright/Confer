@@ -32,39 +32,23 @@ export async function askAgent(client: GatewayClient, input: AskInput): Promise<
     language: input.language,
   });
 
+  const handle = { conversationId: initiated.conversation_id, messageId: initiated.message_id };
+
   if (initiated.status === 'failed') {
-    return {
-      status: 'failed',
-      conversationId: initiated.conversation_id,
-      messageId: initiated.message_id,
-      error: initiated.error,
-    };
+    return { status: 'failed', ...handle, error: initiated.error };
   }
 
   if (input.waitSeconds <= 0) {
-    return {
-      status: 'pending',
-      conversationId: initiated.conversation_id,
-      messageId: initiated.message_id,
-    };
+    return { status: 'pending', ...handle };
   }
 
   const reply = await client.get<ReplyResponse>(
-    `/api/v1/consult/${encodeURIComponent(initiated.conversation_id)}/reply?after=${encodeURIComponent(initiated.message_id)}&wait=${input.waitSeconds}`,
+    `/api/v1/consult/${encodeURIComponent(handle.conversationId)}/reply?after=${encodeURIComponent(handle.messageId)}&wait=${input.waitSeconds}`,
   );
   if (reply.status === 'answered') {
-    return {
-      status: 'answered',
-      conversationId: initiated.conversation_id,
-      messageId: initiated.message_id,
-      answer: reply.message?.content ?? '',
-    };
+    return { status: 'answered', ...handle, answer: reply.message?.content ?? '' };
   }
-  return {
-    status: 'pending',
-    conversationId: initiated.conversation_id,
-    messageId: initiated.message_id,
-  };
+  return { status: 'pending', ...handle };
 }
 
 // A follow-up reuses the per-peer consult thread (the gateway keeps one

@@ -32,8 +32,9 @@ export function createProvider(
   const spec = llmProvider(name);
   if (!spec) return null;
 
+  const baseUrl = providerBaseUrl(spec, apiKey);
   if (spec.kind === 'anthropic') {
-    return new AnthropicProvider(apiKey, providerBaseUrl(spec, apiKey), fetcher);
+    return new AnthropicProvider(apiKey, baseUrl, fetcher);
   }
 
   return new OpenAICompatibleProvider(
@@ -41,7 +42,7 @@ export function createProvider(
     // Local runtimes store their address in the key slot and authenticate with
     // nothing, so the key is not also a credential.
     spec.keyIsBaseUrl ? '' : apiKey,
-    providerBaseUrl(spec, apiKey),
+    baseUrl,
     spec.defaultModel ?? '',
     spec.completionsPath,
     fetcher,

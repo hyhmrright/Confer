@@ -1,17 +1,16 @@
 import { AppError, newId } from '@confer/shared';
-import { and, count, desc, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { getDb } from '../db/connection.js';
 import { knowledgeBases, knowledgeDocuments } from '../db/schema.js';
-import { getEnv } from '../env.js';
 import { runDetached } from '../lib/background.js';
 import { chunkText } from '../lib/chunker.js';
 import { ingestQueue } from '../lib/concurrency.js';
 import { guessContentType, isSupportedDocumentType, parseDocument } from '../lib/doc-parser.js';
-import { type EmbeddingProvider, embedTexts } from '../lib/embedding.js';
-import { getUserLlmKeys, resolveEmbeddingKey } from '../lib/llm-keys.js';
-import { parseLimit, parseOffset } from '../lib/pagination.js';
+import { embedTexts } from '../lib/embedding.js';
+import { requireEmbeddingConfig } from '../lib/llm-keys.js';
+import { countOf, parseLimit, parseOffset } from '../lib/pagination.js';
 import { deleteByDocId, deleteByKbId, ensureCollection, upsertChunks } from '../lib/qdrant.js';
 import { getObject, putObject, removeObject } from '../lib/storage.js';
 import { detectLang } from '../lib/text-lang.js';
@@ -36,21 +35,6 @@ const updateKbSchema = z
     shared_with_peers: z.boolean(),
   })
   .partial();
-
-async function getEmbeddingConfig(
-  userId: string,
-): Promise<{ apiKey: string; provider: EmbeddingProvider }> {
-  const llmKeys = await getUserLlmKeys(userId);
-  const config = await resolveEmbeddingKey(llmKeys, getEnv().ENCRYPTION_KEY);
-  if (!config) {
-    throw new AppError(
-      'embedding_unavailable',
-      'No embedding provider configured — please add an OpenAI, ZhipuAI (GLM), or Qwen API key in Settings',
-      400,
-    );
-  }
-  return config;
-}
 
 /** Loads a knowledge base, rejecting ids that belong to another user. */
 async function requireKb(
@@ -128,9 +112,7 @@ knowledgeBasesRoutes.get('/', async (c) => {
     .limit(limit)
     .offset(offset);
 
-  const [totals] = await db.select({ value: count() }).from(knowledgeBases).where(owned);
-
-  return c.json({ knowledge_bases: rows, total: totals?.value ?? 0 });
+  return c.json({ knowledge_bases: rows, total: await countOf(knowledgeBases, owned) });
 });
 
 knowledgeBasesRoutes.post('/', async (c) => {
@@ -204,9 +186,7 @@ knowledgeBasesRoutes.get('/:kbId/documents', async (c) => {
     .limit(limit)
     .offset(offset);
 
-  const [totals] = await db.select({ value: count() }).from(knowledgeDocuments).where(inKb);
-
-  return c.json({ documents: docs, total: totals?.value ?? 0 });
+  return c.json({ documents: docs, total: await countOf(knowledgeDocuments, inKb) });
 });
 
 knowledgeBasesRoutes.post('/:kbId/documents', async (c) => {
@@ -337,7 +317,7 @@ knowledgeBasesRoutes.post('/:kbId/documents/:docId/retry', async (c) => {
 async function ingestDocument(job: IngestJob): Promise<void> {
   const { docId, kbId, kbName, userId, filename, contentType, buffer } = job;
   const db = getDb();
-  const { apiKey, provider } = await getEmbeddingConfig(userId);
+  const { apiKey, provider } = await requireEmbeddingConfig(userId);
 
   const text = await parseDocument(buffer, contentType);
   const chunks = chunkText(text, docId, filename, kbId, userId).map((c) => ({

@@ -4,6 +4,7 @@ import {
   deleteQdrantPoints,
   ensureQdrantCollection,
   providerMatchFilter,
+  type QdrantSearchHit,
   searchQdrantCollection,
   upsertQdrantPoints,
 } from './qdrant-client.js';
@@ -48,7 +49,6 @@ export async function ensureCollection(): Promise<void> {
 }
 
 export async function upsertChunks(chunks: KnowledgeChunk[]): Promise<void> {
-  if (chunks.length === 0) return;
   const points = chunks.map((c) => ({
     id: toUUID(c.chunk_id),
     vector: c.vector,
@@ -126,7 +126,7 @@ export async function searchChunks(
   // language is unknown, and they already competed in the primary search.
   const seen = new Set(results.map((r) => r.chunk_id));
   for (const point of supplementary) {
-    if (seen.has(point.id as string)) continue;
+    if (seen.has(point.id)) continue;
     results.push(toSearchResult(point));
   }
   return results;
@@ -138,13 +138,9 @@ const OTHER_LANGS: Record<TextLang, TextLang[]> = {
   en: ['zh', 'ja'],
 };
 
-function toSearchResult(r: {
-  id: unknown;
-  score: number;
-  payload: Record<string, unknown>;
-}): SearchResult {
+function toSearchResult(r: QdrantSearchHit): SearchResult {
   return {
-    chunk_id: r.id as string,
+    chunk_id: r.id,
     kb_id: r.payload.kb_id as string,
     kb_name: r.payload.kb_name as string,
     doc_id: r.payload.doc_id as string,

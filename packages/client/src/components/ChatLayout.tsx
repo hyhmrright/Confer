@@ -191,33 +191,24 @@ export function ChatLayout() {
     // fresh one once the first API call triggers a refresh.
     setOnTokenRefreshed(reconnectWs);
 
+    const onValid = <T,>(type: string, schema: z.ZodType<T>, fn: (data: T) => void) =>
+      onWsMessage(type, (data) => {
+        const parsed = schema.safeParse(data);
+        if (!parsed.success) {
+          console.warn(`[ws] ${type} validation failed:`, parsed.error.issues);
+          return;
+        }
+        fn(parsed.data);
+      });
+
     const unsubs = [
-      onWsMessage('message.new', (data) => {
-        const parsed = wsMessageSchema.safeParse(data);
-        if (!parsed.success) {
-          console.warn('[ws] message.new validation failed:', parsed.error.issues);
-          return;
-        }
-        addMessage({ ...parsed.data, created_at: new Date().toISOString() });
-      }),
-
-      onWsMessage('permission.request', (data) => {
-        const parsed = permissionRequestEventSchema.safeParse(data);
-        if (!parsed.success) {
-          console.warn('[ws] permission.request validation failed:', parsed.error.issues);
-          return;
-        }
-        addPermissionRequest(parsed.data);
-      }),
-
-      onWsMessage('agent.status', (data) => {
-        const parsed = wsAgentStatusSchema.safeParse(data);
-        if (!parsed.success) {
-          console.warn('[ws] agent.status validation failed:', parsed.error.issues);
-          return;
-        }
-        setAgentStatus(parsed.data.message ?? null);
-      }),
+      onValid('message.new', wsMessageSchema, (msg) =>
+        addMessage({ ...msg, created_at: new Date().toISOString() }),
+      ),
+      onValid('permission.request', permissionRequestEventSchema, addPermissionRequest),
+      onValid('agent.status', wsAgentStatusSchema, (status) =>
+        setAgentStatus(status.message ?? null),
+      ),
     ];
 
     return () => {

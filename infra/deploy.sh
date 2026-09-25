@@ -22,7 +22,7 @@ source "$(dirname "$0")/compose-images.sh"
 
 for svc in "${SERVICES[@]}"; do
   img=$(image_of "$svc")
-  prev="${img%:*}:previous"
+  prev=$(previous_of "$img")
   if docker image inspect "$img" >/dev/null 2>&1; then
     docker tag "$img" "$prev"
     echo "kept $prev as a rollback point"

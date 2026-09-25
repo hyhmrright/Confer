@@ -54,6 +54,12 @@ interface DocumentList {
   total: number;
 }
 
+function docsPage(kbId: string, offset: number): Promise<DocumentList> {
+  return api.get<DocumentList>(
+    `/knowledge-bases/${kbId}/documents?limit=${DOC_PAGE_SIZE}&offset=${offset}`,
+  );
+}
+
 // Fold a freshly-fetched first page over what is already cached: refresh the
 // rows it covers, keep the ones it doesn't (anything the user paged in beyond
 // it), and prepend rows that are genuinely new. The upload poller re-reads page
@@ -120,9 +126,7 @@ export const useKbStore = create<KbState>((set, get) => ({
   },
 
   fetchDocuments: async (kbId) => {
-    const data = await api.get<DocumentList>(
-      `/knowledge-bases/${kbId}/documents?limit=${DOC_PAGE_SIZE}&offset=0`,
-    );
+    const data = await docsPage(kbId, 0);
     set((s) => ({
       documents: { ...s.documents, [kbId]: data.documents },
       documentsTotal: { ...s.documentsTotal, [kbId]: data.total },
@@ -135,9 +139,7 @@ export const useKbStore = create<KbState>((set, get) => ({
     if (loadingMoreDocs || shown.length >= (documentsTotal[kbId] ?? 0)) return;
     set({ loadingMoreDocs: kbId });
     try {
-      const data = await api.get<DocumentList>(
-        `/knowledge-bases/${kbId}/documents?limit=${DOC_PAGE_SIZE}&offset=${shown.length}`,
-      );
+      const data = await docsPage(kbId, shown.length);
       set((s) => ({
         documents: {
           ...s.documents,
@@ -177,9 +179,7 @@ export const useKbStore = create<KbState>((set, get) => ({
             await new Promise((resolve) => setTimeout(resolve, 1500));
             let page: DocumentList;
             try {
-              page = await api.get<DocumentList>(
-                `/knowledge-bases/${kbId}/documents?limit=${DOC_PAGE_SIZE}&offset=0`,
-              );
+              page = await docsPage(kbId, 0);
             } catch {
               return;
             }

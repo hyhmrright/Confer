@@ -8,8 +8,7 @@ import {
   adminUserListQuerySchema,
   newId,
 } from '@confer/shared';
-import { count, desc, eq, like, type SQL } from 'drizzle-orm';
-import type { PgTable } from 'drizzle-orm/pg-core';
+import { desc, eq, like } from 'drizzle-orm';
 import { type Context, Hono } from 'hono';
 import { getDb } from '../db/connection.js';
 import {
@@ -23,6 +22,7 @@ import {
 } from '../db/schema.js';
 import { getAppConfig, setConfigValue } from '../lib/app-config.js';
 import { clientIp } from '../lib/client-ip.js';
+import { countOf } from '../lib/pagination.js';
 import { adminMiddleware } from '../middleware/admin.js';
 import { authMiddleware } from '../middleware/auth.js';
 import type { AppEnv } from '../types.js';
@@ -89,13 +89,6 @@ async function auditChange(
     after: change.after,
     reason: change.reason,
   });
-}
-
-// Count every row of a table (optionally filtered). Drizzle returns a one-row
-// result set; this unwraps it so list handlers read as `total: await countOf(x)`.
-async function countOf(table: PgTable, where?: SQL): Promise<number> {
-  const [row] = await getDb().select({ value: count() }).from(table).where(where);
-  return row?.value ?? 0;
 }
 
 adminRoutes.get('/users', async (c) => {

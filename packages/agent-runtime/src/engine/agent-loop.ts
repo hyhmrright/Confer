@@ -8,14 +8,16 @@ export interface AgentContext {
   conversationHistory: LLMMessage[];
 }
 
-export async function runAgentLoop(ctx: AgentContext, userMessage: string): Promise<string> {
-  const messages: LLMMessage[] = [
+function buildMessages(ctx: AgentContext, userMessage: string): LLMMessage[] {
+  return [
     { role: 'system', content: ctx.systemPrompt },
     ...ctx.conversationHistory,
     { role: 'user', content: userMessage },
   ];
+}
 
-  const response = await ctx.provider.chat(messages);
+export async function runAgentLoop(ctx: AgentContext, userMessage: string): Promise<string> {
+  const response = await ctx.provider.chat(buildMessages(ctx, userMessage));
   return response.content;
 }
 
@@ -23,11 +25,5 @@ export async function* streamAgentLoop(
   ctx: AgentContext,
   userMessage: string,
 ): AsyncIterable<LLMStreamEvent> {
-  const messages: LLMMessage[] = [
-    { role: 'system', content: ctx.systemPrompt },
-    ...ctx.conversationHistory,
-    { role: 'user', content: userMessage },
-  ];
-
-  yield* ctx.provider.stream(messages);
+  yield* ctx.provider.stream(buildMessages(ctx, userMessage));
 }

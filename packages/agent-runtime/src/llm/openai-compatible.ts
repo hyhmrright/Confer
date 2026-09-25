@@ -105,13 +105,14 @@ export class OpenAICompatibleProvider implements LLMProvider {
     const message = choice.message as Record<string, string>;
 
     const choiceFinish = choice.finish_reason as string | undefined;
+    const u = data.usage as Record<string, number>;
     return {
       content: message.content ?? '',
       finish_reason:
         choiceFinish === 'tool_calls' ? 'tool_use' : choiceFinish === 'length' ? 'length' : 'stop',
       usage: {
-        prompt_tokens: (data.usage as Record<string, number>).prompt_tokens ?? 0,
-        completion_tokens: (data.usage as Record<string, number>).completion_tokens ?? 0,
+        prompt_tokens: u.prompt_tokens ?? 0,
+        completion_tokens: u.completion_tokens ?? 0,
       },
     };
   }
@@ -209,6 +210,6 @@ export function createOpenAICompatibleProvider(
     apiKey,
     opts.baseUrl ?? 'https://api.openai.com',
     opts.model ?? 'gpt-4o',
-    opts.completionsPath ?? '/v1/chat/completions',
+    opts.completionsPath,
   );
 }

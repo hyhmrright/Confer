@@ -49,7 +49,7 @@ export interface ParsedSignatureInput {
 
 // Standard base64 (with padding) over raw bytes — used for the Signature
 // byte-sequence and Content-Digest.
-function encodeBase64(bytes: Uint8Array): string {
+export function encodeBase64(bytes: Uint8Array): string {
   let binary = '';
   for (const b of bytes) binary += String.fromCharCode(b);
   return btoa(binary);

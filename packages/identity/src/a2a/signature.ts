@@ -1,5 +1,6 @@
 import { err, ok, type Result } from '@confer/shared';
 import {
+  encodeBase64,
   parseSignatureInput,
   parseSignatureValue,
   serializeContentDigest,
@@ -20,8 +21,7 @@ const SIGNATURE_ALG = 'ed25519';
 export async function computeDigest(body: string): Promise<string> {
   const encoded = new TextEncoder().encode(body);
   const hash = await crypto.subtle.digest('SHA-256', encoded);
-  const b64 = btoa(String.fromCharCode(...new Uint8Array(hash)));
-  return serializeContentDigest(b64);
+  return serializeContentDigest(encodeBase64(new Uint8Array(hash)));
 }
 
 // Build the RFC 9421 §2.5 signature base: one `"<component>": <value>` line per
@@ -30,11 +30,11 @@ export async function computeDigest(body: string): Promise<string> {
 // agree on. Derived components map to the request; other identifiers map to the
 // request header of the same (lowercased) name. A covered component whose value
 // is absent is an error — the base cannot be reproduced.
-export async function buildSignatureBase(
+export function buildSignatureBase(
   request: Request,
   components: string[],
   paramsValue: string,
-): Promise<Result<string, string>> {
+): Result<string, string> {
   const url = new URL(request.url);
   const lines: string[] = [];
 
@@ -165,7 +165,7 @@ export async function verifyRequestSignature(
     }
   }
 
-  const base = await buildSignatureBase(request, components, paramsValue);
+  const base = buildSignatureBase(request, components, paramsValue);
   if (!base.ok) {
     return base;
   }
@@ -233,7 +233,7 @@ export async function signRequest(
     alg: SIGNATURE_ALG,
   });
 
-  const base = await buildSignatureBase(signed, components, paramsValue);
+  const base = buildSignatureBase(signed, components, paramsValue);
   if (!base.ok) {
     // Unreachable for the components assembled here (all derived or set above);
     // a failure would be a programming error in this function.

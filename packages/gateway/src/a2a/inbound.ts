@@ -51,9 +51,6 @@ export async function admitInboundMessage(params: InboundMessageParams): Promise
   const db = getDb();
 
   const peer = await ensurePeerAgent(targetAgent.user_id, senderDid, signerDid);
-  if (!peer) {
-    throw new Error(`Failed to resolve peer agent for ${senderDid}`);
-  }
 
   // A message from an unconnected peer is held as a pending connection request
   // until the owner approves it in the permission inbox. Adding a contact is the

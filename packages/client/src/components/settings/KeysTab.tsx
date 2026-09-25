@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { LLM_PROVIDERS, llmProviderName, TOOL_PROVIDERS } from '../../lib/providers.js';
+import { useAutoClear } from '../../hooks/use-auto-clear.js';
+import {
+  LLM_PROVIDERS,
+  type LlmProviderSpec,
+  llmProviderName,
+  TOOL_PROVIDERS,
+} from '../../lib/providers.js';
 import { useSettingsStore } from '../../stores/settings.js';
 import { ProviderKeyEditor } from './ProviderKeyEditor.js';
 import { StatusMsg } from './SettingsShared.js';
@@ -28,23 +34,17 @@ export function KeysTab() {
     loadLlmKeys();
   }, [loadLlmKeys]);
 
-  useEffect(() => {
-    if (success || error) {
-      const timer = setTimeout(clearMessages, 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [success, error, clearMessages]);
-
-  const handleSave = async (provider: string) => {
-    if (!keyValue.trim()) return;
-    await saveLlmKey(provider, keyValue.trim());
-    setEditing(null);
-    setKeyValue('');
-  };
+  useAutoClear(success, error, clearMessages);
 
   const cancelEdit = () => {
     setEditing(null);
     setKeyValue('');
+  };
+
+  const handleSave = async (provider: string) => {
+    if (!keyValue.trim()) return;
+    await saveLlmKey(provider, keyValue.trim());
+    cancelEdit();
   };
 
   const handleEdit = (providerId: string) => {
@@ -69,7 +69,7 @@ export function KeysTab() {
   const availableProviders = LLM_PROVIDERS.filter((p) => !isConfigured(p.id));
   const grouped = configuredProviders.length > 0;
 
-  const renderProvider = (provider: (typeof LLM_PROVIDERS)[number]) => {
+  const renderProvider = (provider: LlmProviderSpec) => {
     const configured = isConfigured(provider.id);
     const addressOnly = provider.keyIsBaseUrl;
     return (

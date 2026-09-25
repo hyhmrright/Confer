@@ -13,7 +13,7 @@ import {
 } from '../db/schema.js';
 import { getEnv } from '../env.js';
 import { runDetached } from '../lib/background.js';
-import { type AuthPayload, TOKEN_TYPE } from '../middleware/auth.js';
+import { type AuthPayload, jwtSecret, TOKEN_TYPE } from '../middleware/auth.js';
 
 export interface WsData {
   user: AuthPayload;
@@ -126,7 +126,7 @@ async function authenticateUpgrade(
   if (!token) return null;
 
   const env = getEnv();
-  const secret = new TextEncoder().encode(env.JWT_SECRET);
+  const secret = jwtSecret();
 
   let sub: string;
   let username: string;

@@ -1,6 +1,7 @@
 import { AppError } from '@confer/shared';
 import { and, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
+import { discoverableAgent } from '../a2a/target-agent.js';
 import { getDb } from '../db/connection.js';
 import { agents } from '../db/schema.js';
 import { buildAgentFacts } from '../lib/agent-facts.js';
@@ -18,7 +19,7 @@ agentFactsRoutes.get('/agent-facts/:agentDid', async (c) => {
   const [agent] = await db
     .select()
     .from(agents)
-    .where(and(eq(agents.did, agentDid), eq(agents.is_public, true), eq(agents.status, 'active')))
+    .where(and(eq(agents.did, agentDid), discoverableAgent))
     .limit(1);
 
   if (!agent) {

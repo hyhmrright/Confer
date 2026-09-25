@@ -52,7 +52,7 @@ async function craftSignedRequest(
   }
 
   const paramsValue = serializeSignatureParams(components, { keyid, created, alg });
-  const base = await buildSignatureBase(
+  const base = buildSignatureBase(
     new Request(url, { method, headers, body }),
     components,
     paramsValue,
@@ -89,11 +89,7 @@ describe('buildSignatureBase (RFC 9421 §2.5)', () => {
       created: 1700000000,
       alg: 'ed25519',
     });
-    const base = await buildSignatureBase(
-      req,
-      ['@method', '@authority', '@path', 'date'],
-      paramsValue,
-    );
+    const base = buildSignatureBase(req, ['@method', '@authority', '@path', 'date'], paramsValue);
     expect(base.ok).toBe(true);
     if (base.ok) {
       expect(base.value).toBe(
@@ -110,7 +106,7 @@ describe('buildSignatureBase (RFC 9421 §2.5)', () => {
 
   test('errors when a covered component is absent from the request', async () => {
     const req = new Request(ENDPOINT, { method: 'POST' });
-    const base = await buildSignatureBase(req, ['x-missing'], '("x-missing")');
+    const base = buildSignatureBase(req, ['x-missing'], '("x-missing")');
     expect(base.ok).toBe(false);
   });
 });
@@ -317,13 +313,13 @@ describe('query-string coverage', () => {
   const QUERY_URL = 'https://agent.example.com/a2a/v1/tasks?contextId=abc&pageSize=2';
 
   test('@query serializes with its leading question mark', async () => {
-    const base = await buildSignatureBase(new Request(QUERY_URL), ['@query'], '()');
+    const base = buildSignatureBase(new Request(QUERY_URL), ['@query'], '()');
     expect(base.ok).toBe(true);
     if (base.ok) expect(base.value).toContain('"@query": ?contextId=abc&pageSize=2');
   });
 
   test('@query on a query-less URL is a bare `?`, pinning its absence', async () => {
-    const base = await buildSignatureBase(new Request(ENDPOINT), ['@query'], '()');
+    const base = buildSignatureBase(new Request(ENDPOINT), ['@query'], '()');
     expect(base.ok).toBe(true);
     if (base.ok) expect(base.value).toContain('"@query": ?');
   });

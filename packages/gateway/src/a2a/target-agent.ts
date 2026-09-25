@@ -9,6 +9,14 @@ import { agents, users } from '../db/schema.js';
 
 export type Agent = typeof agents.$inferSelect;
 
+/**
+ * What public discovery shows: agents their owner published and that are not
+ * suspended. Every discovery surface — the directory, Agent Cards, AgentFacts,
+ * username lookup — applies this one condition, so an agent undiscoverable in
+ * one place cannot be enumerated through another.
+ */
+export const discoverableAgent = and(eq(agents.is_public, true), eq(agents.status, 'active'));
+
 /** A suspended agent is treated as absent everywhere; never reveal the suspension. */
 export function isReachable(agent: Agent | undefined): agent is Agent {
   return agent !== undefined && agent.status !== 'suspended';
@@ -74,10 +82,10 @@ export async function findSolePublicAgent() {
   const rows = await db
     .select()
     .from(agents)
-    // The same two conditions `/.well-known/agent-card.json` applies, so the
-    // agent a client can discover without a tenant is the one it can then
-    // address without a tenant.
-    .where(and(eq(agents.is_public, true), eq(agents.status, 'active')))
+    // The same condition `/.well-known/agent-card.json` applies, so the agent a
+    // client can discover without a tenant is the one it can then address
+    // without a tenant.
+    .where(discoverableAgent)
     // Two is enough to know it is ambiguous; no reason to read the rest.
     .limit(2);
   return rows.length === 1 ? rows[0] : undefined;

@@ -106,6 +106,22 @@ async function sendToPeer(
   }
 }
 
+/** Push this agent's reply to the inbound question to the owner's open sockets. */
+function broadcastReply(params: ProcessA2AMessageParams, id: string, content: string): void {
+  const { targetAgent, conversationId, inboundMessageId } = params;
+  broadcastToConversation(conversationId, {
+    type: 'message.new',
+    data: {
+      id,
+      conversation_id: conversationId,
+      sender_type: 'own_agent',
+      sender_id: targetAgent.id,
+      content,
+      in_reply_to: inboundMessageId,
+    },
+  });
+}
+
 type A2AFailure = ModelConfigError | 'agent_error';
 
 /** One-line English summary of a turn that could not be run, sent to the asker. */
@@ -158,17 +174,7 @@ async function notifyPeerOfFailure(
     via: 'a2a',
   });
 
-  broadcastToConversation(conversationId, {
-    type: 'message.new',
-    data: {
-      id: noticeId,
-      conversation_id: conversationId,
-      sender_type: 'own_agent',
-      sender_id: targetAgent.id,
-      content: prose,
-      in_reply_to: inboundMessageId,
-    },
-  });
+  broadcastReply(params, noticeId, prose);
 
   await sendToPeer(params, {
     type: 'notification',
@@ -251,17 +257,7 @@ export async function processA2AMessage(params: ProcessA2AMessageParams): Promis
     delivered_at: new Date(),
   });
 
-  broadcastToConversation(conversationId, {
-    type: 'message.new',
-    data: {
-      id: replyId,
-      conversation_id: conversationId,
-      sender_type: 'own_agent',
-      sender_id: targetAgent.id,
-      content: replyContent,
-      in_reply_to: inboundMessageId,
-    },
-  });
+  broadcastReply(params, replyId, replyContent);
 
   // Fire-and-forget: distil durable facts from this A2A turn into long-term
   // memory, mirroring the chat path. Runs before the outbound delivery block so
