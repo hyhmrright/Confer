@@ -19,14 +19,14 @@
     },
     "packages/cli": {
       "name": "confer-cli",
-      "version": "0.4.2",
+      "version": "0.6.2",
       "bin": {
         "confer": "./dist/confer.mjs",
       },
     },
     "packages/client": {
       "name": "@confer/client",
-      "version": "0.6.1",
+      "version": "0.6.2",
       "dependencies": {
         "@confer/shared": "workspace:*",
         "i18next": "^26.4.2",
