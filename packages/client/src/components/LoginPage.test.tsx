@@ -26,6 +26,7 @@ mock.module('../lib/api.js', () => ({
 const { changeLanguage, SUPPORTED_LANGUAGES } = await import('../i18n/index.js');
 const { gatewayOrigin, setGatewayUrl } = await import('../lib/gateway.js');
 const { LoginPage } = await import('./LoginPage.js');
+const { useAuthStore } = await import('../stores/auth.js');
 
 afterEach(cleanup);
 // i18next is process-global, so leaving this file's last switch in place would
@@ -129,5 +130,31 @@ describe('LoginPage instance address', () => {
     await waitFor(() => expect(screen.getByText(/isn't a valid address/)).toBeDefined());
     expect(post).not.toHaveBeenCalled();
     expect(gatewayOrigin()).toBe('');
+  });
+});
+
+// The failure banner sits below the fields, away from the button that caused it,
+// so it has to be a live region or a screen reader user hears nothing.
+describe('LoginPage failure', () => {
+  afterEach(() => useAuthStore.setState({ error: null }));
+
+  test('announces the store error as an alert', async () => {
+    await changeLanguage('en');
+    useAuthStore.setState({ error: 'Invalid username or password' });
+    render(
+      <MemoryRouter>
+        <LoginPage />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole('alert').textContent).toBe('Invalid username or password');
+  });
+
+  test('shows no banner while there is nothing to report', () => {
+    render(
+      <MemoryRouter>
+        <LoginPage />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 });

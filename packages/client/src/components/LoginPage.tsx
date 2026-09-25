@@ -11,6 +11,7 @@ import { DISABLED_FILLED, FOCUS_RING } from '../lib/styles.js';
 import { useAuthStore } from '../stores/auth.js';
 import { Loader } from './Icons.js';
 import { LanguageSwitcherCompact } from './LanguageSwitcher.js';
+import { FieldLabel, StatusMsg } from './settings/SettingsShared.js';
 
 export function LoginPage() {
   const { t } = useTranslation();
@@ -109,12 +110,7 @@ export function LoginPage() {
           <form onSubmit={handleSubmit} className="space-y-3.5">
             {needsGateway && (
               <div>
-                <label
-                  htmlFor="login-gateway"
-                  className="block text-xs font-medium text-ink-secondary mb-1.5"
-                >
-                  {t('login.gateway')}
-                </label>
+                <FieldLabel htmlFor="login-gateway">{t('login.gateway')}</FieldLabel>
                 <input
                   id="login-gateway"
                   type="text"
@@ -137,12 +133,7 @@ export function LoginPage() {
             )}
 
             <div>
-              <label
-                htmlFor="login-username"
-                className="block text-xs font-medium text-ink-secondary mb-1.5"
-              >
-                {t('login.username')}
-              </label>
+              <FieldLabel htmlFor="login-username">{t('login.username')}</FieldLabel>
               <input
                 id="login-username"
                 type="text"
@@ -158,13 +149,10 @@ export function LoginPage() {
 
             {isRegister && (
               <div>
-                <label
-                  htmlFor="login-displayname"
-                  className="block text-xs font-medium text-ink-secondary mb-1.5"
-                >
+                <FieldLabel htmlFor="login-displayname">
                   {t('login.displayName')}{' '}
                   <span className="text-ink-muted font-normal">{t('common.optional')}</span>
-                </label>
+                </FieldLabel>
                 <input
                   id="login-displayname"
                   type="text"
@@ -177,12 +165,7 @@ export function LoginPage() {
             )}
 
             <div>
-              <label
-                htmlFor="login-password"
-                className="block text-xs font-medium text-ink-secondary mb-1.5"
-              >
-                {t('login.password')}
-              </label>
+              <FieldLabel htmlFor="login-password">{t('login.password')}</FieldLabel>
               <input
                 id="login-password"
                 type="password"
@@ -199,14 +182,7 @@ export function LoginPage() {
               />
             </div>
 
-            {error && (
-              <div
-                role="alert"
-                className="px-3 py-2 bg-red-900/20 border border-red-800/40 rounded-lg"
-              >
-                <p className="text-red-400 text-xs">{error}</p>
-              </div>
-            )}
+            <StatusMsg error={error} success={null} />
 
             <button
               type="submit"
