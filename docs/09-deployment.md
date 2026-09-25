@@ -18,7 +18,7 @@
 | `migrate` | 一次性任务 | 执行 Drizzle 迁移后退出 |
 | `postgres` | `postgres:18-alpine` | 主数据存储 |
 | `qdrant` | `qdrant/qdrant:v1.19.0` | RAG 知识库的向量检索 |
-| `minio` | `quay.io/minio/minio` | S3 兼容的文件存储 |
+| `minio` | `pgsty/silo` | S3 兼容的文件存储 |
 
 > **不要把 `gateway` 扩到一个副本以上。**WebSocket 连接、A2A 重放 nonce 和限流计数
 > 都存在那个进程的内存里。第二个副本会接受被重放的 A2A 请求(它的 nonce 表是空的)、

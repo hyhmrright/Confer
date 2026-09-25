@@ -20,7 +20,7 @@ One command starts the whole platform:
 | `migrate` | one-shot | runs Drizzle migrations, then exits |
 | `postgres` | `postgres:18-alpine` | primary datastore |
 | `qdrant` | `qdrant/qdrant:v1.19.0` | vector search for the RAG knowledge base |
-| `minio` | `quay.io/minio/minio` | S3-compatible file storage |
+| `minio` | `pgsty/silo` | S3-compatible file storage |
 
 > **Do not scale `gateway` past one replica.** WebSocket connections, A2A replay
 > nonces and rate-limit counters live in that process's memory. A second replica

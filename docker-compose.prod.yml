@@ -33,7 +33,9 @@ services:
       - qdrantdata:/qdrant/storage
 
   minio:
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    # SILO, PGSTY's maintained fork of MinIO: upstream is archived and its
+    # images are gone from Docker Hub and Quay. Same on-disk format and env.
+    image: pgsty/silo:RELEASE.2026-09-16T00-00-00Z
     restart: unless-stopped
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-confer}
