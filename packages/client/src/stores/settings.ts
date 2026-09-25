@@ -1,5 +1,5 @@
 import type { PolicyOverrides } from '@confer/shared';
-import { create } from 'zustand';
+import { create, type StoreApi } from 'zustand';
 import i18n from '../i18n/index.js';
 import { api } from '../lib/api.js';
 import { captureError } from '../lib/error.js';
@@ -69,6 +69,29 @@ interface SettingsState {
   clearMessages: () => void;
 }
 
+type SetSettings = StoreApi<SettingsState>['setState'];
+
+// The shape every settings write shares: clear the banners and raise `saving`,
+// run the request, then either apply its patch or report the failure.
+async function save(
+  set: SetSettings,
+  request: () => Promise<unknown>,
+  onSuccess: (s: SettingsState) => Partial<SettingsState>,
+  failureKey: 'settings.saveFailed' | 'settings.deleteFailed',
+): Promise<void> {
+  set({ saving: true, error: null, success: null });
+  try {
+    await request();
+    set((s) => ({ ...onSuccess(s), saving: false }));
+  } catch (e) {
+    set({ saving: false, error: captureError(e, i18n.t(failureKey)) });
+  }
+}
+
+function setConfigured(keys: LlmKeyEntry[], provider: string, configured: boolean) {
+  return keys.map((k) => (k.provider === provider ? { ...k, configured } : k));
+}
+
 export const useSettingsStore = create<SettingsState>((set) => ({
   agent: null,
   llmKeys: [],
@@ -87,36 +110,30 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     }
   },
 
-  updateAgent: async (patch) => {
-    set({ saving: true, error: null, success: null });
-    try {
-      await api.patch('/agents/me', patch);
-      set((s) => ({
+  updateAgent: (patch) =>
+    save(
+      set,
+      () => api.patch('/agents/me', patch),
+      (s) => ({
         agent: s.agent ? { ...s.agent, ...patch } : s.agent,
-        saving: false,
         success: i18n.t('settings.saveSuccess'),
-      }));
-    } catch (e) {
-      set({ saving: false, error: captureError(e, i18n.t('settings.saveFailed')) });
-    }
-  },
+      }),
+      'settings.saveFailed',
+    ),
 
-  updatePolicies: async (policies) => {
-    set({ saving: true, error: null, success: null });
-    try {
+  updatePolicies: (policies) =>
+    save(
+      set,
       // Whole-object replace. The server stores the body verbatim
       // (`z.record(z.string(), z.unknown())`), so the client is the only guard that the
       // shape is the correct engine vocabulary — hence the `PolicyOverrides` type.
-      await api.put('/agents/me/policies', policies);
-      set((s) => ({
+      () => api.put('/agents/me/policies', policies),
+      (s) => ({
         agent: s.agent ? { ...s.agent, policies_json: policies } : s.agent,
-        saving: false,
         success: i18n.t('settings.saveSuccess'),
-      }));
-    } catch (e) {
-      set({ saving: false, error: captureError(e, i18n.t('settings.saveFailed')) });
-    }
-  },
+      }),
+      'settings.saveFailed',
+    ),
 
   loadLlmKeys: async () => {
     try {
@@ -127,33 +144,27 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     }
   },
 
-  saveLlmKey: async (provider, apiKey) => {
-    set({ saving: true, error: null, success: null });
-    try {
-      await api.put('/agents/me/llm-keys', { provider, api_key: apiKey });
-      set((s) => ({
-        saving: false,
+  saveLlmKey: (provider, apiKey) =>
+    save(
+      set,
+      () => api.put('/agents/me/llm-keys', { provider, api_key: apiKey }),
+      (s) => ({
         success: i18n.t('settings.keySaved', { provider }),
-        llmKeys: s.llmKeys.map((k) => (k.provider === provider ? { ...k, configured: true } : k)),
-      }));
-    } catch (e) {
-      set({ saving: false, error: captureError(e, i18n.t('settings.saveFailed')) });
-    }
-  },
+        llmKeys: setConfigured(s.llmKeys, provider, true),
+      }),
+      'settings.saveFailed',
+    ),
 
-  removeLlmKey: async (provider) => {
-    set({ saving: true, error: null, success: null });
-    try {
-      await api.delete(`/agents/me/llm-keys/${provider}`);
-      set((s) => ({
-        saving: false,
+  removeLlmKey: (provider) =>
+    save(
+      set,
+      () => api.delete(`/agents/me/llm-keys/${provider}`),
+      (s) => ({
         success: i18n.t('settings.keyRemoved', { provider }),
-        llmKeys: s.llmKeys.map((k) => (k.provider === provider ? { ...k, configured: false } : k)),
-      }));
-    } catch (e) {
-      set({ saving: false, error: captureError(e, i18n.t('settings.deleteFailed')) });
-    }
-  },
+        llmKeys: setConfigured(s.llmKeys, provider, false),
+      }),
+      'settings.deleteFailed',
+    ),
 
   fetchModels: async (provider) => {
     try {

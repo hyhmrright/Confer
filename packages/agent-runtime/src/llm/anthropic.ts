@@ -1,3 +1,4 @@
+import { readCappedText } from '@confer/shared';
 import type {
   Fetcher,
   LLMChatOptions,
@@ -6,7 +7,7 @@ import type {
   LLMResponse,
   LLMStreamEvent,
 } from './provider.js';
-import { readSSEData } from './stream-utils.js';
+import { MAX_ERROR_BYTES, MAX_RESPONSE_BYTES, readSSEData } from './stream-utils.js';
 
 function toAnthropicMessages(messages: LLMMessage[]): unknown[] {
   return messages
@@ -82,11 +83,14 @@ export class AnthropicProvider implements LLMProvider {
     const response = await this.post(body);
 
     if (!response.ok) {
-      const text = await response.text();
+      const text = await readCappedText(response, MAX_ERROR_BYTES).catch(() => '');
       throw new Error(`Anthropic API error (${response.status}): ${text}`);
     }
 
-    const data = (await response.json()) as Record<string, unknown>;
+    const data = JSON.parse(await readCappedText(response, MAX_RESPONSE_BYTES)) as Record<
+      string,
+      unknown
+    >;
     const content = (data.content as Array<{ type: string; text?: string }>)
       .filter((b) => b.type === 'text')
       .map((b) => b.text)

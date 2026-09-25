@@ -63,6 +63,18 @@ export async function assertIsConversationParticipant(
   convId: string,
   db: Database = getDb(),
 ): Promise<void> {
+  if (!(await isConversationParticipant(userId, convId, db))) {
+    throw new AppError('forbidden', 'Not a participant', 403);
+  }
+}
+
+// The membership check itself, for callers that answer a refusal their own way
+// (the WebSocket subscribe path has no HTTP status to throw).
+export async function isConversationParticipant(
+  userId: string,
+  convId: string,
+  db: Database = getDb(),
+): Promise<boolean> {
   const [participant] = await db
     .select({ id: conversationParticipants.id })
     .from(conversationParticipants)
@@ -73,10 +85,7 @@ export async function assertIsConversationParticipant(
       ),
     )
     .limit(1);
-
-  if (!participant) {
-    throw new AppError('forbidden', 'Not a participant', 403);
-  }
+  return Boolean(participant);
 }
 
 // Ownership gate for destructive/owner-only conversation operations: the caller
@@ -87,13 +96,21 @@ export async function assertOwnsConversation(
   convId: string,
   db: Database = getDb(),
 ): Promise<void> {
+  if (!(await ownsConversation(userId, convId, db))) {
+    throw new AppError('not_found', 'Conversation not found', 404);
+  }
+}
+
+// The ownership check itself, non-throwing (see `isConversationParticipant`).
+export async function ownsConversation(
+  userId: string,
+  convId: string,
+  db: Database = getDb(),
+): Promise<boolean> {
   const [conv] = await db
     .select({ id: conversations.id })
     .from(conversations)
     .where(and(eq(conversations.id, convId), eq(conversations.created_by, userId)))
     .limit(1);
-
-  if (!conv) {
-    throw new AppError('not_found', 'Conversation not found', 404);
-  }
+  return Boolean(conv);
 }

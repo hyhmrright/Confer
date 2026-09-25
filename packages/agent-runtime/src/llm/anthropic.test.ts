@@ -193,6 +193,15 @@ describe('chat', () => {
       new AnthropicProvider('k').chat([{ role: 'user', content: 'hi' }]),
     ).rejects.toThrow(/Anthropic API error \(500\)/);
   });
+
+  // The base URL is configurable, so the far side is not necessarily Anthropic.
+  test('refuses a reply larger than any completion', async () => {
+    const huge = `{"pad":"${'x'.repeat(2 * 1024 * 1024)}"}`;
+    const provider = new AnthropicProvider('k', 'https://api.test', async () => new Response(huge));
+    await expect(provider.chat([{ role: 'user', content: 'hi' }])).rejects.toThrow(
+      'response too large',
+    );
+  });
 });
 
 describe('stream', () => {

@@ -97,8 +97,7 @@ async function sendToPeer(
       thread_id: peerThreadId ?? conversationId,
       message,
     },
-    key.value.keyId,
-    key.value.privateKeyJwk,
+    key.value,
   );
 
   if (!result.ok) {

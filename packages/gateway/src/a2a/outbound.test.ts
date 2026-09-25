@@ -2,15 +2,19 @@ import { afterEach, beforeAll, describe, expect, test } from 'bun:test';
 import { exportPrivateKey, generateEd25519KeyPair } from '@confer/identity';
 import { selfA2AEndpoint } from '../lib/public-identity.js';
 import { sendA2AMessage } from './outbound.js';
+import type { AgentSigningKey } from './signing.js';
 
 // Real Ed25519 signing is used (no identity mock) so this file never leaks a
 // stubbed @confer/identity into sibling tests under bun's process-global
 // mock.module. Only fetch is stubbed.
-let signingJwk: string;
+let signingKey: AgentSigningKey;
 
 beforeAll(async () => {
   const kp = await generateEd25519KeyPair();
-  signingJwk = JSON.stringify(await exportPrivateKey(kp.privateKey));
+  signingKey = {
+    keyId: 'did:web:me#k1',
+    privateKeyJwk: JSON.stringify(await exportPrivateKey(kp.privateKey)),
+  };
 });
 
 function stubFetch(impl: (req: Request, init?: RequestInit) => Response | Promise<Response>): void {
@@ -61,7 +65,7 @@ describe('sendA2AMessage', () => {
       return Response.json({ message_id: 'm1', thread_id: 't-1', stream_url: '/a2a/v1/stream/m1' });
     });
 
-    const res = await sendA2AMessage('https://peer.test/a2a/v1', MSG, 'did:web:me#k1', signingJwk);
+    const res = await sendA2AMessage('https://peer.test/a2a/v1', MSG, signingKey);
 
     expect(res.ok).toBe(true);
     if (res.ok) expect(res.value.message_id).toBe('m1');
@@ -83,13 +87,13 @@ describe('sendA2AMessage', () => {
         { status: 403 },
       ),
     );
-    const res = await sendA2AMessage('https://peer.test/a2a/v1', MSG, 'did:web:me#k1', signingJwk);
+    const res = await sendA2AMessage('https://peer.test/a2a/v1', MSG, signingKey);
     expect(res).toEqual({ ok: false, error: 'Remote returned 403 (not_a_contact)' });
   });
 
   test('err carries no code when the body is not our error shape', async () => {
     stubFetch(() => new Response('denied', { status: 500 }));
-    const res = await sendA2AMessage('https://peer.test/a2a/v1', MSG, 'did:web:me#k1', signingJwk);
+    const res = await sendA2AMessage('https://peer.test/a2a/v1', MSG, signingKey);
     expect(res).toEqual({ ok: false, error: 'Remote returned 500' });
   });
 
@@ -112,7 +116,7 @@ describe('sendA2AMessage', () => {
       'https://peer.test/a2a/v1#',
       'not a url',
     ]) {
-      const res = await sendA2AMessage(endpoint, MSG, 'did:web:me#k1', signingJwk);
+      const res = await sendA2AMessage(endpoint, MSG, signingKey);
       expect(res.ok).toBe(false);
     }
     expect(dialled).toBe(false);
@@ -124,7 +128,7 @@ describe('sendA2AMessage', () => {
       redirect = init?.redirect;
       return new Response(null, { status: 307, headers: { location: 'http://qdrant:6333/' } });
     });
-    const res = await sendA2AMessage('https://peer.test/a2a/v1', MSG, 'did:web:me#k1', signingJwk);
+    const res = await sendA2AMessage('https://peer.test/a2a/v1', MSG, signingKey);
     expect(redirect).toBe('manual');
     expect(res).toEqual({ ok: false, error: 'Remote returned 307' });
   });
@@ -135,7 +139,7 @@ describe('sendA2AMessage', () => {
       dialledUrl = req.url;
       return Response.json({ message_id: 'm1', thread_id: 't-1', stream_url: '/s' });
     });
-    const res = await sendA2AMessage(selfA2AEndpoint(), MSG, 'did:web:me#k1', signingJwk);
+    const res = await sendA2AMessage(selfA2AEndpoint(), MSG, signingKey);
     expect(res.ok).toBe(true);
     expect(dialledUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/a2a\/v1\/messages$/);
   });
@@ -153,7 +157,7 @@ describe('sendA2AMessage', () => {
       `${selfA2AEndpoint()}/x?`,
       `${selfA2AEndpoint()}/x#`,
     ]) {
-      const res = await sendA2AMessage(endpoint, MSG, 'did:web:me#k1', signingJwk);
+      const res = await sendA2AMessage(endpoint, MSG, signingKey);
       expect(res.ok).toBe(false);
     }
     expect(dialled).toBe(false);
@@ -162,7 +166,7 @@ describe('sendA2AMessage', () => {
   // The parser's own error quotes the body it choked on.
   test('reports a 2xx that is not JSON without repeating it', async () => {
     stubFetch(() => new Response('secretvalue', { status: 200 }));
-    const res = await sendA2AMessage('https://peer.test/a2a/v1', MSG, 'did:web:me#k1', signingJwk);
+    const res = await sendA2AMessage('https://peer.test/a2a/v1', MSG, signingKey);
     expect(res).toEqual({ ok: false, error: 'Remote returned a response that is not JSON' });
   });
 
@@ -172,12 +176,15 @@ describe('sendA2AMessage', () => {
     stubFetch(() => {
       throw new Error('connection refused');
     });
-    const res = await sendA2AMessage('https://peer.test/a2a/v1', MSG, 'did:web:me#k1', signingJwk);
+    const res = await sendA2AMessage('https://peer.test/a2a/v1', MSG, signingKey);
     expect(res).toEqual({ ok: false, error: 'sendA2AMessage failed' });
   });
 
   test('err when the private key JWK is malformed', async () => {
-    const res = await sendA2AMessage('https://peer.test/a2a/v1', MSG, 'k', 'not-json');
+    const res = await sendA2AMessage('https://peer.test/a2a/v1', MSG, {
+      keyId: 'k',
+      privateKeyJwk: 'not-json',
+    });
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toContain('sendA2AMessage failed');
   });

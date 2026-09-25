@@ -71,6 +71,10 @@ function mergeDocs(cached: KnowledgeDocument[], page: KnowledgeDocument[]): Know
   return prependNew(refreshed, page);
 }
 
+function omitKey<T>(record: Record<string, T>, key: string): Record<string, T> {
+  return Object.fromEntries(Object.entries(record).filter(([k]) => k !== key));
+}
+
 export const useKbStore = create<KbState>((set, get) => ({
   kbs: [],
   documents: {},
@@ -101,10 +105,8 @@ export const useKbStore = create<KbState>((set, get) => ({
     await api.delete(`/knowledge-bases/${kbId}`);
     set((s) => ({
       kbs: s.kbs.filter((kb) => kb.id !== kbId),
-      documents: Object.fromEntries(Object.entries(s.documents).filter(([k]) => k !== kbId)),
-      documentsTotal: Object.fromEntries(
-        Object.entries(s.documentsTotal).filter(([k]) => k !== kbId),
-      ),
+      documents: omitKey(s.documents, kbId),
+      documentsTotal: omitKey(s.documentsTotal, kbId),
     }));
   },
 

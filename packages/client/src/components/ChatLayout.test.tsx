@@ -8,11 +8,10 @@ import { MemoryRouter } from 'react-router';
 // half: that `inert` lands on the main content only while the drawer actually
 // covers it, and that the drawer gets out of the way once it has been used.
 
-// Longest prefix first: `/errands` would otherwise swallow the cards endpoint
-// and land `undefined` in the store, which ErrandInbox reads without a guard.
+// Without the cards arm the store lands `undefined`, which ErrandInbox reads
+// without a guard.
 const get = mock(async (path: string) => {
   if (path.startsWith('/errands/cards/pending')) return { cards: [] };
-  if (path.startsWith('/errands')) return { errands: [] };
   if (path.startsWith('/conversations')) return { conversations: [], messages: [] };
   if (path.startsWith('/permissions')) return { permissions: [] };
   if (path.startsWith('/contacts')) return { contacts: [] };

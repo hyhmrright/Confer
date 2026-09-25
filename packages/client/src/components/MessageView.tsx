@@ -219,7 +219,7 @@ export function MessageView() {
               onClick={handleSend}
               disabled={!canSend}
               className={`p-2 rounded-lg bg-primary-600 text-white hover:bg-primary-500
-                ${DISABLED_FILLED} disabled:cursor-not-allowed transition-all shrink-0`}
+                ${DISABLED_FILLED} transition-all shrink-0`}
             >
               <Send className="w-4 h-4" />
             </button>

@@ -1,6 +1,7 @@
 import { assertPublicHostname, importPrivateKey, signRequest } from '@confer/identity';
 import { err, ok, type Result, readCappedText } from '@confer/shared';
 import { dialableEndpoint, selfA2AEndpoint } from '../lib/public-identity.js';
+import type { AgentSigningKey } from './signing.js';
 
 export interface OutboundA2AMessage {
   from: string;
@@ -29,8 +30,7 @@ const MAX_RESPONSE_BYTES = 64 * 1024;
 export async function sendA2AMessage(
   endpoint: string,
   message: OutboundA2AMessage,
-  signerKeyId: string,
-  privateKeyJwk: string,
+  key: AgentSigningKey,
 ): Promise<Result<OutboundResult, string>> {
   try {
     const body = JSON.stringify(message);
@@ -58,8 +58,8 @@ export async function sendA2AMessage(
       body,
     });
 
-    const privateKey = await importPrivateKey(JSON.parse(privateKeyJwk) as JsonWebKey);
-    const signedRequest = await signRequest(baseRequest, privateKey, signerKeyId);
+    const privateKey = await importPrivateKey(JSON.parse(key.privateKeyJwk) as JsonWebKey);
+    const signedRequest = await signRequest(baseRequest, privateKey, key.keyId);
 
     // `manual`: the address was vetted, not wherever it redirects to.
     const response = await fetch(signedRequest, {

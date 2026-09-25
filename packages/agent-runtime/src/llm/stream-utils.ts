@@ -14,6 +14,12 @@
 // for a local runtime, that side is any host the owner can name.
 const MAX_LINE_CHARS = 1024 * 1024;
 
+// The most of a non-streamed reply either provider reads into memory. A
+// completion stops at max_tokens, so this is generous; without it the far side
+// decided how much this process buffered.
+export const MAX_RESPONSE_BYTES = 1024 * 1024;
+export const MAX_ERROR_BYTES = 16 * 1024;
+
 export async function* readSSEData(body: ReadableStream<Uint8Array>): AsyncIterable<string> {
   const reader = body.getReader();
   const decoder = new TextDecoder();

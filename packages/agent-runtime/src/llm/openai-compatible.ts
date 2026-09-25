@@ -7,13 +7,7 @@ import type {
   LLMResponse,
   LLMStreamEvent,
 } from './provider.js';
-import { readSSEData } from './stream-utils.js';
-
-// The most of a reply read into memory. A completion stops at max_tokens, so
-// this is generous; without it the far side — for a local runtime, any host the
-// owner can name — decided how much this process buffered.
-const MAX_RESPONSE_BYTES = 1024 * 1024;
-const MAX_ERROR_BYTES = 16 * 1024;
+import { MAX_ERROR_BYTES, MAX_RESPONSE_BYTES, readSSEData } from './stream-utils.js';
 
 function toOpenAIMessage(m: LLMMessage): Record<string, unknown> {
   if (m.role === 'tool') {
