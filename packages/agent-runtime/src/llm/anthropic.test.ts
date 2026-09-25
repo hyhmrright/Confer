@@ -283,19 +283,82 @@ describe('prompt caching', () => {
     }
   }
 
-  test('marks only the first system block, so a per-turn one after it cannot spoil the cache', async () => {
+  test('marks a message the caller flagged, as well as the last one', async () => {
+    // The end of the stored history is what the next turn's prompt will start
+    // with; the current question carries per-turn context and will not.
     mockFetch(done);
     await drain(
       new AnthropicProvider('k').stream([
-        { role: 'system', content: 'stable instructions' },
-        { role: 'system', content: 'memories for this turn' },
-        { role: 'user', content: 'hi' },
+        { role: 'user', content: 'earlier question' },
+        { role: 'assistant', content: 'earlier answer', cache_breakpoint: true },
+        { role: 'user', content: 'memories\n\nnew question' },
       ]),
     );
-    expect(lastBody().system).toEqual([
-      { type: 'text', text: 'stable instructions', cache_control: { type: 'ephemeral' } },
-      { type: 'text', text: 'memories for this turn' },
+    const sent = lastBody().messages as Array<{ content: unknown }>;
+    expect(sent[0]?.content).toBe('earlier question');
+    expect(sent[1]?.content).toEqual([
+      { type: 'text', text: 'earlier answer', cache_control: { type: 'ephemeral' } },
     ]);
+    expect(sent[2]?.content).toEqual([
+      { type: 'text', text: 'memories\n\nnew question', cache_control: { type: 'ephemeral' } },
+    ]);
+  });
+
+  // Anthropic refuses more than four. Counted on the serialized body, since
+  // that is what the API counts.
+  const breakpoints = () => JSON.stringify(lastBody()).split('"cache_control"').length - 1;
+
+  test('uses three breakpoints in a tool round: system, end of history, last block', async () => {
+    mockFetch(done);
+    await drain(
+      new AnthropicProvider('k').stream(
+        [
+          { role: 'system', content: 'instructions' },
+          { role: 'user', content: 'earlier' },
+          { role: 'assistant', content: 'answer', cache_breakpoint: true },
+          { role: 'user', content: 'question' },
+          {
+            role: 'assistant',
+            content: null,
+            tool_calls: [{ id: 't1', type: 'function', function: { name: 'f', arguments: '{}' } }],
+          },
+          { role: 'tool', content: 'result', tool_call_id: 't1' },
+        ],
+        { tools: [{ name: 'f', description: 'd', parameters: { type: 'object' } }] },
+      ),
+    );
+    expect(breakpoints()).toBe(3);
+  });
+
+  test('honours only the last flag when several messages carry one', async () => {
+    mockFetch(done);
+    await drain(
+      new AnthropicProvider('k').stream([
+        { role: 'system', content: 'instructions' },
+        { role: 'user', content: 'a', cache_breakpoint: true },
+        { role: 'assistant', content: 'b', cache_breakpoint: true },
+        { role: 'user', content: 'c', cache_breakpoint: true },
+        { role: 'assistant', content: 'd', cache_breakpoint: true },
+        { role: 'user', content: 'e' },
+      ]),
+    );
+    const sent = lastBody().messages as Array<{ content: unknown }>;
+    expect(sent[0]?.content).toBe('a');
+    expect(sent[3]?.content).toEqual([
+      { type: 'text', text: 'd', cache_control: { type: 'ephemeral' } },
+    ]);
+    expect(breakpoints()).toBe(3);
+  });
+
+  test('never sends the flag itself to the API', async () => {
+    mockFetch(done);
+    await drain(
+      new AnthropicProvider('k').stream([
+        { role: 'assistant', content: 'a', cache_breakpoint: true },
+        { role: 'user', content: 'q' },
+      ]),
+    );
+    expect(JSON.stringify(lastBody())).not.toContain('cache_breakpoint');
   });
 
   test("marks the conversation's last block, so later tool rounds reuse it", async () => {

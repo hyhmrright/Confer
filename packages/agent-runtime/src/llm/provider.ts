@@ -9,6 +9,13 @@ export interface LLMMessage {
   content: string | null;
   tool_calls?: LLMToolCallBlock[];
   tool_call_id?: string;
+  /**
+   * The prompt up to and including this message will recur on the next
+   * request, so a provider with explicit caching should mark it. Only a hint:
+   * a provider that caches on its own, or not at all, ignores it. Flag one
+   * message; if several are, only the last counts.
+   */
+  cache_breakpoint?: boolean;
 }
 
 export interface LLMToolCall {

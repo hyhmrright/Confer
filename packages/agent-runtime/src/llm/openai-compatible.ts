@@ -21,22 +21,6 @@ function toOpenAIMessage(m: LLMMessage): Record<string, unknown> {
 }
 
 /**
- * Several system messages are the caller marking where the stable part of the
- * prompt ends, for Anthropic's explicit cache breakpoints (see anthropic.ts).
- * OpenAI-shape vendors cache a matching prefix on their own with no marker, and
- * not every one of them — nor every local model's chat template — honours more
- * than one system message, so they still go out as the single one they were.
- */
-function foldSystemMessages(messages: LLMMessage[]): LLMMessage[] {
-  const system = messages
-    .filter((m) => m.role === 'system' && m.content)
-    .map((m) => m.content)
-    .join('\n');
-  const rest = messages.filter((m) => m.role !== 'system');
-  return system ? [{ role: 'system', content: system }, ...rest] : rest;
-}
-
-/**
  * Usage as reported. Cache hits are already inside `prompt_tokens` here, unlike
  * Anthropic's; the hit count sits in OpenAI's `prompt_tokens_details`, in
  * DeepSeek's `prompt_cache_hit_tokens`, or at the top level (Moonshot). None of
@@ -95,7 +79,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
   private baseBody(messages: LLMMessage[], options?: LLMChatOptions): Record<string, unknown> {
     return {
       model: this.resolveModel(options),
-      messages: foldSystemMessages(messages).map(toOpenAIMessage),
+      messages: messages.map(toOpenAIMessage),
       temperature: options?.temperature,
       max_tokens: options?.max_tokens ?? 4096,
     };

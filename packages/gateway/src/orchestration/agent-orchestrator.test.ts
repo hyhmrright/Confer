@@ -363,7 +363,34 @@ describe('prompt cache accounting', () => {
     expect(groundingLine()).not.toContain('cache_read');
   });
 
-  test('sends the stable system prompt as its own message when nothing was recalled', async () => {
+  test('flags the end of the stored history, and sends the question as it was written', async () => {
+    let sent: LLMMessage[] = [];
+    const provider: LLMProvider = {
+      name: 'scripted',
+      async chat(): Promise<LLMResponse> {
+        throw new Error('not used');
+      },
+      async *stream(messages): AsyncGenerator<LLMStreamEvent> {
+        sent = messages;
+        yield token('ok');
+      },
+    };
+    await runAgentTurn({
+      ...baseOpts,
+      history: [
+        { role: 'user', content: '上一个问题' },
+        { role: 'assistant', content: '上一个回答' },
+      ],
+      provider,
+    });
+    expect(sent.slice(1)).toEqual([
+      { role: 'user', content: '上一个问题' },
+      { role: 'assistant', content: '上一个回答', cache_breakpoint: true },
+      { role: 'user', content: '你好' },
+    ]);
+  });
+
+  test('sends exactly one system message: the system prompt', async () => {
     let sent: LLMMessage[] = [];
     const provider: LLMProvider = {
       name: 'scripted',

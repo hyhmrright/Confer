@@ -23,49 +23,48 @@ interface AnthropicMessage {
 const CACHE_BREAKPOINT = { type: 'ephemeral' } as const;
 
 /**
- * One text block per system message, the FIRST marked as a cache breakpoint.
- * The caller's contract: what is identical turn after turn goes in the first
- * system message, and anything that varies per turn (recalled memories) in a
- * later one. Joining them into one string, as this did, put the per-turn part
- * inside the only block there was, so nothing before it could be reused.
+ * The system prompt as one text block marked as a cache breakpoint. Tools come
+ * before it in the prefix, so this one mark caches the tool definitions too.
  */
 function toAnthropicSystem(messages: LLMMessage[]): AnthropicBlock[] | undefined {
-  const blocks: AnthropicBlock[] = messages
-    // A whitespace-only text block is rejected just like an empty one.
-    .filter((m) => m.role === 'system' && m.content?.trim())
-    .map((m) => ({ type: 'text', text: m.content }));
-  const [first] = blocks;
-  if (!first) return undefined;
-  first.cache_control = CACHE_BREAKPOINT;
-  return blocks;
+  const text = messages.find((m) => m.role === 'system')?.content;
+  // A blank text block is rejected just like an empty one.
+  if (!text?.trim()) return undefined;
+  return [{ type: 'text', text, cache_control: CACHE_BREAKPOINT }];
+}
+
+/** The same message with its last content block marked as a cache breakpoint. */
+function markLastBlock(message: AnthropicMessage): AnthropicMessage {
+  let blocks: AnthropicBlock[];
+  if (typeof message.content !== 'string') {
+    blocks = message.content;
+  } else if (message.content.trim()) {
+    blocks = [{ type: 'text', text: message.content }];
+  } else {
+    // An empty or blank text block is a 400, so such a message is left as the
+    // plain string it was.
+    return message;
+  }
+  const tail = blocks.at(-1);
+  if (!tail) return message;
+  return {
+    ...message,
+    content: [...blocks.slice(0, -1), { ...tail, cache_control: CACHE_BREAKPOINT }],
+  };
 }
 
 /**
- * Mark the conversation's last block as a breakpoint too. Within a turn every
- * tool round resends the whole conversation plus one more exchange, so round
- * two onward reads everything up to here from the cache instead of paying for
- * it again; across turns the same holds for the history, as long as nothing
- * earlier in the prompt changed.
+ * Mark the conversation's last block too. Within a turn every tool round
+ * resends the whole conversation plus one more exchange, so round two onward
+ * reads everything up to here from the cache instead of paying for it again.
+ * On a turn with no tool calls nothing reads this entry back; the write premium
+ * then covers only the tokens after the caller's own breakpoint, which is the
+ * question, so it is not worth a special case.
  */
 function withTrailingBreakpoint(messages: AnthropicMessage[]): AnthropicMessage[] {
   const last = messages.at(-1);
   if (!last) return messages;
-  let blocks: AnthropicBlock[];
-  if (typeof last.content !== 'string') {
-    blocks = last.content;
-  } else if (last.content.trim()) {
-    blocks = [{ type: 'text', text: last.content }];
-  } else {
-    // An empty or blank text block is a 400, so such a message is left as the
-    // plain string it was.
-    return messages;
-  }
-  const tail = blocks.at(-1);
-  if (!tail) return messages;
-  return [
-    ...messages.slice(0, -1),
-    { ...last, content: [...blocks.slice(0, -1), { ...tail, cache_control: CACHE_BREAKPOINT }] },
-  ];
+  return [...messages.slice(0, -1), markLastBlock(last)];
 }
 
 /**
@@ -85,31 +84,41 @@ function inputUsage(u: Record<string, unknown>): Omit<LLMUsage, 'completion_toke
   };
 }
 
+/**
+ * Only the LAST flagged message is marked. Anthropic refuses a request with
+ * more than four breakpoints, and the system block and the trailing one take
+ * two; honouring every flag would turn a second one from some future caller
+ * into a 400 rather than a slightly smaller cache.
+ */
 function toAnthropicMessages(messages: LLMMessage[]): AnthropicMessage[] {
-  return messages
-    .filter((m) => m.role !== 'system')
-    .map((m): AnthropicMessage => {
-      if (m.role === 'tool') {
-        return {
-          role: 'user',
-          content: [{ type: 'tool_result', tool_use_id: m.tool_call_id, content: m.content ?? '' }],
-        };
-      }
-      if (m.tool_calls?.length) {
-        const content: AnthropicBlock[] = [];
-        if (m.content) content.push({ type: 'text', text: m.content });
-        for (const tc of m.tool_calls) {
-          content.push({
-            type: 'tool_use',
-            id: tc.id,
-            name: tc.function.name,
-            input: JSON.parse(tc.function.arguments || '{}'),
-          });
-        }
-        return { role: 'assistant', content };
-      }
-      return { role: m.role, content: m.content ?? '' };
-    });
+  const conversation = messages.filter((m) => m.role !== 'system');
+  const flagged = conversation.findLastIndex((m) => m.cache_breakpoint);
+  return conversation.map((m, i) =>
+    i === flagged ? markLastBlock(toAnthropicMessage(m)) : toAnthropicMessage(m),
+  );
+}
+
+function toAnthropicMessage(m: LLMMessage): AnthropicMessage {
+  if (m.role === 'tool') {
+    return {
+      role: 'user',
+      content: [{ type: 'tool_result', tool_use_id: m.tool_call_id, content: m.content ?? '' }],
+    };
+  }
+  if (m.tool_calls?.length) {
+    const content: AnthropicBlock[] = [];
+    if (m.content) content.push({ type: 'text', text: m.content });
+    for (const tc of m.tool_calls) {
+      content.push({
+        type: 'tool_use',
+        id: tc.id,
+        name: tc.function.name,
+        input: JSON.parse(tc.function.arguments || '{}'),
+      });
+    }
+    return { role: 'assistant', content };
+  }
+  return { role: m.role, content: m.content ?? '' };
 }
 
 export class AnthropicProvider implements LLMProvider {

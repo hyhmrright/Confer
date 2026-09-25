@@ -14,11 +14,12 @@ import {
   seedUser,
 } from '../test/helpers.js';
 
-// The durable fact stored on turn 1 and expected back in the turn-2 system prompt.
+// The durable fact stored on turn 1 and expected back in turn 2's prompt.
 const FACT = '用户偏好 TypeScript';
 
-// System prompts seen by the *streaming* (reply) LLM calls, captured for assertions.
-let capturedSystemPrompts: string[] = [];
+// The message list of each *streaming* (reply) LLM call, captured for assertions.
+type WireMessage = { role: string; content: string };
+let capturedStreamCalls: WireMessage[][] = [];
 
 // Deterministic embedding stub. Any text mentioning 'TypeScript' maps to one
 // fixed hot index, so the turn-2 query ('TypeScript 有什么技巧') and the stored
@@ -41,8 +42,8 @@ function embedVector(text: string): number[] {
 // streaming reply path and the fire-and-forget extraction path BOTH hit
 // /chat/completions; they are distinguished by body.stream:
 //   - stream:true  → the streamed assistant reply (deliberately does NOT contain
-//                    the fact, so the only way FACT reaches the turn-2 system
-//                    prompt is via memory recall injection). System prompt captured.
+//                    the fact, so the only way FACT reaches the turn-2 prompt
+//                    is via memory recall injection). Messages captured.
 //   - stream:false → the extraction call; extractFacts() does response.json(),
 //                    so this MUST be plain JSON (not SSE) returning the fact list.
 function mockOpenAIAndEmbedding(replyText: string, facts: string[]): () => void {
@@ -58,10 +59,10 @@ function mockOpenAIAndEmbedding(replyText: string, facts: string[]): () => void 
     if (url.includes('/chat/completions')) {
       const body = JSON.parse(String(init?.body ?? '{}')) as {
         stream?: boolean;
-        messages: Array<{ role: string; content: string }>;
+        messages: WireMessage[];
       };
       if (body.stream) {
-        capturedSystemPrompts.push(body.messages.find((m) => m.role === 'system')?.content ?? '');
+        capturedStreamCalls.push(body.messages);
         const chunks = [
           `data: ${JSON.stringify({ choices: [{ delta: { content: replyText } }] })}\n\n`,
           'data: [DONE]\n\n',
@@ -145,12 +146,12 @@ describe('stream long-term memory', () => {
   beforeEach(async () => {
     await resetDb();
     await ensureMemoryCollection();
-    capturedSystemPrompts = [];
+    capturedStreamCalls = [];
   });
 
   afterEach(() => restore?.());
 
-  test('a fact stored on turn 1 is injected into the system prompt on turn 2', async () => {
+  test('a fact stored on turn 1 is recalled into turn 2, behind an unchanged prefix', async () => {
     const { u, convId } = await setupUserWithAgent();
     await deleteMemory(u.id, undefined);
 
@@ -184,8 +185,9 @@ describe('stream long-term memory', () => {
     expect(recallable).toBeGreaterThan(0);
 
     // Turn 2: a related query. The streamed reply ('明白') does NOT contain FACT,
-    // so the only path for FACT into the system prompt is recall injection.
-    capturedSystemPrompts = [];
+    // so the only path for FACT into the prompt is recall injection.
+    const [turn1] = capturedStreamCalls;
+    capturedStreamCalls = [];
     restore = mockOpenAIAndEmbedding('明白', []);
     const msg2 = await postUserMessage(convId, u.id, 'TypeScript 有什么技巧');
     const res2 = await apiRequest(`/api/v1/stream/${convId}/${msg2}`, {
@@ -197,9 +199,19 @@ describe('stream long-term memory', () => {
     restore = undefined;
 
     // Exactly one streaming reply call should have happened on turn 2.
-    expect(capturedSystemPrompts.length).toBe(1);
-    const sysPrompt = capturedSystemPrompts[0];
-    expect(sysPrompt).toContain(FACT);
+    expect(capturedStreamCalls.length).toBe(1);
+    const turn2 = capturedStreamCalls[0] ?? [];
+    expect(turn2.at(-1)?.role).toBe('user');
+    expect(turn2.at(-1)?.content).toContain(FACT);
+    expect(turn2.find((m) => m.role === 'system')?.content).not.toContain(FACT);
+
+    // What the prompt cache depends on, checked on the wire: turn 2 begins with
+    // exactly what turn 1 sent. That holds here only because turn 1 recalled
+    // nothing (the memory store was empty); a turn-1 question carrying memories
+    // would, by design, come back bare in turn 2's history. Recall used to write into the system prompt,
+    // so the first message already differed and nothing could be reused.
+    expect(turn1).toBeDefined();
+    expect(turn2.slice(0, turn1?.length)).toEqual(turn1 ?? []);
   });
 
   test('stream completes and persists the reply even if memory (embedding) fails', async () => {

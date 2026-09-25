@@ -43,8 +43,8 @@ export interface AgentTurnEmit {
 
 export interface RunAgentTurnOptions {
   provider: LLMProvider;
-  // Base system prompt; the KB instruction is appended to it, and recalled
-  // memories go in a separate system message after it. Sourced per caller (chat: model_config.system_prompt; A2A: agent.description).
+  // Base system prompt, to which the KB instruction is appended. Sourced per
+  // caller (chat: model_config.system_prompt; A2A: agent.description).
   systemPromptBase: string;
   // Model id from the owner's agent settings (`model_config.model`). Undefined
   // falls back to the provider's own default — which for Ollama is a model the
@@ -346,9 +346,10 @@ function kbState(hasKb: boolean, toolsUsed: string[]): string {
 }
 
 // Run one agent turn: recall durable memories, append the KB instruction to the
-// base system prompt, put recalled memories in a second system message, offer
-// the resolved tools, and drive the tool loop. Memory recall is best-effort — a failure is logged
-// (userId only, never message content) and the turn proceeds without it.
+// base system prompt, put recalled memories in front of the question, offer the
+// resolved tools, and drive the tool loop. Memory recall is best-effort — a
+// failure is logged (userId only, never message content) and the turn proceeds
+// without it.
 export async function runAgentTurn(opts: RunAgentTurnOptions): Promise<RunAgentTurnResult> {
   let recall: MemoryRecall | undefined;
   if (opts.embeddingKey && opts.recallMemory) {
@@ -366,19 +367,34 @@ export async function runAgentTurn(opts: RunAgentTurnOptions): Promise<RunAgentT
 
   const tools = buildToolDefinitions(opts);
 
-  // Two system messages, stable first. Recalled memories depend on this turn's
-  // question, so they change nearly every turn, and a prompt cache is a prefix
-  // match: whatever follows a changed part misses with it. Kept apart, the
-  // agent's own instructions and the tool set before them are still reused;
-  // folded into one string, as before, nothing was. OpenAI-shape
-  // providers fold the two back into one message with a newline between, which
-  // is the prompt this used to build.
-  const memoryFragment = recall?.fragment;
+  // Ordered for the prompt cache, which every provider applies as a PREFIX
+  // match: whatever follows a changed part misses with it. What is the same
+  // from one turn to the next comes first — instructions, then the stored
+  // history — and what depends on this turn's question comes last.
+  //
+  // Recalled memories are the per-turn part, so they ride in front of the
+  // question — the one message that is new anyway. The history row keeps the
+  // bare question, which is what makes the next turn's prefix match.
+  //
+  // The last history message is flagged because it is where the next turn's
+  // prompt stops matching this one: next turn, this question comes back from
+  // the database without its memories. Marking the end of the history lets a
+  // provider with explicit caching (Anthropic) write that shared prefix, rather
+  // than only the full prompt, which nothing will send again.
+  //
+  // All of this holds while the conversation fits the caller's history window
+  // (20 messages). Past that, each turn drops the oldest messages, the history
+  // no longer begins as it did, and only the system prompt and tools still hit.
+  const history = opts.history.map((m, i) =>
+    i === opts.history.length - 1 ? { ...m, cache_breakpoint: true } : m,
+  );
+  const question = recall?.fragment
+    ? `${recall.fragment}\n\n${opts.userMessage}`
+    : opts.userMessage;
   const initialMessages: LLMMessage[] = [
     { role: 'system', content: buildSystemPrompt(opts.systemPromptBase, opts.hasKb) },
-    ...(memoryFragment ? [{ role: 'system' as const, content: memoryFragment }] : []),
-    ...opts.history,
-    { role: 'user', content: opts.userMessage },
+    ...history,
+    { role: 'user', content: question },
   ];
 
   const citations: KbCitation[] = [];

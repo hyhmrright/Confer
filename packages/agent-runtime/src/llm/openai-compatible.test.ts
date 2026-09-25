@@ -67,19 +67,13 @@ describe('toOpenAIMessage (via request body)', () => {
     expect(sent[0]).toEqual({ role: 'user', content: 'hi' });
   });
 
-  test('folds split system messages back into the single one vendors expect', async () => {
-    // The orchestrator splits them for Anthropic's cache breakpoints; a local
-    // model's chat template may read only one system message.
+  test('drops the cache hint, which is not a field any vendor defines', async () => {
+    // These vendors cache a matching prefix on their own; an unknown field is
+    // a 400 at some of them.
     mockFetch(() => chatResponse({}));
-    await provider().chat([
-      { role: 'system', content: 'stable' },
-      { role: 'system', content: 'per turn' },
-      { role: 'user', content: 'hi' },
-    ]);
-    expect(lastBody().messages).toEqual([
-      { role: 'system', content: 'stable\nper turn' },
-      { role: 'user', content: 'hi' },
-    ]);
+    await provider().chat([{ role: 'assistant', content: 'a', cache_breakpoint: true }]);
+    const sent = lastBody().messages as Array<Record<string, unknown>>;
+    expect(sent[0]).toEqual({ role: 'assistant', content: 'a' });
   });
 });
 
