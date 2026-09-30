@@ -122,7 +122,9 @@ export class OpenAICompatibleProvider implements LLMProvider {
       content: message.content ?? '',
       finish_reason:
         choiceFinish === 'tool_calls' ? 'tool_use' : choiceFinish === 'length' ? 'length' : 'stop',
-      usage: toUsage(data.usage as Record<string, unknown>),
+      // Optional in the wire format, and absent from some local runtimes: an
+      // unguarded read here threw after the answer had already arrived.
+      ...(data.usage ? { usage: toUsage(data.usage as Record<string, unknown>) } : {}),
     };
   }
 

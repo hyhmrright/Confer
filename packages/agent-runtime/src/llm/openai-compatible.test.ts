@@ -123,6 +123,10 @@ describe('prompt cache hits', () => {
     ).toStrictEqual({ prompt_tokens: 800, completion_tokens: 5 });
   });
 
+  test('leaves usage unreported, rather than throwing, when the vendor sends none', async () => {
+    expect(await usageOf(undefined)).toBeUndefined();
+  });
+
   test('leaves hits unreported when the vendor says nothing about them', async () => {
     expect(await usageOf({ prompt_tokens: 800, completion_tokens: 5 })).toEqual({
       prompt_tokens: 800,
