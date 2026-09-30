@@ -255,6 +255,20 @@ GET    /api/v1/attachments/{id}                  # download (302 to a signed URL
 DELETE /api/v1/attachments/{id}
 ```
 
+### Usage
+
+```
+GET /api/v1/usage?month=YYYY-MM    # token usage of agent turns for one month; defaults to the current month
+```
+
+Returns `{ month, rows }`. Each row is one provider × model × audience group: `turns`, `unreported` (turns whose provider reported no usage), `failed`, `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`. Months are cut in UTC; a `month` that is not `YYYY-MM` returns `400`. Only the caller's own data is returned.
+
+- Token totals leave out `unreported` turns; when every turn in a group is unreported the fields are `null` — unreported is not zero.
+- `cache_*` are parts of `input_tokens`, not additional to them; they are `null` when the provider never mentioned caching.
+- `audience: peer` rows are turns answering a connected contact, still paid for by the owner.
+- Only agent turns are recorded (the web chat and inbound A2A paths), one row per turn, failed turns included. Memory extraction and embedding calls are not.
+- No money amounts: per-model prices are not kept locally, and the provider's bill is the source for cost.
+
 ## WebSocket
 
 ### Endpoint

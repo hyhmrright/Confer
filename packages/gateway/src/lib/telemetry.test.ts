@@ -22,6 +22,7 @@ afterEach(() => {
 
 const base: AgentTurnRecord = {
   userId: '01ABCDEF',
+  agentId: '01AGENT',
   audience: 'owner',
   provider: 'anthropic',
   model: 'claude-opus-5',

@@ -269,6 +269,8 @@ describe('where recalled memories land in a turn', () => {
         ],
         userMessage: 'TypeScript 有什么技巧',
         userId: user.id,
+        agentId: 'unused',
+        storeUsage: () => {},
         embeddingKey: KEY,
         embeddingProvider: 'openai',
         tavilyApiKey: '',

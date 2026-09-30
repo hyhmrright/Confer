@@ -13,7 +13,7 @@ milestone ごとにスライスし、各 milestone は提供可能でデモ可�
 - [x] ユーザー登録 / ログイン（パスワードログインのみで十分、OAuth/passkey は不要）
 - [x] DID:web ドキュメントの生成と公開（`/.well-known/did.json`）
 - [x] AgentFacts ドキュメントの生成と公開
-- [ ] A2A プロトコルの入站と出站（HTTP signature 検証 + capability token 検証）
+- [x] A2A プロトコルの入站と出站（HTTP signature 検証。capability token は未実装で、下のタスク一覧を参照）
 - [x] Agent runtime：LLM 呼び出しループ（まずは Claude と DeepSeek の 2 つの provider のみ対応）
 - [x] シンプルなポリシーエンジン：whitelist peer + 全許可 / 全拒否
 - [x] クライアント：単一の Tauri アプリ、デスクトップ 3 プラットフォームを先に（Linux / macOS / Windows、モバイルは後期）
@@ -102,7 +102,7 @@ milestone ごとにスライスし、各 milestone は提供可能でデモ可�
 - [ ] バックアップとリストア（PG 物理バックアップ + S3 増分）
 - [x] セキュリティ監査（重要な操作に audit log）
 - [ ] 細分化されたレート制限（4 次元すべてを実装）
-- [ ] LLM 使用量ダッシュボード（per-Agent の月次コスト）
+- [x] LLM 使用量ダッシュボード（月ごとのトークン使用量をモデル別に表示し、連絡先への応答を別に示す。金額には換算しない——価格はローカルに保持しない）
 - [ ] BYO LLM key の完全な UX（暗号化保存、ローテーション、クォータ）
 - [x] ドキュメントサイト（ユーザー利用マニュアル、自前デプロイマニュアル、API リファレンス）
 - [ ] パブリックな Confer Cloud インスタンスの公開（`cloud.confer.ai`）

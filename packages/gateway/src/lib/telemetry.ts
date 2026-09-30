@@ -1,4 +1,8 @@
 import type { LLMUsage } from '@confer/agent-runtime';
+import { newId } from '@confer/shared';
+import { getDb } from '../db/connection.js';
+import { llmUsage } from '../db/schema.js';
+import { runDetached } from './background.js';
 
 /**
  * What one agent turn was grounded in, and what it cost.
@@ -31,6 +35,7 @@ import type { LLMUsage } from '@confer/agent-runtime';
 export interface AgentTurnRecord {
   /** The turn's owner. Never the peer, even when a peer asked the question. */
   userId: string;
+  agentId: string;
   /** Which capability set the turn ran with. A peer turn reaches far less data. */
   audience: 'owner' | 'peer';
   provider: string;
@@ -74,6 +79,34 @@ function usageFields(usage: AgentTurnRecord['usage']): string {
     (usage.cache_write_tokens === undefined
       ? ''
       : ` gen_ai.usage.cache_creation.input_tokens=${usage.cache_write_tokens}`)
+  );
+}
+
+/**
+ * The cost half, kept in `llm_usage` for the owner's usage panel. Detached: the
+ * reply must not wait on bookkeeping, and a failed insert must not fail a turn
+ * the owner has already paid for.
+ */
+export function storeTurnUsage(record: AgentTurnRecord): void {
+  const { usage } = record;
+  runDetached(
+    getDb()
+      .insert(llmUsage)
+      .values({
+        id: newId(),
+        user_id: record.userId,
+        agent_id: record.agentId,
+        audience: record.audience,
+        provider: record.provider,
+        model: record.model ?? null,
+        rounds: record.rounds,
+        input_tokens: usage?.prompt_tokens ?? null,
+        output_tokens: usage?.completion_tokens ?? null,
+        cache_read_tokens: usage?.cached_tokens ?? null,
+        cache_write_tokens: usage?.cache_write_tokens ?? null,
+        error_type: record.errorType ?? null,
+      }),
+    (err) => console.error(`Could not store usage for user ${record.userId}:`, err),
   );
 }
 

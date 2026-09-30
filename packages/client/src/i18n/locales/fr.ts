@@ -119,6 +119,7 @@ export const fr: Resources = {
     keysToolServices: 'Services outils',
     tabPolicy: 'Politique',
     tabHistory: 'Historique des approbations',
+    tabUsage: 'Utilisation',
     agentDefaultPolicy: "Politique par défaut de l'agent",
     agentDefaultPolicyHint:
       "Comment les demandes sont traitées par défaut lorsqu'un contact n'a pas de politique propre.",
@@ -344,6 +345,24 @@ export const fr: Resources = {
     rulesReadonlyHint:
       'Les règles existantes sont en lecture seule ; leur édition arrivera dans une version ultérieure.',
     noRules: 'Aucune règle spécifique',
+  },
+  usage: {
+    prevMonth: 'Mois précédent',
+    nextMonth: 'Mois suivant',
+    turns: 'Tours',
+    inputTokens: "Tokens d'entrée",
+    outputTokens: 'Tokens de sortie',
+    cacheRead: 'Succès du cache',
+    byModel: 'Par modèle',
+    model: 'Modèle',
+    defaultModel: 'Modèle par défaut du fournisseur',
+    peerTurns: 'Tours en réponse à vos contacts : {{count}}',
+    unreported:
+      'Tours sans utilisation signalée par le fournisseur : {{count}} (non inclus dans les totaux)',
+    failed: 'Tours en échec : {{count}}',
+    empty: "Aucun tour de l'agent ce mois-ci",
+    loadError: "Impossible de charger l'utilisation",
+    note: "Ne compte que les réponses de votre agent ; l'extraction de mémoire et la vectorisation de la base de connaissances font leurs propres appels, non inclus. Aucun montant n'est affiché : le coût figure sur la facture de votre fournisseur.",
   },
   history: {
     empty: "Aucun enregistrement d'approbation",

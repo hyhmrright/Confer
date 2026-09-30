@@ -224,6 +224,7 @@ export async function processA2AMessage(params: ProcessA2AMessageParams): Promis
     history,
     userMessage: messageContent,
     userId: targetAgent.user_id,
+    agentId: targetAgent.id,
     embeddingKey,
     embeddingProvider,
     tavilyApiKey,

@@ -262,6 +262,20 @@ GET    /api/v1/attachments/{id}                  # 下载（302 redirect 到签�
 DELETE /api/v1/attachments/{id}
 ```
 
+### 用量
+
+```
+GET /api/v1/usage?month=YYYY-MM    # 当月 Agent 回合的 token 用量，缺省为当前月
+```
+
+返回 `{ month, rows }`，每行是一个「provider × model × audience」分组：`turns`、`unreported`（厂商没有报告用量的回合数）、`failed`、`input_tokens`、`output_tokens`、`cache_read_tokens`、`cache_write_tokens`。月份按 UTC 切分；`month` 不是 `YYYY-MM` 返回 `400`。只返回调用者自己的数据。
+
+- token 合计不含 `unreported` 的回合；一组全部未报告时对应字段为 `null`——未报告不等于零。
+- `cache_*` 是 `input_tokens` 的组成部分，不是额外的量；厂商从未提过缓存时为 `null`。
+- `audience` 为 `peer` 的是回答已连接联系人的回合，费用同样落在 owner 名下。
+- 只记 Agent 回合本身（网页对话与入站 A2A 两条路径），每轮一行，失败的回合也记。记忆抽取、embedding 等调用不计入。
+- 不给金额：各模型价格不在本地维护，费用以厂商账单为准。
+
 ## WebSocket
 
 ### 端点

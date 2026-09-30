@@ -9,7 +9,7 @@ import { getEnv } from '../env.js';
 import { boundedMap } from '../lib/concurrency.js';
 import type { EmbeddingProvider } from '../lib/embedding.js';
 import type { TurnAudience } from '../lib/llm-keys.js';
-import { recordAgentTurn } from '../lib/telemetry.js';
+import { type AgentTurnRecord, recordAgentTurn, storeTurnUsage } from '../lib/telemetry.js';
 import {
   listContacts,
   listContactsToolDefinition,
@@ -53,6 +53,8 @@ export interface RunAgentTurnOptions {
   history: LLMMessage[];
   userMessage: string;
   userId: string;
+  // The agent answering; its turns are what the owner's usage panel counts.
+  agentId: string;
   // Empty string when the owner has no usable embedding key: disables recall.
   embeddingKey: string;
   embeddingProvider: EmbeddingProvider;
@@ -74,6 +76,9 @@ export interface RunAgentTurnOptions {
   // contacts or search their long-term memory.
   audience: TurnAudience;
   emit?: AgentTurnEmit;
+  // Where the turn's spend is kept. Defaults to the `llm_usage` table; the
+  // seam exists so the orchestrator's unit tests stay free of a database.
+  storeUsage?: (record: AgentTurnRecord) => void;
 }
 
 export interface RunAgentTurnResult {
@@ -402,9 +407,10 @@ export async function runAgentTurn(opts: RunAgentTurnOptions): Promise<RunAgentT
   const spend: TurnSpend = { rounds: 0 };
   const startedAt = Date.now();
 
-  const record = (error?: unknown): void =>
-    recordAgentTurn({
+  const record = (error?: unknown): void => {
+    const turn: AgentTurnRecord = {
       userId: opts.userId,
+      agentId: opts.agentId,
       audience: opts.audience,
       provider: opts.provider.name,
       model: opts.model,
@@ -416,7 +422,10 @@ export async function runAgentTurn(opts: RunAgentTurnOptions): Promise<RunAgentT
       citations: citations.length,
       tools: toolsUsed.length,
       errorType: error === undefined ? undefined : ((error as Error)?.constructor?.name ?? 'Error'),
-    });
+    };
+    recordAgentTurn(turn);
+    (opts.storeUsage ?? storeTurnUsage)(turn);
+  };
 
   // Recorded on the way out whether the turn succeeded or threw. A turn that
   // fails after three tool rounds has still been paid for, and it is the one an

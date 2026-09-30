@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test';
 import type { LLMMessage, LLMProvider, LLMResponse, LLMStreamEvent } from '@confer/agent-runtime';
+import type { AgentTurnRecord } from '../lib/telemetry.js';
 import { narrowKbIds, runAgentTurn } from './agent-orchestrator.js';
 
 // A provider that replays scripted stream events per round, so a turn can be
@@ -40,7 +41,14 @@ const baseOpts = {
   hasKb: false,
   recallMemory: true,
   audience: 'owner' as const,
+  agentId: '01HTURNAGENT000000000000AA',
+  storeUsage: (record: AgentTurnRecord) => {
+    stored.push(record);
+  },
 };
+
+// What the turn handed to the usage store, in place of the `llm_usage` table.
+const stored: AgentTurnRecord[] = [];
 
 // Capture the grounding line without letting it reach the real console. Scoped
 // to this file: bun runs every test file in one process, so an override left
@@ -58,6 +66,7 @@ afterAll(() => {
 });
 afterEach(() => {
   logged.length = 0;
+  stored.length = 0;
 });
 
 function groundingLine(): string {
@@ -145,6 +154,30 @@ describe('runAgentTurn grounding', () => {
       'provider exploded',
     );
     expect(groundingLine()).toContain('error.type=TypeError');
+    expect(stored[0]?.errorType).toBe('TypeError');
+  });
+
+  test('stores one record per turn, with the usage summed across rounds', async () => {
+    const usage = (prompt: number, completion: number): LLMStreamEvent => ({
+      type: 'done',
+      usage: { prompt_tokens: prompt, completion_tokens: completion },
+    });
+    await runAgentTurn({
+      ...baseOpts,
+      provider: scriptedProvider([
+        [toolCall('search_knowledge_base'), usage(100, 10)],
+        [token('答案'), usage(150, 20)],
+      ]),
+      hasKb: true,
+    });
+
+    expect(stored).toHaveLength(1);
+    expect(stored[0]).toMatchObject({
+      userId: baseOpts.userId,
+      agentId: baseOpts.agentId,
+      rounds: 2,
+      usage: { prompt_tokens: 250, completion_tokens: 30 },
+    });
   });
 
   // The instruction in the system prompt *mandates* a knowledge-base search

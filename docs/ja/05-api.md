@@ -255,6 +255,20 @@ GET    /api/v1/attachments/{id}                  # ダウンロード（署名�
 DELETE /api/v1/attachments/{id}
 ```
 
+### 使用量
+
+```
+GET /api/v1/usage?month=YYYY-MM    # 1 か月分の Agent ターンのトークン使用量。省略時は今月
+```
+
+`{ month, rows }` を返します。各行は provider × model × audience の 1 グループで、`turns`、`unreported`（プロバイダーが使用量を報告しなかったターン数）、`failed`、`input_tokens`、`output_tokens`、`cache_read_tokens`、`cache_write_tokens` を持ちます。月は UTC で区切り、`month` が `YYYY-MM` でなければ `400` を返します。返すのは呼び出し元自身のデータだけです。
+
+- トークン合計に `unreported` のターンは含みません。グループ内のすべてが未報告ならフィールドは `null` です——未報告はゼロではありません。
+- `cache_*` は `input_tokens` の内訳であり、追加分ではありません。プロバイダーがキャッシュに一度も触れていなければ `null` です。
+- `audience` が `peer` の行は接続済みの連絡先への応答で、費用は owner が負担します。
+- 記録するのは Agent ターンそのもの（Web チャットと受信 A2A の 2 経路）だけで、1 ターン 1 行、失敗したターンも含みます。記憶の抽出や embedding の呼び出しは含みません。
+- 金額は返しません。モデルごとの価格はローカルに保持しておらず、費用はプロバイダーの請求書が基準です。
+
 ## WebSocket
 
 ### エンドポイント
