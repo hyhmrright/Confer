@@ -161,6 +161,7 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
         history,
         userMessage: msg.content ?? '',
         userId: user.sub,
+        agentId: agent.id,
         embeddingKey,
         embeddingProvider,
         tavilyApiKey,

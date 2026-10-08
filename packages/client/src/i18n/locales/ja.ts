@@ -119,6 +119,7 @@ export const ja: Resources = {
     keysToolServices: 'ツールサービス',
     tabPolicy: 'ポリシー',
     tabHistory: '承認履歴',
+    tabUsage: '使用量',
     agentDefaultPolicy: 'エージェントの既定ポリシー',
     agentDefaultPolicyHint:
       '連絡先に個別のポリシーがない場合に、リクエストを既定でどう処理するかを設定します。',
@@ -338,6 +339,23 @@ export const ja: Resources = {
     rulesReadonlyHint:
       '既存のルールは読み取り専用です。ルール編集機能は今後のリリースで提供予定です。',
     noRules: '個別ルールはありません',
+  },
+  usage: {
+    prevMonth: '前の月',
+    nextMonth: '次の月',
+    turns: 'ターン',
+    inputTokens: '入力トークン',
+    outputTokens: '出力トークン',
+    cacheRead: 'キャッシュヒット',
+    byModel: 'モデル別',
+    model: 'モデル',
+    defaultModel: 'プロバイダーの既定モデル',
+    peerTurns: 'うち連絡先への応答：{{count}}',
+    unreported: 'プロバイダーが使用量を報告しなかったターン：{{count}}（上の合計には含まれません）',
+    failed: '失敗したターン：{{count}}',
+    empty: '今月の Agent ターンはありません',
+    loadError: '使用量を読み込めませんでした',
+    note: 'Agent の応答のみを集計しています。記憶の抽出やナレッジベースの埋め込みによる呼び出しは含まれません。金額は表示しません。費用は各プロバイダーの請求書をご確認ください。',
   },
   history: {
     empty: '承認履歴はまだありません',

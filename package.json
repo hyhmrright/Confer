@@ -1,7 +1,7 @@
 {
   "name": "confer",
   "private": true,
-  "version": "0.6.2",
+  "version": "0.7.0",
   "workspaces": [
     "packages/*"
   ],
@@ -31,6 +31,7 @@
     "ip-address": "^10.4.0",
     "postcss": "^8.5.28",
     "shell-quote": "^1.10.0",
-    "nanoid": "^3.3.18"
+    "nanoid": "^3.3.18",
+    "source-map-js": "^1.2.2"
   }
 }

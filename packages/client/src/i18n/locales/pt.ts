@@ -117,6 +117,7 @@ export const pt: Resources = {
     keysToolServices: 'Serviços de ferramentas',
     tabPolicy: 'Política',
     tabHistory: 'Histórico de aprovações',
+    tabUsage: 'Uso',
     agentDefaultPolicy: 'Política padrão do agente',
     agentDefaultPolicyHint:
       'Como os pedidos são tratados por padrão quando um contato não tem política própria.',
@@ -338,6 +339,23 @@ export const pt: Resources = {
     rulesReadonlyHint:
       'As regras existentes são somente leitura; a edição virá em uma versão futura.',
     noRules: 'Sem regras específicas',
+  },
+  usage: {
+    prevMonth: 'Mês anterior',
+    nextMonth: 'Próximo mês',
+    turns: 'Turnos',
+    inputTokens: 'Tokens de entrada',
+    outputTokens: 'Tokens de saída',
+    cacheRead: 'Acertos de cache',
+    byModel: 'Por modelo',
+    model: 'Modelo',
+    defaultModel: 'Modelo padrão do provedor',
+    peerTurns: 'Turnos respondendo aos seus contatos: {{count}}',
+    unreported: 'Turnos sem uso informado pelo provedor: {{count}} (fora dos totais)',
+    failed: 'Turnos com falha: {{count}}',
+    empty: 'Nenhum turno do agente neste mês',
+    loadError: 'Não foi possível carregar o uso',
+    note: 'Conta apenas as respostas do seu agente; a extração de memória e a vetorização da base de conhecimento fazem chamadas próprias que não entram aqui. Nenhum valor em dinheiro é mostrado: o custo está na fatura do seu provedor.',
   },
   history: {
     empty: 'Ainda não há registros de aprovação',

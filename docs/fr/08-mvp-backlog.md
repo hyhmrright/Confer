@@ -13,7 +13,7 @@ Découpé par jalons ; chaque jalon est une version livrable et démontrable.
 - [x] inscription et connexion des utilisateurs (le mot de passe suffit ; ni OAuth ni passkey)
 - [x] génération et publication du document DID:web (`/.well-known/did.json`)
 - [x] génération et publication du document AgentFacts
-- [ ] protocole A2A entrant et sortant (vérification de la signature HTTP + vérification du capability token)
+- [x] protocole A2A entrant et sortant (vérification de la signature HTTP ; le capability token n'est pas encore implémenté, voir la liste des tâches plus bas)
 - [x] agent runtime : la boucle d'appels au LLM (pour l'instant deux fournisseurs seulement, Claude et DeepSeek)
 - [x] moteur de politiques simple : pairs en liste blanche, tout autorisé ou tout refusé
 - [x] client : une seule application Tauri, d'abord les trois bureaux (Linux / macOS / Windows ; le mobile plus tard)
@@ -102,7 +102,7 @@ Quelqu'un en Chine interroge en chinois l'Agent d'un fabricant allemand (documen
 - [ ] sauvegarde et restauration (sauvegarde physique PG + incrémental vers S3)
 - [x] audit de sécurité (les opérations sensibles laissent un audit log)
 - [ ] limitation de débit affinée (les quatre dimensions)
-- [ ] tableau de bord de consommation LLM (coût mensuel par Agent)
+- [x] Tableau d'utilisation LLM (utilisation mensuelle de tokens par modèle, les tours répondant aux contacts étant indiqués à part ; aucun montant : les prix ne sont pas conservés localement)
 - [ ] expérience complète du BYO LLM key (stockage chiffré, rotation, quota)
 - [x] site de documentation (manuel d'utilisation, manuel d'auto-hébergement, référence de l'API)
 - [ ] mise en service de l'instance publique Confer Cloud (`cloud.confer.ai`)

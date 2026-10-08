@@ -255,6 +255,20 @@ GET    /api/v1/attachments/{id}                  # descarga (302 a una URL firma
 DELETE /api/v1/attachments/{id}
 ```
 
+### Uso
+
+```
+GET /api/v1/usage?month=YYYY-MM    # uso de tokens de los turnos del agente en un mes; por defecto, el mes actual
+```
+
+Devuelve `{ month, rows }`. Cada fila es un grupo proveedor × modelo × audiencia: `turns`, `unreported` (turnos cuyo proveedor no informó uso), `failed`, `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`. Los meses se cortan en UTC; un `month` que no sea `YYYY-MM` devuelve `400`. Solo se devuelven los datos de quien llama.
+
+- Los totales de tokens excluyen los turnos `unreported`; si ningún turno de un grupo informó uso, los campos son `null`: no informado no es cero.
+- Los `cache_*` forman parte de `input_tokens`, no se suman a ellos; son `null` cuando el proveedor nunca habló de caché.
+- Las filas con `audience: peer` son turnos que responden a un contacto conectado, y los paga igualmente el propietario.
+- Solo se registran turnos del agente (el chat web y el A2A entrante), una fila por turno, fallidos incluidos. La extracción de memoria y las llamadas de embedding no.
+- Sin importes: los precios por modelo no se guardan localmente; el coste lo indica la factura del proveedor.
+
 ## WebSocket
 
 ### Endpoint

@@ -255,6 +255,20 @@ GET    /api/v1/attachments/{id}                  # téléchargement (302 vers un
 DELETE /api/v1/attachments/{id}
 ```
 
+### Utilisation
+
+```
+GET /api/v1/usage?month=YYYY-MM    # utilisation de tokens des tours de l'agent sur un mois ; par défaut, le mois en cours
+```
+
+Renvoie `{ month, rows }`. Chaque ligne est un groupe fournisseur × modèle × audience : `turns`, `unreported` (tours dont le fournisseur n'a signalé aucune utilisation), `failed`, `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`. Les mois sont découpés en UTC ; un `month` qui n'est pas `YYYY-MM` renvoie `400`. Seules les données de l'appelant sont renvoyées.
+
+- Les totaux de tokens excluent les tours `unreported` ; si aucun tour d'un groupe n'a été signalé, les champs valent `null` : non signalé n'est pas zéro.
+- Les `cache_*` font partie de `input_tokens`, ils ne s'y ajoutent pas ; ils valent `null` quand le fournisseur n'a jamais parlé de cache.
+- Les lignes `audience: peer` sont des tours répondant à un contact connecté, toujours payés par le propriétaire.
+- Seuls les tours de l'agent sont enregistrés (le chat web et l'A2A entrant), une ligne par tour, échecs compris. L'extraction de mémoire et les appels d'embedding ne le sont pas.
+- Aucun montant : les prix par modèle ne sont pas conservés localement, et le coût figure sur la facture du fournisseur.
+
 ## WebSocket
 
 ### Point d'accès

@@ -496,3 +496,37 @@ export const errandCards = pgTable(
   },
   (t) => [index('idx_errand_cards_errand').on(t.errand_id)],
 );
+
+// One row per agent turn: what it spent, never what it said. The same record
+// `lib/telemetry.ts` logs, kept so an owner can ask "what is my agent costing
+// me this month?" of something other than container logs. Token counts are null
+// when the vendor reported nothing — unreported is not zero, and summing it as
+// zero would understate exactly the vendors the owner can see least of. No price
+// is stored or derived: per-model prices would be a vendor claim written down
+// here, which is the mistake the model catalogue already made once.
+export const llmUsage = pgTable(
+  'llm_usage',
+  {
+    id: char('id', { length: 26 }).primaryKey(),
+    // Who pays: the agent's owner, even when a connected peer asked.
+    user_id: char('user_id', { length: 26 })
+      .notNull()
+      .references(() => users.id),
+    agent_id: char('agent_id', { length: 26 })
+      .notNull()
+      .references(() => agents.id),
+    audience: varchar('audience', { length: 8 }).notNull(),
+    provider: varchar('provider', { length: 64 }).notNull(),
+    // Null when the owner named no model and the provider's default ran.
+    model: varchar('model', { length: 255 }),
+    rounds: integer('rounds').notNull(),
+    // Includes the two cache counts, which are parts of it rather than extra.
+    input_tokens: integer('input_tokens'),
+    output_tokens: integer('output_tokens'),
+    cache_read_tokens: integer('cache_read_tokens'),
+    cache_write_tokens: integer('cache_write_tokens'),
+    error_type: varchar('error_type', { length: 64 }),
+    created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('idx_llm_usage_user_created').on(t.user_id, t.created_at)],
+);

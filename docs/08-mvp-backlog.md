@@ -13,7 +13,7 @@
 - [x] 用户注册 / 登录（仅密码登录够了，不做 OAuth/passkey）
 - [x] DID:web 文档生成和暴露（`/.well-known/did.json`）
 - [x] AgentFacts 文档生成和暴露
-- [ ] A2A 协议入站和出站（HTTP signature 验证 + capability token 验证）
+- [x] A2A 协议入站和出站（HTTP signature 验证；capability token 尚未实现，见下方任务清单）
 - [x] Agent runtime：LLM 调用循环（先只支持 Claude 和 DeepSeek 两个 provider）
 - [x] 简单策略引擎：白名单 peer + 全允许 / 全拒绝
 - [x] 客户端：单一 Tauri 应用，桌面三端先（Linux / macOS / Windows，移动端后期）
@@ -102,7 +102,7 @@
 - [ ] 备份和恢复（PG 物理备份 + S3 增量）
 - [x] 安全审计（关键操作有 audit log）
 - [ ] 限流细化（4 维度全做）
-- [ ] LLM 用量面板（per-Agent 月度成本）
+- [x] LLM 用量面板（每月 token 用量，按模型拆分并单列回答联系人的部分；不换算金额——价格不在本地维护）
 - [ ] BYO LLM key 完整 UX（加密存储、轮换、配额）
 - [x] 文档站（用户使用手册、自建部署手册、API 参考）
 - [ ] 公共 Confer Cloud 实例上线（`cloud.confer.ai`）

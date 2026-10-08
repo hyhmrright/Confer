@@ -13,6 +13,24 @@ const get = mock(async (path: string) => {
   if (path === '/agents/me') return { agent: { model_config: {}, policies_json: {} } };
   if (path.startsWith('/permissions')) return { permissions: [] };
   if (path === '/users/me') return { user: { username: 'tester', preferences: {} } };
+  if (path.startsWith('/usage')) {
+    return {
+      rows: [
+        {
+          provider: 'deepseek',
+          model: 'deepseek-chat',
+          audience: 'peer',
+          turns: 3,
+          unreported: 1,
+          failed: 0,
+          input_tokens: 12345,
+          output_tokens: 678,
+          cache_read_tokens: null,
+          cache_write_tokens: null,
+        },
+      ],
+    };
+  }
   return {};
 });
 mock.module('../lib/api.js', () => ({
@@ -43,19 +61,19 @@ const renderPage = () =>
 afterEach(cleanup);
 
 describe('SettingsPage', () => {
-  test('renders the tab rail with all five tabs', () => {
+  test('renders the tab rail with all six tabs', () => {
     renderPage();
-    // 1 back button + 5 tab buttons, before any tab body adds its own controls.
+    // 1 back button + 6 tab buttons, before any tab body adds its own controls.
     const labels = screen.getAllByRole('button').map((b) => b.textContent);
-    expect(labels.length).toBeGreaterThanOrEqual(6);
+    expect(labels.length).toBeGreaterThanOrEqual(7);
   });
 
   // Switching tabs is the interaction most likely to break on a React major:
   // each click unmounts one subtree and mounts another under StrictMode.
   test('every tab mounts without throwing', async () => {
     renderPage();
-    const rail = screen.getAllByRole('button').slice(1, 6);
-    expect(rail).toHaveLength(5);
+    const rail = screen.getAllByRole('button').slice(1, 7);
+    expect(rail).toHaveLength(6);
 
     for (const tab of rail) {
       const label = tab.textContent ?? '';
@@ -65,6 +83,17 @@ describe('SettingsPage', () => {
         expect(screen.getByRole('heading', { level: 2 }).textContent).toBe(label),
       );
     }
+  });
+
+  test('the usage tab shows the month by model, and says what its totals leave out', async () => {
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: 'Usage' }));
+
+    const row = await screen.findByRole('rowheader', { name: /deepseek-chat/ });
+    expect(row.closest('tr')?.textContent).toContain('12,345');
+    expect(screen.getByText(/Turns answering your contacts: 3/)).toBeTruthy();
+    expect(screen.getByText(/no usage reported by the provider: 1/)).toBeTruthy();
+    expect(get).toHaveBeenCalledWith(expect.stringMatching(/^\/usage\?month=\d{4}-\d{2}$/));
   });
 
   test('the back control is present and is a real button', () => {

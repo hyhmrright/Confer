@@ -45,7 +45,8 @@ export interface LLMResponse {
   content: string;
   tool_calls?: LLMToolCall[];
   finish_reason: 'stop' | 'tool_use' | 'length';
-  usage: LLMUsage;
+  /** Absent when the vendor reported none — which is not zero. */
+  usage?: LLMUsage;
 }
 
 export interface LLMStreamEvent {

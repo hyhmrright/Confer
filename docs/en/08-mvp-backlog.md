@@ -13,7 +13,7 @@ Sliced by milestone, where each milestone is a deliverable, demoable version.
 - [x] User registration / login (password login alone is enough, no OAuth/passkey)
 - [x] DID:web document generation and exposure (`/.well-known/did.json`)
 - [x] AgentFacts document generation and exposure
-- [ ] A2A protocol inbound and outbound (HTTP signature verification + capability token verification)
+- [x] A2A protocol inbound and outbound (HTTP signature verification; capability tokens are not implemented yet — see the task list below)
 - [x] Agent runtime: LLM call loop (support only the two providers Claude and DeepSeek at first)
 - [x] Simple policy engine: peer whitelist + allow-all / deny-all
 - [x] Client: a single Tauri app, desktop three-platform first (Linux / macOS / Windows, mobile later)
@@ -102,7 +102,7 @@ A Chinese developer asks a German vendor's Agent (German docs) a question in Chi
 - [ ] Backup and recovery (PG physical backup + S3 incremental)
 - [x] Security audit (audit log for critical operations)
 - [ ] Rate-limiting refinement (all 4 dimensions done)
-- [ ] LLM usage dashboard (per-Agent monthly cost)
+- [x] LLM usage dashboard (monthly token usage by model, with turns answering contacts shown separately; no money amounts — prices are not kept locally)
 - [ ] Full BYO LLM key UX (encrypted storage, rotation, quotas)
 - [x] Documentation site (user manual, self-hosting deployment guide, API reference)
 - [ ] Public Confer Cloud instance goes live (`cloud.confer.ai`)

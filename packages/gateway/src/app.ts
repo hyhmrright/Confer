@@ -21,6 +21,7 @@ import { permissionRoutes } from './routes/permissions.js';
 import { probeRoutes } from './routes/probe.js';
 import { projectsRoutes } from './routes/projects.js';
 import { streamRoutes } from './routes/stream.js';
+import { usageRoutes } from './routes/usage.js';
 import { agentRoutes, userRoutes } from './routes/users.js';
 import { wellKnownRoutes } from './routes/well-known.js';
 
@@ -89,6 +90,7 @@ app.route('/api/v1/projects', projectsRoutes);
 app.route('/api/v1/errands', errandRoutes);
 app.route('/api/v1/memories', memoriesRoutes);
 app.route('/api/v1/knowledge-bases', knowledgeBasesRoutes);
+app.route('/api/v1/usage', usageRoutes);
 app.route('/api/v1/admin', adminRoutes);
 
 // One rate limiter for everything under `/a2a/v1`, registered here rather than
