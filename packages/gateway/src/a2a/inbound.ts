@@ -190,6 +190,7 @@ export async function admitInboundMessage(params: InboundMessageParams): Promise
         conversationId,
         peerThreadId: threadId,
         inboundMessageId: messageId,
+        language: message.language,
       }),
     ),
     (error) => console.error('A2A processing failed:', error),

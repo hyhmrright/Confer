@@ -26,6 +26,8 @@ export interface ProcessA2AMessageParams {
   /** The thread id the peer sent, which the reply must be addressed with. */
   peerThreadId?: string;
   inboundMessageId: string;
+  /** The language the asker said they read, when the wire carried one. */
+  language?: string;
 }
 
 // The recent visible messages of an A2A thread as LLM history (the window
@@ -252,6 +254,7 @@ export async function processA2AMessage(params: ProcessA2AMessageParams): Promis
     hasKb,
     kbScope,
     recallMemory,
+    replyLanguage: params.language,
     emit: { onTool: (name) => broadcastTurnState(conversationId, 'tool', name) },
   })
     .catch((error) => {
@@ -325,7 +328,7 @@ export async function resumeHeldA2AQuestion(row: typeof permissions.$inferSelect
   const db = getDb();
 
   const [inbound] = await db
-    .select({ content: messages.content })
+    .select({ content: messages.content, language: messages.language })
     .from(messages)
     .where(eq(messages.id, scope.inbound_message_id))
     .limit(1);
@@ -364,5 +367,6 @@ export async function resumeHeldA2AQuestion(row: typeof permissions.$inferSelect
     conversationId: scope.conversation_id,
     peerThreadId: scope.peer_thread_id,
     inboundMessageId: scope.inbound_message_id,
+    language: inbound.language ?? undefined,
   });
 }

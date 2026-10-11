@@ -56,6 +56,10 @@ export interface RunAgentTurnOptions {
   userMessage: string;
   // Images the owner sent with this message; the history carries earlier ones.
   userImages?: LLMImage[];
+  // The language the asker said they read (A2A `message.language`). Only a
+  // well-formed tag is used; the peer turn answers in the question's language
+  // regardless.
+  replyLanguage?: string;
   userId: string;
   // The agent answering; its turns are what the owner's usage panel counts.
   agentId: string;
@@ -90,12 +94,24 @@ export interface RunAgentTurnResult {
   citations: KbCitation[];
 }
 
-function buildSystemPrompt(base: string, hasKb: boolean): string {
+// A peer may write in any language, and the documents an answer draws on may be
+// in another (docs/01-product.md, scenario 4: a Chinese engineer asking a German
+// vendor's agent). The rule is fixed text, so it sits in the system prompt
+// without costing the prompt cache; which language THIS question is in is
+// per-turn, and rides at the end of the question instead (`replyLanguage`).
+const PEER_LANGUAGE_RULE =
+  'Answer in the language the question is written in, whatever language your sources are in. When you quote a source, keep the quotation in its original language and add a short translation.';
+
+function buildSystemPrompt(base: string, hasKb: boolean, audience: TurnAudience): string {
   const kbInstruction = hasKb
     ? '用户已上传了私有知识库文档。遇到任何关于文档内容、产品资料、内部知识的问题，必须先调用 search_knowledge_base 工具搜索，再基于搜索结果回答，不要凭记忆回答。'
     : '';
-  return [base, kbInstruction].filter(Boolean).join('\n');
+  const languageRule = audience === 'peer' ? PEER_LANGUAGE_RULE : '';
+  return [base, kbInstruction, languageRule].filter(Boolean).join('\n');
 }
+
+/** A BCP 47-shaped tag, so a peer's `language` field cannot carry instructions. */
+const LANGUAGE_TAG = /^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8}){0,2}$/;
 
 // Assemble the tool set offered to the LLM. Each entry is gated on the thing
 // that makes it work at all — a Tavily key, a knowledge base, an embedding key
@@ -397,11 +413,20 @@ export async function runAgentTurn(opts: RunAgentTurnOptions): Promise<RunAgentT
   const history = opts.history.map((m, i) =>
     i === opts.history.length - 1 ? { ...m, cache_breakpoint: true } : m,
   );
+  // The asker's stated language, when the wire carried one; anything that is
+  // not a plain language tag is dropped rather than echoed into the prompt.
+  const languageHint =
+    opts.replyLanguage && LANGUAGE_TAG.test(opts.replyLanguage)
+      ? `\n\n(Reply in language: ${opts.replyLanguage})`
+      : '';
   const question = recall?.fragment
-    ? `${recall.fragment}\n\n${opts.userMessage}`
-    : opts.userMessage;
+    ? `${recall.fragment}\n\n${opts.userMessage}${languageHint}`
+    : `${opts.userMessage}${languageHint}`;
   const initialMessages: LLMMessage[] = [
-    { role: 'system', content: buildSystemPrompt(opts.systemPromptBase, opts.hasKb) },
+    {
+      role: 'system',
+      content: buildSystemPrompt(opts.systemPromptBase, opts.hasKb, opts.audience),
+    },
     ...history,
     { role: 'user', content: question, images: opts.userImages },
   ];
