@@ -7,6 +7,7 @@ import { DISABLED_FILLED, FOCUS_RING, INPUT_FIELD_CLS } from '../../lib/styles.j
 import { LoadingDots } from '../LoadingDots.js';
 import { ApiTokens } from './ApiTokens.js';
 import { FieldLabel, StatusMsg } from './SettingsShared.js';
+import { SigningKeys } from './SigningKeys.js';
 
 const SECONDARY_BTN = `px-3 py-1.5 rounded-lg border border-dark-border text-xs text-ink-secondary hover:bg-dark-hover hover:text-ink-primary ${FOCUS_RING}`;
 const PRIMARY_BTN = `px-3 py-1.5 rounded-lg bg-primary-600 text-white text-xs hover:bg-primary-500 ${DISABLED_FILLED} ${FOCUS_RING}`;
@@ -52,6 +53,7 @@ export function SecurityTab() {
     <div className="space-y-10">
       <ChangePassword twoFactorOn={status.enabled} />
       <TwoStepSignIn status={status} reload={load} />
+      <SigningKeys />
       <ApiTokens />
     </div>
   );

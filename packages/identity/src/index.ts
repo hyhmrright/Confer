@@ -11,8 +11,14 @@ export {
   publicKeyToMultibase,
 } from './crypto/keypair.js';
 export type { DIDDocument, DidWebLocation } from './did/document.js';
-export { buildDIDDocument, didFromDomain, domainFromDid, parseDidWeb } from './did/document.js';
-export { clearDIDCache, resolveDID } from './did/resolver.js';
+export {
+  buildDIDDocument,
+  didFromDomain,
+  domainFromDid,
+  type PublishedKey,
+  parseDidWeb,
+} from './did/document.js';
+export { clearDIDCache, invalidateDID, resolveDID } from './did/resolver.js';
 export {
   assertNotMetadataHostname,
   assertPublicHostname,

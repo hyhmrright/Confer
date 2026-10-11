@@ -17,7 +17,9 @@ import { z } from 'zod';
 import { getDb } from '../db/connection.js';
 import { agents, users } from '../db/schema.js';
 import { getEnv } from '../env.js';
+import { writeAudit } from '../lib/audit.js';
 import { uniqueViolation } from '../lib/db-errors.js';
+import { listUserKeys, revokeUserKey, rotateUserKey } from '../lib/keys.js';
 import { getUserLlmKeys } from '../lib/llm-keys.js';
 import { isRuntimeBaseUrl, runtimeFetcher } from '../lib/runtime-url.js';
 import { authMiddleware, requireSession } from '../middleware/auth.js';
@@ -157,6 +159,32 @@ const TAKEN_BY_CONSTRAINT: Record<string, string> = {
   users_email_unique: 'email_taken',
   users_phone_unique: 'phone_taken',
 };
+
+// The keys that sign for this account's agent (lib/keys.ts). Listing is open
+// to anything signed in; changing them is the person's alone, never a token's.
+userRoutes.get('/me/keys', async (c) => c.json({ keys: await listUserKeys(c.get('user').sub) }));
+
+userRoutes.post('/me/keys/rotate', requireSession, async (c) => {
+  const userId = c.get('user').sub;
+  const [row] = await getDb()
+    .select({ did: users.did })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  if (!row) throw new AppError('not_found', 'User not found', 404);
+  const keyId = await rotateUserKey(userId, row.did);
+  await writeAudit(c, 'account.key_rotated', { key_id: keyId });
+  return c.json({ key_id: keyId }, 201);
+});
+
+const revokeKeySchema = z.object({ key_id: z.string().min(1).max(255) });
+
+userRoutes.post('/me/keys/revoke', requireSession, async (c) => {
+  const { key_id } = revokeKeySchema.parse(await c.req.json());
+  await revokeUserKey(c.get('user').sub, key_id);
+  await writeAudit(c, 'account.key_revoked', { key_id });
+  return c.json({ ok: true });
+});
 
 export const agentRoutes = new Hono<AppEnv>();
 

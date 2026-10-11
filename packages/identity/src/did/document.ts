@@ -84,35 +84,38 @@ export function parseDidWeb(did: string): DidWebLocation | null {
   }
 }
 
+export interface PublishedKey {
+  keyId: string;
+  publicKeyMultibase: string;
+}
+
 export interface BuildDIDDocumentParams {
   did: string;
   serviceEndpoint: string;
-  // Omit when no active signing key exists yet (e.g. during a key-rotation gap):
-  // `verificationMethod` and `authentication` come back empty, `service` stays.
-  key?: { keyId: string; publicKeyMultibase: string };
+  // Every key a verifier should accept: during a rotation that is the new key
+  // and the one it replaces, until the old one retires. Empty is a valid
+  // document — `verificationMethod` and `authentication` come back empty and
+  // `service` stays — for an identity with no key at the moment.
+  keys: PublishedKey[];
 }
 
 export function buildDIDDocument({
   did,
   serviceEndpoint,
-  key,
+  keys,
 }: BuildDIDDocumentParams): DIDDocument {
   return {
     '@context': ['https://www.w3.org/ns/did/v1'],
     id: did,
-    verificationMethod: key
-      ? [
-          {
-            id: key.keyId,
-            type: 'Ed25519VerificationKey2020',
-            controller: did,
-            publicKeyMultibase: key.publicKeyMultibase,
-          },
-        ]
-      : [],
-    // Declare the signing key's purpose so verifiers can enforce that this key
-    // is authorized for authentication, not merely registered.
-    authentication: key ? [key.keyId] : [],
+    verificationMethod: keys.map((key) => ({
+      id: key.keyId,
+      type: 'Ed25519VerificationKey2020',
+      controller: did,
+      publicKeyMultibase: key.publicKeyMultibase,
+    })),
+    // Declare each key's purpose so verifiers can enforce that it is authorized
+    // for authentication, not merely registered.
+    authentication: keys.map((key) => key.keyId),
     service: [
       {
         id: `${did}#confer-agent`,

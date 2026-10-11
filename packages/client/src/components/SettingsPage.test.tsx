@@ -15,6 +15,7 @@ const get = mock(async (path: string) => {
   if (path === '/users/me') return { user: { username: 'tester', preferences: {} } };
   if (path === '/auth/2fa') return { enabled: false, recovery_codes_left: 0 };
   if (path === '/tokens') return { tokens: [] };
+  if (path === '/users/me/keys') return { keys: [] };
   if (path.startsWith('/usage')) {
     return {
       rows: [

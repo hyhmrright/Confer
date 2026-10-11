@@ -49,6 +49,8 @@ DID document 结构（W3C DID v1.0 兼容）：
 - DID document 支持声明多个 verification method，平滑轮换
 - 旧密钥保留至少 30 天（防止飞行中的请求失败）
 - 撤销靠从 document 移除 verification method 完成
+- 实现：`POST /api/v1/users/me/keys/rotate` 生成 `#key-<n>` 并立即用它签名，旧密钥标为“即将退役”，继续留在 DID document 里 30 天只用于验证；`POST /api/v1/users/me/keys/revoke {key_id}` 立刻把一把退役中的密钥移出（正在签名的那把不能直接吊销，要先轮换）。两者都只接受登录会话并写审计日志。
+- 验证方：签名里的 keyId 不在缓存的对方 DID document 中时，绕过缓存重新取一次（每个 DID 每分钟最多一次），所以对方刚轮换后的第一条消息不会因为我们的缓存被拒。
 
 ## AgentFacts (NANDA-compatible)
 

@@ -1,21 +1,15 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
-import { exportPrivateKey, generateEd25519KeyPair, publicKeyToMultibase } from '@confer/identity';
-import {
-  AppError,
-  encrypt,
-  loginRequestSchema,
-  newId,
-  registerRequestSchema,
-} from '@confer/shared';
+import { AppError, loginRequestSchema, newId, registerRequestSchema } from '@confer/shared';
 import { and, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import * as jose from 'jose';
 import { z } from 'zod';
 import { getDb } from '../db/connection.js';
-import { agents, keypairs, sessions, users } from '../db/schema.js';
+import { agents, sessions, users } from '../db/schema.js';
 import { getEnv } from '../env.js';
 import { getConfigValue } from '../lib/app-config.js';
 import { uniqueViolation } from '../lib/db-errors.js';
+import { mintUserKey } from '../lib/keys.js';
 import { hashPassword, verifyPassword } from '../lib/password.js';
 import { userDid } from '../lib/public-identity.js';
 import { consumeSecondFactor } from '../lib/two-factor.js';
@@ -167,23 +161,8 @@ authRoutes.post('/register', rateLimit(3, 3600_000), async (c) => {
     name: `${body.display_name ?? body.username}'s Agent`,
   });
 
-  const keyPair = await generateEd25519KeyPair();
-  const pubMultibase = await publicKeyToMultibase(keyPair.publicKey);
-  const privJwk = await exportPrivateKey(keyPair.privateKey);
-  const env = getEnv();
-  const encryptedKey = await encrypt(JSON.stringify(privJwk), env.ENCRYPTION_KEY);
-  if (!encryptedKey.ok) {
-    throw new AppError('encryption_failed', 'Failed to encrypt keypair', 500);
-  }
-
-  await db.insert(keypairs).values({
-    id: newId(),
-    owner_type: 'user',
-    owner_id: userId,
-    key_id: `${did}#key-1`,
-    public_key_multibase: pubMultibase,
-    private_key_jwk_encrypted: encryptedKey.value,
-  });
+  // The account's first signing key, `#key-1`; rotation mints the rest the same way.
+  await mintUserKey(userId, did);
 
   // Register gets a backing session too, so its freshly minted refresh token can
   // be rotated/revoked exactly like a login's (no more stranded, unrevocable

@@ -1,12 +1,13 @@
 import { buildDIDDocument } from '@confer/identity';
 import { AppError } from '@confer/shared';
-import { and, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { discoverableAgent } from '../a2a/target-agent.js';
 import { getDb } from '../db/connection.js';
-import { agents, keypairs } from '../db/schema.js';
+import { agents } from '../db/schema.js';
+import { instanceKeys, publishedKeys } from '../lib/keys.js';
 import { instanceDid, selfA2AEndpoint } from '../lib/public-identity.js';
 import { wellKnownAgentCard } from './agent-card.js';
+import { DID_DOCUMENT_CACHE } from './agent-did.js';
 
 export const wellKnownRoutes = new Hono();
 
@@ -16,17 +17,6 @@ wellKnownRoutes.get('/did.json', async (c) => {
   // internal name. It is also what user DIDs are minted from, so deriving it
   // any other way lets the instance disagree with its own accounts.
   const did = instanceDid();
-  const db = getDb();
-
-  // Only public columns — never `private_key_jwk_encrypted`.
-  const [kp] = await db
-    .select({
-      key_id: keypairs.key_id,
-      public_key_multibase: keypairs.public_key_multibase,
-    })
-    .from(keypairs)
-    .where(and(eq(keypairs.owner_type, 'instance'), eq(keypairs.is_active, true)))
-    .limit(1);
 
   // Shared builder keeps the instance and per-user DID documents in one shape;
   // with no active instance key the document is served keyless
@@ -34,9 +24,10 @@ wellKnownRoutes.get('/did.json', async (c) => {
   const doc = buildDIDDocument({
     did,
     serviceEndpoint: selfA2AEndpoint(),
-    key: kp ? { keyId: kp.key_id, publicKeyMultibase: kp.public_key_multibase } : undefined,
+    keys: await publishedKeys(instanceKeys()),
   });
 
+  c.header('cache-control', DID_DOCUMENT_CACHE);
   return c.json(doc);
 });
 

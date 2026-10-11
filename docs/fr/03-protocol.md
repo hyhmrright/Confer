@@ -49,6 +49,8 @@ Selon la spécification did:web, un **DID à sous-identifiant** (donc avec segme
 - Le document DID accepte plusieurs méthodes de vérification, ce qui permet une rotation sans rupture.
 - L'ancienne clé est conservée au moins 30 jours, pour ne pas faire échouer les requêtes en vol.
 - La révocation consiste à retirer la méthode de vérification du document.
+- Mise en œuvre : `POST /api/v1/users/me/keys/rotate` crée `#key-<n>` et signe aussitôt avec elle ; l'ancienne clé passe « en retrait » et reste 30 jours dans le document DID, pour la seule vérification. `POST /api/v1/users/me/keys/revoke {key_id}` retire immédiatement une clé en retrait (la clé en service ne peut pas être révoquée directement ; il faut d'abord faire une rotation). Les deux n'acceptent qu'une session connectée et sont auditées.
+- Côté vérificateur : une signature dont le keyId est absent de notre copie en cache du document DID du peer déclenche un nouveau téléchargement (au plus une fois par minute et par DID), si bien que le premier message d'un peer après sa rotation n'est pas refusé à cause de notre cache.
 
 ## AgentFacts (compatible NANDA)
 

@@ -39,6 +39,9 @@ let user: SeededUser;
 let restoreFetch: () => void;
 let peerKey: CryptoKey;
 let otherKey: CryptoKey;
+// The DID documents the mocked network serves, by host — mutable, so a test
+// can rotate a peer's key between two requests.
+let docs: Record<string, unknown> = {};
 
 function didDoc(did: string, keyId: string, publicKeyMultibase: string) {
   return {
@@ -61,7 +64,7 @@ beforeEach(async () => {
   peerKey = peer.privateKey;
   otherKey = other.privateKey;
 
-  const docs: Record<string, unknown> = {
+  docs = {
     'peer.example': didDoc(PEER_DID, PEER_KEY_ID, await publicKeyToMultibase(peer.publicKey)),
     'other.example': didDoc(OTHER_DID, OTHER_KEY_ID, await publicKeyToMultibase(other.publicKey)),
   };
@@ -201,6 +204,38 @@ describe('binding preconditions', () => {
     await connectPeer();
     const res = await call('POST', '/message:send', sendNow('hi'), { version: '1.0' });
     expect(res.status).toBe(200);
+  });
+
+  // A peer that rotates sends its next message under a key our cached copy of
+  // its document has never seen. Refusing that would break every peer's first
+  // message after a rotation, until our cache happened to expire.
+  test('accepts a peer that rotated its key while we held its old document', async () => {
+    const did = 'did:web:rotating.example';
+    const first = await generateEd25519KeyPair();
+    docs['rotating.example'] = didDoc(
+      did,
+      `${did}#key-1`,
+      await publicKeyToMultibase(first.publicKey),
+    );
+    await seedAgent();
+    await connectPeer(did);
+    const before = await call('POST', '/message:send', sendNow('before'), {
+      key: first.privateKey,
+      keyId: `${did}#key-1`,
+    });
+    expect(before.status).toBe(200);
+
+    const next = await generateEd25519KeyPair();
+    docs['rotating.example'] = didDoc(
+      did,
+      `${did}#key-2`,
+      await publicKeyToMultibase(next.publicKey),
+    );
+    const after = await call('POST', '/message:send', sendNow('after'), {
+      key: next.privateKey,
+      keyId: `${did}#key-2`,
+    });
+    expect(after.status).toBe(200);
   });
 
   test("reports an unsigned request in the A2A error shape, not Confer's", async () => {
