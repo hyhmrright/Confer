@@ -1,7 +1,7 @@
 import type { PermissionLevel } from '@confer/agent-runtime';
 import { classifyPermissionLevel } from '@confer/agent-runtime';
 import { newId } from '@confer/shared';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { getDb } from '../db/connection.js';
 import { type peerAgents, permissions } from '../db/schema.js';
 import { notifyPermissionRequest } from '../lib/permission-notify.js';
@@ -65,13 +65,15 @@ export async function upsertConnectionRequest(
         eq(permissions.user_id, userId),
         eq(permissions.peer_id, peer.id),
         eq(permissions.action, 'connect'),
-        eq(permissions.decision, 'pending'),
+        inArray(permissions.decision, ['pending', 'deny_always']),
       ),
     )
     .limit(1);
 
   // Only a genuinely new request gets past here, so the owner is never
-  // double-notified for a peer that keeps retrying.
+  // double-notified for a peer that keeps retrying — nor asked again about one
+  // they chose to always deny. Adding the peer as a contact by hand still works,
+  // since the consent gate checks contacts before it ever reaches here.
   if (existing) return;
 
   await requestPeerPermission({

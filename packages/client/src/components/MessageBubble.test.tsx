@@ -81,7 +81,7 @@ describe('MessageBubble markdown rendering', () => {
       />,
     );
     expect(screen.getByText(/Bob/)).toBeDefined();
-    expect(screen.getAllByRole('button')).toHaveLength(3);
+    expect(screen.getAllByRole('button')).toHaveLength(4);
   });
 
   test('falls back to a normal bubble when content_json fails schema validation', () => {

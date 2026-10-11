@@ -183,6 +183,8 @@ GET    /api/v1/permissions/history               # 履歴
 
 `action='ask'` のものは**接続済み peer からの保留中の質問**で、その質問に対して Agent の policy が `ask_user` と判定したときに A2A の受信経路が生成する（`03-protocol.md` の「Pending inbox（不在時の代理応答）」を参照）。承認（`allow_*`）すると Agent が保留中の質問に答え、拒否すれば答えない。
 
+`allow_always` / `deny_always` は**継続的な決定**である。保留中の質問に対しては、その連絡先の policy override の先頭に `{ action: 'ask', decision: 'allow' | 'deny' }` ルールを書き込む（既存のものは置き換える）ため、この peer からの以後の質問は保留されずに応答または拒否される。オーナーは連絡先詳細の policy でこのルールを確認・取り消しできる。接続リクエストに対しては、`deny_always` によりその peer からの以後の接続リクエストは受信箱に届かず黙って破棄される。DID を指定して手動で追加することは引き続き可能である。
+
 `GET /pending` は各リクエストに `description` を付ける（接続リクエストには発信者と最初のメッセージ、質問には発信者と質問本文）。持ち主が判断できるようにするためである。
 
 ### プロジェクト記憶（Claude Code 連携まわり）

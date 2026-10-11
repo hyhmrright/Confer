@@ -183,6 +183,8 @@ Entre las peticiones pendientes, las que tienen `action='connect'` son **solicit
 
 Las que tienen `action='ask'` son **preguntas pendientes de un peer ya conectado**: las genera la entrada A2A cuando la política del Agente resuelve `ask_user` para esa pregunta (véase «Bandeja pendiente (respuesta en diferido)» en `03-protocol.md`). Aprobarla (`allow_*`) hace que el Agente responda a la pregunta en suspenso; rechazarla la deja sin responder.
 
+`allow_always` / `deny_always` son **decisiones permanentes**. Sobre una pregunta en suspenso escriben (o sustituyen) una regla `{ action: 'ask', decision: 'allow' | 'deny' }` al principio de la política del contacto, de modo que las siguientes preguntas de ese peer se responden o se rechazan sin quedar en suspenso; el dueño puede ver y revocar la regla en el panel de política del contacto. Sobre una solicitud de conexión, `deny_always` hace que las siguientes solicitudes de ese peer se descarten en silencio en lugar de llegar a la bandeja; añadir el peer a mano por su DID sigue funcionando.
+
 `GET /pending` acompaña cada petición de una `description` (la solicitud de conexión lleva quién la inicia y su primer mensaje; la pregunta, quién la hace y su texto) para que el dueño pueda decidir.
 
 ### Memoria de proyecto (para la integración con Claude Code)

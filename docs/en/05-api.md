@@ -183,6 +183,8 @@ Among the pending requests, those with `action='connect'` are **connection reque
 
 Those with `action='ask'` are **pending questions from an already-connected peer** — the inbound A2A path generates them when the Agent's policy resolves to `ask_user` for that question (see "Pending inbox (answering while away)" in `03-protocol.md`). Approving (`allow_*`) makes the Agent answer the suspended question; denying leaves it unanswered.
 
+`allow_always` / `deny_always` are **standing decisions**. On a held question they write (or replace) a `{ action: 'ask', decision: 'allow' | 'deny' }` rule at the front of that contact's policy override, so this peer's later questions are answered or refused without being held; the owner can see and revoke the rule in the contact's policy panel. On a connection request, `deny_always` makes later connection requests from that peer drop silently instead of reaching the inbox; adding the peer by DID by hand still works.
+
 `GET /pending` attaches a `description` to each request (a connection request carries who started it and their first message; a question carries who asked and the text) so the owner has something to judge by.
 
 ### Project memory (part of the Claude Code integration)

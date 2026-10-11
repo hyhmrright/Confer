@@ -324,6 +324,7 @@ export const ar: Resources = {
     levelHigh: 'خطورة عالية',
     allowOnce: 'السماح مرة واحدة',
     allowAlways: 'السماح دائمًا',
+    denyAlways: 'الرفض دائمًا',
     deny: 'رفض',
     allowed: 'مسموح',
     denied: 'مرفوض',
@@ -343,7 +344,9 @@ export const ar: Resources = {
     decisionDeny: 'الرفض تلقائيًا',
     inherit: 'استخدام السياسة الافتراضية للوكيل',
     rulesHeading: 'قواعد محدّدة',
-    rulesReadonlyHint: 'القواعد الحالية للقراءة فقط؛ تحرير القواعد سيأتي في إصدار لاحق.',
+    rulesHint:
+      'تُفحص القواعد قبل القرار الافتراضي. يضيف «السماح دائمًا» و«الرفض دائمًا» قاعدة هنا؛ احذف القاعدة واحفظ للتراجع عنها.',
+    removeRule: 'حذف',
     noRules: 'لا توجد قواعد محدّدة',
   },
   usage: {

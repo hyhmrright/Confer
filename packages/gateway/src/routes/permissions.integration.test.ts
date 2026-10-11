@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { newId } from '@confer/shared';
 import { eq } from 'drizzle-orm';
+import { upsertConnectionRequest } from '../a2a/inbound-permissions.js';
 import { getDb } from '../db/connection.js';
 import { peerAgents, peerContacts, permissions } from '../db/schema.js';
 import { get, post, resetDb, type SeededUser, seedUser } from '../test/helpers.js';
@@ -135,5 +136,125 @@ describe('permissions', () => {
       .where(eq(peerContacts.user_id, user.id));
     expect(contacts).toHaveLength(1);
     expect(contacts[0]?.peer_id).toBe(peerId);
+  });
+
+  describe('"always" decisions are standing', () => {
+    async function seedPeer(): Promise<typeof peerAgents.$inferSelect> {
+      const [peer] = await getDb()
+        .insert(peerAgents)
+        .values({
+          id: newId(),
+          did: `did:web:${newId().toLowerCase()}.example.com`,
+          name: 'Vendor Bot',
+          endpoint: 'https://peer.example.com/a2a/v1',
+          public_key_json: {},
+          agent_facts_json: {},
+        })
+        .returning();
+      if (!peer) throw new Error('peer not seeded');
+      return peer;
+    }
+
+    async function seedHeldQuestion(peerId: string): Promise<string> {
+      const id = newId();
+      await getDb().insert(permissions).values({
+        id,
+        user_id: user.id,
+        peer_id: peerId,
+        action: 'ask',
+        // Not an a2a_question scope, so allowing it starts no agent turn.
+        scope_json: {},
+        level: 'L2',
+        decision: 'pending',
+        requested_by: peerId,
+      });
+      return id;
+    }
+
+    async function overridesFor(peerId: string): Promise<unknown> {
+      const [row] = await getDb()
+        .select({ overrides: peerContacts.policy_overrides_json })
+        .from(peerContacts)
+        .where(eq(peerContacts.peer_id, peerId));
+      return row?.overrides;
+    }
+
+    for (const [decision, rule] of [
+      ['allow_always', 'allow'],
+      ['deny_always', 'deny'],
+    ] as const) {
+      test(`${decision} on a held question becomes a contact rule, replacing any earlier one`, async () => {
+        const peer = await seedPeer();
+        await getDb()
+          .insert(peerContacts)
+          .values({
+            id: newId(),
+            user_id: user.id,
+            peer_id: peer.id,
+            policy_overrides_json: {
+              default: 'ask_user',
+              rules: [
+                { action: 'ask', decision: 'ask_user' },
+                { action: 'send_message', decision: 'deny' },
+              ],
+            },
+          });
+
+        const res = await post(`/api/v1/permissions/${await seedHeldQuestion(peer.id)}/decide`, {
+          token: user.token,
+          body: { decision, scope: 'peer_action' },
+        });
+        expect(res.status).toBe(200);
+
+        // The owner's other choices survive; only the `ask` rule is replaced.
+        expect(await overridesFor(peer.id)).toEqual({
+          default: 'ask_user',
+          rules: [
+            { action: 'ask', decision: rule },
+            { action: 'send_message', decision: 'deny' },
+          ],
+        });
+      });
+    }
+
+    test('allow_once leaves the contact policy alone', async () => {
+      const peer = await seedPeer();
+      await getDb()
+        .insert(peerContacts)
+        .values({ id: newId(), user_id: user.id, peer_id: peer.id });
+
+      await post(`/api/v1/permissions/${await seedHeldQuestion(peer.id)}/decide`, {
+        token: user.token,
+        body: { decision: 'allow_once', scope: 'peer_action' },
+      });
+
+      expect(await overridesFor(peer.id)).toEqual({});
+    });
+
+    // deny_always silences the peer's later connection requests; a plain deny
+    // only answers this one, so the peer may ask again.
+    for (const [decision, askedAgain] of [
+      ['deny_always', 0],
+      ['deny', 1],
+    ] as const) {
+      test(`${decision} on a connection request → ${askedAgain} new request(s) later`, async () => {
+        const peer = await seedPeer();
+        await upsertConnectionRequest(user.id, peer, 'hello');
+        const [first] = await getDb()
+          .select({ id: permissions.id })
+          .from(permissions)
+          .where(eq(permissions.peer_id, peer.id));
+        if (!first) throw new Error('connection request not stored');
+
+        await post(`/api/v1/permissions/${first.id}/decide`, {
+          token: user.token,
+          body: { decision, scope: 'peer' },
+        });
+        await upsertConnectionRequest(user.id, peer, 'hello again');
+
+        const pending = await get('/api/v1/permissions/pending', { token: user.token });
+        expect((await pending.json()).permissions).toHaveLength(askedAgain);
+      });
+    }
   });
 });

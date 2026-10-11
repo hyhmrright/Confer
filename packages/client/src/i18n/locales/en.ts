@@ -312,6 +312,7 @@ export const en: Resources = {
     levelHigh: 'High risk',
     allowOnce: 'Allow once',
     allowAlways: 'Always allow',
+    denyAlways: 'Always deny',
     deny: 'Deny',
     allowed: 'Allowed',
     denied: 'Denied',
@@ -331,7 +332,9 @@ export const en: Resources = {
     decisionDeny: 'Deny automatically',
     inherit: 'Use agent default policy',
     rulesHeading: 'Specific rules',
-    rulesReadonlyHint: 'Existing rules are read-only; rule editing is coming in a later release.',
+    rulesHint:
+      'Rules are checked before the default. “Always allow” and “Always deny” add one here; remove a rule and save to undo it.',
+    removeRule: 'Remove',
     noRules: 'No specific rules',
   },
   usage: {

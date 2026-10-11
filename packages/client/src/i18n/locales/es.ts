@@ -314,6 +314,7 @@ export const es: Resources = {
     levelHigh: 'Riesgo alto',
     allowOnce: 'Permitir una vez',
     allowAlways: 'Permitir siempre',
+    denyAlways: 'Denegar siempre',
     deny: 'Denegar',
     allowed: 'Permitido',
     denied: 'Denegado',
@@ -334,8 +335,9 @@ export const es: Resources = {
     decisionDeny: 'Denegar automáticamente',
     inherit: 'Usar la política por defecto del agente',
     rulesHeading: 'Reglas específicas',
-    rulesReadonlyHint:
-      'Las reglas existentes son de solo lectura; la edición llegará en una versión posterior.',
+    rulesHint:
+      'Las reglas se comprueban antes que la opción por defecto. «Permitir siempre» y «Denegar siempre» añaden una aquí; elimina una regla y guarda para deshacerla.',
+    removeRule: 'Eliminar',
     noRules: 'Sin reglas específicas',
   },
   usage: {

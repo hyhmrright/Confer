@@ -197,8 +197,8 @@ describe('authenticated screens mount', () => {
     wrap(<PermissionInbox />);
     expect(screen.getByText(/Stranger/)).toBeDefined();
     expect(screen.getByText(/Courier/)).toBeDefined();
-    // three controls per card, and never an auto-accept
-    expect(screen.getAllByRole('button')).toHaveLength(6);
+    // four controls per card, and never an auto-accept
+    expect(screen.getAllByRole('button')).toHaveLength(8);
     usePermissionsStore.setState({ pending: [] });
   });
 });

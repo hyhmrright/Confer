@@ -190,6 +190,8 @@ GET    /api/v1/permissions/history               # 历史记录
 
 `action='ask'` 的是**已连接 peer 的待批提问**——当主人的 Agent 策略对该提问判为 `ask_user` 时由 A2A 入站生成（见 `03-protocol.md` 的「Pending inbox（离线代答）」）。批准（`allow_*`）触发 Agent 代答这条挂起的提问；拒绝则不回答。
 
+`allow_always` / `deny_always` 是**长期决定**。对挂起的提问，它们会在该联系人的策略覆盖里写入（或替换）一条 `{ action: 'ask', decision: 'allow' | 'deny' }` 规则，排在最前面，所以这个 peer 之后的提问直接代答或直接拒绝，不再挂起；主人可以在联系人详情的策略里看到并撤销。对连接请求，`deny_always` 会让这个 peer 之后的连接请求被静默丢弃，不再进收件箱；主人手动按 DID 添加它仍然有效。
+
 `GET /pending` 为每条请求附带 `description`（连接请求含发起方与首条留言；提问含发起方与问题正文）便于主人判断。
 
 ### 项目记忆（Claude Code 集成相关）

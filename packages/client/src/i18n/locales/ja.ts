@@ -316,6 +316,7 @@ export const ja: Resources = {
     levelHigh: '高リスク',
     allowOnce: '1 回のみ許可',
     allowAlways: '常に許可',
+    denyAlways: '常に拒否',
     deny: '拒否',
     allowed: '許可済み',
     denied: '拒否済み',
@@ -336,8 +337,9 @@ export const ja: Resources = {
     decisionDeny: '自動的に拒否',
     inherit: 'エージェントの既定ポリシーを使用',
     rulesHeading: '個別ルール',
-    rulesReadonlyHint:
-      '既存のルールは読み取り専用です。ルール編集機能は今後のリリースで提供予定です。',
+    rulesHint:
+      'ルールは既定の判断より先に適用されます。「常に許可」「常に拒否」はここにルールを追加します。取り消すにはルールを削除して保存してください。',
+    removeRule: '削除',
     noRules: '個別ルールはありません',
   },
   usage: {

@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAutoClear } from '../../hooks/use-auto-clear.js';
-import { mergePolicyDefault } from '../../lib/policy.js';
+import { usePolicyDraft } from '../../hooks/use-policy-draft.js';
 import { useSettingsStore } from '../../stores/settings.js';
 import { LoadingDots } from '../LoadingDots.js';
 import { SaveButton } from '../SaveButton.js';
@@ -18,22 +18,15 @@ export function PolicyTab() {
   const loadAgent = useSettingsStore((s) => s.loadAgent);
   const updatePolicies = useSettingsStore((s) => s.updatePolicies);
   const clearMessages = useSettingsStore((s) => s.clearMessages);
-  const [decision, setDecision] = useState<string>('');
+  const policy = usePolicyDraft(agent?.policies_json);
 
   useEffect(() => {
     loadAgent();
   }, [loadAgent]);
 
-  useEffect(() => {
-    setDecision(agent?.policies_json?.default ?? '');
-  }, [agent]);
-
   useAutoClear(success, error, clearMessages);
 
-  const handleSave = () => {
-    // Whole-object replace: preserve any existing rules, only swap `default`.
-    updatePolicies(mergePolicyDefault(agent?.policies_json, decision));
-  };
+  const handleSave = () => updatePolicies(policy.draft());
 
   if (loading) {
     return (
@@ -50,10 +43,11 @@ export function PolicyTab() {
         <p className="text-xs text-ink-muted mb-2">{t('settings.agentDefaultPolicyHint')}</p>
         <PolicyEditor
           id="agent-default-policy"
-          decision={decision}
-          onChange={setDecision}
+          decision={policy.decision}
+          onChange={policy.setDecision}
           inheritLabel={null}
-          rules={agent?.policies_json?.rules}
+          rules={policy.rules}
+          onRemoveRule={policy.removeRule}
         />
       </div>
 

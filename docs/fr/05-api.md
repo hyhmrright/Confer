@@ -183,6 +183,8 @@ Parmi les demandes en attente, celles dont `action='connect'` sont des **demande
 
 Celles dont `action='ask'` sont des **questions en attente venant d'un pair déjà connecté** : l'entrée A2A les génère quand la politique de l'Agent tranche `ask_user` pour cette question (voir « Boîte d'attente (réponse en différé) » dans `03-protocol.md`). Les approuver (`allow_*`) fait répondre l'Agent à la question suspendue ; les refuser la laisse sans réponse.
 
+`allow_always` / `deny_always` sont des **décisions permanentes**. Sur une question en attente, elles écrivent (ou remplacent) une règle `{ action: 'ask', decision: 'allow' | 'deny' }` en tête de la politique du contact, si bien que les questions suivantes de ce peer reçoivent une réponse ou un refus sans être mises en attente ; le propriétaire peut voir et révoquer la règle dans le panneau de politique du contact. Sur une demande de connexion, `deny_always` fait que les demandes suivantes de ce peer sont ignorées en silence au lieu d'arriver dans la boîte de réception ; ajouter le peer à la main par son DID reste possible.
+
 `GET /pending` joint à chaque demande une `description` (la demande de connexion porte son initiateur et son premier message ; la question, son auteur et son texte) pour que le maître puisse trancher.
 
 ### Mémoire de projet (liée à l'intégration Claude Code)

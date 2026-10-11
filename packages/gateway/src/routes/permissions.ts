@@ -1,4 +1,9 @@
-import { AppError, decidePermissionRequestSchema, newId } from '@confer/shared';
+import {
+  AppError,
+  decidePermissionRequestSchema,
+  newId,
+  policyOverridesSchema,
+} from '@confer/shared';
 import { and, desc, eq, isNull, ne, or } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { resumeHeldA2AQuestion } from '../a2a/answer.js';
@@ -97,6 +102,18 @@ permissionRoutes.post('/:id/decide', async (c) => {
       .onConflictDoNothing();
   }
 
+  // "Always" on a held question is a standing grant for this peer, so the next
+  // question is not held again. It becomes a rule on the contact's own policy —
+  // where the owner can see and revoke it in the contact panel — rather than a
+  // permission row every later request would have to go looking for.
+  if (row.action === 'ask' && row.peer_id && body.decision.endsWith('_always')) {
+    await setStandingAskRule(
+      user.sub,
+      row.peer_id,
+      body.decision === 'allow_always' ? 'allow' : 'deny',
+    );
+  }
+
   // Approving a held A2A question lets the agent answer it now. Run the agent
   // loop fire-and-forget so this endpoint returns immediately without waiting
   // on the LLM; denials simply leave the request in history with no reply.
@@ -115,6 +132,33 @@ permissionRoutes.post('/:id/decide', async (c) => {
 
   return c.json({ ok: true });
 });
+
+// Put an `ask` rule at the front of the contact's policy override, replacing any
+// earlier one so repeated "always" decisions don't stack. A peer that is no
+// longer a contact has nothing to attach a rule to; the consent gate already
+// keeps it out.
+async function setStandingAskRule(
+  userId: string,
+  peerId: string,
+  decision: 'allow' | 'deny',
+): Promise<void> {
+  const db = getDb();
+  const [contact] = await db
+    .select({ id: peerContacts.id, overrides: peerContacts.policy_overrides_json })
+    .from(peerContacts)
+    .where(and(eq(peerContacts.user_id, userId), eq(peerContacts.peer_id, peerId)))
+    .limit(1);
+  if (!contact) return;
+
+  const parsed = policyOverridesSchema.safeParse(contact.overrides ?? {});
+  const current = parsed.success ? parsed.data : {};
+  const rules = (current.rules ?? []).filter((r) => r.action !== 'ask');
+
+  await db
+    .update(peerContacts)
+    .set({ policy_overrides_json: { ...current, rules: [{ action: 'ask', decision }, ...rules] } })
+    .where(eq(peerContacts.id, contact.id));
+}
 
 permissionRoutes.get('/history', async (c) => {
   const user = c.get('user');

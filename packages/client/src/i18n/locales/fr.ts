@@ -322,6 +322,7 @@ export const fr: Resources = {
     levelHigh: 'Risque élevé',
     allowOnce: 'Autoriser une fois',
     allowAlways: 'Toujours autoriser',
+    denyAlways: 'Toujours refuser',
     deny: 'Refuser',
     allowed: 'Autorisé',
     denied: 'Refusé',
@@ -342,8 +343,9 @@ export const fr: Resources = {
     decisionDeny: 'Refuser automatiquement',
     inherit: "Utiliser la politique par défaut de l'agent",
     rulesHeading: 'Règles spécifiques',
-    rulesReadonlyHint:
-      'Les règles existantes sont en lecture seule ; leur édition arrivera dans une version ultérieure.',
+    rulesHint:
+      "Les règles sont vérifiées avant la décision par défaut. « Toujours autoriser » et « Toujours refuser » en ajoutent une ici ; supprimez une règle puis enregistrez pour l'annuler.",
+    removeRule: 'Supprimer',
     noRules: 'Aucune règle spécifique',
   },
   usage: {

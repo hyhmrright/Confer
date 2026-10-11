@@ -303,6 +303,7 @@ export const zh = {
     levelHigh: '高风险',
     allowOnce: '允许一次',
     allowAlways: '始终允许',
+    denyAlways: '始终拒绝',
     deny: '拒绝',
     allowed: '已允许',
     denied: '已拒绝',
@@ -322,7 +323,9 @@ export const zh = {
     decisionDeny: '自动拒绝',
     inherit: '使用 Agent 默认策略',
     rulesHeading: '具体规则',
-    rulesReadonlyHint: '现有规则为只读，规则编辑功能将在后续版本提供。',
+    rulesHint:
+      '规则先于默认决定生效。“始终允许”和“始终拒绝”会在这里添加一条规则；删除规则并保存即可撤销。',
+    removeRule: '删除',
     noRules: '暂无具体规则',
   },
   usage: {
