@@ -14,6 +14,7 @@ import { extractAndStore } from '../tools/memory.js';
 import { broadcastToConversation } from '../ws/handler.js';
 import { asA2AQuestionScope } from './inbound-permissions.js';
 import { type OutboundA2AMessage, sendA2AMessage } from './outbound.js';
+import { queueTaskPush } from './push.js';
 import { loadOwnerSigningKey } from './signing.js';
 
 export interface ProcessA2AMessageParams {
@@ -191,6 +192,8 @@ async function notifyPeerOfFailure(
   });
 
   broadcastReply(params, noticeId, prose);
+  // The REST binding's task is now FAILED; a peer that left a webhook hears so.
+  queueTaskPush(inboundMessageId);
 
   await sendToPeer(params, {
     type: 'notification',
@@ -279,6 +282,7 @@ export async function processA2AMessage(params: ProcessA2AMessageParams): Promis
   });
 
   broadcastReply(params, replyId, replyContent);
+  queueTaskPush(inboundMessageId);
 
   // Fire-and-forget: distil durable facts from this A2A turn into long-term
   // memory, mirroring the chat path. Runs before the outbound delivery block so

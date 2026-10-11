@@ -434,11 +434,16 @@ POST   /a2a/v1/message:send              # SendMessage → Task
 GET    /a2a/v1/tasks/{id}                # GetTask
 GET    /a2a/v1/tasks                     # ListTasks（カーソルページング）
 POST   /a2a/v1/tasks/{id}:cancel         # CancelTask → TaskNotCancelable
-POST   /a2a/v1/message:stream            # 未実装 → UnsupportedOperation
-POST   /a2a/v1/tasks/{id}:subscribe      # 未実装 → UnsupportedOperation
+POST   /a2a/v1/message:stream            # SendStreamingMessage → SSE: Task, then statusUpdate
+GET|POST /a2a/v1/tasks/{id}:subscribe    # SubscribeToTask → SSE
+POST   /a2a/v1/tasks/{id}/pushNotificationConfigs            # → TaskPushNotificationConfig
+GET    /a2a/v1/tasks/{id}/pushNotificationConfigs            # → {configs, nextPageToken}
+GET    /a2a/v1/tasks/{id}/pushNotificationConfigs/{configId}
+DELETE /a2a/v1/tasks/{id}/pushNotificationConfigs/{configId} # idempotent
 GET    /a2a/v1/extendedAgentCard         # 未実装 → UnsupportedOperation
-*      /a2a/v1/tasks/{id}/pushNotificationConfigs…  # → PushNotificationNotSupported
 ```
+
+**ストリーミングとプッシュ。** `message:stream` は `message:send` と同じ検証とゲートを通り、`text/event-stream` で応答する。イベントは 1 行の `data:` に 1 つの `StreamResponse`：まず `{task}`、タスクが終わる（または人の承認待ちの `AUTH_REQUIRED` になる）と `{statusUpdate}` を 1 つ送り、閉じる。このパスでは回答は 1 回の LLM 呼び出しで途中出力がないため、粒度はタスクイベント単位。`:subscribe` は GET と POST の両方を受け付け（proto は GET、spec の表は POST）、終了済みのタスクには `UnsupportedOperation` を返す。プッシュ：peer はタスクに webhook を登録でき（`message:send` の `configuration.taskPushNotificationConfig` でも可）、タスクの状態が変わるたびに `{task}` を 1 回 POST する。`Authorization: {scheme} {credentials}` を付け、`token` は `X-A2A-Notification-Token` で送る。webhook は https かつ公開アドレスに解決されなければならない（送信側 A2A と同じ SSRF 規則で、配信時にも再確認し、リダイレクトは追わない）。認証情報は封印して保存し、読み出し時は `scheme` だけを返す。タスクあたり最大 5 個で、登録した peer だけが参照・削除できる。
 
 **Confer 独自の方言**（インスタンス間で使う。`/.well-known/agents.json` から発見される）:
 
@@ -471,7 +476,7 @@ Linux Foundation の **Agent2Agent v1.0** の `AgentCard` に従う（フィー�
 いくつかの意図的な取捨:
 
 - **Agent 1 つにつき Card 1 枚**。`supportedInterfaces[].tenant` はユーザー名。仕様の well-known は 1 ドメインに 1 Agent を前提にしているが、このインスタンスはマルチテナントである。`tenant` はまさに、仕様が「1 つの A2A エンドポイントの背後に複数の Agent」のために定義したルーティング用セレクタだ。`/.well-known/agent-card.json` は**公開 Agent がちょうど 1 つ**のときだけ応答し（単独セルフホストの場合）、そうでなければ 404 を返してエラーメッセージで `agents.json` を指す。適当なアカウントを 1 つ選んで「このドメインの Agent」と称するのは誤りだからである。
-- **`streaming: false`**。ストリーミングのエンドポイントは確かに存在するが、それは Confer 独自の形であって仕様の `SendStreamingMessage` ではない。標準クライアントが使えない能力を宣言するのは、宣言しないよりも悪い。
+- **`streaming: true`、`pushNotifications: true`**。`message:stream`、`:subscribe`、プッシュ設定ルートはいずれも spec の形で応答する。ストリーミングはタスクイベント単位（Task の後に確定した状態を 1 つ）。
 - **`securitySchemes` は宣言しない**。仕様がそこで用意しているのは API キー / HTTP auth / OAuth2 / OIDC / mTLS だが、このエンドポイントはそのどれも受け取らない。求めているのは署名されたリクエストである。適当に 1 つ埋めるのは、必ず拒否される方法で認証してよいとクライアントに告げるに等しい。本当の要求は**必須拡張**（`capabilities.extensions`。`uri` は RFC 9421 のアドレス、`required: true`）として宣言する。仕様がこのために用意した機構がまさにこれだ。
 - Card は**発見ドキュメント**であり、その可視性は `/.well-known/agents.json` と完全に同じである。非公開または停止中の Agent は一律 404。そうでなければこの経路が、持ち主が公開するつもりの無かったアカウントを列挙する手段になってしまう。
 

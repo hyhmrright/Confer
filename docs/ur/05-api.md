@@ -434,11 +434,16 @@ POST   /a2a/v1/message:send              # SendMessage → Task
 GET    /a2a/v1/tasks/{id}                # GetTask
 GET    /a2a/v1/tasks                     # ListTasks(کرسر سے صفحہ بندی)
 POST   /a2a/v1/tasks/{id}:cancel         # CancelTask → TaskNotCancelable
-POST   /a2a/v1/message:stream            # غیر نافذ → UnsupportedOperation
-POST   /a2a/v1/tasks/{id}:subscribe      # غیر نافذ → UnsupportedOperation
+POST   /a2a/v1/message:stream            # SendStreamingMessage → SSE: Task, then statusUpdate
+GET|POST /a2a/v1/tasks/{id}:subscribe    # SubscribeToTask → SSE
+POST   /a2a/v1/tasks/{id}/pushNotificationConfigs            # → TaskPushNotificationConfig
+GET    /a2a/v1/tasks/{id}/pushNotificationConfigs            # → {configs, nextPageToken}
+GET    /a2a/v1/tasks/{id}/pushNotificationConfigs/{configId}
+DELETE /a2a/v1/tasks/{id}/pushNotificationConfigs/{configId} # idempotent
 GET    /a2a/v1/extendedAgentCard         # غیر نافذ → UnsupportedOperation
-*      /a2a/v1/tasks/{id}/pushNotificationConfigs…  # → PushNotificationNotSupported
 ```
+
+**اسٹریمنگ اور پش۔** `message:stream` انہی جانچوں اور دروازوں سے گزرتا ہے جن سے `message:send`، اور `text/event-stream` سے جواب دیتا ہے، ہر `StreamResponse` کے لیے ایک `data:` سطر: پہلے `{task}`، پھر کام ختم ہونے (یا کسی شخص کے انتظار میں `AUTH_REQUIRED` تک پہنچنے) پر ایک `{statusUpdate}`، پھر اسٹریم بند۔ اس راستے پر جواب بغیر جزوی آؤٹ پٹ کے ایک LLM باری ہے، اس لیے باریکی کام کے واقعات کی سطح پر ہے۔ `:subscribe` GET اور POST دونوں قبول کرتا ہے (proto میں GET، spec کی جدولوں میں POST) اور ختم شدہ کام پر `UnsupportedOperation` دیتا ہے۔ پش: peer کسی کام پر webhook درج کرتا ہے (یا `message:send` میں `configuration.taskPushNotificationConfig` دیتا ہے)، اور کام جس حالت میں بھی پہنچے وہ ایک بار `{task}` کی صورت میں POST ہوتی ہے، `Authorization: {scheme} {credentials}` کے ساتھ اور `token` `X-A2A-Notification-Token` میں۔ webhook لازماً https ہو اور عوامی پتے پر حل ہو (باہر جانے والے A2A والا وہی SSRF اصول، ترسیل پر دوبارہ جانچا جاتا ہے، ری ڈائریکٹ نہیں مانے جاتے)؛ اسناد مہر بند رکھی جاتی ہیں اور صرف `scheme` لوٹایا جاتا ہے۔ فی کام زیادہ سے زیادہ 5، جنہیں صرف درج کرنے والا peer دیکھ یا حذف کر سکتا ہے۔
 
 **Confer کی اپنی بولی** (انسٹنسوں کے درمیان؛ `/.well-known/agents.json` سے دریافت ہوتی ہے):
 
@@ -471,7 +476,7 @@ Linux Foundation کے **Agent2Agent v1.0** کے `AgentCard` کے مطابق (خ�
 چند جان بوجھ کر کیے گئے فیصلے:
 
 - **ہر Agent کا اپنا Card**، جس میں `supportedInterfaces[].tenant` = صارف نام۔ تفصیلات کا well-known فرض کرتا ہے کہ ایک ڈومین پر ایک Agent ہے، جبکہ یہ انسٹنس کثیر کرایہ دار ہے؛ `tenant` ٹھیک وہی راہ گزینی کا انتخاب کنندہ ہے جسے تفصیلات نے «ایک ہی A2A راستے کے پیچھے کئی Agent» کے لیے متعین کیا۔ `/.well-known/agent-card.json` تبھی جواب دیتا ہے جب **ٹھیک ایک عوامی Agent** ہو (اکیلے خود میزبانی کرنے والے کی صورت)، ورنہ 404 دیتا ہے اور خرابی کے پیغام میں `agents.json` کی طرف اشارہ کرتا ہے — کسی بھی کھاتے کو اٹھا کر «اس ڈومین کا Agent» کہہ دینا غلط ہوتا۔
-- **`streaming: false`**۔ رواں راستے واقعی موجود ہیں، مگر وہ Confer کی اپنی صورت کے ہیں، تفصیلات کے `SendStreamingMessage` کے نہیں۔ ایسی صلاحیت کا اعلان کرنا جسے معیاری کلائنٹ برت ہی نہ سکے، اعلان نہ کرنے سے بدتر ہے۔
+- **`streaming: true`، `pushNotifications: true`۔** `message:stream`، `:subscribe` اور پش کنفیگ راستے spec کی شکل میں جواب دیتے ہیں؛ اسٹریمنگ کام کے واقعات کی سطح پر ہے (Task، پھر ایک حتمی حالت)۔
 - **`securitySchemes` کا اعلان نہیں ہوتا**۔ تفصیلات وہاں API کلید، HTTP توثیق، OAuth2، OIDC یا mTLS دیتی ہیں، اور یہ راستہ ان میں سے ایک بھی نہیں لیتا — اسے دستخط شدہ درخواست چاہیے۔ کوئی بھی ایک بھر دینا کلائنٹ سے یہ کہنے کے مترادف ہے کہ وہ ایسے طریقے سے توثیق کر سکتا ہے جو یقیناً مسترد ہو گا۔ اصل تقاضا **لازمی توسیع** کے طور پر بیان ہوتا ہے (`capabilities.extensions`، جس میں `uri` RFC 9421 کا پتہ ہے اور `required: true`) — تفصیلات نے اسی کام کے لیے یہ طریقہ رکھا ہے۔
 - Card ایک **دریافت دستاویز** ہے اور اس کی نمائش بالکل `/.well-known/agents.json` جیسی ہے: غیر عوامی یا معطل Agent ہمیشہ 404 دیتا ہے، ورنہ یہ راستہ اُن کھاتوں کو گننے کا ذریعہ بن جاتا جنہیں مالک نے عام کرنے کا ارادہ ہی نہ کیا تھا۔
 

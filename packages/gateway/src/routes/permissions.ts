@@ -7,6 +7,8 @@ import {
 import { and, desc, eq, isNull, ne, or } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { resumeHeldA2AQuestion } from '../a2a/answer.js';
+import { asA2AQuestionScope } from '../a2a/inbound-permissions.js';
+import { queueTaskPush } from '../a2a/push.js';
 import { getDb } from '../db/connection.js';
 import { peerAgents, peerContacts, permissions } from '../db/schema.js';
 import { runDetached } from '../lib/background.js';
@@ -114,6 +116,11 @@ permissionRoutes.post('/:id/decide', requireSession, async (c) => {
       body.decision === 'allow_always' ? 'allow' : 'deny',
     );
   }
+
+  // A refusal ends the peer's task (REJECTED); a webhook on it should hear so.
+  // An approval needs no push here: the answer it leads to sends its own.
+  const held = row.action === 'ask' ? asA2AQuestionScope(row.scope_json) : null;
+  if (held && body.decision.startsWith('deny')) queueTaskPush(held.inbound_message_id);
 
   // Approving a held A2A question lets the agent answer it now. Run the agent
   // loop fire-and-forget so this endpoint returns immediately without waiting

@@ -10,13 +10,9 @@ import { getDb } from '../db/connection.js';
 import { sessions, users } from '../db/schema.js';
 import { writeAudit } from '../lib/audit.js';
 import { hashPassword, verifyPassword } from '../lib/password.js';
+import { openSecret, sealSecret } from '../lib/sealed.js';
 import { generateTotpSecret, otpauthUri, verifyTotp } from '../lib/totp.js';
-import {
-  consumeSecondFactor,
-  newRecoveryCodes,
-  openSecret,
-  sealSecret,
-} from '../lib/two-factor.js';
+import { consumeSecondFactor, newRecoveryCodes } from '../lib/two-factor.js';
 import { authMiddleware, requireSession } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rate-limit.js';
 import type { AppEnv } from '../types.js';

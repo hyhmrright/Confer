@@ -20,11 +20,14 @@
  * discovered through `/.well-known/agents.json` instead, which is Confer's own
  * directory, and this Card stays free of a claim it cannot honour.
  *
- * Two capabilities are deliberately NOT claimed:
+ * `streaming` and `pushNotifications` are claimed because the binding serves
+ * them in the spec's own shapes (`message:stream`, `:subscribe`, and the
+ * push-config routes in `routes/a2a-rest.ts`). Streaming is at task-event
+ * granularity — the task, then its settled status — since an answer is one
+ * LLM turn with no partial output on this path; the spec asks for no more.
  *
- *   - `streaming: false`. There is a streaming endpoint, but it is Confer's own
- *     shape, not the spec's `SendStreamingMessage`. Advertising a capability a
- *     standard client cannot actually use is worse than not advertising it.
+ * One thing is deliberately NOT claimed:
+ *
  *   - No `securitySchemes`. The spec's set is API key / HTTP auth / OAuth2 /
  *     OIDC / mTLS, and this endpoint accepts none of them — it requires a
  *     request signature. Claiming one of those would tell a client it can
@@ -130,8 +133,8 @@ export function buildAgentCard(input: AgentCardInput): AgentCard {
     ],
     provider: { url: instanceUrl, organization: 'Confer' },
     capabilities: {
-      streaming: false,
-      pushNotifications: false,
+      streaming: true,
+      pushNotifications: true,
       extendedAgentCard: false,
       extensions: [
         {

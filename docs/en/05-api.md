@@ -434,11 +434,16 @@ POST   /a2a/v1/message:send              # SendMessage → Task
 GET    /a2a/v1/tasks/{id}                # GetTask
 GET    /a2a/v1/tasks                     # ListTasks (cursor pagination)
 POST   /a2a/v1/tasks/{id}:cancel         # CancelTask → TaskNotCancelable
-POST   /a2a/v1/message:stream            # not implemented → UnsupportedOperation
-POST   /a2a/v1/tasks/{id}:subscribe      # not implemented → UnsupportedOperation
+POST   /a2a/v1/message:stream            # SendStreamingMessage → SSE: Task, then statusUpdate
+GET|POST /a2a/v1/tasks/{id}:subscribe    # SubscribeToTask → SSE
+POST   /a2a/v1/tasks/{id}/pushNotificationConfigs            # → TaskPushNotificationConfig
+GET    /a2a/v1/tasks/{id}/pushNotificationConfigs            # → {configs, nextPageToken}
+GET    /a2a/v1/tasks/{id}/pushNotificationConfigs/{configId}
+DELETE /a2a/v1/tasks/{id}/pushNotificationConfigs/{configId} # idempotent
 GET    /a2a/v1/extendedAgentCard         # not implemented → UnsupportedOperation
-*      /a2a/v1/tasks/{id}/pushNotificationConfigs…  # → PushNotificationNotSupported
 ```
+
+**Streaming and push.** `message:stream` goes through the same validation and gates as `message:send` and answers `text/event-stream`, one `data:` line per `StreamResponse`: the `{task}` first, then one `{statusUpdate}` when the task finishes (or reaches `AUTH_REQUIRED`, waiting on a person), then the stream closes. An answer is one LLM turn with no partial output on this path, so the granularity is task events. `:subscribe` accepts GET and POST (the proto says GET, the spec's tables POST) and answers `UnsupportedOperation` for a finished task. Push: a peer registers a webhook on a task (or passes `configuration.taskPushNotificationConfig` on `message:send`), and each state the task reaches is POSTed once as `{task}`, with `Authorization: {scheme} {credentials}` and the `token` in `X-A2A-Notification-Token`. The webhook must be https and resolve to a public address (the same SSRF rule as outbound A2A, checked again at delivery, redirects not followed); credentials are sealed and only `scheme` is echoed. At most 5 per task, visible to and deletable by only the peer that registered them.
 
 **Confer's own dialect** (instance to instance; discovered through `/.well-known/agents.json`):
 
@@ -471,7 +476,7 @@ Follows the `AgentCard` of the Linux Foundation's **Agent2Agent v1.0** (fields t
 A few deliberate trade-offs:
 
 - **One Card per Agent**, with `supportedInterfaces[].tenant` = the username. The spec's well-known assumes one Agent per domain, and this instance is multi-tenant; `tenant` is precisely the routing selector the spec defines for "several Agents behind one A2A endpoint". `/.well-known/agent-card.json` answers only when there is **exactly one public Agent** (the solo self-hosting case); otherwise it 404s and points at `agents.json` in the error message — picking an arbitrary account and calling it "this domain's Agent" would simply be false.
-- **`streaming: false`**. Streaming endpoints do exist, but in Confer's own shape, not the spec's `SendStreamingMessage`. Advertising a capability a standard client cannot use is worse than advertising nothing.
+- **`streaming: true`, `pushNotifications: true`.** `message:stream`, `:subscribe` and the push-config routes answer in the spec's shapes; streaming is at task-event granularity (the Task, then one settled status).
 - **No `securitySchemes` declared**. What the spec offers there is API key, HTTP auth, OAuth2, OIDC or mTLS, and this endpoint accepts none of them: what it wants is a signed request. Filling in an arbitrary one would be telling the client it may authenticate in a way that is certain to be rejected. The real requirement is declared as a **required extension** (`capabilities.extensions`, with the RFC 9421 address as `uri` and `required: true`), which is exactly the mechanism the spec provides for this.
 - The Card is a **discovery document**, and its visibility is identical to that of `/.well-known/agents.json`: a non-public or disabled Agent always 404s, or this route would become a way to enumerate accounts their owner never meant to publish.
 

@@ -434,11 +434,16 @@ POST   /a2a/v1/message:send              # SendMessage → Task
 GET    /a2a/v1/tasks/{id}                # GetTask
 GET    /a2a/v1/tasks                     # ListTasks(कर्सर से पृष्ठ-विभाजन)
 POST   /a2a/v1/tasks/{id}:cancel         # CancelTask → TaskNotCancelable
-POST   /a2a/v1/message:stream            # अलागू → UnsupportedOperation
-POST   /a2a/v1/tasks/{id}:subscribe      # अलागू → UnsupportedOperation
+POST   /a2a/v1/message:stream            # SendStreamingMessage → SSE: Task, then statusUpdate
+GET|POST /a2a/v1/tasks/{id}:subscribe    # SubscribeToTask → SSE
+POST   /a2a/v1/tasks/{id}/pushNotificationConfigs            # → TaskPushNotificationConfig
+GET    /a2a/v1/tasks/{id}/pushNotificationConfigs            # → {configs, nextPageToken}
+GET    /a2a/v1/tasks/{id}/pushNotificationConfigs/{configId}
+DELETE /a2a/v1/tasks/{id}/pushNotificationConfigs/{configId} # idempotent
 GET    /a2a/v1/extendedAgentCard         # अलागू → UnsupportedOperation
-*      /a2a/v1/tasks/{id}/pushNotificationConfigs…  # → PushNotificationNotSupported
 ```
+
+**स्ट्रीमिंग और पुश।** `message:stream` उन्हीं जाँचों और द्वारों से गुज़रता है जिनसे `message:send`, और `text/event-stream` से उत्तर देता है, हर `StreamResponse` के लिए एक `data:` पंक्ति: पहले `{task}`, फिर कार्य समाप्त होने (या किसी व्यक्ति की प्रतीक्षा में `AUTH_REQUIRED` तक पहुँचने) पर एक `{statusUpdate}`, फिर स्ट्रीम बंद। इस पथ पर उत्तर बिना आंशिक आउटपुट वाला एक LLM टर्न है, इसलिए ग्रैन्युलैरिटी कार्य-घटना स्तर की है। `:subscribe` GET और POST दोनों स्वीकारता है (proto में GET, spec की तालिकाओं में POST) और समाप्त कार्य पर `UnsupportedOperation` देता है। पुश: peer किसी कार्य पर webhook पंजीकृत करता है (या `message:send` में `configuration.taskPushNotificationConfig` देता है), और कार्य जिस भी स्थिति में पहुँचे, वह एक बार `{task}` के रूप में POST होती है, `Authorization: {scheme} {credentials}` के साथ और `token` `X-A2A-Notification-Token` में। webhook https होना चाहिए और सार्वजनिक पते पर रिज़ॉल्व होना चाहिए (आउटबाउंड A2A वाला ही SSRF नियम, डिलीवरी पर फिर जाँचा जाता है, रीडायरेक्ट नहीं माने जाते); क्रेडेंशियल सीलबंद रखे जाते हैं और केवल `scheme` लौटाया जाता है। प्रति कार्य अधिकतम 5, जिन्हें केवल पंजीकृत करने वाला peer देख या हटा सकता है।
 
 **Confer की अपनी बोली** (इंस्टेंसों के बीच; `/.well-known/agents.json` से खोजी जाती है):
 
@@ -471,7 +476,7 @@ Linux Foundation के **Agent2Agent v1.0** के `AgentCard` के अनु
 कुछ जान-बूझकर लिए गए निर्णय:
 
 - **हर Agent का अपना Card**, जिसमें `supportedInterfaces[].tenant` = उपयोगकर्ता-नाम। विनिर्देश का well-known मानकर चलता है कि एक डोमेन पर एक Agent है, जबकि यह इंस्टेंस बहु-किरायेदार है; `tenant` ठीक वही रूटिंग चयनक है जिसे विनिर्देश ने «एक ही A2A endpoint के पीछे कई Agent» के लिए परिभाषित किया है। `/.well-known/agent-card.json` तभी उत्तर देता है जब **ठीक एक सार्वजनिक Agent** हो (अकेले स्व-होस्ट करने वाले का मामला), वरना 404 देता है और त्रुटि-संदेश में `agents.json` की ओर इशारा करता है — किसी भी खाते को उठाकर «इस डोमेन का Agent» कह देना ग़लत होगा।
-- **`streaming: false`**। धारा-रूप endpoint हैं ज़रूर, पर वे Confer के अपने आकार के हैं, विनिर्देश के `SendStreamingMessage` के नहीं। ऐसी क्षमता घोषित करना जिसे मानक क्लाइंट बरत ही न सके, घोषित न करने से बुरा है।
+- **`streaming: true`, `pushNotifications: true`।** `message:stream`, `:subscribe` और पुश-कॉन्फ़िग मार्ग spec के आकार में उत्तर देते हैं; स्ट्रीमिंग कार्य-घटना स्तर की है (Task, फिर एक अंतिम स्थिति)।
 - **`securitySchemes` घोषित नहीं होते**। विनिर्देश वहाँ API कुंजी, HTTP auth, OAuth2, OIDC या mTLS देता है, और यह endpoint इनमें से एक भी नहीं लेता — उसे चाहिए हस्ताक्षरित अनुरोध। कोई भी एक भर देना क्लाइंट से यह कहने जैसा है कि वह ऐसे तरीक़े से प्रमाणित हो सकता है जो निश्चित रूप से ठुकराया जाएगा। असली अपेक्षा **अनिवार्य विस्तार** के रूप में घोषित है (`capabilities.extensions`, जिसमें `uri` RFC 9421 का पता है और `required: true`) — विनिर्देश ने इसी के लिए यह तंत्र दिया है।
 - Card एक **खोज-दस्तावेज़** है और उसकी दृश्यता बिल्कुल `/.well-known/agents.json` जैसी है: ग़ैर-सार्वजनिक या निष्क्रिय Agent हमेशा 404 देता है, वरना यह मार्ग उन खातों को गिनने का ज़रिया बन जाता जिन्हें मालिक ने सार्वजनिक करने का इरादा ही नहीं किया था।
 

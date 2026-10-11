@@ -120,6 +120,13 @@
       "when": 1791688129195,
       "tag": "0016_api_tokens",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1791688672452,
+      "tag": "0017_a2a_push_configs",
+      "breakpoints": true
     }
   ]
 }

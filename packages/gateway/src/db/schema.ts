@@ -254,6 +254,29 @@ export const apiTokens = pgTable(
   (t) => [index('idx_api_tokens_user').on(t.user_id)],
 );
 
+// A2A push notification configs (§4.3): where a peer asked to be told about a
+// task's progress. Scoped to the peer that registered it — `caller_did` — so
+// one peer can never read or replace another's. The receiver's credentials are
+// the peer's secrets, kept sealed like every other credential here.
+export const a2aPushConfigs = pgTable(
+  'a2a_push_configs',
+  {
+    id: char('id', { length: 26 }).primaryKey(),
+    // The inbound message the task is. No foreign key: a deleted conversation
+    // takes its messages with it, and a config left pointing at nothing is inert.
+    task_id: char('task_id', { length: 26 }).notNull(),
+    caller_did: varchar('caller_did', { length: 255 }).notNull(),
+    url: text('url').notNull(),
+    token_json: jsonb('token_json'),
+    auth_scheme: varchar('auth_scheme', { length: 64 }),
+    auth_credentials_json: jsonb('auth_credentials_json'),
+    // The last state delivered, so a state is announced once, not on every change check.
+    last_state: varchar('last_state', { length: 32 }),
+    created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('idx_a2a_push_configs_task').on(t.task_id)],
+);
+
 export const sessions = pgTable(
   'sessions',
   {

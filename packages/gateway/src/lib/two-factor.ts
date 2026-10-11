@@ -1,27 +1,16 @@
 import { createHmac, randomBytes } from 'node:crypto';
-import { AppError, decrypt, type EncryptedValue, encrypt } from '@confer/shared';
+import { AppError } from '@confer/shared';
 import { and, eq, isNull, lt, or, sql } from 'drizzle-orm';
 import { getDb } from '../db/connection.js';
 import { users } from '../db/schema.js';
 import { getEnv } from '../env.js';
+import { openSecret } from './sealed.js';
 import { base32Encode, verifyTotp } from './totp.js';
 
 // The second step of signing in: an authenticator code, or one of the recovery
 // codes handed out when two-step sign-in was turned on.
 
 const RECOVERY_CODE_COUNT = 10;
-
-export async function sealSecret(secret: string): Promise<EncryptedValue> {
-  const sealed = await encrypt(secret, getEnv().ENCRYPTION_KEY);
-  if (!sealed.ok) throw new AppError('encryption_failed', 'Failed to protect the secret', 500);
-  return sealed.value;
-}
-
-export async function openSecret(sealed: unknown): Promise<string> {
-  const opened = await decrypt(sealed as EncryptedValue, getEnv().ENCRYPTION_KEY);
-  if (!opened.ok) throw new AppError('decryption_failed', 'Failed to read the secret', 500);
-  return opened.value;
-}
 
 // Recovery codes are compared without their dash and case, the way people
 // retype them from paper. Keyed with the server's secret rather than plainly

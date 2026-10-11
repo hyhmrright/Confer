@@ -21,7 +21,7 @@ import {
 import { SIGNATURE_EXTENSION_URI } from '../lib/agent-card.js';
 import { settleDetached } from '../lib/background.js';
 import { clearNonceCache } from '../lib/nonce-cache.js';
-import { mockFetch, resetDb, type SeededUser, seedUser } from '../test/helpers.js';
+import { mockFetch, post, resetDb, type SeededUser, seedUser } from '../test/helpers.js';
 
 // The Linux Foundation A2A HTTP+JSON binding, driven the way a standard client
 // would drive it: the spec's paths, the spec's request bodies, and a real RFC
@@ -337,19 +337,25 @@ describe('message:send', () => {
     expect((await res.json()).error.details[0].reason).toBe('CONTENT_TYPE_NOT_SUPPORTED');
   });
 
-  test('refuses a push-notification config it cannot honour', async () => {
+  // A webhook is called as given, so it gets the same check as a peer's A2A
+  // endpoint: https, resolving to a public address. Refused before anything is
+  // stored, so a bad one cannot leave behind a question nobody will hear about.
+  test.each([
+    'http://hooks.example/a2a',
+    'https://127.0.0.1/a2a',
+    'https://user:pw@hooks.example/a2a',
+  ])('refuses a push webhook at %s', async (url) => {
     await seedAgent();
     await connectPeer();
     const res = await call(
       'POST',
       '/message:send',
-      sendNow('hi', {
-        configuration: { taskPushNotificationConfig: { pushNotificationConfig: { url: 'x' } } },
-      }),
+      sendNow('hi', { configuration: { taskPushNotificationConfig: { url } } }),
     );
 
     expect(res.status).toBe(400);
-    expect((await res.json()).error.details[0].reason).toBe('PUSH_NOTIFICATION_NOT_SUPPORTED');
+    expect((await res.json()).error.details[0].reason).toBe('INVALID_ARGUMENT');
+    expect(await getDb().select().from(messages)).toHaveLength(0);
   });
 
   test('rejects a malformed request body', async () => {
@@ -603,23 +609,274 @@ describe('operations this agent does not offer', () => {
     expect(error.message).toContain('cancel');
   });
 
-  test.each([
-    ['POST', '/message:stream', 'UNSUPPORTED_OPERATION'],
-    ['POST', '/tasks/t1:subscribe', 'UNSUPPORTED_OPERATION'],
-    ['GET', '/extendedAgentCard', 'UNSUPPORTED_OPERATION'],
-    ['POST', '/tasks/t1/pushNotificationConfigs', 'PUSH_NOTIFICATION_NOT_SUPPORTED'],
-    ['GET', '/tasks/t1/pushNotificationConfigs', 'PUSH_NOTIFICATION_NOT_SUPPORTED'],
-    ['GET', '/tasks/t1/pushNotificationConfigs/c1', 'PUSH_NOTIFICATION_NOT_SUPPORTED'],
-    ['DELETE', '/tasks/t1/pushNotificationConfigs/c1', 'PUSH_NOTIFICATION_NOT_SUPPORTED'],
-  ])('%s %s answers the capability error the spec names', async (method, path, reason) => {
+  test('answers the capability error the spec names for an extended Card', async () => {
     // §3.3.4 does not allow a 404 here: a client that reads the Card knows the
     // operation exists and needs to be told which capability is missing.
     await seedAgent();
     await connectPeer();
-    const res = await call(method, path, method === 'POST' ? {} : undefined);
+    const res = await call('GET', '/extendedAgentCard');
 
     expect(res.status).toBe(400);
-    expect((await res.json()).error.details[0].reason).toBe(reason);
+    expect((await res.json()).error.details[0].reason).toBe('UNSUPPORTED_OPERATION');
+  });
+});
+
+/** The `StreamResponse` objects in an SSE body, in order (§11.7: one per `data:` line). */
+async function streamEvents(res: Response): Promise<Array<Record<string, any>>> {
+  expect(res.headers.get('content-type')).toStartWith('text/event-stream');
+  return (await res.text())
+    .split('\n')
+    .filter((line) => line.startsWith('data: '))
+    .map((line) => JSON.parse(line.slice(6)));
+}
+
+describe('streaming', () => {
+  test('message:stream sends the task first, then its settled status, then closes', async () => {
+    // No model key in these fixtures, so the turn ends in a failure notice:
+    // WORKING, then FAILED — the two events a client of this agent can see.
+    await seedAgent();
+    await connectPeer();
+    const events = await streamEvents(await call('POST', '/message:stream', sendBody('hi')));
+
+    // The failure is instant, so it can land before the first snapshot is read:
+    // then the task itself is the one, settled event. Otherwise WORKING comes
+    // first and a status update settles it.
+    const first = events[0]?.task;
+    expect(first.id).toBeTruthy();
+    if (events.length === 1) {
+      expect(first.status.state).toBe('TASK_STATE_FAILED');
+      return;
+    }
+    expect(events).toHaveLength(2);
+    expect(first.status.state).toBe('TASK_STATE_WORKING');
+    expect(events[1]?.statusUpdate).toMatchObject({
+      taskId: first.id,
+      contextId: first.contextId,
+      status: { state: 'TASK_STATE_FAILED' },
+    });
+  });
+
+  // §11.7: the stream closes on an interrupted state too — only a person can
+  // move a task out of AUTH_REQUIRED, and nobody should hold a socket for that.
+  test('a held question streams its AUTH_REQUIRED task and closes', async () => {
+    await seedAgent({ default: 'ask_user' });
+    await connectPeer();
+    const events = await streamEvents(await call('POST', '/message:stream', sendBody('hold')));
+
+    expect(events).toHaveLength(1);
+    expect(events[0]?.task.status.state).toBe('TASK_STATE_AUTH_REQUIRED');
+  });
+
+  test('a stream request goes through the same gates as a send', async () => {
+    await seedAgent();
+    const res = await call('POST', '/message:stream', sendBody('stranger'));
+    expect(res.status).toBe(403);
+    expect((await res.json()).error.details[0].reason).toBe('PERMISSION_DENIED');
+  });
+
+  // The proto says GET and the spec's tables say POST; both are served.
+  test.each(['GET', 'POST'])('%s :subscribe opens with the current task', async (method) => {
+    await seedAgent({ default: 'ask_user' });
+    await connectPeer();
+    const task = await (await call('POST', '/message:send', sendNow('hold'))).json();
+
+    const events = await streamEvents(await call(method, `/tasks/${task.id}:subscribe`));
+    expect(events[0]?.task.id).toBe(task.id);
+    expect(events[0]?.task.status.state).toBe('TASK_STATE_AUTH_REQUIRED');
+  });
+
+  test('caps open streams per peer, and frees a slot when one closes', async () => {
+    await seedAgent({ default: 'ask_user' });
+    const peerId = await connectPeer();
+    // Unanswered and ungated: WORKING, so each subscription stays open.
+    const db = getDb();
+    const convId = newId();
+    await db
+      .insert(conversations)
+      .values({ id: convId, type: 'direct_agent_agent', created_by: user.id });
+    const taskId = newId();
+    await db.insert(messages).values({
+      id: taskId,
+      conversation_id: convId,
+      sender_type: 'peer_agent',
+      sender_id: peerId,
+      sender_did: PEER_DID,
+      content_type: 'text',
+      content: 'open',
+      thread_root: convId,
+      via: 'a2a',
+    });
+
+    const open = await Promise.all(
+      Array.from({ length: 5 }, () => call('GET', `/tasks/${taskId}:subscribe`)),
+    );
+    const sixth = await call('GET', `/tasks/${taskId}:subscribe`);
+    expect(sixth.status).toBe(429);
+    expect((await sixth.json()).error.details[0].reason).toBe('RESOURCE_EXHAUSTED');
+
+    for (const res of open) await res.body?.cancel();
+    // A cancelled stream notices on its next tick and gives its slot back.
+    let again: Response | undefined;
+    for (let i = 0; i < 20; i++) {
+      await Bun.sleep(100);
+      again = await call('GET', `/tasks/${taskId}:subscribe`);
+      if (again.status === 200) break;
+    }
+    expect(again?.status).toBe(200);
+    await again?.body?.cancel();
+  });
+
+  test(':subscribe refuses a finished task, and 404s one that is not the caller own', async () => {
+    await seedAgent();
+    await connectPeer();
+    const task = await (await call('POST', '/message:send', sendNow('hi'))).json();
+    await settleDetached();
+
+    const finished = await call('POST', `/tasks/${task.id}:subscribe`);
+    expect(finished.status).toBe(400);
+    expect((await finished.json()).error.details[0].reason).toBe('UNSUPPORTED_OPERATION');
+
+    const unknown = await call('GET', `/tasks/${newId()}:subscribe`);
+    expect(unknown.status).toBe(404);
+  });
+});
+
+describe('push notifications', () => {
+  const HOOK = 'https://hooks.example/a2a?channel=7';
+  let delivered: Array<{ headers: Headers; body: Record<string, any> }>;
+
+  beforeEach(() => {
+    delivered = [];
+    const inner = restoreFetch;
+    const restoreHooks = mockFetch((url, init) => {
+      if (!url.startsWith('https://hooks.example/')) return undefined;
+      delivered.push({ headers: new Headers(init?.headers), body: JSON.parse(String(init?.body)) });
+      return new Response(null, { status: 204 });
+    });
+    restoreFetch = () => {
+      restoreHooks();
+      inner();
+    };
+  });
+
+  const register = (taskId: string, extra: Record<string, unknown> = {}) =>
+    call('POST', `/tasks/${taskId}/pushNotificationConfigs`, { url: HOOK, ...extra });
+
+  test('tells the webhook each state a task reaches, once, with the credentials it was given', async () => {
+    await seedAgent({ default: 'ask_user' });
+    await connectPeer();
+    const task = await (await call('POST', '/message:send', sendNow('hold'))).json();
+
+    const res = await register(task.id, {
+      token: 'per-task-token',
+      authentication: { scheme: 'Bearer', credentials: 'receiver-secret' },
+    });
+    expect(res.status).toBe(200);
+    const config = await res.json();
+    expect(config).toMatchObject({ taskId: task.id, url: HOOK });
+    // What the receiver checks to trust a push is written, never read back.
+    expect(config.token).toBeUndefined();
+    expect(config.authentication).toEqual({ scheme: 'Bearer' });
+
+    await settleDetached();
+    expect(delivered).toHaveLength(1);
+    expect(delivered[0]?.body.task.status.state).toBe('TASK_STATE_AUTH_REQUIRED');
+    expect(delivered[0]?.headers.get('authorization')).toBe('Bearer receiver-secret');
+    expect(delivered[0]?.headers.get('content-type')).toBe('application/a2a+json');
+    expect(delivered[0]?.headers.get('x-a2a-notification-token')).toBe('per-task-token');
+
+    // The owner refuses: REJECTED reaches the webhook.
+    const [held] = await getDb()
+      .select({ id: permissions.id })
+      .from(permissions)
+      .where(eq(permissions.action, 'ask'));
+    await post(`/api/v1/permissions/${held?.id}/decide`, {
+      token: user.token,
+      body: { decision: 'deny', scope: 'peer_action' },
+    });
+    await settleDetached();
+    expect(delivered.map((d) => d.body.task.status.state)).toEqual([
+      'TASK_STATE_AUTH_REQUIRED',
+      'TASK_STATE_REJECTED',
+    ]);
+  });
+
+  test('a config given on send hears the turn end', async () => {
+    await seedAgent();
+    await connectPeer();
+    await call(
+      'POST',
+      '/message:send',
+      sendNow('hi', { configuration: { taskPushNotificationConfig: { url: HOOK } } }),
+    );
+    await settleDetached();
+
+    expect(delivered.at(-1)?.body.task.status.state).toBe('TASK_STATE_FAILED');
+  });
+
+  test('lists, reads and deletes configs, and only for the peer that made them', async () => {
+    await seedAgent({ default: 'ask_user' });
+    await connectPeer();
+    await connectPeer(OTHER_DID);
+    const task = await (await call('POST', '/message:send', sendNow('hold'))).json();
+    const config = await (await register(task.id)).json();
+
+    const listed = await (await call('GET', `/tasks/${task.id}/pushNotificationConfigs`)).json();
+    expect(listed).toEqual({ configs: [config], nextPageToken: '' });
+    const one = await call('GET', `/tasks/${task.id}/pushNotificationConfigs/${config.id}`);
+    expect(await one.json()).toEqual(config);
+
+    const asOther = { key: otherKey, keyId: OTHER_KEY_ID };
+    expect(
+      (await call('GET', `/tasks/${task.id}/pushNotificationConfigs`, undefined, asOther)).status,
+    ).toBe(404);
+    expect(
+      (await call('POST', `/tasks/${task.id}/pushNotificationConfigs`, { url: HOOK }, asOther))
+        .status,
+    ).toBe(404);
+
+    // Deleting is idempotent (§3.1.10), and the other peer's delete touches nothing.
+    await call(
+      'DELETE',
+      `/tasks/${task.id}/pushNotificationConfigs/${config.id}`,
+      undefined,
+      asOther,
+    );
+    expect(
+      (await call('GET', `/tasks/${task.id}/pushNotificationConfigs/${config.id}`)).status,
+    ).toBe(200);
+    for (let i = 0; i < 2; i++) {
+      const gone = await call('DELETE', `/tasks/${task.id}/pushNotificationConfigs/${config.id}`);
+      expect(gone.status).toBe(200);
+    }
+    expect(
+      (await call('GET', `/tasks/${task.id}/pushNotificationConfigs/${config.id}`)).status,
+    ).toBe(404);
+  });
+
+  // These become request headers at delivery, where a bad one would only fail
+  // inside a retry loop, long after the peer could have been told.
+  test.each([
+    { authentication: { scheme: 'Bearer token', credentials: 'x' } },
+    { authentication: { scheme: 'Bearer', credentials: 'a\r\nX-Injected: 1' } },
+    { token: 'a\nb' },
+  ])('refuses a config whose header values could not be sent: %j', async (extra) => {
+    await seedAgent({ default: 'ask_user' });
+    await connectPeer();
+    const task = await (await call('POST', '/message:send', sendNow('hold'))).json();
+    const res = await register(task.id, extra);
+    expect(res.status).toBe(400);
+    expect((await res.json()).error.details[0].reason).toBe('INVALID_ARGUMENT');
+  });
+
+  test('refuses a webhook that would reach this machine', async () => {
+    await seedAgent({ default: 'ask_user' });
+    await connectPeer();
+    const task = await (await call('POST', '/message:send', sendNow('hold'))).json();
+    const res = await call('POST', `/tasks/${task.id}/pushNotificationConfigs`, {
+      url: 'https://127.0.0.1/hook',
+    });
+    expect(res.status).toBe(400);
   });
 });
 
@@ -668,10 +925,18 @@ describe('owner approval reaches the task state machine', () => {
     const task = await (await call('POST', '/message:send', sendBody('needs approval'))).json();
     expect(task.status.state).toBe('TASK_STATE_AUTH_REQUIRED');
 
-    await getDb()
-      .update(permissions)
-      .set({ decision: 'denied' })
+    // Through the owner's real decide route: this used to write a `'denied'`
+    // that the route never writes, and so pinned a mapping production could not
+    // reach — a refused question really sat at WORKING forever.
+    const [held] = await getDb()
+      .select({ id: permissions.id })
+      .from(permissions)
       .where(and(eq(permissions.user_id, user.id), eq(permissions.action, 'ask')));
+    const decided = await post(`/api/v1/permissions/${held?.id}/decide`, {
+      token: user.token,
+      body: { decision: 'deny', scope: 'peer_action' },
+    });
+    expect(decided.status).toBe(200);
 
     const after = await (await call('GET', `/tasks/${task.id}`)).json();
     expect(after.status.state).toBe('TASK_STATE_REJECTED');
@@ -722,6 +987,33 @@ describe('task state machine', () => {
     expect(task.status.state).toBe('TASK_STATE_WORKING');
     // Interim states carry no status message: there is nothing true to say yet.
     expect(task.status.message).toBeUndefined();
+  });
+
+  // Deterministic, unlike a live turn: the task is WORKING when the stream
+  // opens, and the answer is written while it is open.
+  test(':subscribe streams a WORKING task through to its answer', async () => {
+    const agentId = await seedAgent();
+    const { taskId, convId } = await seedInbound(await connectPeer());
+    // Awaited inside the callback: a drizzle query is a lazy thenable, and one
+    // nobody awaits is never sent.
+    setTimeout(async () => {
+      await getDb().insert(messages).values({
+        id: newId(),
+        conversation_id: convId,
+        sender_type: 'own_agent',
+        sender_id: agentId,
+        content_type: 'text',
+        content: 'here it is',
+        in_reply_to: taskId,
+        via: 'a2a',
+      });
+    }, 300);
+
+    const events = await streamEvents(await call('GET', `/tasks/${taskId}:subscribe`));
+    expect(events).toHaveLength(2);
+    expect(events[0]?.task.status.state).toBe('TASK_STATE_WORKING');
+    expect(events[1]?.statusUpdate.status.state).toBe('TASK_STATE_COMPLETED');
+    expect(events[1]?.statusUpdate.status.message.parts[0].text).toBe('here it is');
   });
 
   test('a moderator-hidden question is invisible even to the peer that sent it', async () => {

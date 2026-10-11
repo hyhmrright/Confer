@@ -99,14 +99,20 @@ export async function sendA2AMessage(
  * trailing `?` in the published endpoint swallowed the `/messages` appended
  * above and let the document choose the whole path.
  */
-async function refusePeerUrl(raw: string): Promise<string | null> {
+export async function refusePeerUrl(
+  raw: string,
+  opts: { allowQuery?: boolean } = {},
+): Promise<string | null> {
   let url: URL;
   try {
     url = new URL(raw);
   } catch {
     return 'Peer endpoint is not a valid URL';
   }
-  if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash) {
+  // A webhook is called as given, so its query cannot swallow an appended
+  // path; it may carry one. Everything else here applies to it unchanged.
+  const query = opts.allowQuery ? '' : url.search;
+  if (url.protocol !== 'https:' || url.username || url.password || query || url.hash) {
     return 'Peer endpoint must be a plain https URL';
   }
   try {

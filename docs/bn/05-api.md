@@ -434,11 +434,16 @@ POST   /a2a/v1/message:send              # SendMessage → Task
 GET    /a2a/v1/tasks/{id}                # GetTask
 GET    /a2a/v1/tasks                     # ListTasks(কার্সর দিয়ে পৃষ্ঠাভাগ)
 POST   /a2a/v1/tasks/{id}:cancel         # CancelTask → TaskNotCancelable
-POST   /a2a/v1/message:stream            # অবাস্তবায়িত → UnsupportedOperation
-POST   /a2a/v1/tasks/{id}:subscribe      # অবাস্তবায়িত → UnsupportedOperation
+POST   /a2a/v1/message:stream            # SendStreamingMessage → SSE: Task, then statusUpdate
+GET|POST /a2a/v1/tasks/{id}:subscribe    # SubscribeToTask → SSE
+POST   /a2a/v1/tasks/{id}/pushNotificationConfigs            # → TaskPushNotificationConfig
+GET    /a2a/v1/tasks/{id}/pushNotificationConfigs            # → {configs, nextPageToken}
+GET    /a2a/v1/tasks/{id}/pushNotificationConfigs/{configId}
+DELETE /a2a/v1/tasks/{id}/pushNotificationConfigs/{configId} # idempotent
 GET    /a2a/v1/extendedAgentCard         # অবাস্তবায়িত → UnsupportedOperation
-*      /a2a/v1/tasks/{id}/pushNotificationConfigs…  # → PushNotificationNotSupported
 ```
+
+**স্ট্রিমিং ও পুশ।** `message:stream` একই যাচাই ও গেটের মধ্য দিয়ে যায় যেমন `message:send`, এবং `text/event-stream`-এ উত্তর দেয়, প্রতিটি `StreamResponse`-এর জন্য একটি `data:` লাইন: প্রথমে `{task}`, তারপর কাজ শেষ হলে (বা কারও অনুমোদনের অপেক্ষায় `AUTH_REQUIRED`-এ পৌঁছালে) একটি `{statusUpdate}`, তারপর স্ট্রিম বন্ধ। এই পথে উত্তর আংশিক আউটপুট ছাড়া একটি LLM টার্ন, তাই গ্রানুলারিটি কাজ-ঘটনা স্তরের। `:subscribe` GET ও POST দুটোই নেয় (proto-তে GET, spec-এর টেবিলে POST) এবং শেষ হওয়া কাজে `UnsupportedOperation` দেয়। পুশ: peer কোনো কাজে webhook নিবন্ধন করে (বা `message:send`-এ `configuration.taskPushNotificationConfig` দেয়), আর কাজ যে অবস্থায় পৌঁছায় তা একবার `{task}` হিসেবে POST হয়, `Authorization: {scheme} {credentials}` সহ এবং `token` থাকে `X-A2A-Notification-Token`-এ। webhook অবশ্যই https এবং পাবলিক ঠিকানায় রিজলভ হতে হবে (আউটবাউন্ড A2A-র একই SSRF নিয়ম, ডেলিভারির সময় আবার যাচাই হয়, রিডাইরেক্ট মানা হয় না); ক্রেডেনশিয়াল সিল করে রাখা হয় আর শুধু `scheme` ফেরত দেওয়া হয়। প্রতি কাজে সর্বোচ্চ ৫টি, শুধু নিবন্ধনকারী peer দেখতে বা মুছতে পারে।
 
 **Confer-এর নিজস্ব উপভাষা** (ইনস্ট্যান্সে-ইনস্ট্যান্সে; `/.well-known/agents.json` দিয়ে খুঁজে পাওয়া যায়):
 
@@ -471,7 +476,7 @@ Linux Foundation-এর **Agent2Agent v1.0**-এর `AgentCard` অনুসা�
 কয়েকটি সচেতন সিদ্ধান্ত:
 
 - **প্রতি Agent-এ একটি Card**, যেখানে `supportedInterfaces[].tenant` = ব্যবহারকারী-নাম। নির্দেশনার well-known ধরে নেয় এক ডোমেইনে এক Agent, অথচ এই ইনস্ট্যান্স বহু-ভাড়াটে; «একই A2A প্রান্তবিন্দুর পিছনে একাধিক Agent»-এর জন্য নির্দেশনা যে রাউটিং নির্বাচক দিয়েছে, `tenant` ঠিক সেটাই। `/.well-known/agent-card.json` কেবল তখনই উত্তর দেয় যখন **ঠিক একটিই প্রকাশ্য Agent** থাকে (একা স্ব-হোস্ট করার ক্ষেত্র), নইলে 404 দেয় আর ত্রুটি-বার্তায় `agents.json`-এর দিকে দেখায় — যেকোনো একটি অ্যাকাউন্ট বেছে «এই ডোমেইনের Agent» বলা ভুল হতো।
-- **`streaming: false`**। ধারা-আকারের প্রান্তবিন্দু সত্যিই আছে, তবে সেগুলো Confer-এর নিজস্ব আকারের, নির্দেশনার `SendStreamingMessage`-এর নয়। প্রমিত ক্লায়েন্ট ব্যবহার করতে পারবে না এমন সামর্থ্য ঘোষণা করা, না করার চেয়েও খারাপ।
+- **`streaming: true`, `pushNotifications: true`।** `message:stream`, `:subscribe` ও পুশ-কনফিগ রুটগুলো spec-এর আকারে উত্তর দেয়; স্ট্রিমিং কাজ-ঘটনা স্তরের (Task, তারপর একটি চূড়ান্ত অবস্থা)।
 - **`securitySchemes` ঘোষণা করা হয় না**। নির্দেশনা সেখানে দেয় API চাবি, HTTP auth, OAuth2, OIDC কিংবা mTLS — এই প্রান্তবিন্দু এদের একটিও নেয় না; তার চাই স্বাক্ষরিত অনুরোধ। যেকোনো একটি বসিয়ে দেওয়া মানে ক্লায়েন্টকে বলা যে সে এমন উপায়ে প্রমাণীকরণ করতে পারে যা নিশ্চিতভাবেই নাকচ হবে। আসল দাবিটি ঘোষিত হয় **আবশ্যিক এক্সটেনশন** হিসেবে (`capabilities.extensions`, যেখানে `uri` হলো RFC 9421-এর ঠিকানা আর `required: true`) — নির্দেশনা এই কাজের জন্যই এই কলটি রেখেছে।
 - Card একটি **আবিষ্কার-নথি**, আর তার দৃশ্যমানতা হুবহু `/.well-known/agents.json`-এর মতো: অপ্রকাশ্য বা নিষ্ক্রিয় Agent সবসময় 404 দেয়, নইলে এই পথই হয়ে দাঁড়াত মালিক যেসব অ্যাকাউন্ট প্রকাশ করতে চাননি সেগুলো গুনে নেওয়ার উপায়।
 

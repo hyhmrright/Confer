@@ -434,11 +434,16 @@ POST   /a2a/v1/message:send              # SendMessage → Task
 GET    /a2a/v1/tasks/{id}                # GetTask
 GET    /a2a/v1/tasks                     # ListTasks (paginación por cursor)
 POST   /a2a/v1/tasks/{id}:cancel         # CancelTask → TaskNotCancelable
-POST   /a2a/v1/message:stream            # sin implementar → UnsupportedOperation
-POST   /a2a/v1/tasks/{id}:subscribe      # sin implementar → UnsupportedOperation
+POST   /a2a/v1/message:stream            # SendStreamingMessage → SSE: Task, then statusUpdate
+GET|POST /a2a/v1/tasks/{id}:subscribe    # SubscribeToTask → SSE
+POST   /a2a/v1/tasks/{id}/pushNotificationConfigs            # → TaskPushNotificationConfig
+GET    /a2a/v1/tasks/{id}/pushNotificationConfigs            # → {configs, nextPageToken}
+GET    /a2a/v1/tasks/{id}/pushNotificationConfigs/{configId}
+DELETE /a2a/v1/tasks/{id}/pushNotificationConfigs/{configId} # idempotent
 GET    /a2a/v1/extendedAgentCard         # sin implementar → UnsupportedOperation
-*      /a2a/v1/tasks/{id}/pushNotificationConfigs…  # → PushNotificationNotSupported
 ```
+
+**Streaming y push.** `message:stream` pasa por las mismas validaciones y puertas que `message:send` y responde `text/event-stream`, una línea `data:` por cada `StreamResponse`: primero `{task}`, después un `{statusUpdate}` cuando la tarea termina (o llega a `AUTH_REQUIRED`, a la espera de una persona), y se cierra. En esta ruta la respuesta es un único turno del LLM sin salida parcial, así que la granularidad es de eventos de tarea. `:subscribe` acepta GET y POST (el proto dice GET, las tablas de la spec POST) y responde `UnsupportedOperation` a una tarea terminada. Push: un peer registra un webhook en una tarea (o envía `configuration.taskPushNotificationConfig` en `message:send`) y cada estado que alcanza la tarea se envía una vez por POST como `{task}`, con `Authorization: {scheme} {credentials}` y el `token` en `X-A2A-Notification-Token`. El webhook debe ser https y resolver a una dirección pública (la misma regla SSRF que el A2A saliente, comprobada de nuevo al entregar, sin seguir redirecciones); las credenciales se guardan selladas y solo se devuelve `scheme`. Como máximo 5 por tarea, visibles y borrables solo por el peer que los registró.
 
 **El dialecto propio de Confer** (para hablar entre instancias; se descubre por `/.well-known/agents.json`):
 
@@ -471,7 +476,7 @@ Sigue el `AgentCard` de **Agent2Agent v1.0** de la Linux Foundation (los campos 
 Algunas decisiones deliberadas:
 
 - **Una Card por Agente**, con `supportedInterfaces[].tenant` = nombre de usuario. El well-known de la especificación da por supuesto un Agente por dominio, y esta instancia es multiinquilino; `tenant` es precisamente el selector de enrutado que la especificación define para «varios Agentes detrás de un mismo endpoint A2A». `/.well-known/agent-card.json` solo responde cuando hay **exactamente un Agente público** (el caso de quien se autoaloja en solitario); si no, devuelve 404 y en el mensaje de error apunta a `agents.json` — elegir una cuenta cualquiera y llamarla «el Agente de este dominio» sería sencillamente falso.
-- **`streaming: false`**. Endpoints en flujo sí que hay, pero con la forma propia de Confer, no con el `SendStreamingMessage` de la especificación. Anunciar una capacidad que un cliente estándar no puede usar es peor que no anunciarla.
+- **`streaming: true`, `pushNotifications: true`.** `message:stream`, `:subscribe` y las rutas de configuración de push responden con las formas de la spec; el streaming es a nivel de eventos de tarea (la Task y después un estado final).
 - **No se declara `securitySchemes`**. Lo que la especificación ofrece ahí es clave de API, autenticación HTTP, OAuth2, OIDC o mTLS, y este endpoint no acepta ninguno: lo que quiere es una petición firmada. Rellenar uno cualquiera equivaldría a decirle al cliente que puede autenticarse de una forma que se va a rechazar sin falta. El requisito real se declara como **extensión obligatoria** (`capabilities.extensions`, con la dirección de la RFC 9421 en `uri` y `required: true`), que es justo el mecanismo que la especificación prevé para esto.
 - La Card es un **documento de descubrimiento** y su visibilidad es idéntica a la de `/.well-known/agents.json`: un Agente no público o dado de baja devuelve 404 siempre; de lo contrario esta ruta se convertiría en una manera de enumerar cuentas que su dueño no quiso hacer públicas.
 

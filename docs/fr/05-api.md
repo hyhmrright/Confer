@@ -434,11 +434,16 @@ POST   /a2a/v1/message:send              # SendMessage → Task
 GET    /a2a/v1/tasks/{id}                # GetTask
 GET    /a2a/v1/tasks                     # ListTasks (pagination par curseur)
 POST   /a2a/v1/tasks/{id}:cancel         # CancelTask → TaskNotCancelable
-POST   /a2a/v1/message:stream            # non implémenté → UnsupportedOperation
-POST   /a2a/v1/tasks/{id}:subscribe      # non implémenté → UnsupportedOperation
+POST   /a2a/v1/message:stream            # SendStreamingMessage → SSE: Task, then statusUpdate
+GET|POST /a2a/v1/tasks/{id}:subscribe    # SubscribeToTask → SSE
+POST   /a2a/v1/tasks/{id}/pushNotificationConfigs            # → TaskPushNotificationConfig
+GET    /a2a/v1/tasks/{id}/pushNotificationConfigs            # → {configs, nextPageToken}
+GET    /a2a/v1/tasks/{id}/pushNotificationConfigs/{configId}
+DELETE /a2a/v1/tasks/{id}/pushNotificationConfigs/{configId} # idempotent
 GET    /a2a/v1/extendedAgentCard         # non implémenté → UnsupportedOperation
-*      /a2a/v1/tasks/{id}/pushNotificationConfigs…  # → PushNotificationNotSupported
 ```
+
+**Streaming et push.** `message:stream` passe par les mêmes validations et barrières que `message:send` et répond en `text/event-stream`, une ligne `data:` par `StreamResponse` : d'abord `{task}`, puis un `{statusUpdate}` quand la tâche se termine (ou atteint `AUTH_REQUIRED`, en attente d'une personne), puis le flux se ferme. Sur ce chemin, une réponse est un seul tour de LLM sans sortie partielle, d'où une granularité par événement de tâche. `:subscribe` accepte GET et POST (le proto dit GET, les tableaux de la spec POST) et répond `UnsupportedOperation` pour une tâche terminée. Push : un peer enregistre un webhook sur une tâche (ou passe `configuration.taskPushNotificationConfig` dans `message:send`), et chaque état atteint est envoyé une fois en POST sous forme de `{task}`, avec `Authorization: {scheme} {credentials}` et le `token` dans `X-A2A-Notification-Token`. Le webhook doit être en https et se résoudre vers une adresse publique (même règle SSRF que l'A2A sortant, revérifiée à la livraison, redirections non suivies) ; les identifiants sont scellés et seul `scheme` est renvoyé. Au plus 5 par tâche, visibles et supprimables uniquement par le peer qui les a enregistrés.
 
 **Le dialecte propre à Confer** (entre instances ; découvert via `/.well-known/agents.json`) :
 
@@ -471,7 +476,7 @@ Conforme à l'`AgentCard` d'**Agent2Agent v1.0** de la Linux Foundation (champs 
 Quelques choix délibérés :
 
 - **Une Card par Agent**, avec `supportedInterfaces[].tenant` = nom d'utilisateur. Le well-known de la spécification suppose un Agent par domaine, alors que cette instance est multi-locataire ; `tenant` est précisément le sélecteur de routage que la spécification définit pour « plusieurs Agents derrière un même point d'accès A2A ». `/.well-known/agent-card.json` ne répond que s'il y a **exactement un Agent public** (le cas de l'auto-hébergement solitaire) ; sinon il renvoie 404 en pointant vers `agents.json` dans le message d'erreur — désigner un compte au hasard comme « l'Agent de ce domaine » serait faux.
-- **`streaming: false`**. Des points d'accès en flux existent bel et bien, mais à la forme propre de Confer, pas au `SendStreamingMessage` de la spécification. Annoncer une capacité qu'un client standard ne peut pas utiliser est pire que de ne rien annoncer.
+- **`streaming: true`, `pushNotifications: true`.** `message:stream`, `:subscribe` et les routes de configuration push répondent dans les formes de la spec ; le streaming se fait par événement de tâche (la Task, puis un état final).
 - **Pas de `securitySchemes` déclaré**. Ce que la spécification propose là, c'est clé d'API, authentification HTTP, OAuth2, OIDC ou mTLS, et ce point d'accès n'en accepte aucun : ce qu'il veut, c'est une requête signée. En remplir un au hasard reviendrait à dire au client qu'il peut s'authentifier d'une manière qui sera immanquablement rejetée. L'exigence réelle est déclarée comme **extension obligatoire** (`capabilities.extensions`, avec l'adresse de la RFC 9421 en `uri` et `required: true`), c'est-à-dire le mécanisme que la spécification prévoit exactement pour cela.
 - La Card est un **document de découverte** et sa visibilité est identique à celle de `/.well-known/agents.json` : un Agent non public ou désactivé renvoie systématiquement 404, sans quoi cette route deviendrait un moyen d'énumérer des comptes que leur propriétaire n'a pas voulu rendre publics.
 

@@ -434,11 +434,16 @@ POST   /a2a/v1/message:send              # SendMessage → Task
 GET    /a2a/v1/tasks/{id}                # GetTask
 GET    /a2a/v1/tasks                     # ListTasks(تصفّح بمؤشّر)
 POST   /a2a/v1/tasks/{id}:cancel         # CancelTask → TaskNotCancelable
-POST   /a2a/v1/message:stream            # غير منجَز → UnsupportedOperation
-POST   /a2a/v1/tasks/{id}:subscribe      # غير منجَز → UnsupportedOperation
+POST   /a2a/v1/message:stream            # SendStreamingMessage → SSE: Task, then statusUpdate
+GET|POST /a2a/v1/tasks/{id}:subscribe    # SubscribeToTask → SSE
+POST   /a2a/v1/tasks/{id}/pushNotificationConfigs            # → TaskPushNotificationConfig
+GET    /a2a/v1/tasks/{id}/pushNotificationConfigs            # → {configs, nextPageToken}
+GET    /a2a/v1/tasks/{id}/pushNotificationConfigs/{configId}
+DELETE /a2a/v1/tasks/{id}/pushNotificationConfigs/{configId} # idempotent
 GET    /a2a/v1/extendedAgentCard         # غير منجَز → UnsupportedOperation
-*      /a2a/v1/tasks/{id}/pushNotificationConfigs…  # → PushNotificationNotSupported
 ```
+
+**البث والإشعارات الفورية.** يمر `message:stream` بنفس عمليات التحقق والبوابات التي يمر بها `message:send` ويرد بـ `text/event-stream`، بسطر `data:` واحد لكل `StreamResponse`: أولًا `{task}`، ثم `{statusUpdate}` واحد عند انتهاء المهمة (أو بلوغها `AUTH_REQUIRED` بانتظار شخص)، ثم يُغلق البث. الإجابة على هذا المسار دورة LLM واحدة بلا مخرجات جزئية، لذا فالدقة على مستوى أحداث المهمة. يقبل `:subscribe` كلًا من GET وPOST (الـ proto يقول GET وجداول المواصفة تقول POST) ويرد بـ `UnsupportedOperation` على المهمة المنتهية. الإشعارات: يسجّل الـ peer عنوان webhook على مهمة (أو يمرر `configuration.taskPushNotificationConfig` في `message:send`)، وتُرسَل كل حالة تبلغها المهمة مرة واحدة بطلب POST على شكل `{task}`، مع `Authorization: {scheme} {credentials}` ووضع `token` في `X-A2A-Notification-Token`. يجب أن يكون الـ webhook بـ https وأن يُحل إلى عنوان عام (قاعدة SSRF نفسها المطبقة على A2A الصادر، ويُعاد التحقق عند التسليم، ولا تُتبع إعادات التوجيه)؛ وتُخزَّن بيانات الاعتماد مختومة ولا يُعاد إلا `scheme`. خمسة كحد أقصى لكل مهمة، ولا يراها أو يحذفها إلا الـ peer الذي سجّلها.
 
 **لهجة Confer الخاصة** (بين النسخ؛ تُكتشف عبر `/.well-known/agents.json`):
 
@@ -471,7 +476,7 @@ GET    /.well-known/agent-card.json         # المثل، فقط إن كان ف
 بضعة اختيارات مقصودة:
 
 - **بطاقة لكل وكيل**، وفيها `supportedInterfaces[].tenant` = اسم المستخدم. فمسار well-known في المواصفة يفترض وكيلًا واحدًا لكل نطاق، وهذه النسخة متعدّدة المستأجرين؛ و`tenant` هو بعينه مُحدِّد التوجيه الذي عرّفته المواصفة لحالة «عدّة وكلاء خلف مسار A2A واحد». ولا يجيب `/.well-known/agent-card.json` إلا إذا كان الوكيل العلني **واحدًا بالضبط** (حالة من يستضيف لنفسه وحده)، وإلا أعاد 404 وأشار في نص الخطأ إلى `agents.json` — فاختيار حساب أيًّا كان وتسميته «وكيل هذا النطاق» باطل.
-- **`streaming: false`**. المسارات التدفّقية موجودة فعلًا، لكنها على هيئة Confer الخاصة لا على `SendStreamingMessage` الذي في المواصفة. والإعلان عن قدرة لا يستطيع عميل قياسي استعمالها أسوأ من ترك الإعلان.
+- **`streaming: true` و`pushNotifications: true`.** تجيب `message:stream` و`:subscribe` ومسارات إعداد الإشعارات بأشكال المواصفة؛ والبث على مستوى أحداث المهمة (الـ Task ثم حالة نهائية واحدة).
 - **لا يُعلَن `securitySchemes`**. فما تعرضه المواصفة هناك هو مفتاح واجهة أو توثيق HTTP أو OAuth2 أو OIDC أو mTLS، وهذا المسار لا يقبل واحدًا منها: إنما يريد طلبًا موقَّعًا. وملء أيٍّ منها اعتباطًا يعادل إخبار العميل بأنه يستطيع التوثّق بطريقة سيُرفض بها حتمًا. أما الاشتراط الحقيقي فمعلَن بوصفه **امتدادًا لازمًا** (`capabilities.extensions`، حيث `uri` عنوان RFC 9421 و`required: true`)، وهي الآلية التي وفّرتها المواصفة لهذا الغرض بعينه.
 - البطاقة **مستند اكتشاف**، وظهورها مطابق تمامًا لظهور `/.well-known/agents.json`: فالوكيل غير العلني أو المعطَّل يعيد 404 دائمًا، وإلا صار هذا المسار طريقًا إلى تعداد حسابات لم يُرِد صاحبها إعلانها.
 

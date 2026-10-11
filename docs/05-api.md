@@ -452,11 +452,16 @@ POST   /a2a/v1/message:send              # SendMessage → Task
 GET    /a2a/v1/tasks/{id}                # GetTask
 GET    /a2a/v1/tasks                     # ListTasks（游标分页）
 POST   /a2a/v1/tasks/{id}:cancel         # CancelTask → TaskNotCancelable
-POST   /a2a/v1/message:stream            # 未实现 → UnsupportedOperation
-POST   /a2a/v1/tasks/{id}:subscribe      # 未实现 → UnsupportedOperation
+POST   /a2a/v1/message:stream            # SendStreamingMessage → SSE: Task, then statusUpdate
+GET|POST /a2a/v1/tasks/{id}:subscribe    # SubscribeToTask → SSE
+POST   /a2a/v1/tasks/{id}/pushNotificationConfigs            # → TaskPushNotificationConfig
+GET    /a2a/v1/tasks/{id}/pushNotificationConfigs            # → {configs, nextPageToken}
+GET    /a2a/v1/tasks/{id}/pushNotificationConfigs/{configId}
+DELETE /a2a/v1/tasks/{id}/pushNotificationConfigs/{configId} # idempotent
 GET    /a2a/v1/extendedAgentCard         # 未实现 → UnsupportedOperation
-*      /a2a/v1/tasks/{id}/pushNotificationConfigs…  # → PushNotificationNotSupported
 ```
+
+**流式与推送。** `message:stream` 与 `message:send` 走同一套校验和闸门，回答为 `text/event-stream`，每个事件是一行 `data:`，内容为一个 `StreamResponse`：先是 `{task}`，任务结束（或进入需要人批准的 `AUTH_REQUIRED`）时再发一个 `{statusUpdate}`，然后关闭；回答在这条路径上是一次完整的 LLM 调用，没有逐字输出，所以是任务事件粒度。`:subscribe` 同时接受 GET 和 POST（proto 写 GET，spec 表格写 POST），对已结束的任务返回 `UnsupportedOperation`。推送：对方在任务上登记 webhook（也可在 `message:send` 的 `configuration.taskPushNotificationConfig` 里带上），任务状态每变一次就 POST 一次 `{task}`，同一状态只发一次；带 `Authorization: {scheme} {credentials}`，`token` 放在 `X-A2A-Notification-Token`。webhook 必须是 https 且解析到公网地址（与出站 A2A 同一条 SSRF 规则，投递时再查一遍，不跟随重定向）；凭据密封保存，读取时只回显 `scheme`。每个任务最多 5 个，只有登记它的那个 peer 能看到或删除。
 
 **Confer 自己的方言**（实例之间用，经 `/.well-known/agents.json` 发现）：
 
@@ -489,7 +494,7 @@ GET    /.well-known/agent-card.json         # 同上，仅当本实例只有一�
 几个刻意的取舍：
 
 - **每个 Agent 一张 Card**，`supportedInterfaces[].tenant` = 用户名。spec 的 well-known 假设一个域名一个 Agent，而本实例是多租户；`tenant` 正是 spec 为「单个 A2A 端点后面多个 Agent」定义的路由选择器。`/.well-known/agent-card.json` 只在**恰好一个公开 Agent** 时作答（单人自托管场景），否则 404 并在错误信息里指向 `agents.json` —— 随便挑一个账号称之为「本域名的 Agent」是错的。
-- **`streaming: false`**。确实有流式端点，但那是 Confer 自己的形状，不是 spec 的 `SendStreamingMessage`。宣称一个标准客户端用不了的能力，比不宣称更糟。
+- **`streaming: true`、`pushNotifications: true`**。`message:stream`、`:subscribe` 和推送配置路由都按 spec 的形状作答，流式是任务事件粒度（先 Task，再一个结束状态）。
 - **不声明 `securitySchemes`**。spec 那套是 API key / HTTP auth / OAuth2 / OIDC / mTLS，本端点一个都不收——它要的是请求签名。随便挑一个填上，等于告诉客户端可以用一种必然被拒的方式认证。真实要求改用**必需扩展**（`capabilities.extensions`，`uri` 为 RFC 9421 的地址，`required: true`）声明，这正是 spec 为此提供的机制。
 - Card 是**发现文档**，可见性与 `/.well-known/agents.json` 完全一致：非公开或已停用的 Agent 一律 404，否则这条路由就成了枚举主人没打算公开的账号的办法。
 

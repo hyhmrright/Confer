@@ -434,11 +434,16 @@ POST   /a2a/v1/message:send              # SendMessage → Task
 GET    /a2a/v1/tasks/{id}                # GetTask
 GET    /a2a/v1/tasks                     # ListTasks (курсорная постраничность)
 POST   /a2a/v1/tasks/{id}:cancel         # CancelTask → TaskNotCancelable
-POST   /a2a/v1/message:stream            # не реализовано → UnsupportedOperation
-POST   /a2a/v1/tasks/{id}:subscribe      # не реализовано → UnsupportedOperation
+POST   /a2a/v1/message:stream            # SendStreamingMessage → SSE: Task, then statusUpdate
+GET|POST /a2a/v1/tasks/{id}:subscribe    # SubscribeToTask → SSE
+POST   /a2a/v1/tasks/{id}/pushNotificationConfigs            # → TaskPushNotificationConfig
+GET    /a2a/v1/tasks/{id}/pushNotificationConfigs            # → {configs, nextPageToken}
+GET    /a2a/v1/tasks/{id}/pushNotificationConfigs/{configId}
+DELETE /a2a/v1/tasks/{id}/pushNotificationConfigs/{configId} # idempotent
 GET    /a2a/v1/extendedAgentCard         # не реализовано → UnsupportedOperation
-*      /a2a/v1/tasks/{id}/pushNotificationConfigs…  # → PushNotificationNotSupported
 ```
+
+**Потоковая передача и push.** `message:stream` проходит те же проверки и шлюзы, что и `message:send`, и отвечает `text/event-stream`, по одной строке `data:` на `StreamResponse`: сначала `{task}`, затем один `{statusUpdate}`, когда задача завершается (или переходит в `AUTH_REQUIRED`, ожидая человека), после чего поток закрывается. На этом пути ответ — один ход LLM без промежуточного вывода, поэтому гранулярность — события задачи. `:subscribe` принимает GET и POST (в proto — GET, в таблицах спецификации — POST) и для завершённой задачи отвечает `UnsupportedOperation`. Push: peer регистрирует webhook на задаче (или передаёт `configuration.taskPushNotificationConfig` в `message:send`), и каждое достигнутое состояние отправляется один раз POST-запросом как `{task}` с `Authorization: {scheme} {credentials}`, а `token` — в `X-A2A-Notification-Token`. Webhook должен быть https и разрешаться в публичный адрес (то же правило SSRF, что и для исходящего A2A, повторно проверяется при доставке, перенаправления не выполняются); учётные данные хранятся запечатанными, наружу возвращается только `scheme`. Не более 5 на задачу; видеть и удалять их может только зарегистрировавший peer.
 
 **Собственный диалект Confer** (между экземплярами; обнаруживается через `/.well-known/agents.json`):
 
@@ -471,7 +476,7 @@ GET    /.well-known/agent-card.json         # то же самое, только
 Несколько намеренных решений:
 
 - **По одной карточке на Агента**, где `supportedInterfaces[].tenant` — имя пользователя. Well-known в спецификации исходит из «один домен — один Агент», а этот экземпляр многоарендный; `tenant` и есть тот селектор маршрутизации, который спецификация вводит для случая «несколько Агентов за одним эндпоинтом A2A». `/.well-known/agent-card.json` отвечает, только когда публичный Агент **ровно один** (случай одиночного самостоятельного хостинга), иначе возвращает 404 и в тексте ошибки указывает на `agents.json` — назвать произвольно выбранную учётную запись «Агентом этого домена» было бы неправдой.
-- **`streaming: false`**. Потоковые эндпоинты действительно есть, но в собственной форме Confer, а не в виде спецификационного `SendStreamingMessage`. Объявить возможность, которой стандартный клиент воспользоваться не сможет, хуже, чем не объявлять ничего.
+- **`streaming: true`, `pushNotifications: true`.** `message:stream`, `:subscribe` и маршруты настроек push отвечают в формах спецификации; потоковая передача — на уровне событий задачи (Task, затем одно итоговое состояние).
 - **`securitySchemes` не объявляются**. Спецификация предлагает там ключ API, HTTP-аутентификацию, OAuth2, OIDC или mTLS, а этот эндпоинт не принимает ни одного из них: ему нужен подписанный запрос. Вписать что-нибудь наугад — значит сказать клиенту, что он может аутентифицироваться способом, который наверняка отвергнут. Настоящее требование объявлено как **обязательное расширение** (`capabilities.extensions`, где `uri` — адрес RFC 9421, а `required: true`), и это ровно тот механизм, который спецификация для этого и предусмотрела.
 - Карточка — это **документ обнаружения**, и её видимость в точности совпадает с видимостью `/.well-known/agents.json`: непубличный или отключённый Агент всегда отдаёт 404, иначе этот маршрут превратился бы в способ перечислить учётные записи, которые хозяин публиковать не собирался.
 
