@@ -73,6 +73,12 @@ export const enableTwoFactorRequestSchema = z.object({
   code: z.string().max(16),
 });
 
+/** Body of `POST /api/v1/tokens`. No expiry means the token lasts until revoked. */
+export const createApiTokenRequestSchema = z.object({
+  name: z.string().trim().min(1).max(64),
+  expires_in_days: z.number().int().min(1).max(365).optional(),
+});
+
 /** Body of `POST /api/v1/auth/2fa/disable`: the password and a second factor. */
 export const disableTwoFactorRequestSchema = z.object({
   password: z.string().max(128),

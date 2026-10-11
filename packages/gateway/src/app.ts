@@ -11,6 +11,7 @@ import { adminRoutes } from './routes/admin.js';
 import { agentCardRoutes } from './routes/agent-card.js';
 import { agentDidRoutes } from './routes/agent-did.js';
 import { agentFactsRoutes } from './routes/agent-facts.js';
+import { apiTokenRoutes } from './routes/api-tokens.js';
 import { attachmentRoutes } from './routes/attachments.js';
 import { authRoutes } from './routes/auth.js';
 import { consultRoutes } from './routes/consult.js';
@@ -82,6 +83,7 @@ app.route('/agents', agentCardRoutes);
 
 app.route('/api/v1/auth', authRoutes);
 app.route('/api/v1/auth', accountSecurityRoutes);
+app.route('/api/v1/tokens', apiTokenRoutes);
 app.route('/api/v1/users', userRoutes);
 app.route('/api/v1/agents', agentRoutes);
 app.route('/api/v1/contacts', contactRoutes);

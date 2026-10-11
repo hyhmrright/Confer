@@ -20,7 +20,7 @@ import { getEnv } from '../env.js';
 import { uniqueViolation } from '../lib/db-errors.js';
 import { getUserLlmKeys } from '../lib/llm-keys.js';
 import { isRuntimeBaseUrl, runtimeFetcher } from '../lib/runtime-url.js';
-import { authMiddleware } from '../middleware/auth.js';
+import { authMiddleware, requireSession } from '../middleware/auth.js';
 import type { AppEnv } from '../types.js';
 
 // Key slots the owner can fill: every catalogued LLM provider, plus the tool
@@ -206,7 +206,8 @@ agentRoutes.get('/me/llm-keys', async (c) => {
   return c.json({ keys });
 });
 
-agentRoutes.put('/me/llm-keys', async (c) => {
+// Credentials: the owner's, not a script's (see `requireSession`).
+agentRoutes.put('/me/llm-keys', requireSession, async (c) => {
   const user = c.get('user');
   const db = getDb();
   const body = llmKeyBodySchema.parse(await c.req.json());
@@ -226,7 +227,7 @@ agentRoutes.put('/me/llm-keys', async (c) => {
   return c.json({ ok: true });
 });
 
-agentRoutes.delete('/me/llm-keys/:provider', async (c) => {
+agentRoutes.delete('/me/llm-keys/:provider', requireSession, async (c) => {
   const user = c.get('user');
   const db = getDb();
   const provider = c.req.param('provider');

@@ -19,7 +19,7 @@ import { uniqueViolation } from '../lib/db-errors.js';
 import { hashPassword, verifyPassword } from '../lib/password.js';
 import { userDid } from '../lib/public-identity.js';
 import { consumeSecondFactor } from '../lib/two-factor.js';
-import { authMiddleware, jwtSecret, TOKEN_TYPE } from '../middleware/auth.js';
+import { authMiddleware, jwtSecret, requireSession, TOKEN_TYPE } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rate-limit.js';
 import { disconnectSession, disconnectUser } from '../ws/handler.js';
 
@@ -318,7 +318,7 @@ authRoutes.post('/refresh', rateLimit(30, 60_000), async (c) => {
   }
 });
 
-authRoutes.post('/logout', authMiddleware, async (c) => {
+authRoutes.post('/logout', authMiddleware, requireSession, async (c) => {
   const { sub, sid } = c.get('user');
   const db = getDb();
   if (sid) {

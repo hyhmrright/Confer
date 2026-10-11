@@ -74,6 +74,14 @@ POST   /api/v1/auth/oauth/{provider}    # OAuth callback
 
 **两步登录（TOTP）。** 开启后，`login` 在密码正确之后还要求 `totp_code`（身份验证器 App 的 6 位码）或 `recovery_code`；两者都没带时返回 401 `totp_required`，客户端据此显示第二步，码不对返回 401 `invalid_second_factor`。密码错误时永远先返回 `invalid_credentials`，不会透露账号是否开了两步登录。每个验证码只能用一次（记录已用的时间步），每个恢复码用后作废；两者都用一条带条件的 UPDATE 消费，并发登录不能重复使用。`setup` 生成的密钥用 AES-256-GCM 加密保存，在 `enable` 用 App 里的码确认之前不生效；`enable` 只返回这一次恢复码（10 个），服务端只存哈希。`disable` 需要密码加第二因素。`password` 修改密码需要当前密码，并注销该用户的所有其他会话。这些操作都写审计日志，且按账号每分钟限 10 次。 `enable` 同样需要 `password`，这样仅凭盗来的 token 不能把攻击者的身份验证器装进别人的账号；开启两步登录后，`password` 修改密码也需要第二因素。同一账号连续 5 个错误的码会锁定该账号的验证码尝试 15 分钟（429 `too_many_attempts`），与按 IP 的登录限流叠加。恢复码用服务端密钥做 HMAC 保存。用户同时丢失身份验证器和恢复码时，管理员可用 `POST /api/v1/admin/users/{id}/reset-2fa` 为其关闭两步登录（会写审计日志，不能对自己使用）。
 
+```
+GET    /api/v1/tokens              # [{id, name, prefix, created_at, last_used_at, expires_at}]
+POST   /api/v1/tokens              # {name, expires_in_days?} → {token: {..., token}}
+DELETE /api/v1/tokens/{id}
+```
+
+**个人 API 令牌。** 给以主人身份调用 API 的脚本和工具使用：`Authorization: Bearer cfr_…`，与会话的 access token 用同一个请求头。令牌明文只在创建时返回一次，服务端只存 SHA-256 和用于辨认的前缀；可选 1–365 天有效期，每个用户最多 20 个；令牌所属账号被停用后立即失效。令牌能做主人在聊天里能做的事，但下列操作只接受登录会话，令牌调用会得到 403 `session_required`：登出、改密码和两步登录、管理令牌本身、审批权限请求和 errand 卡片、修改 LLM 密钥、所有 admin 接口。泄露的令牌可以替主人跑腿，但不能替主人做决定或把主人锁在外面。管理令牌本身也只接受会话。创建和吊销都写审计日志。
+
 ### 用户和 Agent 配置
 
 ```

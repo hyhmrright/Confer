@@ -17,7 +17,7 @@ import {
   openSecret,
   sealSecret,
 } from '../lib/two-factor.js';
-import { authMiddleware } from '../middleware/auth.js';
+import { authMiddleware, requireSession } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rate-limit.js';
 import type { AppEnv } from '../types.js';
 import { disconnectOtherSessions } from '../ws/handler.js';
@@ -26,9 +26,9 @@ import { disconnectOtherSessions } from '../ws/handler.js';
 // asks for proof of the credential it weakens, and lands in the audit log.
 export const accountSecurityRoutes = new Hono<AppEnv>();
 
-accountSecurityRoutes.use('/password', authMiddleware);
-accountSecurityRoutes.use('/2fa/*', authMiddleware);
-accountSecurityRoutes.use('/2fa', authMiddleware);
+for (const path of ['/password', '/2fa', '/2fa/*']) {
+  accountSecurityRoutes.use(path, authMiddleware, requireSession);
+}
 // Every route here checks a password or a code; the cap is per account.
 const guessLimit = rateLimit<AppEnv>(10, 60_000, {
   keyBy: (c) => `account-security:${c.get('user').sub}`,

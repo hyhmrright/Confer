@@ -173,6 +173,8 @@ describe('LoginPage two-step sign-in', () => {
 
   test('asks for a code after the password, and sends it as the right field', async () => {
     await changeLanguage('en');
+    // Another test in this file may have called it first; count from here.
+    post.mockReset();
     post
       .mockImplementationOnce(async () => {
         throw asApiError('totp_required');

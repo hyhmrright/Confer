@@ -234,6 +234,26 @@ export const permissions = pgTable(
   (t) => [index('idx_permissions_user_peer').on(t.user_id, t.peer_id)],
 );
 
+// Personal API tokens: a long-lived credential an owner hands to a script.
+// Only the SHA-256 of the token is kept — it is 256 random bits, so a fast
+// hash is enough — and `prefix` is what the owner recognises it by.
+export const apiTokens = pgTable(
+  'api_tokens',
+  {
+    id: char('id', { length: 26 }).primaryKey(),
+    user_id: char('user_id', { length: 26 })
+      .notNull()
+      .references(() => users.id),
+    name: varchar('name', { length: 64 }).notNull(),
+    token_hash: char('token_hash', { length: 64 }).unique().notNull(),
+    prefix: varchar('prefix', { length: 16 }).notNull(),
+    created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    last_used_at: timestamp('last_used_at', { withTimezone: true }),
+    expires_at: timestamp('expires_at', { withTimezone: true }),
+  },
+  (t) => [index('idx_api_tokens_user').on(t.user_id)],
+);
+
 export const sessions = pgTable(
   'sessions',
   {

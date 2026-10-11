@@ -149,7 +149,7 @@ async function authenticateUpgrade(
   }
 
   if (!(await sessionIsLive(sub, sid))) return null;
-  return { user: { sub, username, sid }, expiresAt };
+  return { user: { sub, username, sid, via: 'session' }, expiresAt };
 }
 
 /** The account is enabled and the session behind the token still exists. */

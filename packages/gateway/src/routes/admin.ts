@@ -15,7 +15,7 @@ import { getAppConfig, setConfigValue } from '../lib/app-config.js';
 import { writeAudit } from '../lib/audit.js';
 import { countOf } from '../lib/pagination.js';
 import { adminMiddleware } from '../middleware/admin.js';
-import { authMiddleware } from '../middleware/auth.js';
+import { authMiddleware, requireSession } from '../middleware/auth.js';
 import type { AppEnv } from '../types.js';
 import { disconnectUser } from '../ws/handler.js';
 
@@ -23,6 +23,7 @@ export const adminRoutes = new Hono<AppEnv>();
 
 // Identity first, then role — both gates apply to every /admin/* route.
 adminRoutes.use('/*', authMiddleware);
+adminRoutes.use('/*', requireSession);
 adminRoutes.use('/*', adminMiddleware);
 
 // Every admin write is the same event: some field of some row went from

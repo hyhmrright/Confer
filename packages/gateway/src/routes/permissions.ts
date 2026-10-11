@@ -11,7 +11,7 @@ import { getDb } from '../db/connection.js';
 import { peerAgents, peerContacts, permissions } from '../db/schema.js';
 import { runDetached } from '../lib/background.js';
 import { toPermissionRequestEvent } from '../lib/permission-notify.js';
-import { authMiddleware } from '../middleware/auth.js';
+import { authMiddleware, requireSession } from '../middleware/auth.js';
 import type { AppEnv } from '../types.js';
 
 export const permissionRoutes = new Hono<AppEnv>();
@@ -50,7 +50,8 @@ permissionRoutes.get('/pending', async (c) => {
   return c.json({ permissions: rows.map(toPermissionRequestEvent) });
 });
 
-permissionRoutes.post('/:id/decide', async (c) => {
+// A decision is the owner's consent; a script holding their token may not give it.
+permissionRoutes.post('/:id/decide', requireSession, async (c) => {
   const user = c.get('user');
   const db = getDb();
   const id = c.req.param('id');

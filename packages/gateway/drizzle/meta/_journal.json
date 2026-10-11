@@ -113,6 +113,13 @@
       "when": 1791687080416,
       "tag": "0015_users_totp",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1791688129195,
+      "tag": "0016_api_tokens",
+      "breakpoints": true
     }
   ]
 }
