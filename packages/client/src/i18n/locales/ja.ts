@@ -314,12 +314,14 @@ export const ja: Resources = {
     statusThinking: '考え中...',
     statusCallingTool: '{{tool}} を呼び出し中...',
     statusAnsweringPeer: '連絡先に回答中...',
+    uploading: 'アップロード中…',
+    uploadFailed: 'アップロードに失敗しました',
+    removeAttachment: '{{name}} を削除',
+    downloadAttachment: '{{name}} をダウンロード',
     statusFailed: 'この応答は完了しませんでした。もう一度お試しください。',
     statusNoModel:
       'モデルが未選択です。「設定 → エージェント」でプロバイダーとモデルを選んでください。',
     statusNoKey: 'このプロバイダーの API キーがありません。「設定 → モデル」で追加してください。',
-    fileTruncated: '[内容が切り詰められました]',
-    fileReadError: 'このファイルを読み取れませんでした。テキストファイルを選択してください。',
   },
   permission: {
     descAction: '{{who}} が{{what}}ことを求めています',

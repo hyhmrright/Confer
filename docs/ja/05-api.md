@@ -259,9 +259,10 @@ POST   /api/v1/knowledge-bases/{kb_id}/documents/{doc_id}/retry # 再取り込�
 
 ```
 POST   /api/v1/attachments                       # multipart upload
-GET    /api/v1/attachments/{id}                  # ダウンロード（署名付き URL へ 302 リダイレクト）
-DELETE /api/v1/attachments/{id}
+GET    /api/v1/attachments/{id}/content          # ファイル本体：アップロードした本人、またはそのメッセージの会話の参加者に返す
 ```
+
+アップロード直後の添付はどのメッセージにも紐づかず、`POST /conversations/{id}/messages` の `attachment_ids`（最大 5 個）で紐づける。紐づけられるのは送信者自身がアップロードした未送信のものだけ。本文がなく添付だけのメッセージも有効。画像はバイト列で判別し（PNG / JPEG / GIF / WebP、1 枚 5 MB まで）、画像ブロックとしてモデルに渡す。PDF / DOCX / XLSX / テキストはアップロード時に本文を抽出し（10 MB まで）、毎ターン `<attachment>` としてそのメッセージに添える。SVG はテキストとして扱い、画像としてインライン表示しない。`content` がインラインで返すのは判別済みの画像だけで、それ以外は `application/octet-stream` のダウンロードになる。メッセージ一覧の各メッセージには `attachments` が付く。会話を削除すると添付も削除される。
 
 ### 使用量
 

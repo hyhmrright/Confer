@@ -319,13 +319,15 @@ export const fr: Resources = {
     statusThinking: 'Réflexion...',
     statusCallingTool: 'Appel de {{tool}}...',
     statusAnsweringPeer: 'Réponse à un contact...',
+    uploading: 'Envoi…',
+    uploadFailed: "Échec de l'envoi",
+    removeAttachment: 'Retirer {{name}}',
+    downloadAttachment: 'Télécharger {{name}}',
     statusFailed: "Ce tour n'est pas allé au bout. Réessayez.",
     statusNoModel:
       'Aucun modèle choisi pour le moment. Sélectionnez un fournisseur et un modèle dans Paramètres → Agent.',
     statusNoKey:
       "Ce fournisseur n'a pas encore de clé d'API. Ajoutez-en une dans Paramètres → Modèles.",
-    fileTruncated: '[contenu tronqué]',
-    fileReadError: 'Impossible de lire ce fichier. Choisissez un fichier texte.',
   },
   permission: {
     descAction: '{{who}} demande à {{what}}',

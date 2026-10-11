@@ -7,6 +7,7 @@ import { getDb } from '../db/connection.js';
 import { agents, messages } from '../db/schema.js';
 import { getEnv } from '../env.js';
 import { resolveAgentModel } from '../lib/agent-model.js';
+import { turnAttachments } from '../lib/attachments.js';
 import { runDetached } from '../lib/background.js';
 import { turnHistory } from '../lib/conversation-history.js';
 import { getUserLlmKeys, resolveAgentCapabilities } from '../lib/llm-keys.js';
@@ -134,6 +135,10 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
       // Moderator-hidden messages stay out of the model's context; see
       // turnHistory for how the window is sized.
       const historyRows = await turnHistory(conversationId, messageId);
+      // Files ride with the message they were sent with, on every turn that
+      // still has it in its window, so the model can be asked about them later.
+      const files = await turnAttachments([...historyRows.map((m) => m.id), messageId]);
+      const withFiles = (id: string, text: string) => text + (files.get(id)?.text ?? '');
 
       // A peer's message is not something this agent said. Mapped to
       // `assistant`, a connected peer's text in an A2A thread reached the
@@ -145,7 +150,14 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
         if (m.sender_type === 'peer_agent') {
           return { role: 'user', content: `[Message from a connected peer agent]\n${content}` };
         }
-        return { role: m.sender_type === 'user' ? 'user' : 'assistant', content };
+        if (m.sender_type === 'user') {
+          return {
+            role: 'user',
+            content: withFiles(m.id, content),
+            images: files.get(m.id)?.images,
+          };
+        }
+        return { role: 'assistant', content };
       });
 
       const { embeddingKey, embeddingProvider, tavilyApiKey, hasKb, recallMemory } =
@@ -159,7 +171,8 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
         systemPromptBase: systemPrompt,
         model,
         history,
-        userMessage: msg.content ?? '',
+        userMessage: withFiles(messageId, msg.content ?? ''),
+        userImages: files.get(messageId)?.images,
         userId: user.sub,
         agentId: agent.id,
         embeddingKey,

@@ -67,6 +67,22 @@ describe('toOpenAIMessage (via request body)', () => {
     expect(sent[0]).toEqual({ role: 'user', content: 'hi' });
   });
 
+  test('sends a user message’s images as data-URL image_url parts before its text', async () => {
+    mockFetch(() => chatResponse({}));
+    const image = { media_type: 'image/jpeg', data: '/9j/4AAQ' };
+    await provider().chat([
+      { role: 'user', content: 'what is this?', images: [image] },
+      { role: 'user', content: '  ', images: [image] },
+    ]);
+    const sent = lastBody().messages as Array<Record<string, unknown>>;
+    const part = { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,/9j/4AAQ' } };
+    expect(sent[0]).toEqual({
+      role: 'user',
+      content: [part, { type: 'text', text: 'what is this?' }],
+    });
+    expect(sent[1]).toEqual({ role: 'user', content: [part] });
+  });
+
   test('drops the cache hint, which is not a field any vendor defines', async () => {
     // These vendors cache a matching prefix on their own; an unknown field is
     // a 400 at some of them.

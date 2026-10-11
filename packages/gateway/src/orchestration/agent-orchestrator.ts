@@ -1,5 +1,6 @@
 import type {
   LLMChatOptions,
+  LLMImage,
   LLMMessage,
   LLMProvider,
   LLMToolDefinition,
@@ -53,6 +54,8 @@ export interface RunAgentTurnOptions {
   model?: string;
   history: LLMMessage[];
   userMessage: string;
+  // Images the owner sent with this message; the history carries earlier ones.
+  userImages?: LLMImage[];
   userId: string;
   // The agent answering; its turns are what the owner's usage panel counts.
   agentId: string;
@@ -400,7 +403,7 @@ export async function runAgentTurn(opts: RunAgentTurnOptions): Promise<RunAgentT
   const initialMessages: LLMMessage[] = [
     { role: 'system', content: buildSystemPrompt(opts.systemPromptBase, opts.hasKb) },
     ...history,
-    { role: 'user', content: question },
+    { role: 'user', content: question, images: opts.userImages },
   ];
 
   const citations: KbCitation[] = [];

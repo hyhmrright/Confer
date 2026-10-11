@@ -25,12 +25,20 @@ export const systemNoticeSchema = z.object({
   error: z.string().min(1).max(64),
 });
 
-export const sendMessageRequestSchema = z.object({
-  content_type: contentTypeSchema.default('text'),
-  content: z.string().min(1).max(32000),
-  in_reply_to: z.string().length(26).optional(),
-  via: z.enum(['claude-code', 'web', 'mobile', 'api']).default('web'),
-});
+export const sendMessageRequestSchema = z
+  .object({
+    content_type: contentTypeSchema.default('text'),
+    content: z.string().max(32000),
+    in_reply_to: z.string().length(26).optional(),
+    via: z.enum(['claude-code', 'web', 'mobile', 'api']).default('web'),
+    // Files uploaded through `POST /attachments`, claimed by this message.
+    attachment_ids: z.array(z.string().length(26)).max(5).default([]),
+  })
+  // An image needs no caption, but a message must carry something.
+  .refine((m) => m.content.length > 0 || m.attachment_ids.length > 0, {
+    message: 'A message needs content or an attachment',
+    path: ['content'],
+  });
 
 export const consultRequestSchema = z.object({
   question: z.string().min(1).max(8000),

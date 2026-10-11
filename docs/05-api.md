@@ -266,9 +266,10 @@ POST   /api/v1/knowledge-bases/{kb_id}/documents/{doc_id}/retry # 重新入库
 
 ```
 POST   /api/v1/attachments                       # multipart upload
-GET    /api/v1/attachments/{id}                  # 下载（302 redirect 到签名 URL）
-DELETE /api/v1/attachments/{id}
+GET    /api/v1/attachments/{id}/content          # 文件本身：上传者或该消息所在对话的参与者
 ```
+
+上传后附件处于未绑定状态，发送消息时在 `POST /conversations/{id}/messages` 里用 `attachment_ids`（最多 5 个）认领，只能认领自己上传且还没被发送过的；只有附件没有正文的消息也合法。图片按文件内容识别（PNG / JPEG / GIF / WebP，每张最多 5 MB），以多模态图片块交给模型；PDF / DOCX / XLSX / 文本在上传时读出文字（最多 10 MB），每轮按 `<attachment>` 附在该消息后面。SVG 只当文本处理，绝不作为图片内联。`content` 只对识别出的图片内联返回，其它一律以 `application/octet-stream` 下载。消息列表里每条消息带 `attachments`。删除对话会一并删除其附件。
 
 ### 用量
 

@@ -259,9 +259,10 @@ Tous les points d'accès sont limités à `user.sub` : accéder à la base ou au
 
 ```
 POST   /api/v1/attachments                       # multipart upload
-GET    /api/v1/attachments/{id}                  # téléchargement (302 vers une URL signée)
-DELETE /api/v1/attachments/{id}
+GET    /api/v1/attachments/{id}/content          # le fichier lui-même, pour qui l'a envoyé ou pour les participants de la conversation de son message
 ```
+
+Un envoi commence non rattaché ; `POST /conversations/{id}/messages` le réclame via `attachment_ids` (5 au plus), et seuls les envois de l'expéditeur pas encore utilisés peuvent l'être. Un message avec des pièces jointes et sans texte est valide. Les images sont reconnues à leurs octets (PNG / JPEG / GIF / WebP, 5 Mo chacune au plus) et parviennent au modèle comme blocs d'image ; PDF / DOCX / XLSX / texte sont lus à l'envoi (10 Mo au plus) et leur texte accompagne le message sous forme de `<attachment>` à chaque tour. Le SVG est traité comme du texte et n'est jamais affiché en ligne comme image. `content` ne sert en ligne qu'une image reconnue ; tout le reste est un téléchargement `application/octet-stream`. Chaque message de la liste porte `attachments`. Supprimer une conversation supprime ses pièces jointes.
 
 ### Utilisation
 

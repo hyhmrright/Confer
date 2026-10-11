@@ -259,9 +259,10 @@ Every endpoint is scoped to `user.sub`: reaching for someone else's base or docu
 
 ```
 POST   /api/v1/attachments                       # multipart upload
-GET    /api/v1/attachments/{id}                  # download (302 to a signed URL)
-DELETE /api/v1/attachments/{id}
+GET    /api/v1/attachments/{id}/content          # the file itself, to its uploader or a participant of its message's conversation
 ```
+
+An upload starts unbound; `POST /conversations/{id}/messages` claims it through `attachment_ids` (at most 5), and only the sender's own, not-yet-sent uploads can be claimed. A message with attachments and no text is valid. Images are recognised by their bytes (PNG / JPEG / GIF / WebP, at most 5 MB each) and reach the model as image blocks; PDF / DOCX / XLSX / text files are read at upload (at most 10 MB) and their text rides with the message as `<attachment>` on every turn. SVG is treated as text and never inlined as an image. `content` serves only a recognised image inline; everything else is an `application/octet-stream` download. Each message in the message list carries `attachments`. Deleting a conversation deletes its attachments.
 
 ### Usage
 

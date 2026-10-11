@@ -18,6 +18,14 @@ export interface Citation {
   trust_level?: string;
 }
 
+/** A file sent with a message; the bytes are fetched on demand. */
+export interface AttachmentMeta {
+  id: string;
+  filename: string;
+  content_type: string | null;
+  size_bytes: number | null;
+}
+
 export interface Message {
   id: string;
   conversation_id: string;
@@ -29,6 +37,7 @@ export interface Message {
   created_at: string;
   in_reply_to?: string;
   content_json?: unknown;
+  attachments?: AttachmentMeta[];
 }
 
 interface Conversation {
@@ -101,7 +110,7 @@ interface ChatState {
   loadOlderMessages: () => Promise<void>;
   createConversation: (name?: string) => Promise<string>;
   deleteConversation: (id: string) => Promise<void>;
-  sendMessage: (content: string) => Promise<void>;
+  sendMessage: (content: string, attachments?: AttachmentMeta[]) => Promise<void>;
   addMessage: (msg: Message) => void;
   setPeerTurn: (turn: PeerTurn | null) => void;
 }
@@ -265,13 +274,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
   },
 
-  sendMessage: async (content) => {
+  sendMessage: async (content, attachments = []) => {
     const { activeConversationId } = get();
     if (!activeConversationId) return;
 
     const data = await api.post<{ id: string; stream_url: string }>(
       `/conversations/${activeConversationId}/messages`,
-      { content, content_type: 'text', via: 'web' },
+      { content, content_type: 'text', via: 'web', attachment_ids: attachments.map((a) => a.id) },
     );
 
     const { user } = useAuthStore.getState();
@@ -283,6 +292,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       content,
       content_type: 'text',
       created_at: new Date().toISOString(),
+      attachments,
     };
     set((s) => ({ messages: [...s.messages, userMsg] }));
 

@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useFileAttachment } from '../hooks/useFileAttachment.js';
+import {
+  ATTACHMENT_ACCEPT,
+  MAX_ATTACHMENTS,
+  useAttachmentUploads,
+} from '../hooks/use-attachment-uploads.js';
 import { DISABLED, DISABLED_FILLED, FOCUS_RING } from '../lib/styles.js';
 import { useChatStore } from '../stores/chat.js';
 import { ExportMenu } from './ExportMenu.js';
@@ -38,8 +42,7 @@ export function MessageView() {
   );
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
-  const { attachedFile, fileInputRef, handleFileChange, openFilePicker, clearAttachment } =
-    useFileAttachment();
+  const files = useAttachmentUploads();
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollRaf = useRef(0);
@@ -64,19 +67,15 @@ export function MessageView() {
 
   const handleSend = async () => {
     const text = input.trim();
-    if ((!text && !attachedFile) || sending) return;
-
-    let fullText = text;
-    if (attachedFile) {
-      fullText = `${text ? `${text}\n\n` : ''}[文件: ${attachedFile.name}]\n\`\`\`\n${attachedFile.content}\n\`\`\``;
-    }
+    const attachments = files.ready;
+    if ((!text && attachments.length === 0) || sending || files.uploading) return;
 
     setInput('');
-    clearAttachment();
+    files.clear();
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
     setSending(true);
     try {
-      await sendMessage(fullText);
+      await sendMessage(text, attachments);
     } finally {
       setSending(false);
     }
@@ -96,7 +95,11 @@ export function MessageView() {
     el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
   };
 
-  const canSend = (input.trim().length > 0 || attachedFile !== null) && !sending && !streaming;
+  const canSend =
+    (input.trim().length > 0 || files.ready.length > 0) &&
+    !files.uploading &&
+    !sending &&
+    !streaming;
 
   // The owner's own reply wins the header; a peer turn shows only when idle.
   let activity: string | null = null;
@@ -184,35 +187,51 @@ export function MessageView() {
             and 4.39:1 against the field, both well past the 3:1 WCAG 2.4.11 asks
             of a focus indicator, so the quiet version is the compliant one too. */}
         <div className="rounded-xl border border-dark-border bg-dark-input transition-colors focus-within:border-primary-500">
-          {/* Attached file preview */}
-          {attachedFile && (
-            <div className="flex items-center gap-2 px-3 pt-3 pb-0">
-              <div className="flex items-center gap-2 px-2.5 py-1 rounded-md bg-primary-600/10 border border-primary-600/20 text-xs text-primary-300 min-w-0">
-                <Paperclip className="w-3 h-3 shrink-0" />
-                <span className="truncate">{attachedFile.name}</span>
-                <button
-                  type="button"
-                  onClick={clearAttachment}
-                  className="shrink-0 hover:text-red-400 transition-colors ms-1"
+          {files.uploads.length > 0 && (
+            <ul className="flex flex-wrap items-center gap-2 px-3 pt-3 pb-0">
+              {files.uploads.map((u) => (
+                <li
+                  key={u.key}
+                  className={`flex items-center gap-2 px-2.5 py-1 rounded-md border text-xs min-w-0 ${
+                    u.status === 'error'
+                      ? 'bg-red-900/20 border-red-800/40 text-red-300'
+                      : 'bg-primary-600/10 border-primary-600/20 text-primary-300'
+                  }`}
                 >
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-            </div>
+                  <Paperclip className="w-3 h-3 shrink-0" />
+                  <span className="truncate max-w-48">{u.name}</span>
+                  {u.status === 'uploading' && (
+                    <span className="shrink-0">{t('message.uploading')}</span>
+                  )}
+                  {u.status === 'error' && (
+                    <span className="shrink-0">{t('message.uploadFailed')}</span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => files.remove(u.key)}
+                    aria-label={t('message.removeAttachment', { name: u.name })}
+                    className="shrink-0 hover:text-red-400 transition-colors ms-1"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </li>
+              ))}
+            </ul>
           )}
 
           <div className="flex items-end gap-1 px-2 py-2">
             <input
-              ref={fileInputRef}
+              ref={files.fileInputRef}
               type="file"
-              accept=".txt,.md,.csv,.json,.yaml,.yml,.toml,.xml,.html,.css,.js,.ts,.py,.go,.rs,.java,.c,.cpp,.sh"
+              multiple
+              accept={ATTACHMENT_ACCEPT}
               className="hidden"
-              onChange={handleFileChange}
+              onChange={files.handleFileChange}
             />
             <button
               type="button"
-              onClick={openFilePicker}
-              disabled={sending || streaming}
+              onClick={files.openFilePicker}
+              disabled={sending || streaming || files.uploads.length >= MAX_ATTACHMENTS}
               className={`p-2 text-ink-muted hover:text-primary-400 hover:bg-primary-600/10 rounded-lg ${DISABLED} transition-colors shrink-0`}
               title={t('message.uploadFile')}
             >

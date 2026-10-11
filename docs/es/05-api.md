@@ -259,9 +259,10 @@ Todos los endpoints se limitan a `user.sub`: acceder a la base o al documento de
 
 ```
 POST   /api/v1/attachments                       # multipart upload
-GET    /api/v1/attachments/{id}                  # descarga (302 a una URL firmada)
-DELETE /api/v1/attachments/{id}
+GET    /api/v1/attachments/{id}/content          # el archivo, para quien lo subió o para los participantes de la conversación de su mensaje
 ```
+
+Una subida empieza sin vincular; `POST /conversations/{id}/messages` la reclama mediante `attachment_ids` (como máximo 5), y solo se pueden reclamar subidas propias aún no enviadas. Un mensaje con adjuntos y sin texto es válido. Las imágenes se reconocen por sus bytes (PNG / JPEG / GIF / WebP, hasta 5 MB cada una) y llegan al modelo como bloques de imagen; PDF / DOCX / XLSX / texto se leen al subirlos (hasta 10 MB) y su texto acompaña al mensaje como `<attachment>` en cada turno. SVG se trata como texto y nunca se muestra en línea como imagen. `content` solo sirve en línea una imagen reconocida; todo lo demás se descarga como `application/octet-stream`. Cada mensaje de la lista lleva `attachments`. Borrar una conversación borra sus adjuntos.
 
 ### Uso
 

@@ -259,9 +259,10 @@ POST   /api/v1/knowledge-bases/{kb_id}/documents/{doc_id}/retry # إعادة ا�
 
 ```
 POST   /api/v1/attachments                       # multipart upload
-GET    /api/v1/attachments/{id}                  # تنزيل (تحويل 302 إلى عنوان موقَّع)
-DELETE /api/v1/attachments/{id}
+GET    /api/v1/attachments/{id}/content          # الملف نفسه، لمن رفعه أو للمشاركين في محادثة رسالته
 ```
+
+يبدأ المرفوع غير مرتبط؛ ويطالب به `POST /conversations/{id}/messages` عبر `attachment_ids` (5 كحد أقصى)، ولا يمكن المطالبة إلا بما رفعه المرسل نفسه ولم يُرسَل بعد. الرسالة ذات المرفقات بلا نص صالحة. تُعرَف الصور من بايتاتها (PNG / JPEG / GIF / WebP، حتى 5 ميغابايت لكل صورة) وتصل إلى النموذج ككتل صور؛ وتُقرأ ملفات PDF / DOCX / XLSX / النصوص عند الرفع (حتى 10 ميغابايت) ويرافق نصها الرسالة كـ `<attachment>` في كل دورة. يُعامَل SVG كنص ولا يُعرض أبدًا كصورة مضمّنة. لا يقدّم `content` مضمّنًا إلا صورة معروفة، وكل ما عدا ذلك يُنزَّل بنوع `application/octet-stream`. تحمل كل رسالة في القائمة `attachments`. حذف المحادثة يحذف مرفقاتها.
 
 ### الاستخدام
 

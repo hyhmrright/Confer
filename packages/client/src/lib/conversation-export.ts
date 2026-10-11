@@ -1,5 +1,6 @@
 import i18n, { dateLocale } from '../i18n/index.js';
 import { agentFailureText } from './agent-failure-text.js';
+import { saveBlob } from './save-file.js';
 
 // The shape of `GET /conversations/{id}/export`: facts, which this file words.
 export interface ConversationExport {
@@ -77,13 +78,7 @@ export function exportFileName(data: ConversationExport, extension: 'md' | 'json
   return `${safe || 'conversation'}.${extension}`;
 }
 
-/** Hand the reader a file, without a round trip to the server. */
+/** Hand the reader a text file, without a round trip to the server. */
 export function downloadText(fileName: string, text: string, mime: string): void {
-  const url = URL.createObjectURL(new Blob([text], { type: `${mime};charset=utf-8` }));
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = fileName;
-  a.click();
-  // Revoked on the next tick: some engines start the download asynchronously.
-  setTimeout(() => URL.revokeObjectURL(url), 0);
+  saveBlob(fileName, new Blob([text], { type: `${mime};charset=utf-8` }));
 }

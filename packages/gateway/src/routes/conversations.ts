@@ -21,9 +21,18 @@ import {
 } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { getDb } from '../db/connection.js';
-import { conversationParticipants, conversations, messages, peerAgents } from '../db/schema.js';
+import {
+  attachments,
+  conversationParticipants,
+  conversations,
+  messages,
+  peerAgents,
+} from '../db/schema.js';
+import { attachmentsByMessage, storageKeys } from '../lib/attachments.js';
+import { runDetached } from '../lib/background.js';
 import { historyBefore } from '../lib/conversation-history.js';
 import { parseLimit } from '../lib/pagination.js';
+import { removeObject } from '../lib/storage.js';
 import { assertIsConversationParticipant, assertOwnsConversation } from '../lib/tenant.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rate-limit.js';
@@ -210,7 +219,11 @@ conversationRoutes.get('/:id/messages', async (c) => {
   // The cursor and the ordering are the same key — see historyBefore. This
   // paged by id while ordering by created_at, and the two disagreed often
   // enough for a page to skip a message or repeat one.
-  return c.json({ messages: await historyBefore(convId, before, limit) });
+  const page = await historyBefore(convId, before, limit);
+  const files = await attachmentsByMessage(page.map((m) => m.id));
+  return c.json({
+    messages: page.map((m) => ({ ...m, attachments: files.get(m.id) ?? [] })),
+  });
 });
 
 // The cap on one export. Far past any thread a person reads, and a bound on
@@ -277,13 +290,29 @@ conversationRoutes.delete('/:id', async (c) => {
   // — a thread nobody can read and nobody can be added back to. An inbound A2A
   // conversation id is derived from the peer's thread id, so that dead row
   // would be found again by the peer's next message and quietly collect it.
-  await db.transaction(async (tx) => {
+  // Attachments reference their message, so they go first — and their files
+  // only once the rows are gone, since a stored file without a row is merely
+  // waste while a row without its file is a broken message.
+  const files = await db.transaction(async (tx) => {
+    const removed = await tx
+      .delete(attachments)
+      .where(
+        inArray(
+          attachments.message_id,
+          tx.select({ id: messages.id }).from(messages).where(eq(messages.conversation_id, convId)),
+        ),
+      )
+      .returning({ storage_url: attachments.storage_url, content_type: attachments.content_type });
     await tx
       .delete(conversationParticipants)
       .where(eq(conversationParticipants.conversation_id, convId));
     await tx.delete(messages).where(eq(messages.conversation_id, convId));
     await tx.delete(conversations).where(eq(conversations.id, convId));
+    return removed;
   });
+  runDetached(Promise.all(files.flatMap(storageKeys).map(removeObject)), (e) =>
+    console.error('attachment cleanup failed:', e),
+  );
 
   return c.json({ ok: true });
 });
@@ -304,19 +333,41 @@ conversationRoutes.post(
     const body = sendMessageRequestSchema.parse(await c.req.json());
 
     const msgId = newId();
-    const [msg] = await db
-      .insert(messages)
-      .values({
-        id: msgId,
-        conversation_id: convId,
-        sender_type: 'user',
-        sender_id: user.sub,
-        content_type: body.content_type,
-        content: body.content,
-        in_reply_to: body.in_reply_to,
-        via: body.via,
-      })
-      .returning();
+    const msg = await db.transaction(async (tx) => {
+      const [row] = await tx
+        .insert(messages)
+        .values({
+          id: msgId,
+          conversation_id: convId,
+          sender_type: 'user',
+          sender_id: user.sub,
+          content_type: body.content_type,
+          content: body.content,
+          in_reply_to: body.in_reply_to,
+          via: body.via,
+        })
+        .returning();
+      if (body.attachment_ids.length > 0) {
+        // Only the sender's own uploads, and only ones no message has claimed:
+        // an id is not a capability, so someone else's file cannot be attached
+        // and a sent one cannot be moved to another thread.
+        const claimed = await tx
+          .update(attachments)
+          .set({ message_id: msgId })
+          .where(
+            and(
+              inArray(attachments.id, body.attachment_ids),
+              eq(attachments.user_id, user.sub),
+              isNull(attachments.message_id),
+            ),
+          )
+          .returning({ id: attachments.id });
+        if (claimed.length !== new Set(body.attachment_ids).size) {
+          throw new AppError('invalid_attachment', 'Unknown or already sent attachment', 400);
+        }
+      }
+      return row;
+    });
 
     if (!msg) {
       throw new AppError('message_creation_failed', 'Failed to create message', 500);

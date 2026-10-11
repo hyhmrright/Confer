@@ -313,13 +313,15 @@ export const pt: Resources = {
     statusThinking: 'Pensando...',
     statusCallingTool: 'Chamando {{tool}}...',
     statusAnsweringPeer: 'A responder a um contacto...',
+    uploading: 'A carregar…',
+    uploadFailed: 'Falha no carregamento',
+    removeAttachment: 'Remover {{name}}',
+    downloadAttachment: 'Transferir {{name}}',
     statusFailed: 'Esse turno não terminou. Tente de novo.',
     statusNoModel:
       'Nenhum modelo escolhido ainda. Selecione provedor e modelo em Configurações → Agente.',
     statusNoKey:
       'Esse provedor ainda não tem chave de API. Adicione uma em Configurações → Modelos.',
-    fileTruncated: '[conteúdo truncado]',
-    fileReadError: 'Não foi possível ler esse arquivo. Escolha um arquivo de texto.',
   },
   permission: {
     descAction: '{{who}} está pedindo para {{what}}',
