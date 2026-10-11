@@ -214,6 +214,8 @@ export const bn: Resources = {
     showActive: 'কথোপকথনে ফিরুন',
     archivedEmpty: 'কোনো আর্কাইভ করা কথোপকথন নেই',
     unread: '{{count}}টি অপঠিত',
+    messageResults: 'বার্তা',
+    noMessageResults: 'কোনো বার্তা মেলেনি',
   },
   contacts: {
     title: 'পরিচিতি',

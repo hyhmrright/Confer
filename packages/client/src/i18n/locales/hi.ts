@@ -215,6 +215,8 @@ export const hi: Resources = {
     showActive: 'बातचीत पर लौटें',
     archivedEmpty: 'कोई संग्रहित बातचीत नहीं',
     unread: '{{count}} अपठित',
+    messageResults: 'संदेश',
+    noMessageResults: 'कोई संदेश मेल नहीं खाता',
   },
   contacts: {
     title: 'संपर्क',

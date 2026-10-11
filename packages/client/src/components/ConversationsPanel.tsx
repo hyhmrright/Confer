@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { type MessageHit, useMessageSearch } from '../hooks/use-message-search.js';
 import { formatShortDateTime } from '../lib/format-date.js';
+import { snippetAround } from '../lib/snippet.js';
 import { FOCUS_RING } from '../lib/styles.js';
 import { useChatStore } from '../stores/chat.js';
 import { Archive, Bot, Pencil, Trash } from './Icons.js';
@@ -29,6 +31,8 @@ export function ConversationsPanel({ onNavigate }: { onNavigate?: () => void }) 
   const filtered = conversations.filter((c) =>
     (c.name ?? '').toLowerCase().includes(query.toLowerCase()),
   );
+  // Names are matched on the list in hand; message text only the server has.
+  const { hits, searching } = useMessageSearch(query);
 
   const handleNew = async () => {
     if (showArchived) await setShowArchived(false);
@@ -37,8 +41,8 @@ export function ConversationsPanel({ onNavigate }: { onNavigate?: () => void }) 
     onNavigate?.();
   };
 
-  const handleSelect = async (id: string) => {
-    await selectConversation(id);
+  const handleSelect = async (id: string, name?: string) => {
+    await selectConversation(id, name);
     onNavigate?.();
   };
 
@@ -58,7 +62,7 @@ export function ConversationsPanel({ onNavigate }: { onNavigate?: () => void }) 
 
       {/* List */}
       <div className="flex-1 overflow-y-auto scrollbar-thin">
-        {filtered.length === 0 ? (
+        {filtered.length === 0 && !query.trim() ? (
           <div className="flex flex-col items-center justify-center h-full py-12 text-ink-muted">
             <p className="text-xs">
               {showArchived ? t('conversations.archivedEmpty') : t('conversations.empty')}
@@ -73,6 +77,16 @@ export function ConversationsPanel({ onNavigate }: { onNavigate?: () => void }) 
               onSelect={() => handleSelect(conv.id)}
             />
           ))
+        )}
+        {query.trim() && (
+          <MessageResults
+            hits={hits}
+            searching={searching}
+            query={query.trim()}
+            onSelect={(hit) =>
+              handleSelect(hit.conversation_id, hit.conversation_name ?? undefined)
+            }
+          />
         )}
       </div>
 
@@ -206,5 +220,47 @@ function ConversationRow({
         </div>
       )}
     </div>
+  );
+}
+
+function MessageResults({
+  hits,
+  searching,
+  query,
+  onSelect,
+}: {
+  hits: MessageHit[];
+  searching: boolean;
+  query: string;
+  onSelect: (hit: MessageHit) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <section aria-label={t('conversations.messageResults')} className="border-t border-dark-border">
+      <h2 className="px-4 pt-3 pb-1 eyebrow text-ink-muted">{t('conversations.messageResults')}</h2>
+      {hits.length === 0 ? (
+        <p className="px-4 py-3 text-xs text-ink-muted">
+          {searching ? t('common.loading') : t('conversations.noMessageResults')}
+        </p>
+      ) : (
+        hits.map((hit) => (
+          <button
+            key={hit.message_id}
+            type="button"
+            onClick={() => onSelect(hit)}
+            className={`w-full text-start px-4 py-2.5 hover:bg-dark-hover ${FOCUS_RING}`}
+          >
+            <p className="text-xs text-ink-secondary truncate">
+              {hit.conversation_name ??
+                t('conversations.untitled', { id: hit.conversation_id.slice(0, 6) })}
+            </p>
+            <p className="text-xs text-ink-primary line-clamp-2 mt-0.5">
+              {snippetAround(hit.content, query)}
+            </p>
+            <p className="eyebrow text-ink-muted mt-0.5">{formatShortDateTime(hit.created_at)}</p>
+          </button>
+        ))
+      )}
+    </section>
   );
 }

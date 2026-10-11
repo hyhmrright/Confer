@@ -229,6 +229,8 @@ export const ar: Resources = {
     showActive: 'العودة إلى المحادثات',
     archivedEmpty: 'لا توجد محادثات مؤرشفة',
     unread: '{{count}} غير مقروءة',
+    messageResults: 'الرسائل',
+    noMessageResults: 'لا توجد رسائل مطابقة',
   },
   contacts: {
     title: 'جهات الاتصال',

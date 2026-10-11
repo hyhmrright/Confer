@@ -143,6 +143,8 @@ POST   /api/v1/conversations/{id}/read             # 既読にする
 
 `GET` は既定でアーカイブされていない会話を返し、`?archived=1` でアーカイブ済みを返す。各会話には `unread_count`（最後に既読にしてから、一度も既読にしていなければ参加時から、他者が書いたメッセージ数。自分の発言は含まない）が付く。`PATCH` は `{ name?, archived? }` を受け付け、会話の作成者だけが使える。`POST .../read` は呼び出したユーザーの `last_read_at` を現在時刻にする。アーカイブ済みの会話に連絡先が書き込むと、アーカイブが解除されて先頭に移る。
 
+`GET /api/v1/search/messages?q=&limit=` は、呼び出したユーザーが参加しているすべての会話（アーカイブ済みを含む）でメッセージ本文を部分一致検索し、新しい順に返す。`q` は 1〜200 文字、`limit` の既定値は 20、最大 50。戻り値は `{ results: [{ message_id, conversation_id, conversation_name, sender_type, content, created_at }] }`。Postgres の全文検索ではなく部分一致を使うのは、組み込みの設定が中国語を分かち書きしないため。
+
 `POST /api/v1/conversations/{id}/messages` リクエスト:
 
 ```json

@@ -30,9 +30,14 @@ const conv = (id: string, name: string, unread_count: number) => ({
 // Every path a store calls gets its real shape. The knowledge-base upload
 // poller from another suite outlives that suite by up to 30s and shares this
 // module mock, so an arm missing here throws inside whatever test is running.
+let hits: unknown[] = [];
 function serve(conversations: unknown[] = []) {
   get.mockImplementation(async (path: string) =>
-    path.startsWith('/knowledge-bases') ? { documents: [], total: 0 } : { conversations },
+    path.startsWith('/knowledge-bases')
+      ? { documents: [], total: 0 }
+      : path.startsWith('/search/messages')
+        ? { results: hits }
+        : { conversations },
   );
 }
 
@@ -92,5 +97,31 @@ describe('ConversationsPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Archived' }));
     await waitFor(() => expect(screen.getByText('Vendor thread')).toBeDefined());
     expect(get).toHaveBeenCalledWith('/conversations?archived=1');
+  });
+
+  // Message text lives only on the server; a hit opens its thread even when
+  // that thread is on the other shelf, under its own name.
+  test('searches message text and opens the thread a hit belongs to', async () => {
+    hits = [
+      {
+        message_id: 'm9',
+        conversation_id: 'c-archived',
+        conversation_name: 'Old vendor thread',
+        sender_type: 'peer_agent',
+        content: `${'filler '.repeat(20)}the quote was 4200 per seat${' filler'.repeat(20)}`,
+        created_at: '2026-09-01T00:00:00Z',
+      },
+    ];
+    render(<ConversationsPanel />);
+
+    fireEvent.change(screen.getByPlaceholderText('Search...'), { target: { value: 'quote' } });
+    const hit = await screen.findByText(/the quote was 4200/);
+    expect(hit.textContent?.startsWith('…')).toBe(true);
+    expect(get).toHaveBeenCalledWith('/search/messages?q=quote');
+
+    fireEvent.click(hit);
+    await waitFor(() => expect(useChatStore.getState().activeConversationId).toBe('c-archived'));
+    expect(useChatStore.getState().activeConversationName).toBe('Old vendor thread');
+    hits = [];
   });
 });

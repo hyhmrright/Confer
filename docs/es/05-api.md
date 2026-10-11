@@ -143,6 +143,8 @@ POST   /api/v1/conversations/{id}/read             # marca como leído
 
 `GET` lista por defecto las conversaciones no archivadas y, con `?archived=1`, las archivadas; cada una lleva `unread_count`, los mensajes que otros escribieron desde que el usuario la marcó como leída por última vez (o desde que se unió, si nunca lo hizo); los propios no cuentan. `PATCH` acepta `{ name?, archived? }` y solo puede usarlo quien creó la conversación. `POST .../read` fija el `last_read_at` del usuario en este momento. Si un contacto escribe en una conversación archivada, se desarchiva y pasa a la parte superior.
 
+`GET /api/v1/search/messages?q=&limit=` busca por subcadena en el texto de los mensajes de todas las conversaciones en las que participa el usuario, archivadas incluidas, de la más reciente a la más antigua; `q` tiene 1–200 caracteres y `limit` vale 20 por defecto, 50 como máximo. Devuelve `{ results: [{ message_id, conversation_id, conversation_name, sender_type, content, created_at }] }`. Se usa coincidencia por subcadena y no la búsqueda de texto completo de Postgres porque sus configuraciones integradas no segmentan el chino.
+
 `POST /api/v1/conversations/{id}/messages` petición:
 
 ```json

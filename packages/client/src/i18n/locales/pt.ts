@@ -216,6 +216,8 @@ export const pt: Resources = {
     showActive: 'Voltar às conversas',
     archivedEmpty: 'Não há conversas arquivadas',
     unread: '{{count}} por ler',
+    messageResults: 'Mensagens',
+    noMessageResults: 'Nenhuma mensagem corresponde',
   },
   contacts: {
     title: 'Contatos',

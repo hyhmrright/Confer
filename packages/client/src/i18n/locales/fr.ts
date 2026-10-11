@@ -221,6 +221,8 @@ export const fr: Resources = {
     showActive: 'Retour aux conversations',
     archivedEmpty: 'Aucune conversation archivée',
     unread: '{{count}} non lu(s)',
+    messageResults: 'Messages',
+    noMessageResults: 'Aucun message ne correspond',
   },
   contacts: {
     title: 'Contacts',

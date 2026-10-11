@@ -143,6 +143,8 @@ POST   /api/v1/conversations/{id}/read             # mark as read
 
 `GET` lists unarchived conversations by default and archived ones with `?archived=1`; each carries `unread_count`, the messages others wrote since the user last marked it read (or since they joined, if they never have) — their own do not count. `PATCH` takes `{ name?, archived? }` and only the conversation's creator may use it. `POST .../read` sets the caller's `last_read_at` to now. A contact writing into an archived conversation unarchives it and moves it to the top.
 
+`GET /api/v1/search/messages?q=&limit=` searches message text by substring across every conversation the caller takes part in, archived ones included, newest first; `q` is 1–200 characters and `limit` defaults to 20, at most 50. It returns `{ results: [{ message_id, conversation_id, conversation_name, sender_type, content, created_at }] }`. Substring matching rather than Postgres full-text search, because the built-in configurations do not segment Chinese.
+
 `POST /api/v1/conversations/{id}/messages` request:
 
 ```json

@@ -209,6 +209,8 @@ export const zh = {
     showActive: '返回对话',
     archivedEmpty: '没有已归档的对话',
     unread: '{{count}} 条未读',
+    messageResults: '消息',
+    noMessageResults: '没有匹配的消息',
   },
   contacts: {
     title: '联系人',

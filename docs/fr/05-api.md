@@ -143,6 +143,8 @@ POST   /api/v1/conversations/{id}/read             # marque comme lu
 
 `GET` liste par défaut les conversations non archivées, et les archivées avec `?archived=1` ; chacune porte `unread_count`, le nombre de messages écrits par d'autres depuis que l'utilisateur l'a marquée comme lue (ou depuis qu'il l'a rejointe, s'il ne l'a jamais fait) — les siens ne comptent pas. `PATCH` accepte `{ name?, archived? }` et seul le créateur de la conversation peut l'utiliser. `POST .../read` met le `last_read_at` de l'appelant à maintenant. Un contact qui écrit dans une conversation archivée la désarchive et la fait remonter en tête.
 
+`GET /api/v1/search/messages?q=&limit=` cherche une sous-chaîne dans le texte des messages de toutes les conversations auxquelles l'appelant participe, archivées comprises, des plus récents aux plus anciens ; `q` fait 1 à 200 caractères et `limit` vaut 20 par défaut, 50 au plus. Réponse : `{ results: [{ message_id, conversation_id, conversation_name, sender_type, content, created_at }] }`. La recherche par sous-chaîne remplace la recherche plein texte de Postgres, dont les configurations intégrées ne segmentent pas le chinois.
+
 `POST /api/v1/conversations/{id}/messages` requête :
 
 ```json

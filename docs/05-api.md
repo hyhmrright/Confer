@@ -150,6 +150,8 @@ POST   /api/v1/conversations/{id}/read             # 标记已读
 
 `GET` 默认只列未归档的对话，`?archived=1` 列已归档的；每条带 `unread_count`：自上次标记已读（从未标记则从加入时起）以来别人写的消息数，自己发的不算。`PATCH` 接受 `{ name?, archived? }`，只有对话创建者能改。`POST .../read` 把当前用户的 `last_read_at` 设为现在。联系人在已归档的对话里写新消息时，对话会自动取消归档并排到最前。
 
+`GET /api/v1/search/messages?q=&limit=` 在当前用户参与的所有对话（含已归档）里按子串搜索消息正文，最新的在前；`q` 为 1–200 个字符，`limit` 默认 20、最大 50。返回 `{ results: [{ message_id, conversation_id, conversation_name, sender_type, content, created_at }] }`。用子串匹配而不是 Postgres 全文检索，因为内置分词不切中文。
+
 `POST /api/v1/conversations/{id}/messages` 请求:
 
 ```json

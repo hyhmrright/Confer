@@ -227,6 +227,8 @@ export const ur: Resources = {
     showActive: 'گفتگو پر واپس',
     archivedEmpty: 'کوئی محفوظ شدہ گفتگو نہیں',
     unread: '{{count}} غیر پڑھے',
+    messageResults: 'پیغامات',
+    noMessageResults: 'کوئی پیغام مماثل نہیں',
   },
   contacts: {
     title: 'روابط',

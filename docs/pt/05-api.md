@@ -143,6 +143,8 @@ POST   /api/v1/conversations/{id}/read             # marca como lida
 
 `GET` lista por predefinição as conversas não arquivadas e, com `?archived=1`, as arquivadas; cada uma traz `unread_count`, as mensagens que outros escreveram desde que o utilizador a marcou como lida pela última vez (ou desde que entrou, se nunca o fez) — as próprias não contam. `PATCH` aceita `{ name?, archived? }` e só quem criou a conversa o pode usar. `POST .../read` define o `last_read_at` do utilizador para agora. Se um contacto escrever numa conversa arquivada, ela é desarquivada e passa para o topo.
 
+`GET /api/v1/search/messages?q=&limit=` procura por subcadeia no texto das mensagens de todas as conversas em que o utilizador participa, arquivadas incluídas, das mais recentes para as mais antigas; `q` tem 1–200 caracteres e `limit` é 20 por predefinição, 50 no máximo. Devolve `{ results: [{ message_id, conversation_id, conversation_name, sender_type, content, created_at }] }`. Usa-se correspondência por subcadeia e não a pesquisa de texto completo do Postgres, porque as configurações incluídas não segmentam chinês.
+
 `POST /api/v1/conversations/{id}/messages` requisição:
 
 ```json

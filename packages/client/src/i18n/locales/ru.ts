@@ -226,6 +226,8 @@ export const ru: Resources = {
     showActive: 'Назад к беседам',
     archivedEmpty: 'В архиве нет бесед',
     unread: 'Непрочитанных: {{count}}',
+    messageResults: 'Сообщения',
+    noMessageResults: 'Нет подходящих сообщений',
   },
   contacts: {
     title: 'Контакты',

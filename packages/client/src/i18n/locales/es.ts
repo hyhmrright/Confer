@@ -216,6 +216,8 @@ export const es: Resources = {
     showActive: 'Volver a las conversaciones',
     archivedEmpty: 'No hay conversaciones archivadas',
     unread: '{{count}} sin leer',
+    messageResults: 'Mensajes',
+    noMessageResults: 'Ningún mensaje coincide',
   },
   contacts: {
     title: 'Contactos',

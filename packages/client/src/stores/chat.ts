@@ -95,7 +95,9 @@ interface ChatState {
   renameConversation: (id: string, name: string) => Promise<void>;
   setArchived: (id: string, archived: boolean) => Promise<void>;
   markRead: (id: string) => Promise<void>;
-  selectConversation: (id: string) => Promise<void>;
+  // `name` covers a thread that is not in the list on screen, e.g. a search
+  // hit in the other shelf.
+  selectConversation: (id: string, name?: string) => Promise<void>;
   loadOlderMessages: () => Promise<void>;
   createConversation: (name?: string) => Promise<string>;
   deleteConversation: (id: string) => Promise<void>;
@@ -171,10 +173,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
     await api.post(`/conversations/${id}/read`, {});
   },
 
-  selectConversation: async (id) => {
+  selectConversation: async (id, name) => {
     set((s) => ({
       activeConversationId: id,
-      activeConversationName: s.conversations.find((c) => c.id === id)?.name,
+      activeConversationName: s.conversations.find((c) => c.id === id)?.name ?? name,
       messages: [],
       messagesLoading: true,
       // Thread-scoped, so they reset with the thread. This also releases the

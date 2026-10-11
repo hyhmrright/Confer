@@ -216,6 +216,8 @@ export const en: Resources = {
     showActive: 'Back to conversations',
     archivedEmpty: 'No archived conversations',
     unread: '{{count}} unread',
+    messageResults: 'Messages',
+    noMessageResults: 'No messages match',
   },
   contacts: {
     title: 'Contacts',

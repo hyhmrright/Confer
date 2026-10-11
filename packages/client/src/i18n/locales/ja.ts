@@ -218,6 +218,8 @@ export const ja: Resources = {
     showActive: '会話に戻る',
     archivedEmpty: 'アーカイブ済みの会話はありません',
     unread: '未読 {{count}} 件',
+    messageResults: 'メッセージ',
+    noMessageResults: '一致するメッセージはありません',
   },
   contacts: {
     title: '連絡先',
