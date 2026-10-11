@@ -148,6 +148,8 @@ DELETE /api/v1/conversations/{id}/participants/{p_id}
 POST   /api/v1/conversations/{id}/read             # 标记已读
 ```
 
+`GET` 默认只列未归档的对话，`?archived=1` 列已归档的；每条带 `unread_count`：自上次标记已读（从未标记则从加入时起）以来别人写的消息数，自己发的不算。`PATCH` 接受 `{ name?, archived? }`，只有对话创建者能改。`POST .../read` 把当前用户的 `last_read_at` 设为现在。联系人在已归档的对话里写新消息时，对话会自动取消归档并排到最前。
+
 `POST /api/v1/conversations/{id}/messages` 请求:
 
 ```json

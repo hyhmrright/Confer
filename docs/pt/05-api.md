@@ -141,6 +141,8 @@ DELETE /api/v1/conversations/{id}/participants/{p_id}
 POST   /api/v1/conversations/{id}/read             # marca como lida
 ```
 
+`GET` lista por predefinição as conversas não arquivadas e, com `?archived=1`, as arquivadas; cada uma traz `unread_count`, as mensagens que outros escreveram desde que o utilizador a marcou como lida pela última vez (ou desde que entrou, se nunca o fez) — as próprias não contam. `PATCH` aceita `{ name?, archived? }` e só quem criou a conversa o pode usar. `POST .../read` define o `last_read_at` do utilizador para agora. Se um contacto escrever numa conversa arquivada, ela é desarquivada e passa para o topo.
+
 `POST /api/v1/conversations/{id}/messages` requisição:
 
 ```json

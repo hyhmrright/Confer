@@ -30,7 +30,9 @@ export function MessageView() {
   // to a string comparison — the header does not re-render when an unrelated
   // conversation's unread count changes.
   const conversationName = useChatStore(
-    (s) => s.conversations.find((c) => c.id === s.activeConversationId)?.name,
+    (s) =>
+      s.conversations.find((c) => c.id === s.activeConversationId)?.name ??
+      s.activeConversationName,
   );
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);

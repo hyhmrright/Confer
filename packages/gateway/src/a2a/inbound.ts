@@ -2,7 +2,7 @@ import { parsePolicyConfig } from '@confer/agent-runtime';
 import { newId } from '@confer/shared';
 import { and, eq } from 'drizzle-orm';
 import { getDb } from '../db/connection.js';
-import { type agents, messages, peerContacts } from '../db/schema.js';
+import { type agents, conversations, messages, peerContacts } from '../db/schema.js';
 import { decideAdmission } from '../lib/a2a-admission.js';
 import { runDetached } from '../lib/background.js';
 import { isContact } from '../lib/tenant.js';
@@ -107,6 +107,13 @@ export async function admitInboundMessage(params: InboundMessageParams): Promise
       in_reply_to: threadId,
     },
   });
+  // A peer writing is activity: the thread moves to the top of the owner's list,
+  // and comes off the archive shelf if it was there — the way mail does.
+  await db
+    .update(conversations)
+    .set({ updated_at: new Date(), archived_at: null })
+    .where(eq(conversations.id, conversationId));
+
   // `message.new` only reaches sockets already subscribed to this thread. A
   // peer opening a new thread has none, so the owner's list never showed it
   // until they reloaded; this goes to the owner wherever they are.

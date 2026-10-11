@@ -3,8 +3,9 @@ import {
   createConversationRequestSchema,
   newId,
   sendMessageRequestSchema,
+  updateConversationRequestSchema,
 } from '@confer/shared';
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, count, desc, eq, gt, inArray, isNotNull, isNull, ne, or, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { getDb } from '../db/connection.js';
 import { conversationParticipants, conversations, messages } from '../db/schema.js';
@@ -14,6 +15,7 @@ import { assertIsConversationParticipant, assertOwnsConversation } from '../lib/
 import { authMiddleware } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rate-limit.js';
 import type { AppEnv } from '../types.js';
+import { sendToUser } from '../ws/handler.js';
 
 export const conversationRoutes = new Hono<AppEnv>();
 
@@ -22,6 +24,8 @@ conversationRoutes.use('/*', authMiddleware);
 conversationRoutes.get('/', async (c) => {
   const user = c.get('user');
   const db = getDb();
+  // The list shows live threads by default; `?archived=1` shows the shelf.
+  const archived = c.req.query('archived') === '1';
 
   const participantRows = await db
     .select({ conversation_id: conversationParticipants.conversation_id })
@@ -41,12 +45,93 @@ conversationRoutes.get('/', async (c) => {
         inArray(conversations.id, convIds),
         // Admin-hidden conversations are invisible to regular users.
         eq(conversations.moderation_status, 'visible'),
+        archived ? isNotNull(conversations.archived_at) : isNull(conversations.archived_at),
       ),
     )
     .orderBy(desc(conversations.updated_at))
     .limit(50);
 
-  return c.json({ conversations: convs });
+  const unread = await unreadCounts(
+    user.sub,
+    convs.map((conv) => conv.id),
+  );
+  return c.json({
+    conversations: convs.map((conv) => ({ ...conv, unread_count: unread.get(conv.id) ?? 0 })),
+  });
+});
+
+// Messages someone other than this user wrote since they last marked the
+// thread read. A participant who never has counts from when they joined, which
+// for an inbound A2A thread is the moment the peer opened it.
+async function unreadCounts(userId: string, convIds: string[]): Promise<Map<string, number>> {
+  if (convIds.length === 0) return new Map();
+  const rows = await getDb()
+    .select({ conversation_id: messages.conversation_id, count: count() })
+    .from(messages)
+    .innerJoin(
+      conversationParticipants,
+      and(
+        eq(conversationParticipants.conversation_id, messages.conversation_id),
+        eq(conversationParticipants.user_id, userId),
+      ),
+    )
+    .where(
+      and(
+        inArray(messages.conversation_id, convIds),
+        eq(messages.moderation_status, 'visible'),
+        or(ne(messages.sender_type, 'user'), ne(messages.sender_id, userId)),
+        gt(
+          messages.created_at,
+          sql`coalesce(${conversationParticipants.last_read_at}, ${conversationParticipants.joined_at})`,
+        ),
+      ),
+    )
+    .groupBy(messages.conversation_id);
+  return new Map(rows.map((r) => [r.conversation_id, r.count]));
+}
+
+conversationRoutes.patch('/:id', async (c) => {
+  const user = c.get('user');
+  const db = getDb();
+  const convId = c.req.param('id');
+  const body = updateConversationRequestSchema.parse(await c.req.json());
+
+  // Renaming or shelving a thread changes it for everyone in it, so like
+  // deletion it is the creator's call.
+  await assertOwnsConversation(user.sub, convId);
+
+  const updates: Partial<typeof conversations.$inferInsert> = {};
+  if (body.name !== undefined) updates.name = body.name;
+  if (body.archived !== undefined) updates.archived_at = body.archived ? new Date() : null;
+
+  // An empty SET clause is a 500; an empty body is a no-op.
+  const [conv] =
+    Object.keys(updates).length === 0
+      ? await db.select().from(conversations).where(eq(conversations.id, convId))
+      : await db.update(conversations).set(updates).where(eq(conversations.id, convId)).returning();
+
+  // The owner's other tabs keep their lists in step.
+  sendToUser(user.sub, { type: 'conversation.updated', data: { conversation_id: convId } });
+  return c.json({ conversation: conv });
+});
+
+conversationRoutes.post('/:id/read', async (c) => {
+  const user = c.get('user');
+  const convId = c.req.param('id');
+
+  await assertIsConversationParticipant(user.sub, convId);
+
+  await getDb()
+    .update(conversationParticipants)
+    .set({ last_read_at: new Date() })
+    .where(
+      and(
+        eq(conversationParticipants.conversation_id, convId),
+        eq(conversationParticipants.user_id, user.sub),
+      ),
+    );
+
+  return c.json({ ok: true });
 });
 
 conversationRoutes.post('/', async (c) => {

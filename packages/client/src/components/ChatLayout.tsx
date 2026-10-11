@@ -163,6 +163,7 @@ export function ChatLayout() {
   const activeConversationId = useChatStore((s) => s.activeConversationId);
   const addMessage = useChatStore((s) => s.addMessage);
   const setPeerTurn = useChatStore((s) => s.setPeerTurn);
+  const markRead = useChatStore((s) => s.markRead);
   const addPermissionRequest = usePermissionsStore((s) => s.addRequest);
   const loadPending = usePermissionsStore((s) => s.loadPending);
   const loadPendingCards = useErrandsStore((s) => s.loadPendingCards);
@@ -206,9 +207,13 @@ export function ChatLayout() {
       });
 
     const unsubs = [
-      onValid('message.new', wsMessageSchema, (msg) =>
-        addMessage({ ...msg, created_at: new Date().toISOString() }),
-      ),
+      onValid('message.new', wsMessageSchema, (msg) => {
+        addMessage({ ...msg, created_at: new Date().toISOString() });
+        // Only the open thread is subscribed, so the owner is looking at this.
+        if (msg.conversation_id === useChatStore.getState().activeConversationId) {
+          markRead(msg.conversation_id).catch(() => {});
+        }
+      }),
       onValid('permission.request', permissionRequestEventSchema, addPermissionRequest),
       onValid('agent.status', wsAgentStatusSchema, ({ state, ...turn }) =>
         setPeerTurn(state === 'idle' ? null : { ...turn, state }),
@@ -224,7 +229,7 @@ export function ChatLayout() {
       disconnectWs();
       for (const fn of unsubs) fn();
     };
-  }, [loadConversations, addMessage, addPermissionRequest, setPeerTurn, loadPending]);
+  }, [loadConversations, addMessage, addPermissionRequest, setPeerTurn, markRead, loadPending]);
 
   // Subscribe the socket to the active conversation so its gateway broadcasts
   // (inbound peer messages, agent auto-replies) arrive in real time; unsubscribe

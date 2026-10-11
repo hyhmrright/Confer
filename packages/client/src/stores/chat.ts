@@ -37,6 +37,7 @@ interface Conversation {
   name?: string;
   created_at: string;
   updated_at: string;
+  unread_count?: number;
 }
 
 // Matches the gateway's cap for this endpoint's default; one "load older" step.
@@ -83,8 +84,17 @@ interface ChatState {
   // Keyset paging has no total to compare against, so "there is more" is
   // inferred from the last page coming back full.
   hasOlderMessages: boolean;
+  // Which shelf the list shows: live threads, or the archived ones.
+  showArchived: boolean;
+  // The open thread's name as of when it was opened. The list is the fresher
+  // source, but switching shelves can take the open thread out of it.
+  activeConversationName?: string;
 
   loadConversations: () => Promise<void>;
+  setShowArchived: (show: boolean) => Promise<void>;
+  renameConversation: (id: string, name: string) => Promise<void>;
+  setArchived: (id: string, archived: boolean) => Promise<void>;
+  markRead: (id: string) => Promise<void>;
   selectConversation: (id: string) => Promise<void>;
   loadOlderMessages: () => Promise<void>;
   createConversation: (name?: string) => Promise<string>;
@@ -123,15 +133,48 @@ export const useChatStore = create<ChatState>((set, get) => ({
   streamCitations: [],
   agentStatus: null,
   peerTurn: null,
+  showArchived: false,
 
   loadConversations: async () => {
-    const data = await api.get<{ conversations: Conversation[] }>('/conversations');
-    set({ conversations: data.conversations });
+    const shelf = get().showArchived;
+    const data = await api.get<{ conversations: Conversation[] }>(
+      shelf ? '/conversations?archived=1' : '/conversations',
+    );
+    // A reply for the other shelf, if the owner switched while it was in flight.
+    if (get().showArchived === shelf) set({ conversations: data.conversations });
+  },
+
+  setShowArchived: async (show) => {
+    set({ showArchived: show, conversations: [] });
+    await get().loadConversations();
+  },
+
+  renameConversation: async (id, name) => {
+    const data = await api.patch<{ conversation: Conversation }>(`/conversations/${id}`, { name });
+    set((s) => ({
+      conversations: s.conversations.map((c) =>
+        c.id === id ? { ...c, name: data.conversation.name } : c,
+      ),
+    }));
+  },
+
+  // Either way the thread leaves the shelf on screen; it is on the other one now.
+  setArchived: async (id, archived) => {
+    await api.patch(`/conversations/${id}`, { archived });
+    set((s) => ({ conversations: s.conversations.filter((c) => c.id !== id) }));
+  },
+
+  markRead: async (id) => {
+    set((s) => ({
+      conversations: s.conversations.map((c) => (c.id === id ? { ...c, unread_count: 0 } : c)),
+    }));
+    await api.post(`/conversations/${id}/read`, {});
   },
 
   selectConversation: async (id) => {
-    set({
+    set((s) => ({
       activeConversationId: id,
+      activeConversationName: s.conversations.find((c) => c.id === id)?.name,
       messages: [],
       messagesLoading: true,
       // Thread-scoped, so they reset with the thread. This also releases the
@@ -143,7 +186,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       streamContent: '',
       streamCitations: [],
       agentStatus: null,
-    });
+    }));
     try {
       const data = await api.get<MessagePage>(
         `/conversations/${id}/messages?limit=${MESSAGE_PAGE_SIZE}`,
@@ -155,7 +198,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
       });
     } catch {
       set({ messagesLoading: false });
+      return;
     }
+    // Best-effort: a failed mark leaves a stale badge, not a broken thread.
+    get()
+      .markRead(id)
+      .catch(() => {});
   },
 
   // Walk backwards through the thread. The endpoint has always supported this

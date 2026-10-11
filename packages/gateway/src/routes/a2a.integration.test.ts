@@ -381,8 +381,19 @@ describe('A2A signed message (real Ed25519, mocked DID resolution)', () => {
       );
       await waitFor(async () => ws.data.subscriptions.has(conversationId));
 
+      // Shelved by the owner; the peer writing again brings it back.
+      await getDb()
+        .update(conversations)
+        .set({ archived_at: new Date() })
+        .where(eq(conversations.id, conversationId));
+
       sent.length = 0;
       await ask('second');
+      const [thread] = await getDb()
+        .select({ archived_at: conversations.archived_at })
+        .from(conversations)
+        .where(eq(conversations.id, conversationId));
+      expect(thread?.archived_at).toBeNull();
       const states = sent.filter((m) => m.type === 'agent.status').map((m) => m.data);
       expect(states).toEqual([
         { conversation_id: conversationId, state: 'thinking' },

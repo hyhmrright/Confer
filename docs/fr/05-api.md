@@ -141,6 +141,8 @@ DELETE /api/v1/conversations/{id}/participants/{p_id}
 POST   /api/v1/conversations/{id}/read             # marque comme lu
 ```
 
+`GET` liste par défaut les conversations non archivées, et les archivées avec `?archived=1` ; chacune porte `unread_count`, le nombre de messages écrits par d'autres depuis que l'utilisateur l'a marquée comme lue (ou depuis qu'il l'a rejointe, s'il ne l'a jamais fait) — les siens ne comptent pas. `PATCH` accepte `{ name?, archived? }` et seul le créateur de la conversation peut l'utiliser. `POST .../read` met le `last_read_at` de l'appelant à maintenant. Un contact qui écrit dans une conversation archivée la désarchive et la fait remonter en tête.
+
 `POST /api/v1/conversations/{id}/messages` requête :
 
 ```json

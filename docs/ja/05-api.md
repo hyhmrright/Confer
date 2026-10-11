@@ -141,6 +141,8 @@ DELETE /api/v1/conversations/{id}/participants/{p_id}
 POST   /api/v1/conversations/{id}/read             # 既読にする
 ```
 
+`GET` は既定でアーカイブされていない会話を返し、`?archived=1` でアーカイブ済みを返す。各会話には `unread_count`（最後に既読にしてから、一度も既読にしていなければ参加時から、他者が書いたメッセージ数。自分の発言は含まない）が付く。`PATCH` は `{ name?, archived? }` を受け付け、会話の作成者だけが使える。`POST .../read` は呼び出したユーザーの `last_read_at` を現在時刻にする。アーカイブ済みの会話に連絡先が書き込むと、アーカイブが解除されて先頭に移る。
+
 `POST /api/v1/conversations/{id}/messages` リクエスト:
 
 ```json

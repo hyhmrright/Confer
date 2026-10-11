@@ -141,6 +141,8 @@ DELETE /api/v1/conversations/{id}/participants/{p_id}
 POST   /api/v1/conversations/{id}/read             # mark as read
 ```
 
+`GET` lists unarchived conversations by default and archived ones with `?archived=1`; each carries `unread_count`, the messages others wrote since the user last marked it read (or since they joined, if they never have) — their own do not count. `PATCH` takes `{ name?, archived? }` and only the conversation's creator may use it. `POST .../read` sets the caller's `last_read_at` to now. A contact writing into an archived conversation unarchives it and moves it to the top.
+
 `POST /api/v1/conversations/{id}/messages` request:
 
 ```json
