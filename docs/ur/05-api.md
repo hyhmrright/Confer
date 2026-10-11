@@ -525,6 +525,8 @@ DELETE /api/v1/webhooks/{id}
 | `/api/v1/auth/register` | 3/گھنٹہ فی IP |
 | `/api/v1/conversations/*/messages` POST | 60/منٹ فی صارف |
 | `/a2a/v1/*` | 60/منٹ فی IP اور پاتھ، پورے `/a2a/v1` پر 300/منٹ فی IP |
+| A2A سوالات (دونوں بائنڈنگز) | فی peer DID فی مالک 20/منٹ اور 300/دن؛ فی peer ڈومین 60/منٹ۔ حد سے زیادہ → 429 / `RESOURCE_EXHAUSTED`، `Retry-After` کے ساتھ |
+| `/api/v1/consult/{peer}` POST | 30/منٹ فی صارف |
 | WSS | فی صارف زیادہ سے زیادہ 10 بیک وقت کنکشن |
 
 حد پار ہونے پر جواب:

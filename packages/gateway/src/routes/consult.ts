@@ -8,6 +8,7 @@ import { conversationPeerId } from '../lib/conversation-peer.js';
 import { derivedId } from '../lib/derived-id.js';
 import { assertIsContact, assertOwnsConversation } from '../lib/tenant.js';
 import { authMiddleware } from '../middleware/auth.js';
+import { rateLimit } from '../middleware/rate-limit.js';
 import type { AppEnv } from '../types.js';
 
 export const consultRoutes = new Hono<AppEnv>();
@@ -52,63 +53,69 @@ async function getOrCreateConsultConversation(userId: string, peerId: string): P
 }
 
 // Verify the user owns the conversation before exposing its messages.
-consultRoutes.post('/:peerId', async (c) => {
-  const user = c.get('user');
-  const db = getDb();
-  const peerId = c.req.param('peerId');
-  const parsed = consultRequestSchema.parse(await c.req.json());
+// Each consult is a signed request to someone else's agent, and costs them a
+// model turn: an owner — or a script holding their API token — gets a quota.
+consultRoutes.post(
+  '/:peerId',
+  rateLimit<AppEnv>(30, 60_000, { keyBy: (c) => `consult:${c.get('user').sub}` }),
+  async (c) => {
+    const user = c.get('user');
+    const db = getDb();
+    const peerId = c.req.param('peerId');
+    const parsed = consultRequestSchema.parse(await c.req.json());
 
-  // Only peers the user has connected to may be consulted.
-  await assertIsContact(user.sub, peerId, db);
+    // Only peers the user has connected to may be consulted.
+    await assertIsContact(user.sub, peerId, db);
 
-  const convId = await getOrCreateConsultConversation(user.sub, peerId);
+    const convId = await getOrCreateConsultConversation(user.sub, peerId);
 
-  const content = parsed.code_context
-    ? `${parsed.question}\n\n---\n\`\`\`\n${parsed.code_context}\n\`\`\``
-    : parsed.question;
+    const content = parsed.code_context
+      ? `${parsed.question}\n\n---\n\`\`\`\n${parsed.code_context}\n\`\`\``
+      : parsed.question;
 
-  const msgId = newId();
-  await db.insert(messages).values({
-    id: msgId,
-    conversation_id: convId,
-    sender_type: 'user',
-    sender_id: user.sub,
-    content_type: 'text',
-    content,
-    language: parsed.language,
-    via: 'a2a',
-  });
+    const msgId = newId();
+    await db.insert(messages).values({
+      id: msgId,
+      conversation_id: convId,
+      sender_type: 'user',
+      sender_id: user.sub,
+      content_type: 'text',
+      content,
+      language: parsed.language,
+      via: 'a2a',
+    });
 
-  const result = await deliverConsult({
-    userId: user.sub,
-    peerId,
-    conversationId: convId,
-    content,
-  });
+    const result = await deliverConsult({
+      userId: user.sub,
+      peerId,
+      conversationId: convId,
+      content,
+    });
 
-  await db
-    .update(messages)
-    .set({
-      delivery_status: result.ok ? 'sent' : 'failed',
-      delivered_at: result.ok ? new Date() : null,
-    })
-    .where(eq(messages.id, msgId));
+    await db
+      .update(messages)
+      .set({
+        delivery_status: result.ok ? 'sent' : 'failed',
+        delivered_at: result.ok ? new Date() : null,
+      })
+      .where(eq(messages.id, msgId));
 
-  await db
-    .update(conversations)
-    .set({ updated_at: new Date() })
-    .where(eq(conversations.id, convId));
+    await db
+      .update(conversations)
+      .set({ updated_at: new Date() })
+      .where(eq(conversations.id, convId));
 
-  // A failed question stays in the thread on purpose (auditable); clients can
-  // tell it apart by its delivery_status, which the history endpoint returns.
-  if (!result.ok) {
-    return c.json(
-      { conversation_id: convId, message_id: msgId, status: 'failed', error: result.error },
-      502,
-    );
-  }
-  return c.json({ conversation_id: convId, message_id: msgId, status: 'sent' }, 201);
-});
+    // A failed question stays in the thread on purpose (auditable); clients can
+    // tell it apart by its delivery_status, which the history endpoint returns.
+    if (!result.ok) {
+      return c.json(
+        { conversation_id: convId, message_id: msgId, status: 'failed', error: result.error },
+        502,
+      );
+    }
+    return c.json({ conversation_id: convId, message_id: msgId, status: 'sent' }, 201);
+  },
+);
 
 // More specific route must be registered before `/:conversationId`.
 consultRoutes.get('/:conversationId/reply', async (c) => {

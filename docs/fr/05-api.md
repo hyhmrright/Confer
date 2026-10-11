@@ -525,6 +525,8 @@ DELETE /api/v1/webhooks/{id}
 | `/api/v1/auth/register` | 3/heure par IP |
 | `/api/v1/conversations/*/messages` POST | 60/minute par utilisateur |
 | `/a2a/v1/*` | 60/minute par IP et chemin, et 300/minute par IP sur l'ensemble de `/a2a/v1` |
+| Questions A2A (les deux bindings) | Par DID de peer et par propriétaire 20/minute et 300/jour ; par domaine du peer 60/minute. Au-delà → 429 / `RESOURCE_EXHAUSTED` avec `Retry-After` |
+| `/api/v1/consult/{peer}` POST | 30/minute par utilisateur |
 | WSS | au plus 10 connexions simultanées par utilisateur |
 
 Réponse en cas de dépassement :

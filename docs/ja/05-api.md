@@ -525,6 +525,8 @@ DELETE /api/v1/webhooks/{id}
 | `/api/v1/auth/register` | 3/時 per IP |
 | `/api/v1/conversations/*/messages` POST | 60/分 per user |
 | `/a2a/v1/*` | 60/分 per IP・パス、`/a2a/v1` 全体で 300/分 per IP |
+| A2A の質問（両バインディング共通） | peer DID ごと・オーナーごとに 20/分・300/日、同一ドメイン合計 60/分。超過 → 429 / `RESOURCE_EXHAUSTED`（`Retry-After` 付き） |
+| `/api/v1/consult/{peer}` POST | 30/分 per user |
 | WSS | 1 ユーザーあたり同時接続は最大 10 |
 
 制限に掛かったときのレスポンス:

@@ -525,6 +525,8 @@ Supported events: `message.new.peer`, `permission.granted`, `thread.archived`.
 | `/api/v1/auth/register` | 3/hour per IP |
 | `/api/v1/conversations/*/messages` POST | 60/minute per user |
 | `/a2a/v1/*` | 60/minute per IP and path, and 300/minute per IP across all of `/a2a/v1` |
+| A2A questions (both bindings) | Per peer DID per owner 20/minute and 300/day; per peer domain 60/minute. Over → 429 / `RESOURCE_EXHAUSTED` with `Retry-After` |
+| `/api/v1/consult/{peer}` POST | 30/minute per user |
 | WSS | at most 10 concurrent connections per user |
 
 Response when the limit is exceeded:

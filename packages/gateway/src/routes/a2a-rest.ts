@@ -304,6 +304,11 @@ async function admitSendRequest(c: Context): Promise<Admitted | Response> {
       return fail(c, 'PERMISSION_DENIED', "This agent's policy refuses requests from you.", {
         confer_status: 'policy_denied',
       });
+    case 'rate_limited':
+      c.header('Retry-After', String(admitted.retryAfterSeconds));
+      return fail(c, 'RESOURCE_EXHAUSTED', 'Too many questions to this agent; retry later.', {
+        retryAfterSeconds: String(admitted.retryAfterSeconds),
+      });
     case 'stored':
       // A question never lands here; the type says otherwise only because the
       // inbound flow also stores answers and notifications.

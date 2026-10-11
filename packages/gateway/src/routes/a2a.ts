@@ -74,6 +74,9 @@ a2aRoutes.post('/messages', verifyA2ASignature, async (c) => {
       );
     case 'denied':
       throw new AppError('policy_denied', 'Agent policy denied this request', 403);
+    case 'rate_limited':
+      c.header('Retry-After', String(admitted.retryAfterSeconds));
+      throw new AppError('rate_limited', 'Too many questions to this agent; retry later', 429);
     case 'held':
       return c.json({ status: 'pending_approval', message_id: admitted.messageId }, 202);
     default:

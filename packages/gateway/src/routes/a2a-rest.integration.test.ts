@@ -125,6 +125,8 @@ interface CallOptions {
   version?: string;
 }
 
+let callCounter = 0;
+
 /** A signed request in the shape a conformant client sends. */
 async function call(
   method: string,
@@ -132,7 +134,13 @@ async function call(
   body?: unknown,
   options: CallOptions = {},
 ): Promise<Response> {
-  const headers: Record<string, string> = { 'content-type': 'application/a2a+json' };
+  // A distinct client IP per call, as `test/helpers.ts` does: the per-IP limit
+  // on /a2a is not what these tests exercise, and one shared address across a
+  // whole file would trip it. Not a signed component, so the signature holds.
+  const headers: Record<string, string> = {
+    'content-type': 'application/a2a+json',
+    'x-forwarded-for': `a2a-test-${++callCounter}`,
+  };
   if (!options.skipExtension) headers['a2a-extensions'] = SIGNATURE_EXTENSION_URI;
   if (options.version) headers['a2a-version'] = options.version;
 
@@ -937,6 +945,24 @@ describe('the two bindings share one set of gates', () => {
       .from(conversations)
       .where(eq(conversations.id, task.contextId));
     expect(conversation?.created_by).toBe(user.id);
+  });
+
+  // Each question costs the owner a model turn; the IP limit in front of the
+  // binding says nothing about who is asking, so the peer has a quota of its own.
+  test('a peer past its question quota is told to come back later', async () => {
+    await seedAgent();
+    await connectPeer();
+    for (let i = 0; i < 20; i++) {
+      expect((await call('POST', '/message:send', sendNow(`q${i}`))).status).toBe(200);
+    }
+    const over = await call('POST', '/message:send', sendNow('one too many'));
+    expect(over.status).toBe(429);
+    expect(Number(over.headers.get('retry-after'))).toBeGreaterThan(0);
+    expect((await over.json()).error.details[0].reason).toBe('RESOURCE_EXHAUSTED');
+    // Refused before anything was stored.
+    expect(
+      await getDb().select().from(messages).where(eq(messages.content, 'one too many')),
+    ).toEqual([]);
   });
 
   test('a suspended agent is unreachable over REST too', async () => {

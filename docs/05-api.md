@@ -543,6 +543,8 @@ DELETE /api/v1/webhooks/{id}
 | `/api/v1/auth/register` | 3/小时 per IP |
 | `/api/v1/conversations/*/messages` POST | 60/分钟 per user |
 | `/a2a/v1/*` | 60/分钟 per IP + 路径；整个 `/a2a/v1` 合计 300/分钟 per IP |
+| A2A 提问（两套绑定共用） | 每个 peer DID 对每个主人 20/分钟、300/天；同一域名合计 60/分钟。超出 → 429 / `RESOURCE_EXHAUSTED`，带 `Retry-After` |
+| `/api/v1/consult/{peer}` POST | 30/分钟 per user |
 | WSS | 单用户最多 10 个并发连接 |
 
 限流响应：
