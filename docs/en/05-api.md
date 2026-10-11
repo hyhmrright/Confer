@@ -309,13 +309,13 @@ read.ack                      // read receipt
 ```
 pong
 message.new                   // new message
-message.updated
-message.deleted
+message.updated               // reserved, not sent yet
+message.deleted               // reserved, not sent yet
 typing.update                 // who is typing
 presence.update               // a contact came online or went offline
 permission.request            // a permission request the user must decide
-agent.status                  // what my Agent is doing ("consulting ABC's Agent…")
-conversation.updated
+agent.status                  // my Agent is answering a contact: {conversation_id, state: thinking|tool|idle, tool?}; the client words it
+conversation.updated          // a contact wrote in {conversation_id} (possibly a new thread); the client refreshes its list
 ```
 
 `message.new` example:

@@ -58,6 +58,12 @@ interface MessagePage {
   messages: Array<Message & { citations_json?: unknown }>;
 }
 
+export interface PeerTurn {
+  conversation_id: string;
+  state: 'thinking' | 'tool';
+  tool?: string;
+}
+
 interface ChatState {
   conversations: Conversation[];
   activeConversationId: string | null;
@@ -66,6 +72,11 @@ interface ChatState {
   streamContent: string;
   streamCitations: Citation[];
   agentStatus: string | null;
+  // What the owner's agent is doing for a PEER right now (an inbound A2A turn),
+  // which arrives over the socket rather than this tab's own SSE stream. Kept
+  // apart from `agentStatus` because it is not tied to `streaming`, and as facts
+  // rather than a sentence so the header can word it in the reader's locale.
+  peerTurn: PeerTurn | null;
 
   messagesLoading: boolean;
   loadingOlder: boolean;
@@ -80,7 +91,7 @@ interface ChatState {
   deleteConversation: (id: string) => Promise<void>;
   sendMessage: (content: string) => Promise<void>;
   addMessage: (msg: Message) => void;
-  setAgentStatus: (status: string | null) => void;
+  setPeerTurn: (turn: PeerTurn | null) => void;
 }
 
 // Backend stores RAG citations as `citations_json` (an array of raw doc/kb/excerpt
@@ -111,6 +122,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   streamContent: '',
   streamCitations: [],
   agentStatus: null,
+  peerTurn: null,
 
   loadConversations: async () => {
     const data = await api.get<{ conversations: Conversation[] }>('/conversations');
@@ -346,13 +358,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   addMessage: (msg) => {
     set((s) => {
-      if (msg.conversation_id !== s.activeConversationId) return s;
-      if (s.messages.some((m) => m.id === msg.id)) return s;
-      return { messages: [...s.messages, msg] };
+      // The agent's reply ends its peer turn. The `idle` status says so too, but
+      // a socket that dropped mid-turn never hears it, and the header would
+      // otherwise claim the agent is still answering for good.
+      const peerTurn =
+        msg.sender_type === 'own_agent' && s.peerTurn?.conversation_id === msg.conversation_id
+          ? null
+          : s.peerTurn;
+      if (msg.conversation_id !== s.activeConversationId) return { peerTurn };
+      if (s.messages.some((m) => m.id === msg.id)) return { peerTurn };
+      return { messages: [...s.messages, msg], peerTurn };
     });
   },
 
-  setAgentStatus: (status) => {
-    set({ agentStatus: status });
+  setPeerTurn: (turn) => {
+    set({ peerTurn: turn });
   },
 }));

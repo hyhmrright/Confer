@@ -301,6 +301,7 @@ export const ru: Resources = {
     a2aTurnFailed: 'Не удалось ответить на вопрос агента собеседника.',
     statusThinking: 'Думает...',
     statusCallingTool: 'Вызов {{tool}}...',
+    statusAnsweringPeer: 'Отвечает контакту...',
     statusFailed: 'Этот ход не завершился. Попробуйте ещё раз.',
     statusNoModel: 'Модель ещё не выбрана. Выберите поставщика и модель в «Настройки → Агент».',
     statusNoKey: 'У этого поставщика ещё нет ключа API. Добавьте его в «Настройки → Модели».',

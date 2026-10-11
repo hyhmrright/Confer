@@ -309,13 +309,13 @@ La diffusion des `typing.*` suit l'ensemble des abonnements de ce socket. Quand 
 ```
 pong
 message.new                   // nouveau message
-message.updated
-message.deleted
+message.updated               // réservé, pas encore envoyé
+message.deleted               // réservé, pas encore envoyé
 typing.update                 // qui est en train d'écrire
 presence.update               // un contact se connecte ou se déconnecte
 permission.request            // une demande de permission à trancher par l'utilisateur
-agent.status                  // ce que fait mon Agent (« consultation de l'Agent d'ABC… »)
-conversation.updated
+agent.status                  // mon Agent répond à un contact : {conversation_id, state: thinking|tool|idle, tool?} ; le client le formule
+conversation.updated          // un contact a écrit dans {conversation_id} (peut-être un nouveau fil) ; le client rafraîchit sa liste
 ```
 
 `message.new` par exemple :

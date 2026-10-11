@@ -309,13 +309,13 @@ read.ack                      // подтверждение прочтения
 ```
 pong
 message.new                   // новое сообщение
-message.updated
-message.deleted
+message.updated               // зарезервировано, пока не отправляется
+message.deleted               // зарезервировано, пока не отправляется
 typing.update                 // кто печатает
 presence.update               // контакт вышел на связь или ушёл
 permission.request            // запрос разрешения, по которому должен решить пользователь
-agent.status                  // чем занят мой Агент («консультируюсь с Агентом ABC…»)
-conversation.updated
+agent.status                  // мой Agent отвечает контакту: {conversation_id, state: thinking|tool|idle, tool?}; текст формирует клиент
+conversation.updated          // контакт написал в {conversation_id} (возможно, в новую беседу); клиент обновляет список
 ```
 
 `message.new` пример:

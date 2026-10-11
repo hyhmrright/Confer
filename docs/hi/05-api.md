@@ -309,13 +309,13 @@ read.ack                      // पढ़े जाने की पुष्�
 ```
 pong
 message.new                   // नया संदेश
-message.updated
-message.deleted
+message.updated               // आरक्षित, अभी भेजा नहीं जाता
+message.deleted               // आरक्षित, अभी भेजा नहीं जाता
 typing.update                 // कौन लिख रहा है
 presence.update               // संपर्क का आना-जाना
 permission.request            // अनुमति का अनुरोध जिस पर उपयोगकर्ता को निर्णय लेना है
-agent.status                  // मेरा Agent क्या कर रहा है («ABC के Agent से पूछ रहा हूँ…»)
-conversation.updated
+agent.status                  // मेरा Agent किसी संपर्क को उत्तर दे रहा है: {conversation_id, state: thinking|tool|idle, tool?}; पाठ क्लाइंट बनाता है
+conversation.updated          // किसी संपर्क ने {conversation_id} में लिखा (शायद नई बातचीत); क्लाइंट अपनी सूची ताज़ा करता है
 ```
 
 `message.new` उदाहरण:

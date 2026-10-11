@@ -298,6 +298,7 @@ export const fr: Resources = {
     a2aTurnFailed: "Impossible de répondre à la question de l'agent pair.",
     statusThinking: 'Réflexion...',
     statusCallingTool: 'Appel de {{tool}}...',
+    statusAnsweringPeer: 'Réponse à un contact...',
     statusFailed: "Ce tour n'est pas allé au bout. Réessayez.",
     statusNoModel:
       'Aucun modèle choisi pour le moment. Sélectionnez un fournisseur et un modèle dans Paramètres → Agent.',

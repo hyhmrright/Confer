@@ -292,6 +292,7 @@ export const es: Resources = {
     a2aTurnFailed: 'No se pudo responder a la pregunta del agente par.',
     statusThinking: 'Pensando...',
     statusCallingTool: 'Llamando a {{tool}}...',
+    statusAnsweringPeer: 'Respondiendo a un contacto...',
     statusFailed: 'Ese turno no terminó. Inténtalo de nuevo.',
     statusNoModel: 'Aún no has elegido modelo. Selecciona proveedor y modelo en Ajustes → Agente.',
     statusNoKey: 'Ese proveedor aún no tiene clave de API. Añade una en Ajustes → Modelos.',

@@ -213,3 +213,24 @@ describe('MessageView streaming cost', () => {
     expect(historyParses - before).toBe(0);
   });
 });
+
+// An A2A turn reaches the owner as socket facts, not as this tab's stream, so
+// the header has to show it without `streaming` — and only in its own thread.
+describe('MessageView peer turn', () => {
+  test('shows what the agent is doing for a peer in that thread, and nowhere else', () => {
+    seed();
+    useChatStore.setState({
+      streaming: false,
+      peerTurn: { conversation_id: 'c1', state: 'tool', tool: 'search_knowledge_base' },
+    });
+    const { unmount } = render(<MessageView />);
+    expect(screen.getByText('Calling search_knowledge_base...')).toBeDefined();
+    unmount();
+
+    useChatStore.setState({ peerTurn: { conversation_id: 'other', state: 'thinking' } });
+    render(<MessageView />);
+    expect(screen.queryByText('Answering a contact...')).toBeNull();
+    act(() => useChatStore.setState({ peerTurn: { conversation_id: 'c1', state: 'thinking' } }));
+    expect(screen.getByText('Answering a contact...')).toBeDefined();
+  });
+});

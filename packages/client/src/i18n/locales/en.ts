@@ -290,6 +290,7 @@ export const en: Resources = {
     a2aTurnFailed: "Could not answer the peer agent's question.",
     statusThinking: 'Thinking...',
     statusCallingTool: 'Calling {{tool}}...',
+    statusAnsweringPeer: 'Answering a contact...',
     statusFailed: 'That turn did not finish. Try again.',
     statusNoModel: 'No model chosen yet. Pick a provider and model in Settings → Agent.',
     statusNoKey: 'That provider has no API key yet. Add one in Settings → Models.',

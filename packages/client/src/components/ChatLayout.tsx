@@ -52,8 +52,12 @@ const wsMessageSchema = z.object({
 });
 
 const wsAgentStatusSchema = z.object({
-  message: z.string().optional(),
+  conversation_id: z.string(),
+  state: z.enum(['thinking', 'tool', 'idle']),
+  tool: z.string().optional(),
 });
+
+const wsConversationUpdatedSchema = z.object({ conversation_id: z.string() });
 
 const NAV_ITEMS = [
   { id: 'conversations' as Tab, Icon: MessageCircle, labelKey: 'nav.conversations' },
@@ -158,7 +162,7 @@ export function ChatLayout() {
   const loadConversations = useChatStore((s) => s.loadConversations);
   const activeConversationId = useChatStore((s) => s.activeConversationId);
   const addMessage = useChatStore((s) => s.addMessage);
-  const setAgentStatus = useChatStore((s) => s.setAgentStatus);
+  const setPeerTurn = useChatStore((s) => s.setPeerTurn);
   const addPermissionRequest = usePermissionsStore((s) => s.addRequest);
   const loadPending = usePermissionsStore((s) => s.loadPending);
   const loadPendingCards = useErrandsStore((s) => s.loadPendingCards);
@@ -206,9 +210,13 @@ export function ChatLayout() {
         addMessage({ ...msg, created_at: new Date().toISOString() }),
       ),
       onValid('permission.request', permissionRequestEventSchema, addPermissionRequest),
-      onValid('agent.status', wsAgentStatusSchema, (status) =>
-        setAgentStatus(status.message ?? null),
+      onValid('agent.status', wsAgentStatusSchema, ({ state, ...turn }) =>
+        setPeerTurn(state === 'idle' ? null : { ...turn, state }),
       ),
+      // A peer wrote somewhere — possibly a thread this list has never seen.
+      onValid('conversation.updated', wsConversationUpdatedSchema, () => {
+        void loadConversations();
+      }),
     ];
 
     return () => {
@@ -216,7 +224,7 @@ export function ChatLayout() {
       disconnectWs();
       for (const fn of unsubs) fn();
     };
-  }, [loadConversations, addMessage, addPermissionRequest, setAgentStatus, loadPending]);
+  }, [loadConversations, addMessage, addPermissionRequest, setPeerTurn, loadPending]);
 
   // Subscribe the socket to the active conversation so its gateway broadcasts
   // (inbound peer messages, agent auto-replies) arrive in real time; unsubscribe

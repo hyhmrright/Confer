@@ -302,6 +302,7 @@ export const ar: Resources = {
     a2aTurnFailed: 'تعذّر الرد على سؤال الوكيل النظير.',
     statusThinking: 'يفكّر...',
     statusCallingTool: 'يستدعي {{tool}}...',
+    statusAnsweringPeer: 'يجيب على جهة اتصال...',
     statusFailed: 'لم تكتمل تلك الجولة. حاول مرة أخرى.',
     statusNoModel: 'لم يُختر نموذج بعد. اختر مزوّدًا ونموذجًا في الإعدادات ← الوكيل.',
     statusNoKey: 'لا يوجد مفتاح لهذا المزوّد بعد. أضف واحدًا في الإعدادات ← النماذج.',

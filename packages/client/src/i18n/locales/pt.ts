@@ -292,6 +292,7 @@ export const pt: Resources = {
     a2aTurnFailed: 'Não foi possível responder à pergunta do agente par.',
     statusThinking: 'Pensando...',
     statusCallingTool: 'Chamando {{tool}}...',
+    statusAnsweringPeer: 'A responder a um contacto...',
     statusFailed: 'Esse turno não terminou. Tente de novo.',
     statusNoModel:
       'Nenhum modelo escolhido ainda. Selecione provedor e modelo em Configurações → Agente.',

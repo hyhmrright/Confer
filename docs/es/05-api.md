@@ -309,13 +309,13 @@ La difusión de `typing.*` se rige por el conjunto de suscripciones de ese socke
 ```
 pong
 message.new                   // mensaje nuevo
-message.updated
-message.deleted
+message.updated               // reservado, aún no se envía
+message.deleted               // reservado, aún no se envía
 typing.update                 // quién está escribiendo
 presence.update               // un contacto se conecta o se desconecta
 permission.request            // una petición de permiso que el usuario debe decidir
-agent.status                  // qué está haciendo mi Agente («consultando al Agente de ABC…»)
-conversation.updated
+agent.status                  // mi Agente está respondiendo a un contacto: {conversation_id, state: thinking|tool|idle, tool?}; el cliente lo redacta
+conversation.updated          // un contacto escribió en {conversation_id} (quizá un hilo nuevo); el cliente refresca su lista
 ```
 
 `message.new` por ejemplo:

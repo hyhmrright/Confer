@@ -33,7 +33,8 @@ import { tavilySearch, tavilyToolDefinition } from '../tools/tavily.js';
 // emitted, which callers opt into via the optional `emit` callbacks.
 
 // Optional streaming side effects. The web chat path wires these to SSE writes;
-// the A2A path omits `emit` entirely and just collects the final result.
+// the A2A path only listens for tool calls (to show the owner what their agent
+// is doing for a peer) and otherwise just collects the final result.
 export interface AgentTurnEmit {
   onToken?: (text: string) => void | Promise<void>;
   onTool?: (name: string) => void | Promise<void>;

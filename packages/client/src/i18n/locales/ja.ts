@@ -293,6 +293,7 @@ export const ja: Resources = {
     a2aTurnFailed: '相手のエージェントの質問に回答できませんでした。',
     statusThinking: '考え中...',
     statusCallingTool: '{{tool}} を呼び出し中...',
+    statusAnsweringPeer: '連絡先に回答中...',
     statusFailed: 'この応答は完了しませんでした。もう一度お試しください。',
     statusNoModel:
       'モデルが未選択です。「設定 → エージェント」でプロバイダーとモデルを選んでください。',

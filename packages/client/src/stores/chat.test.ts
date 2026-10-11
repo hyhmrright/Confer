@@ -28,6 +28,7 @@ const baseState = {
   streamContent: '',
   streamCitations: [],
   agentStatus: null,
+  peerTurn: null,
 };
 
 beforeEach(() => {
@@ -239,6 +240,25 @@ describe('chat store', () => {
     expect(messages[0].content).toBe('hi');
   });
 
+  // The `idle` status is lost if the socket drops mid-turn; the reply itself
+  // still ends the turn, even in a thread the owner is not looking at.
+  test('an agent reply ends that thread’s peer turn, and only that one', () => {
+    useChatStore.setState({
+      activeConversationId: 'c1',
+      peerTurn: { conversation_id: 'other', state: 'thinking' },
+    });
+
+    useChatStore.getState().addMessage(makeMessage({ sender_type: 'peer_agent' }) as never);
+    expect(useChatStore.getState().peerTurn).not.toBeNull();
+
+    useChatStore
+      .getState()
+      .addMessage(
+        makeMessage({ id: 'm2', conversation_id: 'other', sender_type: 'own_agent' }) as never,
+      );
+    expect(useChatStore.getState().peerTurn).toBeNull();
+  });
+
   test('sendMessage is a no-op when there is no active conversation', async () => {
     useChatStore.setState({ activeConversationId: null });
     await useChatStore.getState().sendMessage('hello');
@@ -360,13 +380,5 @@ describe('chat store', () => {
     expect(noModel).not.toBe(generic);
     expect(noKey).not.toBe(generic);
     expect(noModel).not.toBe(noKey);
-  });
-
-  test('setAgentStatus updates the agent status', () => {
-    useChatStore.getState().setAgentStatus('thinking');
-    expect(useChatStore.getState().agentStatus).toBe('thinking');
-
-    useChatStore.getState().setAgentStatus(null);
-    expect(useChatStore.getState().agentStatus).toBeNull();
   });
 });

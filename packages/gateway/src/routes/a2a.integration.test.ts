@@ -35,6 +35,7 @@ import {
   type SeededUser,
   seedUser,
 } from '../test/helpers.js';
+import { websocket } from '../ws/handler.js';
 
 const MESSAGES = 'http://localhost/a2a/v1/messages';
 let user: SeededUser;
@@ -312,6 +313,84 @@ describe('A2A signed message (real Ed25519, mocked DID resolution)', () => {
     expect(stored?.sender_did).toBe('did:web:peer.example');
     expect(stored?.content).toBe('Hello target agent');
     expect(stored?.via).toBe('a2a');
+  });
+
+  // An A2A turn has no SSE stream for the owner to watch, so the owner's socket
+  // is the only way they learn a peer wrote, or that their agent is answering.
+  test('tells the owner’s socket about the thread and about the turn running in it', async () => {
+    const targetDid = 'did:web:localhost:agents:live';
+    await seedTargetAgent(targetDid);
+    await seedUserLlmKey();
+    await connectPeer('did:web:peer.example');
+    const privateKey = await signingKeyResolvedViaDid({ llmReply: 'On it' });
+
+    const sent: Array<{ type: string; data: Record<string, unknown> }> = [];
+    const ws = {
+      data: {
+        user: { sub: user.id, username: user.username, sid: user.sessionId },
+        subscriptions: new Set<string>(),
+        expiresAt: Date.now() + 15 * 60_000,
+      },
+      send: (payload: string) => sent.push(JSON.parse(payload)),
+      close: () => websocket.close(ws as never),
+    };
+    websocket.open(ws as never);
+
+    const ask = async (content: string) => {
+      const req = new Request(MESSAGES, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          from: 'did:web:peer.example',
+          to: targetDid,
+          thread_id: 'their-thread',
+          message: { type: 'question', content },
+        }),
+      });
+      const res = await app.request(await signRequest(req, privateKey, KEY_ID));
+      expect(res.status).toBe(201);
+      const { message_id } = await res.json();
+      const [row] = await getDb().select().from(messages).where(eq(messages.id, message_id));
+      if (!row) throw new Error('inbound message not stored');
+      const conversationId = row.conversation_id;
+      await waitFor(async () => {
+        const replies = await getDb()
+          .select()
+          .from(messages)
+          .where(eq(messages.in_reply_to, message_id));
+        return replies.length > 0;
+      });
+      return conversationId;
+    };
+
+    try {
+      // A brand-new thread: nothing is subscribed to it, so only the per-user
+      // push can put it in the owner's list.
+      const conversationId = await ask('first');
+      expect(sent).toContainEqual({
+        type: 'conversation.updated',
+        data: { conversation_id: conversationId },
+      });
+
+      websocket.message(
+        ws as never,
+        JSON.stringify({
+          type: 'subscribe.conversation',
+          data: { conversation_id: conversationId },
+        }),
+      );
+      await waitFor(async () => ws.data.subscriptions.has(conversationId));
+
+      sent.length = 0;
+      await ask('second');
+      const states = sent.filter((m) => m.type === 'agent.status').map((m) => m.data);
+      expect(states).toEqual([
+        { conversation_id: conversationId, state: 'thinking' },
+        { conversation_id: conversationId, state: 'idle' },
+      ]);
+    } finally {
+      ws.close();
+    }
   });
 
   test('holds an unconnected peer as a pending connection request (202), not an LLM turn', async () => {

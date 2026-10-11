@@ -287,6 +287,7 @@ export const bn: Resources = {
     a2aTurnFailed: 'সহযোগী এজেন্টের প্রশ্নের উত্তর দেওয়া যায়নি।',
     statusThinking: 'ভাবছে...',
     statusCallingTool: '{{tool}} ডাকা হচ্ছে...',
+    statusAnsweringPeer: 'পরিচিতিকে উত্তর দিচ্ছে...',
     statusFailed: 'সেই ধাপটি শেষ হয়নি। আবার চেষ্টা করুন।',
     statusNoModel: 'এখনও কোনও মডেল বাছা হয়নি। সেটিংস → এজেন্ট-এ সরবরাহকারী ও মডেল বেছে নিন।',
     statusNoKey: 'ওই সরবরাহকারীর এখনও API কী নেই। সেটিংস → মডেল-এ একটি যোগ করুন।',

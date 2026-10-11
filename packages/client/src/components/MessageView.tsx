@@ -19,6 +19,10 @@ export function MessageView() {
   const sendMessage = useChatStore((s) => s.sendMessage);
   const streaming = useChatStore((s) => s.streaming);
   const agentStatus = useChatStore((s) => s.agentStatus);
+  // Only this thread's peer turn; one running in another thread is not news here.
+  const peerTurn = useChatStore((s) =>
+    s.peerTurn?.conversation_id === s.activeConversationId ? s.peerTurn : null,
+  );
   const hasOlderMessages = useChatStore((s) => s.hasOlderMessages);
   const loadingOlder = useChatStore((s) => s.loadingOlder);
   const loadOlderMessages = useChatStore((s) => s.loadOlderMessages);
@@ -90,6 +94,13 @@ export function MessageView() {
 
   const canSend = (input.trim().length > 0 || attachedFile !== null) && !sending && !streaming;
 
+  // The owner's own reply wins the header; a peer turn shows only when idle.
+  let activity: string | null = null;
+  if (streaming) activity = agentStatus ?? t('message.thinking');
+  else if (peerTurn?.state === 'tool' && peerTurn.tool)
+    activity = t('message.statusCallingTool', { tool: peerTurn.tool });
+  else if (peerTurn) activity = t('message.statusAnsweringPeer');
+
   return (
     <div className="flex-1 flex flex-col bg-dark-base min-w-0 overflow-hidden">
       {/* Chat header */}
@@ -97,10 +108,10 @@ export function MessageView() {
         <h1 className="font-display text-base text-ink-primary truncate min-w-0">
           {conversationName ?? t('message.title')}
         </h1>
-        {streaming && (
+        {activity && (
           <div className="ms-auto shrink-0 flex items-center gap-1.5 eyebrow text-primary-400">
             <span className="w-1.5 h-1.5 rounded-full bg-primary-400 animate-pulse" />
-            {agentStatus ?? t('message.thinking')}
+            {activity}
           </div>
         )}
       </div>

@@ -302,6 +302,7 @@ export const ur: Resources = {
     a2aTurnFailed: 'ہم منصب ایجنٹ کے سوال کا جواب نہیں دیا جا سکا۔',
     statusThinking: 'سوچ رہا ہے...',
     statusCallingTool: '{{tool}} کو بلایا جا رہا ہے...',
+    statusAnsweringPeer: 'رابطے کو جواب دے رہا ہے...',
     statusFailed: 'وہ مرحلہ مکمل نہیں ہوا۔ دوبارہ کوشش کریں۔',
     statusNoModel: 'ابھی کوئی ماڈل منتخب نہیں۔ ترتیبات ← ایجنٹ میں فراہم کنندہ اور ماڈل چنیں۔',
     statusNoKey: 'اس فراہم کنندہ کی ابھی کوئی API کلید نہیں۔ ترتیبات ← ماڈل میں ایک شامل کریں۔',

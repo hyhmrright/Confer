@@ -6,7 +6,7 @@ import { type agents, messages, peerContacts } from '../db/schema.js';
 import { decideAdmission } from '../lib/a2a-admission.js';
 import { runDetached } from '../lib/background.js';
 import { isContact } from '../lib/tenant.js';
-import { broadcastToConversation } from '../ws/handler.js';
+import { broadcastToConversation, sendToUser } from '../ws/handler.js';
 import { processA2AMessage } from './answer.js';
 import { holdA2AQuestion, upsertConnectionRequest } from './inbound-permissions.js';
 import { ensurePeerAgent, resolveOrCreateThread } from './inbound-thread.js';
@@ -106,6 +106,13 @@ export async function admitInboundMessage(params: InboundMessageParams): Promise
       content: message.content,
       in_reply_to: threadId,
     },
+  });
+  // `message.new` only reaches sockets already subscribed to this thread. A
+  // peer opening a new thread has none, so the owner's list never showed it
+  // until they reloaded; this goes to the owner wherever they are.
+  sendToUser(targetAgent.user_id, {
+    type: 'conversation.updated',
+    data: { conversation_id: conversationId },
   });
 
   // Only a question can be held — an answer or notification never auto-replies,

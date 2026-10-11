@@ -323,13 +323,13 @@ read.ack                      // 已读确认
 ```
 pong
 message.new                   // 新消息
-message.updated
-message.deleted
+message.updated               // 预留，尚未发送
+message.deleted               // 预留，尚未发送
 typing.update                 // 谁在打字
 presence.update               // 联系人上下线
 permission.request            // 需要用户决定的权限请求
-agent.status                  // 我的 Agent 在做什么（"正在咨询 ABC Agent..."）
-conversation.updated
+agent.status                  // 我的 Agent 正在回答联系人：{conversation_id, state: thinking|tool|idle, tool?}，文案由客户端生成
+conversation.updated          // 联系人在 {conversation_id} 里发了消息（可能是新会话），客户端据此刷新列表
 ```
 
 `message.new` 示例:

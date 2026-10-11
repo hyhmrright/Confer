@@ -288,6 +288,7 @@ export const hi: Resources = {
     a2aTurnFailed: 'सहयोगी एजेंट के प्रश्न का उत्तर नहीं दिया जा सका।',
     statusThinking: 'सोच रहा है...',
     statusCallingTool: '{{tool}} को बुलाया जा रहा है...',
+    statusAnsweringPeer: 'संपर्क को उत्तर दे रहा है...',
     statusFailed: 'वह चरण पूरा नहीं हुआ। फिर कोशिश करें।',
     statusNoModel: 'अभी कोई मॉडल नहीं चुना। सेटिंग्स → एजेंट में प्रदाता और मॉडल चुनें।',
     statusNoKey: 'उस प्रदाता की अभी कोई API कुंजी नहीं है। सेटिंग्स → मॉडल में एक जोड़ें।',

@@ -309,13 +309,13 @@ read.ack                      // 既読確認
 ```
 pong
 message.new                   // 新着メッセージ
-message.updated
-message.deleted
+message.updated               // 予約済み、未送信
+message.deleted               // 予約済み、未送信
 typing.update                 // 誰が入力中か
 presence.update               // 連絡先のオンライン・オフライン
 permission.request            // ユーザーの判断を要する権限リクエスト
-agent.status                  // 自分の Agent が何をしているか（「ABC の Agent に相談中…」）
-conversation.updated
+agent.status                  // 自分の Agent が連絡先に回答中：{conversation_id, state: thinking|tool|idle, tool?}。文言はクライアントが生成
+conversation.updated          // 連絡先が {conversation_id} に書き込んだ（新しい会話の場合もある）。クライアントは一覧を更新する
 ```
 
 `message.new` の例:

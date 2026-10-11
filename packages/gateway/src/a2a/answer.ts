@@ -121,6 +121,23 @@ function broadcastReply(params: ProcessA2AMessageParams, id: string, content: st
   });
 }
 
+/**
+ * Tell the owner's open thread what their agent is doing for the peer. The
+ * owner's own chat learns this from its SSE stream; an A2A turn has no stream,
+ * so without this the thread showed the peer's question and then nothing until
+ * the answer landed. Facts only — the client words them in the reader's locale.
+ */
+function broadcastTurnState(
+  conversationId: string,
+  state: 'thinking' | 'tool' | 'idle',
+  tool?: string,
+): void {
+  broadcastToConversation(conversationId, {
+    type: 'agent.status',
+    data: { conversation_id: conversationId, state, tool },
+  });
+}
+
 type A2AFailure = ModelConfigError | 'agent_error';
 
 /** One-line English summary of a turn that could not be run, sent to the asker. */
@@ -211,6 +228,7 @@ export async function processA2AMessage(params: ProcessA2AMessageParams): Promis
 
   const history = await loadA2AHistory(conversationId, inboundMessageId);
 
+  broadcastTurnState(conversationId, 'thinking');
   // A rejected key, a provider outage, a model that no longer exists: each of
   // these ended the turn here with a log line and nothing on the wire, leaving
   // the asker to poll a question that would never be answered.
@@ -231,10 +249,13 @@ export async function processA2AMessage(params: ProcessA2AMessageParams): Promis
     hasKb,
     kbScope,
     recallMemory,
-  }).catch((error) => {
-    console.error(`Agent turn failed for agent ${targetAgent.id}:`, error);
-    return null;
-  });
+    emit: { onTool: (name) => broadcastTurnState(conversationId, 'tool', name) },
+  })
+    .catch((error) => {
+      console.error(`Agent turn failed for agent ${targetAgent.id}:`, error);
+      return null;
+    })
+    .finally(() => broadcastTurnState(conversationId, 'idle'));
   if (!turn) {
     await notifyPeerOfFailure(params, 'agent_error');
     return;

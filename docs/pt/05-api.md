@@ -309,13 +309,13 @@ A difusão de `typing.*` segue o conjunto de assinaturas daquele socket. Quando 
 ```
 pong
 message.new                   // mensagem nova
-message.updated
-message.deleted
+message.updated               // reservado, ainda não enviado
+message.deleted               // reservado, ainda não enviado
 typing.update                 // quem está digitando
 presence.update               // um contato entra ou sai
 permission.request            // um pedido de permissão que o usuário precisa decidir
-agent.status                  // o que o meu Agente está fazendo («consultando o Agente da ABC…»)
-conversation.updated
+agent.status                  // o meu Agente está a responder a um contacto: {conversation_id, state: thinking|tool|idle, tool?}; o cliente redige o texto
+conversation.updated          // um contacto escreveu em {conversation_id} (talvez um tópico novo); o cliente atualiza a lista
 ```
 
 `message.new` por exemplo:

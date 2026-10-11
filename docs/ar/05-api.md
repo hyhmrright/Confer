@@ -309,13 +309,13 @@ read.ack                      // إقرار القراءة
 ```
 pong
 message.new                   // رسالة جديدة
-message.updated
-message.deleted
+message.updated               // محجوز، لا يُرسَل بعد
+message.deleted               // محجوز، لا يُرسَل بعد
 typing.update                 // من يكتب الآن
 presence.update               // اتصال جهة اتصال أو انقطاعها
 permission.request            // طلب إذن يحتاج قرار المستخدم
-agent.status                  // ماذا يفعل وكيلي («أستشير وكيل ABC…»)
-conversation.updated
+agent.status                  // الـ Agent الخاص بي يجيب على جهة اتصال: {conversation_id, state: thinking|tool|idle, tool?}؛ يصوغ العميل النص
+conversation.updated          // كتبت جهة اتصال في {conversation_id} (ربما محادثة جديدة)؛ يحدّث العميل قائمته
 ```
 
 `message.new` مثال:
