@@ -42,6 +42,11 @@ POST   /api/v1/auth/register
 POST   /api/v1/auth/login
 POST   /api/v1/auth/refresh
 POST   /api/v1/auth/logout
+POST   /api/v1/auth/password        # {current_password, new_password}
+GET    /api/v1/auth/2fa             # {enabled, recovery_codes_left}
+POST   /api/v1/auth/2fa/setup       # → {secret, otpauth_uri}
+POST   /api/v1/auth/2fa/enable      # {code} → {recovery_codes}
+POST   /api/v1/auth/2fa/disable     # {password, totp_code | recovery_code}
 POST   /api/v1/auth/oauth/{provider}    # OAuth callback
 ```
 
@@ -66,6 +71,8 @@ POST   /api/v1/auth/oauth/{provider}    # OAuth callback
   "user": { /* User object */ }
 }
 ```
+
+**两步登录（TOTP）。** 开启后，`login` 在密码正确之后还要求 `totp_code`（身份验证器 App 的 6 位码）或 `recovery_code`；两者都没带时返回 401 `totp_required`，客户端据此显示第二步，码不对返回 401 `invalid_second_factor`。密码错误时永远先返回 `invalid_credentials`，不会透露账号是否开了两步登录。每个验证码只能用一次（记录已用的时间步），每个恢复码用后作废；两者都用一条带条件的 UPDATE 消费，并发登录不能重复使用。`setup` 生成的密钥用 AES-256-GCM 加密保存，在 `enable` 用 App 里的码确认之前不生效；`enable` 只返回这一次恢复码（10 个），服务端只存哈希。`disable` 需要密码加第二因素。`password` 修改密码需要当前密码，并注销该用户的所有其他会话。这些操作都写审计日志，且按账号每分钟限 10 次。 `enable` 同样需要 `password`，这样仅凭盗来的 token 不能把攻击者的身份验证器装进别人的账号；开启两步登录后，`password` 修改密码也需要第二因素。同一账号连续 5 个错误的码会锁定该账号的验证码尝试 15 分钟（429 `too_many_attempts`），与按 IP 的登录限流叠加。恢复码用服务端密钥做 HMAC 保存。用户同时丢失身份验证器和恢复码时，管理员可用 `POST /api/v1/admin/users/{id}/reset-2fa` 为其关闭两步登录（会写审计日志，不能对自己使用）。
 
 ### 用户和 Agent 配置
 

@@ -37,6 +37,11 @@ POST   /api/v1/auth/register
 POST   /api/v1/auth/login
 POST   /api/v1/auth/refresh
 POST   /api/v1/auth/logout
+POST   /api/v1/auth/password        # {current_password, new_password}
+GET    /api/v1/auth/2fa             # {enabled, recovery_codes_left}
+POST   /api/v1/auth/2fa/setup       # → {secret, otpauth_uri}
+POST   /api/v1/auth/2fa/enable      # {code} → {recovery_codes}
+POST   /api/v1/auth/2fa/disable     # {password, totp_code | recovery_code}
 POST   /api/v1/auth/oauth/{provider}    # OAuth callback
 ```
 
@@ -61,6 +66,8 @@ POST   /api/v1/auth/oauth/{provider}    # OAuth callback
   "user": { /* User object */ }
 }
 ```
+
+**दो-चरणीय साइन-इन (TOTP)।** चालू होने पर `login` सही पासवर्ड के बाद एक `totp_code` (ऑथेंटिकेटर ऐप के 6 अंक) या `recovery_code` भी माँगता है; दोनों न हों तो 401 `totp_required` लौटाता है, जिससे क्लाइंट समझता है कि दूसरा चरण दिखाना है, और गलत कोड पर 401 `invalid_second_factor`। गलत पासवर्ड पर हमेशा पहले `invalid_credentials` आता है, इसलिए यह कभी पता नहीं चलता कि खाते में दो-चरणीय साइन-इन है। हर कोड एक ही बार चलता है (इस्तेमाल हुआ समय-चरण दर्ज होता है) और हर रिकवरी कोड इस्तेमाल होते ही काट दिया जाता है; दोनों एक ही सशर्त UPDATE से खर्च होते हैं, इसलिए एक साथ हुए साइन-इन किसी कोड को दोबारा नहीं चला सकते। `setup` का रहस्य AES-256-GCM से एन्क्रिप्ट होकर रखा जाता है और तब तक कुछ नहीं करता जब तक `enable` ऐप के कोड से उसकी पुष्टि न करे; `enable` 10 रिकवरी कोड केवल इसी एक बार लौटाता है और केवल उनके हैश रखे जाते हैं। `disable` के लिए पासवर्ड और दूसरा कारक चाहिए। `password` के लिए वर्तमान पासवर्ड चाहिए और यह बाकी सभी सत्र समाप्त कर देता है। ये सब ऑडिट लॉग में दर्ज होते हैं और हर खाते के लिए प्रति मिनट 10 तक सीमित हैं। `enable` के लिए भी `password` चाहिए, ताकि अकेले चुराया गया टोकन किसी के खाते के आगे हमलावर का ऑथेंटिकेटर न लगा सके; दो-चरणीय साइन-इन चालू होने पर `password` के लिए भी दूसरा कारक चाहिए। लगातार 5 गलत कोड उस खाते के कोड प्रयासों को 15 मिनट के लिए रोक देते हैं (429 `too_many_attempts`), जो प्रति-IP लॉगिन सीमा के अतिरिक्त है। रिकवरी कोड सर्वर कुंजी से HMAC के रूप में रखे जाते हैं। जिस उपयोगकर्ता का ऑथेंटिकेटर और रिकवरी कोड दोनों खो गए हों, उसके लिए व्यवस्थापक `POST /api/v1/admin/users/{id}/reset-2fa` से इसे बंद कर सकता है (ऑडिट होता है, और व्यवस्थापक के अपने खाते पर कभी नहीं)।
 
 ### उपयोगकर्ता और Agent का विन्यास
 

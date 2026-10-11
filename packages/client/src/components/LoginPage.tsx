@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router';
+import { errorCode } from '../lib/error.js';
 import {
   gatewayOrigin,
   gatewayUrlRequired,
@@ -19,6 +20,10 @@ export function LoginPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
+  // Set once the server has accepted the password and asked for the second step.
+  const [needsCode, setNeedsCode] = useState(false);
+  const [code, setCode] = useState('');
+  const [codeError, setCodeError] = useState<string | null>(null);
   // Only a bundled app asks for this: it serves its own assets, so it has no
   // origin to send `/api/v1` to until someone names one.
   const needsGateway = gatewayUrlRequired();
@@ -48,16 +53,35 @@ export function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (needsGateway && !applyGateway()) return;
+    setCodeError(null);
     try {
       if (isRegister) {
         await register(username, password, displayName || undefined);
       } else {
-        await login(username, password);
+        await login(username, password, needsCode ? code : undefined);
       }
       navigate('/');
-    } catch {
-      // error is set in store
+    } catch (e) {
+      // Everything else is set in the store. These two are worded here: the
+      // server's sentence is English, and the first is not a failure at all —
+      // the password was right and the account has a second step.
+      if (errorCode(e) === 'totp_required') {
+        useAuthStore.setState({ error: null });
+        setNeedsCode(true);
+      } else if (errorCode(e) === 'invalid_second_factor') {
+        useAuthStore.setState({ error: null });
+        setCodeError(t('login.totpInvalid'));
+      } else if (errorCode(e) === 'too_many_attempts') {
+        useAuthStore.setState({ error: null });
+        setCodeError(t('login.totpLocked'));
+      }
     }
+  };
+
+  const backToPassword = () => {
+    setNeedsCode(false);
+    setCode('');
+    setCodeError(null);
   };
 
   const inputCls = `w-full px-3.5 py-2.5 bg-dark-input border border-dark-border rounded-xl text-sm
@@ -101,103 +125,146 @@ export function LoginPage() {
         {/* Card */}
         <div className="bg-dark-panel rounded-2xl border border-dark-border p-8 shadow-2xl shadow-black/40">
           <h2 className="text-base font-semibold text-ink-primary mb-1">
-            {isRegister ? t('login.createAccount') : t('login.welcomeBack')}
+            {needsCode
+              ? t('login.totpTitle')
+              : isRegister
+                ? t('login.createAccount')
+                : t('login.welcomeBack')}
           </h2>
           <p className="text-xs text-ink-muted mb-6">
-            {isRegister ? t('login.registerHint') : t('login.loginHint')}
+            {needsCode
+              ? t('login.totpHint')
+              : isRegister
+                ? t('login.registerHint')
+                : t('login.loginHint')}
           </p>
 
-          <form onSubmit={handleSubmit} className="space-y-3.5">
-            {needsGateway && (
+          {needsCode ? (
+            <form onSubmit={handleSubmit} className="space-y-3.5">
               <div>
-                <FieldLabel htmlFor="login-gateway">{t('login.gateway')}</FieldLabel>
+                <FieldLabel htmlFor="login-code">{t('login.totpCode')}</FieldLabel>
                 <input
-                  id="login-gateway"
-                  type="text"
-                  inputMode="url"
-                  autoComplete="url"
-                  autoCapitalize="none"
-                  spellCheck={false}
-                  value={gateway}
-                  onChange={(e) => setGateway(e.target.value)}
-                  placeholder={t('login.gatewayPlaceholder')}
+                  id="login-code"
+                  autoComplete="one-time-code"
+                  // biome-ignore lint/a11y/noAutofocus: the step exists only to take this one field
+                  autoFocus
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
                   className={inputCls}
                   required
                 />
-                <p
-                  className={`text-xs mt-1.5 ${gatewayInvalid ? 'text-red-400' : 'text-ink-muted'}`}
-                >
-                  {gatewayInvalid ? t('login.gatewayInvalid') : t('login.gatewayHint')}
-                </p>
               </div>
-            )}
+              <StatusMsg error={codeError ?? error} success={null} />
+              <button
+                type="submit"
+                disabled={loading}
+                className={`w-full py-2.5 bg-primary-600 text-white rounded-xl text-sm font-medium
+                  hover:bg-primary-500 ${DISABLED_FILLED} transition-colors flex items-center justify-center gap-2 mt-1 ${FOCUS_RING}`}
+              >
+                {loading && <Loader className="w-4 h-4 animate-spin" />}
+                {loading ? t('login.processing') : t('login.verify')}
+              </button>
+              <button
+                type="button"
+                onClick={backToPassword}
+                className="w-full text-xs text-ink-muted hover:text-ink-secondary transition-colors"
+              >
+                {t('login.back')}
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-3.5">
+              {needsGateway && (
+                <div>
+                  <FieldLabel htmlFor="login-gateway">{t('login.gateway')}</FieldLabel>
+                  <input
+                    id="login-gateway"
+                    type="text"
+                    inputMode="url"
+                    autoComplete="url"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    value={gateway}
+                    onChange={(e) => setGateway(e.target.value)}
+                    placeholder={t('login.gatewayPlaceholder')}
+                    className={inputCls}
+                    required
+                  />
+                  <p
+                    className={`text-xs mt-1.5 ${gatewayInvalid ? 'text-red-400' : 'text-ink-muted'}`}
+                  >
+                    {gatewayInvalid ? t('login.gatewayInvalid') : t('login.gatewayHint')}
+                  </p>
+                </div>
+              )}
 
-            <div>
-              <FieldLabel htmlFor="login-username">{t('login.username')}</FieldLabel>
-              <input
-                id="login-username"
-                type="text"
-                autoComplete="username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder={t('login.usernamePlaceholder')}
-                className={inputCls}
-                required
-                minLength={3}
-              />
-            </div>
-
-            {isRegister && (
               <div>
-                <FieldLabel htmlFor="login-displayname">
-                  {t('login.displayName')}{' '}
-                  <span className="text-ink-muted font-normal">{t('common.optional')}</span>
-                </FieldLabel>
+                <FieldLabel htmlFor="login-username">{t('login.username')}</FieldLabel>
                 <input
-                  id="login-displayname"
+                  id="login-username"
                   type="text"
-                  value={displayName}
-                  onChange={(e) => setDisplayName(e.target.value)}
-                  placeholder={t('login.displayNamePlaceholder')}
+                  autoComplete="username"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder={t('login.usernamePlaceholder')}
                   className={inputCls}
+                  required
+                  minLength={3}
                 />
               </div>
-            )}
 
-            <div>
-              <FieldLabel htmlFor="login-password">{t('login.password')}</FieldLabel>
-              <input
-                id="login-password"
-                type="password"
-                // One field serving both modes: telling the password manager
-                // which it is, is the difference between offering the saved
-                // credential and offering to generate a new one.
-                autoComplete={isRegister ? 'new-password' : 'current-password'}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder={t('login.passwordPlaceholder')}
-                className={inputCls}
-                required
-                minLength={8}
-              />
-            </div>
+              {isRegister && (
+                <div>
+                  <FieldLabel htmlFor="login-displayname">
+                    {t('login.displayName')}{' '}
+                    <span className="text-ink-muted font-normal">{t('common.optional')}</span>
+                  </FieldLabel>
+                  <input
+                    id="login-displayname"
+                    type="text"
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                    placeholder={t('login.displayNamePlaceholder')}
+                    className={inputCls}
+                  />
+                </div>
+              )}
 
-            <StatusMsg error={error} success={null} />
+              <div>
+                <FieldLabel htmlFor="login-password">{t('login.password')}</FieldLabel>
+                <input
+                  id="login-password"
+                  type="password"
+                  // One field serving both modes: telling the password manager
+                  // which it is, is the difference between offering the saved
+                  // credential and offering to generate a new one.
+                  autoComplete={isRegister ? 'new-password' : 'current-password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder={t('login.passwordPlaceholder')}
+                  className={inputCls}
+                  required
+                  minLength={8}
+                />
+              </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className={`w-full py-2.5 bg-primary-600 text-white rounded-xl text-sm font-medium
+              <StatusMsg error={error} success={null} />
+
+              <button
+                type="submit"
+                disabled={loading}
+                className={`w-full py-2.5 bg-primary-600 text-white rounded-xl text-sm font-medium
                 hover:bg-primary-500 ${DISABLED_FILLED} transition-colors flex items-center justify-center gap-2 mt-1 ${FOCUS_RING}`}
-            >
-              {loading && <Loader className="w-4 h-4 animate-spin" />}
-              {loading
-                ? t('login.processing')
-                : isRegister
-                  ? t('login.register')
-                  : t('login.login')}
-            </button>
-          </form>
+              >
+                {loading && <Loader className="w-4 h-4 animate-spin" />}
+                {loading
+                  ? t('login.processing')
+                  : isRegister
+                    ? t('login.register')
+                    : t('login.login')}
+              </button>
+            </form>
+          )}
         </div>
 
         <p className="text-center text-xs text-ink-muted mt-6">

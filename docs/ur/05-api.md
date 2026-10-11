@@ -37,6 +37,11 @@ POST   /api/v1/auth/register
 POST   /api/v1/auth/login
 POST   /api/v1/auth/refresh
 POST   /api/v1/auth/logout
+POST   /api/v1/auth/password        # {current_password, new_password}
+GET    /api/v1/auth/2fa             # {enabled, recovery_codes_left}
+POST   /api/v1/auth/2fa/setup       # → {secret, otpauth_uri}
+POST   /api/v1/auth/2fa/enable      # {code} → {recovery_codes}
+POST   /api/v1/auth/2fa/disable     # {password, totp_code | recovery_code}
 POST   /api/v1/auth/oauth/{provider}    # OAuth callback
 ```
 
@@ -61,6 +66,8 @@ POST   /api/v1/auth/oauth/{provider}    # OAuth callback
   "user": { /* User object */ }
 }
 ```
+
+**دو مرحلہ سائن ان (TOTP)۔** فعال ہونے پر `login` درست پاس ورڈ کے بعد ایک `totp_code` (تصدیقی ایپ کے 6 ہندسے) یا `recovery_code` بھی مانگتا ہے؛ دونوں نہ ہوں تو 401 `totp_required` لوٹاتا ہے، جس سے کلائنٹ جانتا ہے کہ دوسرا مرحلہ دکھانا ہے، اور غلط کوڈ پر 401 `invalid_second_factor`۔ غلط پاس ورڈ پر ہمیشہ پہلے `invalid_credentials` آتا ہے، اس لیے یہ کبھی ظاہر نہیں ہوتا کہ اکاؤنٹ میں دو مرحلہ سائن ان فعال ہے۔ ہر کوڈ ایک ہی بار چلتا ہے (استعمال شدہ وقتی مرحلہ درج ہوتا ہے) اور ہر بازیابی کوڈ استعمال ہوتے ہی کاٹ دیا جاتا ہے؛ دونوں ایک ہی مشروط UPDATE سے خرچ ہوتے ہیں، اس لیے بیک وقت دو سائن ان ایک کوڈ دوبارہ نہیں چلا سکتے۔ `setup` کا راز AES-256-GCM سے خفیہ کر کے رکھا جاتا ہے اور جب تک `enable` ایپ کے کوڈ سے اس کی تصدیق نہ کرے، بے اثر رہتا ہے؛ `enable` 10 بازیابی کوڈ صرف اسی ایک بار لوٹاتا ہے اور صرف ان کے ہیش رکھے جاتے ہیں۔ `disable` کے لیے پاس ورڈ اور دوسرا عنصر درکار ہے۔ `password` کے لیے موجودہ پاس ورڈ درکار ہے اور یہ باقی تمام سیشن ختم کر دیتا ہے۔ یہ سب آڈٹ لاگ میں درج ہوتے ہیں اور ہر اکاؤنٹ کے لیے فی منٹ 10 تک محدود ہیں۔ `enable` کے لیے بھی `password` درکار ہے، تاکہ صرف چوری شدہ ٹوکن سے کسی کے اکاؤنٹ کے آگے حملہ آور کی تصدیقی ایپ نہ لگائی جا سکے؛ دو مرحلہ سائن ان فعال ہونے پر `password` کے لیے بھی دوسرا عنصر درکار ہے۔ لگاتار 5 غلط کوڈ اس اکاؤنٹ کی کوڈ کوششوں کو 15 منٹ کے لیے روک دیتے ہیں (429 `too_many_attempts`)، جو فی IP لاگ ان حد کے علاوہ ہے۔ بازیابی کوڈ سرور کلید کے ساتھ HMAC کی صورت میں رکھے جاتے ہیں۔ جس صارف کی تصدیقی ایپ اور بازیابی کوڈ دونوں گم ہو گئے ہوں، اس کے لیے منتظم `POST /api/v1/admin/users/{id}/reset-2fa` سے اسے بند کر سکتا ہے (آڈٹ ہوتا ہے، اور منتظم کے اپنے اکاؤنٹ پر کبھی نہیں)۔
 
 ### صارف اور Agent کی ترتیب
 

@@ -1,4 +1,5 @@
 import {
+  bigint,
   boolean,
   char,
   index,
@@ -34,6 +35,15 @@ export const users = pgTable(
     status: varchar('status', { length: 16 }).notNull().default('active'),
     preferences_json: jsonb('preferences_json').default({}),
     llm_keys_json: jsonb('llm_keys_json').default({}),
+    // Two-step sign-in (TOTP). The secret is AES-256-GCM encrypted like every
+    // other credential here; setup writes it, and it guards sign-in only once
+    // `totp_enabled_at` is set, so an abandoned setup locks nobody out.
+    totp_secret_json: jsonb('totp_secret_json'),
+    totp_enabled_at: timestamp('totp_enabled_at', { withTimezone: true }),
+    // The last time step a code was accepted for: each code works once.
+    totp_last_step: bigint('totp_last_step', { mode: 'number' }),
+    // SHA-256 hashes of the recovery codes not yet used.
+    totp_recovery_json: jsonb('totp_recovery_json'),
     created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     deleted_at: timestamp('deleted_at', { withTimezone: true }),

@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from 'b
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 
-const post = mock(async () => ({}));
+const post = mock(async (_path: string, _body?: unknown): Promise<unknown> => ({}));
 
 // The login screen is the only one a first-time visitor sees, so it is also the
 // only place the language can still be wrong for them. Both other switchers sit
@@ -156,5 +156,58 @@ describe('LoginPage failure', () => {
       </MemoryRouter>,
     );
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+});
+
+// The password is right and the account has a second step: that is not a
+// failure, and the server's English sentence for it must not be shown.
+describe('LoginPage two-step sign-in', () => {
+  const asApiError = (code: string) =>
+    Object.assign(new Error('server prose'), { status: 401, code });
+
+  afterEach(() => {
+    post.mockReset();
+    post.mockImplementation(async () => ({}));
+    useAuthStore.setState({ error: null });
+  });
+
+  test('asks for a code after the password, and sends it as the right field', async () => {
+    await changeLanguage('en');
+    post
+      .mockImplementationOnce(async () => {
+        throw asApiError('totp_required');
+      })
+      .mockImplementationOnce(async () => {
+        throw asApiError('invalid_second_factor');
+      })
+      .mockImplementationOnce(async () => ({
+        access_token: 'a',
+        refresh_token: 'r',
+        expires_in: 900,
+        user: { id: 'u', username: 'someone', did: 'did:web:x' },
+      }));
+    render(
+      <MemoryRouter>
+        <LoginPage />
+      </MemoryRouter>,
+    );
+    fireEvent.change(screen.getByLabelText('Username'), { target: { value: 'someone' } });
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'hunter2hunter2' } });
+    fireEvent.submit(screen.getByLabelText('Password').closest('form') as HTMLFormElement);
+
+    const code = await screen.findByLabelText('Code');
+    expect(screen.queryByRole('alert')).toBeNull();
+
+    fireEvent.change(code, { target: { value: '000 000' } });
+    fireEvent.submit(code.closest('form') as HTMLFormElement);
+    await waitFor(() =>
+      expect(screen.getByRole('alert').textContent).toBe('That code is not valid.'),
+    );
+
+    fireEvent.change(code, { target: { value: 'abcde-fghij' } });
+    fireEvent.submit(code.closest('form') as HTMLFormElement);
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(3));
+    expect(post.mock.calls[1]?.[1]).toMatchObject({ username: 'someone', totp_code: '000000' });
+    expect(post.mock.calls[2]?.[1]).toMatchObject({ recovery_code: 'abcde-fghij' });
   });
 });

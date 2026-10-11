@@ -13,6 +13,7 @@ const get = mock(async (path: string) => {
   if (path === '/agents/me') return { agent: { model_config: {}, policies_json: {} } };
   if (path.startsWith('/permissions')) return { permissions: [] };
   if (path === '/users/me') return { user: { username: 'tester', preferences: {} } };
+  if (path === '/auth/2fa') return { enabled: false, recovery_codes_left: 0 };
   if (path.startsWith('/usage')) {
     return {
       rows: [
@@ -61,19 +62,19 @@ const renderPage = () =>
 afterEach(cleanup);
 
 describe('SettingsPage', () => {
-  test('renders the tab rail with all six tabs', () => {
+  test('renders the tab rail with all seven tabs', () => {
     renderPage();
-    // 1 back button + 6 tab buttons, before any tab body adds its own controls.
+    // 1 back button + 7 tab buttons, before any tab body adds its own controls.
     const labels = screen.getAllByRole('button').map((b) => b.textContent);
-    expect(labels.length).toBeGreaterThanOrEqual(7);
+    expect(labels.length).toBeGreaterThanOrEqual(8);
   });
 
   // Switching tabs is the interaction most likely to break on a React major:
   // each click unmounts one subtree and mounts another under StrictMode.
   test('every tab mounts without throwing', async () => {
     renderPage();
-    const rail = screen.getAllByRole('button').slice(1, 7);
-    expect(rail).toHaveLength(6);
+    const rail = screen.getAllByRole('button').slice(1, 8);
+    expect(rail).toHaveLength(7);
 
     for (const tab of rail) {
       const label = tab.textContent ?? '';

@@ -16,22 +16,14 @@ import { agents, keypairs, sessions, users } from '../db/schema.js';
 import { getEnv } from '../env.js';
 import { getConfigValue } from '../lib/app-config.js';
 import { uniqueViolation } from '../lib/db-errors.js';
+import { hashPassword, verifyPassword } from '../lib/password.js';
 import { userDid } from '../lib/public-identity.js';
+import { consumeSecondFactor } from '../lib/two-factor.js';
 import { authMiddleware, jwtSecret, TOKEN_TYPE } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rate-limit.js';
 import { disconnectSession, disconnectUser } from '../ws/handler.js';
 
 export const authRoutes = new Hono();
-
-async function hashPassword(password: string): Promise<string> {
-  const argon2 = await import('argon2');
-  return argon2.hash(password);
-}
-
-async function verifyPassword(hash: string, password: string): Promise<boolean> {
-  const argon2 = await import('argon2');
-  return argon2.verify(hash, password);
-}
 
 // Both tokens carry the session id (`sid`) so `/refresh` can consult the backing
 // session (revoked on logout) and `/logout` can target the exact session row.
@@ -217,6 +209,10 @@ authRoutes.post('/login', rateLimit(10, 60_000), async (c) => {
   if (user.status === 'disabled') {
     throw new AppError('account_disabled', 'This account has been disabled', 403);
   }
+
+  // Only after the password: asking for a code is how the client learns to
+  // show the second step, and it must not be learnable without the password.
+  if (user.totp_enabled_at) await consumeSecondFactor(user, body);
 
   return c.json(await openSession(user, body));
 });

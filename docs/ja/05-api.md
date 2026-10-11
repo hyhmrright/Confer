@@ -37,6 +37,11 @@ POST   /api/v1/auth/register
 POST   /api/v1/auth/login
 POST   /api/v1/auth/refresh
 POST   /api/v1/auth/logout
+POST   /api/v1/auth/password        # {current_password, new_password}
+GET    /api/v1/auth/2fa             # {enabled, recovery_codes_left}
+POST   /api/v1/auth/2fa/setup       # → {secret, otpauth_uri}
+POST   /api/v1/auth/2fa/enable      # {code} → {recovery_codes}
+POST   /api/v1/auth/2fa/disable     # {password, totp_code | recovery_code}
 POST   /api/v1/auth/oauth/{provider}    # OAuth callback
 ```
 
@@ -61,6 +66,8 @@ POST   /api/v1/auth/oauth/{provider}    # OAuth callback
   "user": { /* User object */ }
 }
 ```
+
+**2 段階認証（TOTP）。** 有効にすると、`login` はパスワードが正しいうえで `totp_code`（認証アプリの 6 桁のコード）または `recovery_code` も求める。どちらもなければ 401 `totp_required` を返し、クライアントはこれを見て 2 段階目を表示する。コードが違えば 401 `invalid_second_factor`。パスワードが違う場合は常に先に `invalid_credentials` を返すので、2 段階認証の有無は漏れない。各コードは 1 回しか使えず（使用済みの時間ステップを記録）、リカバリーコードは使うと失効する。どちらも条件付き UPDATE 1 回で消費するため、同時のサインインで再利用はできない。`setup` が生成した秘密鍵は AES-256-GCM で暗号化して保存し、`enable` でアプリのコードを確認するまでは効力を持たない。`enable` はリカバリーコード 10 個をこの一度だけ返し、サーバーはハッシュだけを保持する。`disable` にはパスワードと第 2 要素が必要。`password` は現在のパスワードを求め、そのユーザーの他のセッションをすべて失効させる。これらはすべて監査ログに記録され、アカウントごとに 1 分 10 回までに制限される。 `enable` にも `password` が必要なので、盗まれたトークンだけで攻撃者の認証アプリを他人のアカウントに設定することはできない。2 段階認証がオンのとき、`password` によるパスワード変更にも第 2 要素が必要になる。同じアカウントで誤ったコードが 5 回続くと、そのアカウントのコード入力は 15 分間ロックされる（429 `too_many_attempts`）。これは IP ごとのログイン制限に上乗せされる。リカバリーコードはサーバー鍵による HMAC で保存する。認証アプリとリカバリーコードの両方を失ったユーザーには、管理者が `POST /api/v1/admin/users/{id}/reset-2fa` で 2 段階認証をオフにできる（監査ログに記録され、自分自身には使えない）。
 
 ### ユーザーと Agent の設定
 

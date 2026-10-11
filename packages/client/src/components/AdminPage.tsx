@@ -123,6 +123,7 @@ function OperationsOverview() {
 function UserRow({ u, selfId }: { u: AdminUser; selfId: string | undefined }) {
   const { t } = useTranslation();
   const updateUser = useAdminStore((s) => s.updateUser);
+  const resetTwoFactor = useAdminStore((s) => s.resetTwoFactor);
   const { busy, failed, run } = useConfirmedAction();
   const isSelf = u.id === selfId;
 
@@ -152,6 +153,15 @@ function UserRow({ u, selfId }: { u: AdminUser; selfId: string | undefined }) {
         ) : (
           <div className="flex gap-2 justify-end">
             {failed && <ActionFailed />}
+            {u.two_factor_enabled && (
+              <RowAction
+                tone="neutral"
+                disabled={busy}
+                onClick={() => run('admin.confirmReset2fa', () => resetTwoFactor(u.id))}
+              >
+                {t('admin.actionReset2fa')}
+              </RowAction>
+            )}
             {u.role === 'admin' ? (
               <RowAction
                 tone="neutral"

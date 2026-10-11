@@ -37,6 +37,11 @@ POST   /api/v1/auth/register
 POST   /api/v1/auth/login
 POST   /api/v1/auth/refresh
 POST   /api/v1/auth/logout
+POST   /api/v1/auth/password        # {current_password, new_password}
+GET    /api/v1/auth/2fa             # {enabled, recovery_codes_left}
+POST   /api/v1/auth/2fa/setup       # → {secret, otpauth_uri}
+POST   /api/v1/auth/2fa/enable      # {code} → {recovery_codes}
+POST   /api/v1/auth/2fa/disable     # {password, totp_code | recovery_code}
 POST   /api/v1/auth/oauth/{provider}    # OAuth callback
 ```
 
@@ -61,6 +66,8 @@ Response:
   "user": { /* User object */ }
 }
 ```
+
+**Two-step sign-in (TOTP).** Once on, `login` also needs a `totp_code` (6 digits from an authenticator app) or a `recovery_code` after a correct password; with neither it answers 401 `totp_required`, which is how the client knows to show the second step, and a wrong one is 401 `invalid_second_factor`. A wrong password always answers `invalid_credentials` first, so it never reveals whether the account has two-step sign-in. Each code works once (the used time step is recorded) and each recovery code is struck off when used; both are spent by one conditional UPDATE, so concurrent sign-ins cannot reuse one. The secret from `setup` is stored under AES-256-GCM and does nothing until `enable` confirms a code from the app; `enable` returns the 10 recovery codes this once and only their hashes are kept. `disable` takes the password and a second factor. `password` needs the current password and signs out every other session. All of these are audited and limited to 10 a minute per account. `enable` also takes `password`, so a stolen token alone cannot put an attacker's authenticator in front of someone's account; with two-step sign-in on, `password` also takes a second factor. Five wrong codes in a row lock code attempts for that account for 15 minutes (429 `too_many_attempts`), on top of the per-IP login limit. Recovery codes are stored as an HMAC under the server key. For a user who has lost both their authenticator and their recovery codes, an admin can turn it off with `POST /api/v1/admin/users/{id}/reset-2fa` (audited, and never for the admin's own account).
 
 ### User and Agent configuration
 

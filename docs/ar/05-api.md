@@ -37,6 +37,11 @@ POST   /api/v1/auth/register
 POST   /api/v1/auth/login
 POST   /api/v1/auth/refresh
 POST   /api/v1/auth/logout
+POST   /api/v1/auth/password        # {current_password, new_password}
+GET    /api/v1/auth/2fa             # {enabled, recovery_codes_left}
+POST   /api/v1/auth/2fa/setup       # → {secret, otpauth_uri}
+POST   /api/v1/auth/2fa/enable      # {code} → {recovery_codes}
+POST   /api/v1/auth/2fa/disable     # {password, totp_code | recovery_code}
 POST   /api/v1/auth/oauth/{provider}    # OAuth callback
 ```
 
@@ -61,6 +66,8 @@ POST   /api/v1/auth/oauth/{provider}    # OAuth callback
   "user": { /* User object */ }
 }
 ```
+
+**تسجيل الدخول بخطوتين (TOTP).** عند تفعيله، يطلب `login` بعد كلمة مرور صحيحة أيضًا `totp_code` (6 أرقام من تطبيق مصادقة) أو `recovery_code`؛ وبدونهما يرد بـ 401 `totp_required`، وبه يعرف العميل أن عليه إظهار الخطوة الثانية، ويرد على الرمز الخاطئ بـ 401 `invalid_second_factor`. كلمة المرور الخاطئة يُرد عليها دائمًا أولًا بـ `invalid_credentials`، فلا يُكشف أبدًا إن كان الحساب يستخدم الخطوتين. كل رمز يصلح مرة واحدة (تُسجَّل الخطوة الزمنية المستخدمة)، وكل رمز استرداد يُشطب عند استخدامه؛ ويُستهلك كلاهما بعملية UPDATE مشروطة واحدة، فلا يمكن لعمليتي دخول متزامنتين إعادة استخدام رمز. يُخزَّن سر `setup` مشفرًا بـ AES-256-GCM ولا يعمل حتى يؤكد `enable` رمزًا من التطبيق؛ ويعيد `enable` رموز الاسترداد العشرة هذه المرة فقط ولا يُحتفظ إلا بتجزئاتها. يتطلب `disable` كلمة المرور وعاملًا ثانيًا. ويتطلب `password` كلمة المرور الحالية ويُنهي كل الجلسات الأخرى. كل ذلك يُسجَّل في سجل التدقيق ومحدود بـ 10 مرات في الدقيقة لكل حساب. يتطلب `enable` أيضًا `password`، فلا يكفي رمز مسروق وحده لوضع تطبيق مصادقة المهاجم أمام حساب شخص آخر؛ ومع تفعيل الخطوتين، يتطلب `password` عاملًا ثانيًا أيضًا. خمسة رموز خاطئة متتالية تقفل محاولات الرمز لذلك الحساب لمدة 15 دقيقة (429 `too_many_attempts`)، إضافة إلى حد تسجيل الدخول لكل IP. تُخزَّن رموز الاسترداد كـ HMAC بمفتاح الخادم. وللمستخدم الذي فقد تطبيق المصادقة ورموز الاسترداد معًا، يستطيع المسؤول إيقافه عبر `POST /api/v1/admin/users/{id}/reset-2fa` (يُسجَّل في سجل التدقيق، ولا يُستخدم أبدًا لحساب المسؤول نفسه).
 
 ### إعدادات المستخدم والوكيل
 

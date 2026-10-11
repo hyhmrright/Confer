@@ -6,6 +6,7 @@ import { errorHandler } from './middleware/error-handler.js';
 import { rateLimit } from './middleware/rate-limit.js';
 import { a2aRoutes } from './routes/a2a.js';
 import { a2aRestRoutes } from './routes/a2a-rest.js';
+import { accountSecurityRoutes } from './routes/account-security.js';
 import { adminRoutes } from './routes/admin.js';
 import { agentCardRoutes } from './routes/agent-card.js';
 import { agentDidRoutes } from './routes/agent-did.js';
@@ -80,6 +81,7 @@ app.route('/agents', agentDidRoutes);
 app.route('/agents', agentCardRoutes);
 
 app.route('/api/v1/auth', authRoutes);
+app.route('/api/v1/auth', accountSecurityRoutes);
 app.route('/api/v1/users', userRoutes);
 app.route('/api/v1/agents', agentRoutes);
 app.route('/api/v1/contacts', contactRoutes);

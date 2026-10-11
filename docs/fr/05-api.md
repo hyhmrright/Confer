@@ -37,6 +37,11 @@ POST   /api/v1/auth/register
 POST   /api/v1/auth/login
 POST   /api/v1/auth/refresh
 POST   /api/v1/auth/logout
+POST   /api/v1/auth/password        # {current_password, new_password}
+GET    /api/v1/auth/2fa             # {enabled, recovery_codes_left}
+POST   /api/v1/auth/2fa/setup       # → {secret, otpauth_uri}
+POST   /api/v1/auth/2fa/enable      # {code} → {recovery_codes}
+POST   /api/v1/auth/2fa/disable     # {password, totp_code | recovery_code}
 POST   /api/v1/auth/oauth/{provider}    # OAuth callback
 ```
 
@@ -61,6 +66,8 @@ Réponse :
   "user": { /* User object */ }
 }
 ```
+
+**Connexion en deux étapes (TOTP).** Une fois activée, `login` exige aussi, après un mot de passe correct, un `totp_code` (6 chiffres d'une application d'authentification) ou un `recovery_code` ; sans l'un ni l'autre il répond 401 `totp_required`, ce qui indique au client d'afficher la deuxième étape, et un code faux donne 401 `invalid_second_factor`. Un mauvais mot de passe répond toujours d'abord `invalid_credentials`, si bien que l'activation des deux étapes n'est jamais révélée. Chaque code ne sert qu'une fois (le pas de temps utilisé est enregistré) et chaque code de récupération est rayé à l'usage ; les deux sont consommés par un unique UPDATE conditionnel, de sorte que deux connexions simultanées ne peuvent pas en réutiliser un. Le secret produit par `setup` est stocké chiffré en AES-256-GCM et reste sans effet tant que `enable` n'a pas confirmé un code de l'application ; `enable` renvoie cette seule fois les 10 codes de récupération et seules leurs empreintes sont conservées. `disable` exige le mot de passe et un second facteur. `password` exige le mot de passe actuel et déconnecte toutes les autres sessions. Tout cela est audité et limité à 10 par minute et par compte. `enable` exige aussi `password`, si bien qu'un jeton volé ne suffit pas à placer l'application d'authentification d'un attaquant devant le compte de quelqu'un ; avec la connexion en deux étapes activée, `password` exige aussi un second facteur. Cinq codes erronés d'affilée bloquent les tentatives de code de ce compte pendant 15 minutes (429 `too_many_attempts`), en plus de la limite de connexion par IP. Les codes de récupération sont stockés sous forme de HMAC avec la clé du serveur. Pour un utilisateur qui a perdu à la fois son application d'authentification et ses codes de récupération, un administrateur peut la désactiver avec `POST /api/v1/admin/users/{id}/reset-2fa` (audité, et jamais pour son propre compte).
 
 ### Configuration de l'utilisateur et de l'Agent
 

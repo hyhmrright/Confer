@@ -37,6 +37,11 @@ POST   /api/v1/auth/register
 POST   /api/v1/auth/login
 POST   /api/v1/auth/refresh
 POST   /api/v1/auth/logout
+POST   /api/v1/auth/password        # {current_password, new_password}
+GET    /api/v1/auth/2fa             # {enabled, recovery_codes_left}
+POST   /api/v1/auth/2fa/setup       # → {secret, otpauth_uri}
+POST   /api/v1/auth/2fa/enable      # {code} → {recovery_codes}
+POST   /api/v1/auth/2fa/disable     # {password, totp_code | recovery_code}
 POST   /api/v1/auth/oauth/{provider}    # OAuth callback
 ```
 
@@ -61,6 +66,8 @@ Resposta:
   "user": { /* User object */ }
 }
 ```
+
+**Início de sessão em dois passos (TOTP).** Depois de ativado, `login` pede também, após uma palavra-passe correta, um `totp_code` (6 dígitos de uma app de autenticação) ou um `recovery_code`; sem nenhum responde 401 `totp_required`, que é como o cliente sabe mostrar o segundo passo, e um código errado dá 401 `invalid_second_factor`. Uma palavra-passe errada responde sempre primeiro `invalid_credentials`, por isso nunca revela se a conta tem dois passos. Cada código serve uma vez (o passo de tempo usado é registado) e cada código de recuperação é riscado ao ser usado; ambos são gastos por um único UPDATE condicional, pelo que dois inícios de sessão simultâneos não podem reutilizar um. O segredo de `setup` é guardado cifrado com AES-256-GCM e não tem efeito até `enable` confirmar um código da app; `enable` devolve esta única vez os 10 códigos de recuperação e só os seus hashes são guardados. `disable` pede a palavra-passe e um segundo fator. `password` pede a palavra-passe atual e termina todas as outras sessões. Tudo isto é auditado e limitado a 10 por minuto por conta. `enable` também pede `password`, para que um token roubado não chegue para pôr a app de autenticação de um atacante à frente da conta de outra pessoa; com os dois passos ativados, `password` também pede um segundo fator. Cinco códigos errados seguidos bloqueiam as tentativas de código dessa conta durante 15 minutos (429 `too_many_attempts`), além do limite de início de sessão por IP. Os códigos de recuperação são guardados como HMAC com a chave do servidor. Para um utilizador que perdeu a app de autenticação e os códigos de recuperação, um administrador pode desativá-lo com `POST /api/v1/admin/users/{id}/reset-2fa` (auditado, e nunca para a conta do próprio administrador).
 
 ### Configuração do usuário e do Agente
 

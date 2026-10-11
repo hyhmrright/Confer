@@ -37,6 +37,11 @@ POST   /api/v1/auth/register
 POST   /api/v1/auth/login
 POST   /api/v1/auth/refresh
 POST   /api/v1/auth/logout
+POST   /api/v1/auth/password        # {current_password, new_password}
+GET    /api/v1/auth/2fa             # {enabled, recovery_codes_left}
+POST   /api/v1/auth/2fa/setup       # → {secret, otpauth_uri}
+POST   /api/v1/auth/2fa/enable      # {code} → {recovery_codes}
+POST   /api/v1/auth/2fa/disable     # {password, totp_code | recovery_code}
 POST   /api/v1/auth/oauth/{provider}    # OAuth callback
 ```
 
@@ -61,6 +66,8 @@ POST   /api/v1/auth/oauth/{provider}    # OAuth callback
   "user": { /* User object */ }
 }
 ```
+
+**দুই-ধাপের সাইন-ইন (TOTP)।** চালু থাকলে `login` সঠিক পাসওয়ার্ডের পর একটি `totp_code` (অথেনটিকেটর অ্যাপের ৬ অঙ্ক) বা `recovery_code`-ও চায়; কোনোটি না থাকলে 401 `totp_required` দেয়, যা দেখে ক্লায়েন্ট দ্বিতীয় ধাপ দেখায়, আর ভুল কোডে 401 `invalid_second_factor`। ভুল পাসওয়ার্ডে সবসময় আগে `invalid_credentials` আসে, তাই অ্যাকাউন্টে দুই-ধাপ চালু কি না তা কখনো প্রকাশ পায় না। প্রতিটি কোড একবারই চলে (ব্যবহৃত সময়-ধাপ লেখা থাকে) এবং প্রতিটি রিকভারি কোড ব্যবহারের পর বাদ যায়; দুটোই একটি শর্তযুক্ত UPDATE-এ খরচ হয়, তাই একসঙ্গে দুটি সাইন-ইন একই কোড দুবার চালাতে পারে না। `setup`-এর গোপন কী AES-256-GCM-এ এনক্রিপ্ট করে রাখা হয় এবং `enable` অ্যাপের কোড দিয়ে নিশ্চিত না করা পর্যন্ত কার্যকর হয় না; `enable` ১০টি রিকভারি কোড শুধু এই একবার দেয় এবং শুধু সেগুলোর হ্যাশ রাখা হয়। `disable`-এর জন্য পাসওয়ার্ড ও দ্বিতীয় ফ্যাক্টর লাগে। `password`-এর জন্য বর্তমান পাসওয়ার্ড লাগে এবং এটি বাকি সব সেশন বন্ধ করে দেয়। এগুলো সবই অডিট লগে লেখা হয় এবং প্রতি অ্যাকাউন্টে মিনিটে ১০ বারে সীমিত। `enable`-এর জন্যও `password` লাগে, তাই শুধু চুরি করা টোকেন দিয়ে কারও অ্যাকাউন্টের সামনে আক্রমণকারীর অথেনটিকেটর বসানো যায় না; দুই-ধাপ চালু থাকলে `password`-এর জন্যও দ্বিতীয় ফ্যাক্টর লাগে। পরপর ৫টি ভুল কোড সেই অ্যাকাউন্টের কোড চেষ্টা ১৫ মিনিটের জন্য আটকে দেয় (429 `too_many_attempts`), যা প্রতি-IP লগইন সীমার অতিরিক্ত। রিকভারি কোড সার্ভার কী দিয়ে HMAC হিসেবে রাখা হয়। যে ব্যবহারকারী অথেনটিকেটর ও রিকভারি কোড দুটোই হারিয়েছেন, তাঁর জন্য অ্যাডমিন `POST /api/v1/admin/users/{id}/reset-2fa` দিয়ে এটি বন্ধ করতে পারেন (অডিট হয়, আর অ্যাডমিনের নিজের অ্যাকাউন্টে কখনো নয়)।
 
 ### ব্যবহারকারী ও Agent-এর বিন্যাস
 
