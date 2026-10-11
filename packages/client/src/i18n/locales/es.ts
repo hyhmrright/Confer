@@ -219,6 +219,16 @@ export const es: Resources = {
     messageResults: 'Mensajes',
     noMessageResults: 'Ningún mensaje coincide',
   },
+  export: {
+    button: 'Exportar',
+    markdown: 'Markdown',
+    json: 'JSON',
+    you: 'Tú',
+    yourAgent: 'Tu agente',
+    sources: 'Fuentes',
+    truncated: 'Solo se incluyen los primeros {{count}} mensajes.',
+    failed: 'No se pudo exportar; inténtalo de nuevo',
+  },
   contacts: {
     title: 'Contactos',
     add: 'Añadir',

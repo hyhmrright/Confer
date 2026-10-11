@@ -221,6 +221,16 @@ export const ja: Resources = {
     messageResults: 'メッセージ',
     noMessageResults: '一致するメッセージはありません',
   },
+  export: {
+    button: 'エクスポート',
+    markdown: 'Markdown',
+    json: 'JSON',
+    you: '自分',
+    yourAgent: '自分の Agent',
+    sources: '出典',
+    truncated: '最初の {{count}} 件のメッセージのみを含みます。',
+    failed: 'エクスポートに失敗しました。もう一度お試しください',
+  },
   contacts: {
     title: '連絡先',
     add: '追加',

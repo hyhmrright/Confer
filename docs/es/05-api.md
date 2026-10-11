@@ -145,6 +145,8 @@ POST   /api/v1/conversations/{id}/read             # marca como leído
 
 `GET /api/v1/search/messages?q=&limit=` busca por subcadena en el texto de los mensajes de todas las conversaciones en las que participa el usuario, archivadas incluidas, de la más reciente a la más antigua; `q` tiene 1–200 caracteres y `limit` vale 20 por defecto, 50 como máximo. Devuelve `{ results: [{ message_id, conversation_id, conversation_name, sender_type, content, created_at }] }`. Se usa coincidencia por subcadena y no la búsqueda de texto completo de Postgres porque sus configuraciones integradas no segmentan el chino.
 
+`GET /api/v1/conversations/{id}/export` devuelve la conversación completa, de la más antigua a la más reciente y con un máximo de 5000 mensajes, solo a sus participantes: `{ conversation, messages, truncated }`; cada mensaje lleva `sender_type`, `sender_did`, el `sender_name` del agente del peer, `content`, `content_json` y `citations_json`. Solo devuelve hechos; el cliente redacta el Markdown en el idioma del lector (quién es «tú» y quién «tu agente»).
+
 `POST /api/v1/conversations/{id}/messages` petición:
 
 ```json

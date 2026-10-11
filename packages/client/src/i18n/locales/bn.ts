@@ -217,6 +217,16 @@ export const bn: Resources = {
     messageResults: 'বার্তা',
     noMessageResults: 'কোনো বার্তা মেলেনি',
   },
+  export: {
+    button: 'রপ্তানি',
+    markdown: 'Markdown',
+    json: 'JSON',
+    you: 'আপনি',
+    yourAgent: 'আপনার এজেন্ট',
+    sources: 'উৎস',
+    truncated: 'শুধু প্রথম {{count}}টি বার্তা অন্তর্ভুক্ত।',
+    failed: 'রপ্তানি ব্যর্থ হয়েছে, আবার চেষ্টা করুন',
+  },
   contacts: {
     title: 'পরিচিতি',
     add: 'যোগ করুন',

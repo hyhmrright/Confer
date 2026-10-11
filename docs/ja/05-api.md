@@ -145,6 +145,8 @@ POST   /api/v1/conversations/{id}/read             # 既読にする
 
 `GET /api/v1/search/messages?q=&limit=` は、呼び出したユーザーが参加しているすべての会話（アーカイブ済みを含む）でメッセージ本文を部分一致検索し、新しい順に返す。`q` は 1〜200 文字、`limit` の既定値は 20、最大 50。戻り値は `{ results: [{ message_id, conversation_id, conversation_name, sender_type, content, created_at }] }`。Postgres の全文検索ではなく部分一致を使うのは、組み込みの設定が中国語を分かち書きしないため。
 
+`GET /api/v1/conversations/{id}/export` は会話全体（古い順、最大 5000 件）を参加者にのみ返す：`{ conversation, messages, truncated }`。各メッセージには `sender_type`、`sender_did`、相手 agent の `sender_name`、`content`、`content_json`、`citations_json` が含まれる。返すのは事実だけで、Markdown は読み手の言語でクライアントが組み立てる（誰が「自分」で誰が「自分の Agent」か）。
+
 `POST /api/v1/conversations/{id}/messages` リクエスト:
 
 ```json

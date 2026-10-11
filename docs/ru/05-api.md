@@ -145,6 +145,8 @@ POST   /api/v1/conversations/{id}/read             # отмечает как п�
 
 `GET /api/v1/search/messages?q=&limit=` ищет подстроку в тексте сообщений во всех беседах, где участвует пользователь, включая архивные, от новых к старым; `q` — от 1 до 200 символов, `limit` по умолчанию 20, не больше 50. Ответ: `{ results: [{ message_id, conversation_id, conversation_name, sender_type, content, created_at }] }`. Используется поиск по подстроке, а не полнотекстовый поиск Postgres, потому что встроенные конфигурации не разбивают китайский текст на слова.
 
+`GET /api/v1/conversations/{id}/export` возвращает всю беседу, от старых сообщений к новым и не более 5000, только участникам: `{ conversation, messages, truncated }`; у каждого сообщения есть `sender_type`, `sender_did`, `sender_name` агента собеседника, `content`, `content_json` и `citations_json`. Возвращаются только факты; Markdown клиент составляет на языке читателя (кто «вы», а кто «ваш агент»).
+
 `POST /api/v1/conversations/{id}/messages` запрос:
 
 ```json

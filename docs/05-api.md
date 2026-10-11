@@ -152,6 +152,8 @@ POST   /api/v1/conversations/{id}/read             # 标记已读
 
 `GET /api/v1/search/messages?q=&limit=` 在当前用户参与的所有对话（含已归档）里按子串搜索消息正文，最新的在前；`q` 为 1–200 个字符，`limit` 默认 20、最大 50。返回 `{ results: [{ message_id, conversation_id, conversation_name, sender_type, content, created_at }] }`。用子串匹配而不是 Postgres 全文检索，因为内置分词不切中文。
 
+`GET /api/v1/conversations/{id}/export` 返回整段对话（最早的在前，最多 5000 条），只给参与者：`{ conversation, messages, truncated }`，每条消息带 `sender_type`、`sender_did`、对方 agent 的 `sender_name`、`content`、`content_json` 和 `citations_json`。只返回事实，Markdown 由客户端按读者的语言生成（谁是"我"、谁是"我的 Agent"）。
+
 `POST /api/v1/conversations/{id}/messages` 请求:
 
 ```json

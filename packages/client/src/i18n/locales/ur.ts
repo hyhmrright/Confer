@@ -230,6 +230,16 @@ export const ur: Resources = {
     messageResults: 'پیغامات',
     noMessageResults: 'کوئی پیغام مماثل نہیں',
   },
+  export: {
+    button: 'برآمد کریں',
+    markdown: 'Markdown',
+    json: 'JSON',
+    you: 'آپ',
+    yourAgent: 'آپ کا ایجنٹ',
+    sources: 'ماخذ',
+    truncated: 'صرف پہلے {{count}} پیغامات شامل ہیں۔',
+    failed: 'برآمد ناکام ہو گئی، دوبارہ کوشش کریں',
+  },
   contacts: {
     title: 'روابط',
     add: 'شامل کریں',

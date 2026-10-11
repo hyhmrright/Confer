@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useFileAttachment } from '../hooks/useFileAttachment.js';
 import { DISABLED, DISABLED_FILLED, FOCUS_RING } from '../lib/styles.js';
 import { useChatStore } from '../stores/chat.js';
+import { ExportMenu } from './ExportMenu.js';
 import { Bot, Paperclip, Send, X } from './Icons.js';
 import { LoadingDots } from './LoadingDots.js';
 import { MessageBubble } from './MessageBubble.js';
@@ -19,6 +20,7 @@ export function MessageView() {
   const sendMessage = useChatStore((s) => s.sendMessage);
   const streaming = useChatStore((s) => s.streaming);
   const agentStatus = useChatStore((s) => s.agentStatus);
+  const activeConversationId = useChatStore((s) => s.activeConversationId);
   // Only this thread's peer turn; one running in another thread is not news here.
   const peerTurn = useChatStore((s) =>
     s.peerTurn?.conversation_id === s.activeConversationId ? s.peerTurn : null,
@@ -110,12 +112,15 @@ export function MessageView() {
         <h1 className="font-display text-base text-ink-primary truncate min-w-0">
           {conversationName ?? t('message.title')}
         </h1>
-        {activity && (
-          <div className="ms-auto shrink-0 flex items-center gap-1.5 eyebrow text-primary-400">
-            <span className="w-1.5 h-1.5 rounded-full bg-primary-400 animate-pulse" />
-            {activity}
-          </div>
-        )}
+        <div className="ms-auto shrink-0 flex items-center gap-3">
+          {activity && (
+            <div className="flex items-center gap-1.5 eyebrow text-primary-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-primary-400 animate-pulse" />
+              {activity}
+            </div>
+          )}
+          {activeConversationId && <ExportMenu conversationId={activeConversationId} />}
+        </div>
       </div>
 
       {/*

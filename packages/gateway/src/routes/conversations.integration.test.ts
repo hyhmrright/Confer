@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { newId } from '@confer/shared';
 import { getDb } from '../db/connection.js';
-import { conversationParticipants, messages } from '../db/schema.js';
+import { conversationParticipants, messages, peerAgents } from '../db/schema.js';
 import { del, get, patch, post, resetDb, type SeededUser, seedUser } from '../test/helpers.js';
 
 const BASE = '/api/v1/conversations';
@@ -251,5 +251,50 @@ describe('unread counts', () => {
     const id = await createConversation(user.token);
     const outsider = await seedUser();
     expect((await post(`${BASE}/${id}/read`, { token: outsider.token })).status).toBe(403);
+  });
+});
+
+describe('export', () => {
+  test('returns the whole thread oldest first, naming the peer who wrote', async () => {
+    const id = await createConversation(user.token);
+    await post(`${BASE}/${id}/messages`, { token: user.token, body: { content: 'first' } });
+    const peerId = newId();
+    await getDb().insert(peerAgents).values({
+      id: peerId,
+      did: 'did:web:vendor.example',
+      name: 'Vendor Bot',
+      endpoint: 'https://vendor.example/a2a/v1',
+      public_key_json: {},
+      agent_facts_json: {},
+    });
+    await getDb().insert(messages).values({
+      id: newId(),
+      conversation_id: id,
+      sender_type: 'peer_agent',
+      sender_id: peerId,
+      sender_did: 'did:web:vendor.example',
+      content: 'second',
+    });
+
+    const res = await get(`${BASE}/${id}/export`, { token: user.token });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.conversation).toMatchObject({ id, name: 'Chat' });
+    expect(body.truncated).toBe(false);
+    expect(
+      body.messages.map((m: { content: string; sender_name: string | null }) => [
+        m.content,
+        m.sender_name,
+      ]),
+    ).toEqual([
+      ['first', null],
+      ['second', 'Vendor Bot'],
+    ]);
+  });
+
+  test('only a participant may export', async () => {
+    const id = await createConversation(user.token);
+    const outsider = await seedUser();
+    expect((await get(`${BASE}/${id}/export`, { token: outsider.token })).status).toBe(403);
   });
 });

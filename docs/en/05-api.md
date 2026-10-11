@@ -145,6 +145,8 @@ POST   /api/v1/conversations/{id}/read             # mark as read
 
 `GET /api/v1/search/messages?q=&limit=` searches message text by substring across every conversation the caller takes part in, archived ones included, newest first; `q` is 1–200 characters and `limit` defaults to 20, at most 50. It returns `{ results: [{ message_id, conversation_id, conversation_name, sender_type, content, created_at }] }`. Substring matching rather than Postgres full-text search, because the built-in configurations do not segment Chinese.
 
+`GET /api/v1/conversations/{id}/export` returns the whole conversation, oldest first and at most 5000 messages, to participants only: `{ conversation, messages, truncated }`, each message carrying `sender_type`, `sender_did`, the peer agent's `sender_name`, `content`, `content_json` and `citations_json`. It returns facts only; the client writes the Markdown in the reader's language (who "you" and "your agent" are).
+
 `POST /api/v1/conversations/{id}/messages` request:
 
 ```json

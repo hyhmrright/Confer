@@ -224,6 +224,16 @@ export const fr: Resources = {
     messageResults: 'Messages',
     noMessageResults: 'Aucun message ne correspond',
   },
+  export: {
+    button: 'Exporter',
+    markdown: 'Markdown',
+    json: 'JSON',
+    you: 'Vous',
+    yourAgent: 'Votre agent',
+    sources: 'Sources',
+    truncated: 'Seuls les {{count}} premiers messages sont inclus.',
+    failed: "L'export a échoué, veuillez réessayer",
+  },
   contacts: {
     title: 'Contacts',
     add: 'Ajouter',

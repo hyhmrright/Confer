@@ -145,6 +145,8 @@ POST   /api/v1/conversations/{id}/read             # التعليم كمقروء
 
 يبحث `GET /api/v1/search/messages?q=&limit=` عن سلسلة جزئية في نص الرسائل عبر كل المحادثات التي يشارك فيها المستخدم، بما فيها المؤرشفة، والأحدث أولًا؛ طول `q` من 1 إلى 200 حرف، و`limit` افتراضيًا 20 وبحد أقصى 50. يعيد `{ results: [{ message_id, conversation_id, conversation_name, sender_type, content, created_at }] }`. يُستخدم البحث بالسلسلة الجزئية بدل البحث النصي الكامل في Postgres لأن إعداداته المدمجة لا تقطّع النص الصيني.
 
+يعيد `GET /api/v1/conversations/{id}/export` المحادثة كاملة، من الأقدم إلى الأحدث وبحد أقصى 5000 رسالة، للمشاركين فقط: `{ conversation, messages, truncated }`، وتحمل كل رسالة `sender_type` و`sender_did` و`sender_name` لوكيل الطرف الآخر و`content` و`content_json` و`citations_json`. يعيد الحقائق فقط، ويصوغ العميل ملف Markdown بلغة القارئ (من هو «أنت» ومن هو «وكيلك»).
+
 `POST /api/v1/conversations/{id}/messages` الطلب:
 
 ```json

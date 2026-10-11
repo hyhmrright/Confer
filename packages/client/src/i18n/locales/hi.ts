@@ -218,6 +218,16 @@ export const hi: Resources = {
     messageResults: 'संदेश',
     noMessageResults: 'कोई संदेश मेल नहीं खाता',
   },
+  export: {
+    button: 'निर्यात करें',
+    markdown: 'Markdown',
+    json: 'JSON',
+    you: 'आप',
+    yourAgent: 'आपका एजेंट',
+    sources: 'स्रोत',
+    truncated: 'केवल पहले {{count}} संदेश शामिल हैं।',
+    failed: 'निर्यात विफल रहा, कृपया फिर से प्रयास करें',
+  },
   contacts: {
     title: 'संपर्क',
     add: 'जोड़ें',

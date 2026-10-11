@@ -232,6 +232,16 @@ export const ar: Resources = {
     messageResults: 'الرسائل',
     noMessageResults: 'لا توجد رسائل مطابقة',
   },
+  export: {
+    button: 'تصدير',
+    markdown: 'Markdown',
+    json: 'JSON',
+    you: 'أنت',
+    yourAgent: 'وكيلك',
+    sources: 'المصادر',
+    truncated: 'تتضمن أول {{count}} رسالة فقط.',
+    failed: 'فشل التصدير، يُرجى المحاولة مرة أخرى',
+  },
   contacts: {
     title: 'جهات الاتصال',
     add: 'إضافة',

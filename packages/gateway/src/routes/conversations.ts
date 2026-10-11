@@ -5,10 +5,23 @@ import {
   sendMessageRequestSchema,
   updateConversationRequestSchema,
 } from '@confer/shared';
-import { and, count, desc, eq, gt, inArray, isNotNull, isNull, ne, or, sql } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  ne,
+  or,
+  sql,
+} from 'drizzle-orm';
 import { Hono } from 'hono';
 import { getDb } from '../db/connection.js';
-import { conversationParticipants, conversations, messages } from '../db/schema.js';
+import { conversationParticipants, conversations, messages, peerAgents } from '../db/schema.js';
 import { historyBefore } from '../lib/conversation-history.js';
 import { parseLimit } from '../lib/pagination.js';
 import { assertIsConversationParticipant, assertOwnsConversation } from '../lib/tenant.js';
@@ -198,6 +211,56 @@ conversationRoutes.get('/:id/messages', async (c) => {
   // paged by id while ordering by created_at, and the two disagreed often
   // enough for a page to skip a message or repeat one.
   return c.json({ messages: await historyBefore(convId, before, limit) });
+});
+
+// The cap on one export. Far past any thread a person reads, and a bound on
+// what one request can make the database and the process hold.
+const EXPORT_MAX_MESSAGES = 5000;
+
+// The whole thread, oldest first, for the owner to keep. Facts only: the
+// client words the transcript (who "you" and "your agent" are) in the reader's
+// language. A peer's display name rides along because the client has no other
+// way to put one on a message from a contact it has since removed.
+conversationRoutes.get('/:id/export', async (c) => {
+  const user = c.get('user');
+  const db = getDb();
+  const convId = c.req.param('id');
+
+  await assertIsConversationParticipant(user.sub, convId);
+  const [conversation] = await db
+    .select({
+      id: conversations.id,
+      name: conversations.name,
+      created_at: conversations.created_at,
+    })
+    .from(conversations)
+    .where(and(eq(conversations.id, convId), eq(conversations.moderation_status, 'visible')))
+    .limit(1);
+  if (!conversation) throw new AppError('not_found', 'Conversation not found', 404);
+
+  const rows = await db
+    .select({
+      id: messages.id,
+      sender_type: messages.sender_type,
+      sender_did: messages.sender_did,
+      sender_name: peerAgents.name,
+      content_type: messages.content_type,
+      content: messages.content,
+      content_json: messages.content_json,
+      citations_json: messages.citations_json,
+      created_at: messages.created_at,
+    })
+    .from(messages)
+    .leftJoin(peerAgents, eq(peerAgents.id, messages.sender_id))
+    .where(and(eq(messages.conversation_id, convId), eq(messages.moderation_status, 'visible')))
+    .orderBy(asc(messages.id))
+    .limit(EXPORT_MAX_MESSAGES);
+
+  return c.json({
+    conversation,
+    messages: rows,
+    truncated: rows.length === EXPORT_MAX_MESSAGES,
+  });
 });
 
 conversationRoutes.delete('/:id', async (c) => {

@@ -145,6 +145,8 @@ POST   /api/v1/conversations/{id}/read             # পঠিত চিহ্�
 
 `GET /api/v1/search/messages?q=&limit=` ব্যবহারকারী যেসব কথোপকথনে আছেন (আর্কাইভ করা সহ) সেগুলোর বার্তার লেখায় উপ-স্ট্রিং খোঁজে, নতুনগুলো আগে; `q` ১–২০০ অক্ষরের, `limit` ডিফল্ট ২০, সর্বোচ্চ ৫০। ফেরত দেয় `{ results: [{ message_id, conversation_id, conversation_name, sender_type, content, created_at }] }`। Postgres-এর পূর্ণ-লেখা অনুসন্ধানের বদলে উপ-স্ট্রিং মিল ব্যবহার করা হয়, কারণ এর অন্তর্নির্মিত কনফিগারেশন চীনা লেখাকে শব্দে ভাগ করে না।
 
+`GET /api/v1/conversations/{id}/export` শুধু অংশগ্রহণকারীদের পুরো কথোপকথন ফেরত দেয়, পুরোনোগুলো আগে এবং সর্বোচ্চ ৫০০০টি: `{ conversation, messages, truncated }`; প্রতিটি বার্তায় থাকে `sender_type`, `sender_did`, অপর পক্ষের এজেন্টের `sender_name`, `content`, `content_json` ও `citations_json`। এটি শুধু তথ্য দেয়; Markdown ক্লায়েন্ট পাঠকের ভাষায় তৈরি করে (কে "আপনি" আর কে "আপনার এজেন্ট")।
+
 `POST /api/v1/conversations/{id}/messages` অনুরোধ:
 
 ```json

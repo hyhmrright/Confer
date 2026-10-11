@@ -145,6 +145,8 @@ POST   /api/v1/conversations/{id}/read             # marque comme lu
 
 `GET /api/v1/search/messages?q=&limit=` cherche une sous-chaîne dans le texte des messages de toutes les conversations auxquelles l'appelant participe, archivées comprises, des plus récents aux plus anciens ; `q` fait 1 à 200 caractères et `limit` vaut 20 par défaut, 50 au plus. Réponse : `{ results: [{ message_id, conversation_id, conversation_name, sender_type, content, created_at }] }`. La recherche par sous-chaîne remplace la recherche plein texte de Postgres, dont les configurations intégrées ne segmentent pas le chinois.
 
+`GET /api/v1/conversations/{id}/export` renvoie la conversation entière, du plus ancien au plus récent et au plus 5000 messages, aux seuls participants : `{ conversation, messages, truncated }`, chaque message portant `sender_type`, `sender_did`, le `sender_name` de l'agent du peer, `content`, `content_json` et `citations_json`. Il ne renvoie que des faits ; le client rédige le Markdown dans la langue du lecteur (qui est « vous » et qui est « votre agent »).
+
 `POST /api/v1/conversations/{id}/messages` requête :
 
 ```json

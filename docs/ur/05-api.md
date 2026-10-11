@@ -145,6 +145,8 @@ POST   /api/v1/conversations/{id}/read             # پڑھا ہوا نشان ز
 
 `GET /api/v1/search/messages?q=&limit=` صارف جن تمام گفتگوؤں میں شامل ہے (محفوظ شدہ سمیت) ان کے پیغامات کے متن میں ذیلی سلسلہ تلاش کرتا ہے، نئے پہلے؛ `q` ‏1–200 حروف کا ہوتا ہے اور `limit` بطور طے شدہ 20، زیادہ سے زیادہ 50۔ یہ `{ results: [{ message_id, conversation_id, conversation_name, sender_type, content, created_at }] }` لوٹاتا ہے۔ Postgres کی مکمل متن تلاش کے بجائے ذیلی سلسلہ مماثلت اس لیے، کہ اس کی بلٹ اِن ترتیبات چینی متن کو الفاظ میں تقسیم نہیں کرتیں۔
 
+`GET /api/v1/conversations/{id}/export` صرف شرکاء کو پوری گفتگو لوٹاتا ہے، پرانے پیغامات پہلے اور زیادہ سے زیادہ 5000: `{ conversation, messages, truncated }`؛ ہر پیغام میں `sender_type`، `sender_did`، دوسرے فریق کے ایجنٹ کا `sender_name`، `content`، `content_json` اور `citations_json` ہوتے ہیں۔ یہ صرف حقائق لوٹاتا ہے؛ Markdown کلائنٹ قاری کی زبان میں بناتا ہے (کون "آپ" ہیں اور کون "آپ کا ایجنٹ")۔
+
 `POST /api/v1/conversations/{id}/messages` درخواست:
 
 ```json

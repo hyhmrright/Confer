@@ -212,6 +212,16 @@ export const zh = {
     messageResults: '消息',
     noMessageResults: '没有匹配的消息',
   },
+  export: {
+    button: '导出',
+    markdown: 'Markdown',
+    json: 'JSON',
+    you: '我',
+    yourAgent: '我的 Agent',
+    sources: '来源',
+    truncated: '只包含了前 {{count}} 条消息。',
+    failed: '导出失败，请重试',
+  },
   contacts: {
     title: '联系人',
     add: '添加',

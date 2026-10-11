@@ -145,6 +145,8 @@ POST   /api/v1/conversations/{id}/read             # पढ़ा हुआ च�
 
 `GET /api/v1/search/messages?q=&limit=` उपयोगकर्ता जिन सभी बातचीतों में शामिल है (संग्रहित सहित) उनके संदेश पाठ में उप-स्ट्रिंग खोजता है, नवीनतम पहले; `q` 1–200 अक्षरों का होता है और `limit` डिफ़ॉल्ट 20, अधिकतम 50। यह `{ results: [{ message_id, conversation_id, conversation_name, sender_type, content, created_at }] }` लौटाता है। Postgres के पूर्ण-पाठ खोज के बजाय उप-स्ट्रिंग मिलान इसलिए, क्योंकि उसके अंतर्निहित कॉन्फ़िगरेशन चीनी पाठ को शब्दों में नहीं बाँटते।
 
+`GET /api/v1/conversations/{id}/export` केवल प्रतिभागियों को पूरी बातचीत लौटाता है, सबसे पुराने संदेश पहले और अधिकतम 5000: `{ conversation, messages, truncated }`; हर संदेश में `sender_type`, `sender_did`, सामने वाले एजेंट का `sender_name`, `content`, `content_json` और `citations_json` होते हैं। यह केवल तथ्य लौटाता है; Markdown क्लाइंट पाठक की भाषा में बनाता है (कौन "आप" हैं और कौन "आपका एजेंट")।
+
 `POST /api/v1/conversations/{id}/messages` अनुरोध:
 
 ```json

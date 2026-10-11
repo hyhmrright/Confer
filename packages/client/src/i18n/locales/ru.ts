@@ -229,6 +229,16 @@ export const ru: Resources = {
     messageResults: 'Сообщения',
     noMessageResults: 'Нет подходящих сообщений',
   },
+  export: {
+    button: 'Экспорт',
+    markdown: 'Markdown',
+    json: 'JSON',
+    you: 'Вы',
+    yourAgent: 'Ваш агент',
+    sources: 'Источники',
+    truncated: 'Включены только первые {{count}} сообщений.',
+    failed: 'Не удалось экспортировать, попробуйте ещё раз',
+  },
   contacts: {
     title: 'Контакты',
     add: 'Добавить',
