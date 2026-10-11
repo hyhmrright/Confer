@@ -51,7 +51,11 @@ beforeEach(async () => {
     showArchived: false,
   });
 });
-afterEach(cleanup);
+// The store outlives this file; leave the shelf where every other suite expects it.
+afterEach(() => {
+  cleanup();
+  useChatStore.setState({ conversations: [], activeConversationId: null, showArchived: false });
+});
 
 describe('ConversationsPanel', () => {
   // The open thread is being read as it arrives, so a list fetched a moment

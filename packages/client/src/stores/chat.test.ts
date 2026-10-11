@@ -29,6 +29,8 @@ const baseState = {
   streamCitations: [],
   agentStatus: null,
   peerTurn: null,
+  showArchived: false,
+  activeConversationName: undefined,
 };
 
 beforeEach(() => {

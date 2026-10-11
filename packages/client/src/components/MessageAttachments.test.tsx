@@ -48,7 +48,12 @@ beforeEach(async () => {
   post.mockReset();
   await changeLanguage('en');
 });
-afterEach(cleanup);
+// The composer test leaves a sent message in the store, which outlives this
+// file; a later suite would render it against an api mock without getBlob.
+afterEach(() => {
+  cleanup();
+  useChatStore.setState({ messages: [], activeConversationId: null });
+});
 
 describe('MessageAttachments', () => {
   // An <img src> cannot carry the session token, so the image is fetched with
