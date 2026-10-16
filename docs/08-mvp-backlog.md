@@ -2,6 +2,8 @@
 
 按 milestone 切片，每个 milestone 是一个可交付的可演示版本。
 
+2026-10-16 的源码核对及剩余工作见[开发状态核对](development-status.md)。部分历史勾选尚未同步，开发前先核对实现。
+
 ## v0.1 — Core proof of concept（4-6 周）
 
 **目标**：单机能跑通"用户 ↔ 自己 Agent ↔ 对方 Agent"全链路。

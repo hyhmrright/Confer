@@ -132,6 +132,10 @@ function normalizeMessage(apiMsg: Message & { citations_json?: unknown }): Messa
   return apiMsg;
 }
 
+// A view has an identity beyond its conversation id: A → B → A must not
+// revive requests or streams belonging to the first visit to A.
+let conversationView = 0;
+
 export const useChatStore = create<ChatState>((set, get) => ({
   conversations: [],
   activeConversationId: null,
@@ -183,6 +187,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   selectConversation: async (id, name) => {
+    const view = ++conversationView;
     set((s) => ({
       activeConversationId: id,
       activeConversationName: s.conversations.find((c) => c.id === id)?.name ?? name,
@@ -202,12 +207,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const data = await api.get<MessagePage>(
         `/conversations/${id}/messages?limit=${MESSAGE_PAGE_SIZE}`,
       );
+      if (conversationView !== view || get().activeConversationId !== id) return;
       set({
         messages: data.messages.map(normalizeMessage),
         messagesLoading: false,
         hasOlderMessages: data.messages.length === MESSAGE_PAGE_SIZE,
       });
     } catch {
+      if (conversationView !== view || get().activeConversationId !== id) return;
       set({ messagesLoading: false });
       return;
     }
@@ -223,6 +230,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   // unreachable from the UI.
   loadOlderMessages: async () => {
     const { activeConversationId, messages, loadingOlder, hasOlderMessages } = get();
+    const view = conversationView;
     const oldest = messages[0];
     if (!activeConversationId || !oldest || loadingOlder || !hasOlderMessages) return;
 
@@ -233,7 +241,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       );
       // The user can switch conversations while this is in flight; without this
       // check the older page would be prepended to a different thread.
-      if (get().activeConversationId !== activeConversationId) return;
+      if (conversationView !== view || get().activeConversationId !== activeConversationId) return;
       const older = data.messages.map(normalizeMessage);
       set((s) => ({
         messages: prependNew(s.messages, older),
@@ -241,6 +249,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         loadingOlder: false,
       }));
     } catch {
+      if (conversationView !== view || get().activeConversationId !== activeConversationId) return;
       set({ loadingOlder: false });
     }
   },
@@ -278,6 +287,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const { activeConversationId } = get();
     if (!activeConversationId) return;
 
+    const view = conversationView;
+    // Keep consuming the original stream so its server-side turn can complete,
+    // but only the view that started it may display its progress or result.
+    const setCurrent: typeof set = (update) => {
+      if (conversationView === view && get().activeConversationId === activeConversationId) {
+        set(update);
+      }
+    };
+
     const data = await api.post<{ id: string; stream_url: string }>(
       `/conversations/${activeConversationId}/messages`,
       { content, content_type: 'text', via: 'web', attachment_ids: attachments.map((a) => a.id) },
@@ -294,9 +312,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       created_at: new Date().toISOString(),
       attachments,
     };
-    set((s) => ({ messages: [...s.messages, userMsg] }));
+    setCurrent((s) => ({ messages: [...s.messages, userMsg] }));
 
-    set({
+    setCurrent({
       streaming: true,
       streamContent: '',
       streamCitations: [],
@@ -312,7 +330,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         headers: { Authorization: `Bearer ${getToken() ?? ''}` },
       });
       if (!res.ok || !res.body) {
-        set({ streaming: false, agentStatus: null });
+        setCurrent({ streaming: false, agentStatus: null });
         return;
       }
 
@@ -334,7 +352,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           created_at: new Date().toISOString(),
           in_reply_to: data.id,
         };
-        set((s) => ({
+        setCurrent((s) => ({
           // The gateway broadcasts `message.new` over the WebSocket *before* it
           // writes the stream's `done` event, so this same reply has usually
           // already arrived via addMessage. Appending unconditionally rendered
@@ -368,20 +386,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
             if (event.text) {
               fullContent += event.text;
-              set({ streamContent: fullContent, agentStatus: null });
+              setCurrent({ streamContent: fullContent, agentStatus: null });
             }
 
             if (event.source) {
               citations.push(event);
-              set({ streamCitations: [...citations] });
+              setCurrent({ streamCitations: [...citations] });
             }
 
             if (event.tool) {
-              set({ agentStatus: i18n.t('message.statusCallingTool', { tool: event.tool }) });
+              setCurrent({
+                agentStatus: i18n.t('message.statusCallingTool', { tool: event.tool }),
+              });
             }
 
             if (event.result !== undefined) {
-              set({ agentStatus: null });
+              setCurrent({ agentStatus: null });
             }
 
             // The reader keys off the payload, not the `event:` line it skips,
@@ -390,7 +410,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             // committed an empty reply under a made-up id — a blank bubble
             // presented as the agent's answer.
             if (event.message) {
-              set({
+              setCurrent({
                 streaming: false,
                 streamContent: '',
                 streamCitations: [],
@@ -412,7 +432,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         finalizeAgent();
       }
     } catch {
-      set({ streaming: false, streamContent: '', agentStatus: null });
+      setCurrent({ streaming: false, streamContent: '', agentStatus: null });
     }
   },
 
