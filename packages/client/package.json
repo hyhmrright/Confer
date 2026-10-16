@@ -8,7 +8,8 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "test": "bun test"
+    "test": "bun test",
+    "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
     "@confer/shared": "workspace:*",
@@ -22,7 +23,8 @@
     "react-router": "^8.4.0",
     "remark-gfm": "^4.0.1",
     "zod": "^4.6.5",
-    "zustand": "^5.0.15"
+    "zustand": "^5.0.15",
+    "@tauri-apps/api": "^2.12.4"
   },
   "devDependencies": {
     "@happy-dom/global-registrator": "20.14.5",
@@ -36,6 +38,8 @@
     "@vitejs/plugin-react": "^6.1.2",
     "postcss": "^8.5.29",
     "tailwindcss": "^4.3.3",
-    "vite": "^8.3.3"
+    "vite": "^8.3.3",
+    "drizzle-kit": "^0.31.11",
+    "drizzle-orm": "^0.45.3"
   }
 }
