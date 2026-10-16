@@ -1,0 +1,10 @@
+# AGENTS.md exceeds the default 32 KiB instruction budget.
+project_doc_max_bytes = 98304
+
+# Launch Codex at the repository root. No credentials are stored here.
+[mcp_servers.confer-a2a]
+command = "bun"
+args = ["run", "packages/mcp-a2a/src/server.ts"]
+env_vars = ["CONFER_USERNAME", "CONFER_PASSWORD", "CONFER_GATEWAY_URL", "CONFER_CONSULT_WAIT", "CONFER_PROJECT_ID"]
+startup_timeout_sec = 20
+tool_timeout_sec = 120
