@@ -16,8 +16,11 @@ mock.module('../lib/api.js', () => ({
 
 const { useChatStore } = await import('./chat.js');
 const { setGatewayUrl } = await import('../lib/gateway.js');
+const { useAuthStore } = await import('./auth.js');
+const { clearMessageCache } = await import('../lib/message-cache.js');
 
 const initial = useChatStore.getState();
+const initialAuth = useAuthStore.getState();
 
 const baseState = {
   conversations: [],
@@ -33,15 +36,22 @@ const baseState = {
   activeConversationName: undefined,
 };
 
-beforeEach(() => {
+beforeEach(async () => {
+  // Other test files share these stores. An authenticated user adds an async
+  // cache read before HTTP, so inherited auth changes which request consumes
+  // a one-shot mock and can deadlock the deferred-response tests below.
+  useAuthStore.setState({ user: null });
+  await clearMessageCache();
   get.mockReset();
   post.mockReset();
   del.mockReset();
   useChatStore.setState(baseState);
 });
 
-afterEach(() => {
+afterEach(async () => {
+  useAuthStore.setState(initialAuth, true);
   useChatStore.setState(initial, true);
+  await clearMessageCache();
 });
 
 const makeMessage = (over: Partial<Record<string, unknown>> = {}) => ({
@@ -74,7 +84,7 @@ describe('chat store', () => {
 
     await useChatStore.getState().selectConversation('c1');
 
-    expect(get).toHaveBeenCalledWith('/conversations/c1/messages?limit=50');
+    expect(get).toHaveBeenCalledWith('/conversations/c1/messages?limit=100');
     const state = useChatStore.getState();
     expect(state.activeConversationId).toBe('c1');
     expect(state.messages).toEqual(messages as never);
@@ -87,7 +97,7 @@ describe('chat store', () => {
   test('loadOlderMessages walks backwards from the oldest message on screen', async () => {
     // A full page on open is the signal that there is history behind it.
     get.mockResolvedValueOnce({
-      messages: Array.from({ length: 50 }, (_, i) => makeMessage({ id: `m${i + 50}` })),
+      messages: Array.from({ length: 100 }, (_, i) => makeMessage({ id: `m${i + 50}` })),
     });
     await useChatStore.getState().selectConversation('c1');
     expect(useChatStore.getState().hasOlderMessages).toBe(true);
@@ -98,7 +108,7 @@ describe('chat store', () => {
     expect(get).toHaveBeenLastCalledWith('/conversations/c1/messages?limit=50&before=m50');
     const state = useChatStore.getState();
     expect(state.messages[0]?.id).toBe('m1');
-    expect(state.messages).toHaveLength(51);
+    expect(state.messages).toHaveLength(101);
     expect(state.loadingOlder).toBe(false);
     // The short page means we have reached the beginning of the thread.
     expect(state.hasOlderMessages).toBe(false);
@@ -106,7 +116,7 @@ describe('chat store', () => {
 
   test('loadOlderMessages discards a page that arrives after the user switched threads', async () => {
     get.mockResolvedValueOnce({
-      messages: Array.from({ length: 50 }, (_, i) => makeMessage({ id: `m${i + 50}` })),
+      messages: Array.from({ length: 100 }, (_, i) => makeMessage({ id: `m${i + 50}` })),
     });
     await useChatStore.getState().selectConversation('c1');
 
@@ -118,6 +128,118 @@ describe('chat store', () => {
     await useChatStore.getState().loadOlderMessages();
 
     expect(useChatStore.getState().messages).toEqual([]);
+  });
+
+  test('a late initial page cannot overwrite a newer visit to the same conversation', async () => {
+    const late = Promise.withResolvers<unknown>();
+    get.mockReturnValueOnce(late.promise);
+    const first = useChatStore.getState().selectConversation('c1');
+    get.mockResolvedValueOnce({ messages: [makeMessage({ id: 'b', conversation_id: 'c2' })] });
+    await useChatStore.getState().selectConversation('c2');
+    get.mockResolvedValueOnce({ messages: [makeMessage({ id: 'fresh' })] });
+    await useChatStore.getState().selectConversation('c1');
+    late.resolve({ messages: [makeMessage({ id: 'stale' })] });
+    await first;
+    expect(useChatStore.getState().messages.map((m) => m.id)).toEqual(['fresh']);
+  });
+
+  test('an old failed page cannot clear the new conversation loading indicator', async () => {
+    const old = Promise.withResolvers<unknown>();
+    const current = Promise.withResolvers<unknown>();
+    get.mockReturnValueOnce(old.promise).mockReturnValueOnce(current.promise);
+    const first = useChatStore.getState().selectConversation('c1');
+    const second = useChatStore.getState().selectConversation('c2');
+    old.reject(new Error('offline'));
+    await first;
+    expect(useChatStore.getState().messagesLoading).toBe(true);
+    current.resolve({ messages: [] });
+    await second;
+  });
+
+  test.each([false, true])(
+    'an older page from a previous visit cannot change history (failure=%s)',
+    async (fails) => {
+      get.mockResolvedValueOnce({
+        messages: Array.from({ length: 100 }, (_, i) => makeMessage({ id: `m${i + 50}` })),
+      });
+      await useChatStore.getState().selectConversation('c1');
+      const old = Promise.withResolvers<unknown>();
+      get.mockReturnValueOnce(old.promise);
+      const pending = useChatStore.getState().loadOlderMessages();
+      get.mockResolvedValueOnce({ messages: [] });
+      await useChatStore.getState().selectConversation('c2');
+      get.mockResolvedValueOnce({ messages: [makeMessage({ id: 'fresh' })] });
+      await useChatStore.getState().selectConversation('c1');
+      useChatStore.setState({ loadingOlder: true });
+      if (fails) old.reject(new Error('offline'));
+      else old.resolve({ messages: [makeMessage({ id: 'stale' })] });
+      await pending;
+      expect(useChatStore.getState().messages.map((m) => m.id)).toEqual(['fresh']);
+      expect(useChatStore.getState().loadingOlder).toBe(true);
+    },
+  );
+
+  test.each(['reply', 'error', 'disconnect'])(
+    'an old stream cannot modify a new visit (%s)',
+    async (ending) => {
+      const realFetch = globalThis.fetch;
+      const response = Promise.withResolvers<Response>();
+      globalThis.fetch = mock(() => response.promise) as unknown as typeof fetch;
+      post.mockResolvedValue({ id: 'u1', stream_url: '/stream/c1/u1' });
+      useChatStore.setState({ activeConversationId: 'c1' });
+      try {
+        const sending = useChatStore.getState().sendMessage('hello');
+        await Promise.resolve();
+        get.mockResolvedValueOnce({ messages: [] });
+        await useChatStore.getState().selectConversation('c2');
+        get.mockResolvedValueOnce({ messages: [makeMessage({ id: 'fresh' })] });
+        await useChatStore.getState().selectConversation('c1');
+        useChatStore.setState({
+          streaming: true,
+          streamContent: 'new reply',
+          agentStatus: 'new status',
+        });
+        if (ending === 'disconnect') response.reject(new Error('offline'));
+        else
+          response.resolve(
+            new Response(
+              ending === 'error'
+                ? 'data: {"message":"agent_error"}\n\n'
+                : 'data: {"text":"old reply"}\n\ndata: {"message_id":"old"}\n\n',
+            ),
+          );
+        await sending;
+        const state = useChatStore.getState();
+        expect(state.messages.map((m) => m.id)).toEqual(['fresh']);
+        expect(state.streaming).toBe(true);
+        expect(state.streamContent).toBe('new reply');
+        expect(state.agentStatus).toBe('new status');
+      } finally {
+        globalThis.fetch = realFetch;
+      }
+    },
+  );
+
+  test('a delayed send still starts its original turn without adding bubbles to another thread', async () => {
+    const realFetch = globalThis.fetch;
+    const sent = Promise.withResolvers<unknown>();
+    globalThis.fetch = mock(
+      async () => new Response('data: {"message_id":"a1"}\n\n'),
+    ) as unknown as typeof fetch;
+    post.mockReturnValueOnce(sent.promise);
+    useChatStore.setState({ activeConversationId: 'c1' });
+    try {
+      const sending = useChatStore.getState().sendMessage('hello');
+      get.mockResolvedValueOnce({ messages: [makeMessage({ id: 'b', conversation_id: 'c2' })] });
+      await useChatStore.getState().selectConversation('c2');
+      sent.resolve({ id: 'u1', stream_url: '/stream/c1/u1' });
+      await sending;
+      expect(globalThis.fetch).toHaveBeenCalled();
+      expect(useChatStore.getState().messages.map((m) => m.id)).toEqual(['b']);
+      expect(useChatStore.getState().streaming).toBe(false);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
   });
 
   test('selectConversation maps citations_json into citations', async () => {
@@ -382,5 +504,77 @@ describe('chat store', () => {
     expect(noModel).not.toBe(generic);
     expect(noKey).not.toBe(generic);
     expect(noModel).not.toBe(noKey);
+  });
+});
+
+describe('persistent conversation snapshots', () => {
+  test('a newer selection supersedes a view still reading its cache', async () => {
+    useAuthStore.setState({
+      user: { id: 'cache-user', username: 'cache-user', did: 'did:web:example' },
+    });
+    get.mockResolvedValueOnce({ messages: [makeMessage({ conversation_id: 'c2' })] });
+
+    const first = useChatStore.getState().selectConversation('c1');
+    const second = useChatStore.getState().selectConversation('c2');
+    await Promise.all([first, second]);
+
+    expect(get).toHaveBeenCalledTimes(1);
+    expect(get).toHaveBeenCalledWith('/conversations/c2/messages?limit=100');
+    expect(useChatStore.getState().activeConversationId).toBe('c2');
+    expect(useChatStore.getState().messages[0].conversation_id).toBe('c2');
+  });
+
+  test('shows cached history while refreshing and preserves it if offline', async () => {
+    const { useAuthStore } = await import('./auth.js');
+    const { messageCacheKey, writeMessageCache, clearMessageCache } = await import(
+      '../lib/message-cache.js'
+    );
+    const previousUser = useAuthStore.getState().user;
+    useAuthStore.setState({
+      user: { id: 'cache-user', username: 'cache-user', did: 'did:web:example' },
+    });
+    try {
+      const cached = makeMessage({ content: 'cached answer' });
+      await writeMessageCache(messageCacheKey(location.origin, 'cache-user', 'c1'), [cached]);
+      const pending = Promise.withResolvers<never>();
+      get.mockImplementationOnce(() => pending.promise);
+      const loading = useChatStore.getState().selectConversation('c1');
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(useChatStore.getState().messages[0].content).toBe('cached answer');
+      expect(useChatStore.getState().messagesLoading).toBe(true);
+      pending.reject(new Error('offline'));
+      await loading;
+      expect(useChatStore.getState().messages[0].content).toBe('cached answer');
+      expect(useChatStore.getState().messagesLoading).toBe(false);
+    } finally {
+      useAuthStore.setState({ user: previousUser });
+      await clearMessageCache();
+    }
+  });
+
+  test('server history replaces cached snapshots; logout rejects the old page', async () => {
+    const { useAuthStore } = await import('./auth.js');
+    const { clearMessageCache } = await import('../lib/message-cache.js');
+    const previousUser = useAuthStore.getState().user;
+    useAuthStore.setState({
+      user: { id: 'cache-user', username: 'cache-user', did: 'did:web:example' },
+    });
+    try {
+      get.mockResolvedValueOnce({ messages: [makeMessage({ content: 'authoritative' })] });
+      await useChatStore.getState().selectConversation('c1');
+      const pending = Promise.withResolvers<{ messages: ReturnType<typeof makeMessage>[] }>();
+      get.mockImplementationOnce(() => pending.promise);
+      const loading = useChatStore.getState().selectConversation('c1');
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(useChatStore.getState().messages[0].content).toBe('authoritative');
+      useAuthStore.getState().logout();
+      pending.resolve({ messages: [makeMessage({ content: 'private late response' })] });
+      await loading;
+      expect(useChatStore.getState().messages).toEqual([]);
+      expect(useChatStore.getState().activeConversationId).toBeNull();
+    } finally {
+      useAuthStore.setState({ user: previousUser });
+      await clearMessageCache();
+    }
   });
 });

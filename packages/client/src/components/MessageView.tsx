@@ -137,7 +137,7 @@ export function MessageView() {
           the last entry could never be scrolled out from under it. */}
       <div className="flex-1 overflow-y-auto scrollbar-thin px-6 pt-6 pb-28">
         <div className="mx-auto w-full max-w-[860px] space-y-6">
-          {messagesLoading ? (
+          {messagesLoading && messages.length === 0 ? (
             <div className="flex items-center justify-center py-20">
               <LoadingDots size="md" />
             </div>
