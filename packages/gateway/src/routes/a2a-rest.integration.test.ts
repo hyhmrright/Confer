@@ -7,7 +7,7 @@ import {
 } from '@confer/identity';
 import { newId } from '@confer/shared';
 import { and, eq } from 'drizzle-orm';
-import { TASK_STATES } from '../a2a/rest-model.js';
+import { type A2ATask, TASK_STATES } from '../a2a/rest-model.js';
 import { app } from '../app.js';
 import { getDb } from '../db/connection.js';
 import {
@@ -665,7 +665,12 @@ describe('operations this agent does not offer', () => {
 });
 
 /** The `StreamResponse` objects in an SSE body, in order (§11.7: one per `data:` line). */
-async function streamEvents(res: Response): Promise<Array<Record<string, any>>> {
+interface StreamEvent {
+  task?: A2ATask;
+  statusUpdate?: { taskId: string; contextId: string; status: A2ATask['status'] };
+}
+
+async function streamEvents(res: Response): Promise<StreamEvent[]> {
   expect(res.headers.get('content-type')).toStartWith('text/event-stream');
   return (await res.text())
     .split('\n')
@@ -685,6 +690,7 @@ describe('streaming', () => {
     // then the task itself is the one, settled event. Otherwise WORKING comes
     // first and a status update settles it.
     const first = events[0]?.task;
+    if (!first) throw new Error('The first stream event must contain a task');
     expect(first.id).toBeTruthy();
     if (events.length === 1) {
       expect(first.status.state).toBe('TASK_STATE_FAILED');
@@ -707,7 +713,7 @@ describe('streaming', () => {
     const events = await streamEvents(await call('POST', '/message:stream', sendBody('hold')));
 
     expect(events).toHaveLength(1);
-    expect(events[0]?.task.status.state).toBe('TASK_STATE_AUTH_REQUIRED');
+    expect(events[0]?.task?.status.state).toBe('TASK_STATE_AUTH_REQUIRED');
   });
 
   test('a stream request goes through the same gates as a send', async () => {
@@ -724,8 +730,8 @@ describe('streaming', () => {
     const task = await (await call('POST', '/message:send', sendNow('hold'))).json();
 
     const events = await streamEvents(await call(method, `/tasks/${task.id}:subscribe`));
-    expect(events[0]?.task.id).toBe(task.id);
-    expect(events[0]?.task.status.state).toBe('TASK_STATE_AUTH_REQUIRED');
+    expect(events[0]?.task?.id).toBe(task.id);
+    expect(events[0]?.task?.status.state).toBe('TASK_STATE_AUTH_REQUIRED');
   });
 
   test('caps open streams per peer, and frees a slot when one closes', async () => {
@@ -786,7 +792,7 @@ describe('streaming', () => {
 
 describe('push notifications', () => {
   const HOOK = 'https://hooks.example/a2a?channel=7';
-  let delivered: Array<{ headers: Headers; body: Record<string, any> }>;
+  let delivered: Array<{ headers: Headers; body: { task: A2ATask } }>;
 
   beforeEach(() => {
     delivered = [];
@@ -1072,9 +1078,9 @@ describe('task state machine', () => {
 
     const events = await streamEvents(await call('GET', `/tasks/${taskId}:subscribe`));
     expect(events).toHaveLength(2);
-    expect(events[0]?.task.status.state).toBe('TASK_STATE_WORKING');
-    expect(events[1]?.statusUpdate.status.state).toBe('TASK_STATE_COMPLETED');
-    expect(events[1]?.statusUpdate.status.message.parts[0].text).toBe('here it is');
+    expect(events[0]?.task?.status.state).toBe('TASK_STATE_WORKING');
+    expect(events[1]?.statusUpdate?.status.state).toBe('TASK_STATE_COMPLETED');
+    expect(events[1]?.statusUpdate?.status.message?.parts[0]?.text).toBe('here it is');
   });
 
   test('a moderator-hidden question is invisible even to the peer that sent it', async () => {
