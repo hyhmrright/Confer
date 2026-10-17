@@ -16,8 +16,11 @@ mock.module('../lib/api.js', () => ({
 
 const { useChatStore } = await import('./chat.js');
 const { setGatewayUrl } = await import('../lib/gateway.js');
+const { useAuthStore } = await import('./auth.js');
+const { clearMessageCache } = await import('../lib/message-cache.js');
 
 const initial = useChatStore.getState();
+const initialAuth = useAuthStore.getState();
 
 const baseState = {
   conversations: [],
@@ -33,15 +36,22 @@ const baseState = {
   activeConversationName: undefined,
 };
 
-beforeEach(() => {
+beforeEach(async () => {
+  // Other test files share these stores. An authenticated user adds an async
+  // cache read before HTTP, so inherited auth changes which request consumes
+  // a one-shot mock and can deadlock the deferred-response tests below.
+  useAuthStore.setState({ user: null });
+  await clearMessageCache();
   get.mockReset();
   post.mockReset();
   del.mockReset();
   useChatStore.setState(baseState);
 });
 
-afterEach(() => {
+afterEach(async () => {
+  useAuthStore.setState(initialAuth, true);
   useChatStore.setState(initial, true);
+  await clearMessageCache();
 });
 
 const makeMessage = (over: Partial<Record<string, unknown>> = {}) => ({
@@ -498,6 +508,22 @@ describe('chat store', () => {
 });
 
 describe('persistent conversation snapshots', () => {
+  test('a newer selection supersedes a view still reading its cache', async () => {
+    useAuthStore.setState({
+      user: { id: 'cache-user', username: 'cache-user', did: 'did:web:example' },
+    });
+    get.mockResolvedValueOnce({ messages: [makeMessage({ conversation_id: 'c2' })] });
+
+    const first = useChatStore.getState().selectConversation('c1');
+    const second = useChatStore.getState().selectConversation('c2');
+    await Promise.all([first, second]);
+
+    expect(get).toHaveBeenCalledTimes(1);
+    expect(get).toHaveBeenCalledWith('/conversations/c2/messages?limit=100');
+    expect(useChatStore.getState().activeConversationId).toBe('c2');
+    expect(useChatStore.getState().messages[0].conversation_id).toBe('c2');
+  });
+
   test('shows cached history while refreshing and preserves it if offline', async () => {
     const { useAuthStore } = await import('./auth.js');
     const { messageCacheKey, writeMessageCache, clearMessageCache } = await import(
