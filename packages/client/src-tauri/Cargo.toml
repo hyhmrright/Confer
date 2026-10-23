@@ -17,4 +17,4 @@ tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rusqlite = { version = "0.40", features = ["bundled"] }
-sea-query = { version = "0.32", default-features = false, features = ["backend-sqlite", "derive"] }
+sea-query = { version = "1.0", default-features = false, features = ["backend-sqlite", "derive"] }

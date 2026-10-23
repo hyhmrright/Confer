@@ -1,5 +1,5 @@
 use rusqlite::Connection;
-use sea_query::{Iden, OnConflict, Query, SqliteQueryBuilder};
+use sea_query::{ExprTrait, Iden, OnConflict, Query, SqliteQueryBuilder};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::sync::Mutex;
