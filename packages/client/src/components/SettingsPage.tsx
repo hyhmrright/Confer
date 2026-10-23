@@ -6,10 +6,11 @@ import { AgentTab } from './settings/AgentTab.js';
 import { KeysTab } from './settings/KeysTab.js';
 import { PolicyTab } from './settings/PolicyTab.js';
 import { ProfileTab } from './settings/ProfileTab.js';
+import { SecurityTab } from './settings/SecurityTab.js';
 import { UsageTab } from './settings/UsageTab.js';
 import { type PageTab, TabbedPage } from './TabbedPage.js';
 
-type Tab = 'profile' | 'agent' | 'keys' | 'usage' | 'policy' | 'history';
+type Tab = 'profile' | 'security' | 'agent' | 'keys' | 'usage' | 'policy' | 'history';
 
 export function SettingsPage() {
   const { t } = useTranslation();
@@ -17,6 +18,7 @@ export function SettingsPage() {
 
   const tabs: PageTab<Tab>[] = [
     { id: 'profile', label: t('settings.tabProfile'), icon: User },
+    { id: 'security', label: t('settings.tabSecurity'), icon: Key },
     { id: 'agent', label: t('settings.tabAgent'), icon: Bot },
     { id: 'keys', label: t('settings.tabKeys'), icon: Key },
     { id: 'usage', label: t('settings.tabUsage'), icon: BarChart },
@@ -33,6 +35,7 @@ export function SettingsPage() {
       contentClassName="max-w-xl"
     >
       {tab === 'profile' && <ProfileTab />}
+      {tab === 'security' && <SecurityTab />}
       {tab === 'agent' && <AgentTab />}
       {tab === 'keys' && <KeysTab />}
       {tab === 'usage' && <UsageTab />}

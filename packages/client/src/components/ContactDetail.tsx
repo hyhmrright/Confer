@@ -1,7 +1,6 @@
-import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAutoClear } from '../hooks/use-auto-clear.js';
-import { mergePolicyDefault } from '../lib/policy.js';
+import { usePolicyDraft } from '../hooks/use-policy-draft.js';
 import { useContactsStore } from '../stores/contacts.js';
 import { Bot } from './Icons.js';
 import { Modal } from './Modal.js';
@@ -29,13 +28,7 @@ export function ContactDetail() {
   const closeDetail = useContactsStore((s) => s.closeDetail);
   const setContactPolicy = useContactsStore((s) => s.setContactPolicy);
   const clearDetailMessages = useContactsStore((s) => s.clearDetailMessages);
-  const [decision, setDecision] = useState<string>('');
-
-  const overrides = selectedContact?.policy_overrides_json;
-
-  useEffect(() => {
-    setDecision(overrides?.default ?? '');
-  }, [overrides]);
+  const policy = usePolicyDraft(selectedContact?.policy_overrides_json);
 
   useAutoClear(success, error, clearDetailMessages);
 
@@ -44,10 +37,7 @@ export function ContactDetail() {
   const { peer, alias, tags, pinned, muted } = selectedContact;
   const yesNo = (value: boolean | undefined) => (value ? t('contacts.yes') : t('contacts.no'));
 
-  const handleSave = () => {
-    // Whole-object replace: preserve any existing rules, only swap `default`.
-    setContactPolicy(selectedContact.id, mergePolicyDefault(overrides, decision));
-  };
+  const handleSave = () => setContactPolicy(selectedContact.id, policy.draft());
 
   return (
     <Modal
@@ -89,10 +79,11 @@ export function ContactDetail() {
           ) : (
             <PolicyEditor
               id="contact-policy-default"
-              decision={decision}
-              onChange={setDecision}
+              decision={policy.decision}
+              onChange={policy.setDecision}
               inheritLabel={t('policy.inherit')}
-              rules={overrides?.rules}
+              rules={policy.rules}
+              onRemoveRule={policy.removeRule}
             />
           )}
         </div>

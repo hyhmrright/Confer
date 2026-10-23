@@ -37,6 +37,11 @@ POST   /api/v1/auth/register
 POST   /api/v1/auth/login
 POST   /api/v1/auth/refresh
 POST   /api/v1/auth/logout
+POST   /api/v1/auth/password        # {current_password, new_password}
+GET    /api/v1/auth/2fa             # {enabled, recovery_codes_left}
+POST   /api/v1/auth/2fa/setup       # → {secret, otpauth_uri}
+POST   /api/v1/auth/2fa/enable      # {code} → {recovery_codes}
+POST   /api/v1/auth/2fa/disable     # {password, totp_code | recovery_code}
 POST   /api/v1/auth/oauth/{provider}    # OAuth callback
 ```
 
@@ -62,11 +67,24 @@ POST   /api/v1/auth/oauth/{provider}    # OAuth callback
 }
 ```
 
+**2 段階認証（TOTP）。** 有効にすると、`login` はパスワードが正しいうえで `totp_code`（認証アプリの 6 桁のコード）または `recovery_code` も求める。どちらもなければ 401 `totp_required` を返し、クライアントはこれを見て 2 段階目を表示する。コードが違えば 401 `invalid_second_factor`。パスワードが違う場合は常に先に `invalid_credentials` を返すので、2 段階認証の有無は漏れない。各コードは 1 回しか使えず（使用済みの時間ステップを記録）、リカバリーコードは使うと失効する。どちらも条件付き UPDATE 1 回で消費するため、同時のサインインで再利用はできない。`setup` が生成した秘密鍵は AES-256-GCM で暗号化して保存し、`enable` でアプリのコードを確認するまでは効力を持たない。`enable` はリカバリーコード 10 個をこの一度だけ返し、サーバーはハッシュだけを保持する。`disable` にはパスワードと第 2 要素が必要。`password` は現在のパスワードを求め、そのユーザーの他のセッションをすべて失効させる。これらはすべて監査ログに記録され、アカウントごとに 1 分 10 回までに制限される。 `enable` にも `password` が必要なので、盗まれたトークンだけで攻撃者の認証アプリを他人のアカウントに設定することはできない。2 段階認証がオンのとき、`password` によるパスワード変更にも第 2 要素が必要になる。同じアカウントで誤ったコードが 5 回続くと、そのアカウントのコード入力は 15 分間ロックされる（429 `too_many_attempts`）。これは IP ごとのログイン制限に上乗せされる。リカバリーコードはサーバー鍵による HMAC で保存する。認証アプリとリカバリーコードの両方を失ったユーザーには、管理者が `POST /api/v1/admin/users/{id}/reset-2fa` で 2 段階認証をオフにできる（監査ログに記録され、自分自身には使えない）。
+
+```
+GET    /api/v1/tokens              # [{id, name, prefix, created_at, last_used_at, expires_at}]
+POST   /api/v1/tokens              # {name, expires_in_days?} → {token: {..., token}}
+DELETE /api/v1/tokens/{id}
+```
+
+**個人用 API トークン。** オーナーとして API を呼ぶスクリプトやツール向けで、セッションの access token と同じ `Authorization: Bearer cfr_…` ヘッダーを使う。トークンの平文は作成時に一度だけ返り、サーバーは SHA-256 と識別用のプレフィックスだけを保持する。有効期限は 1〜365 日で任意、1 ユーザーにつき最大 20 個で、所有者のアカウントが無効化されると直ちに使えなくなる。トークンはチャットでオーナーができることはできるが、次の操作はサインイン済みセッションのみを受け付け、トークンには 403 `session_required` を返す：ログアウト、パスワードと 2 段階認証、トークン自体の管理、権限リクエストと errand カードの承認、LLM キーの変更、すべての admin ルート。漏れたトークンはオーナーの用事はこなせても、オーナーに代わって決めることも、オーナーを締め出すこともできない。作成と失効は監査ログに記録される。
+
 ### ユーザーと Agent の設定
 
 ```
 GET    /api/v1/users/me
 PATCH  /api/v1/users/me
+GET    /api/v1/users/me/keys          # signing keys: current / retiring / revoked
+POST   /api/v1/users/me/keys/rotate   # session only
+POST   /api/v1/users/me/keys/revoke   # {key_id}, session only
 GET    /api/v1/agents/me
 PATCH  /api/v1/agents/me
 PUT    /api/v1/agents/me/policies
@@ -141,6 +159,12 @@ DELETE /api/v1/conversations/{id}/participants/{p_id}
 POST   /api/v1/conversations/{id}/read             # 既読にする
 ```
 
+`GET` は既定でアーカイブされていない会話を返し、`?archived=1` でアーカイブ済みを返す。各会話には `unread_count`（最後に既読にしてから、一度も既読にしていなければ参加時から、他者が書いたメッセージ数。自分の発言は含まない）が付く。`PATCH` は `{ name?, archived? }` を受け付け、会話の作成者だけが使える。`POST .../read` は呼び出したユーザーの `last_read_at` を現在時刻にする。アーカイブ済みの会話に連絡先が書き込むと、アーカイブが解除されて先頭に移る。
+
+`GET /api/v1/search/messages?q=&limit=` は、呼び出したユーザーが参加しているすべての会話（アーカイブ済みを含む）でメッセージ本文を部分一致検索し、新しい順に返す。`q` は 1〜200 文字、`limit` の既定値は 20、最大 50。戻り値は `{ results: [{ message_id, conversation_id, conversation_name, sender_type, content, created_at }] }`。Postgres の全文検索ではなく部分一致を使うのは、組み込みの設定が中国語を分かち書きしないため。
+
+`GET /api/v1/conversations/{id}/export` は会話全体（古い順、最大 5000 件）を参加者にのみ返す：`{ conversation, messages, truncated }`。各メッセージには `sender_type`、`sender_did`、相手 agent の `sender_name`、`content`、`content_json`、`citations_json` が含まれる。返すのは事実だけで、Markdown は読み手の言語でクライアントが組み立てる（誰が「自分」で誰が「自分の Agent」か）。
+
 `POST /api/v1/conversations/{id}/messages` リクエスト:
 
 ```json
@@ -182,6 +206,8 @@ GET    /api/v1/permissions/history               # 履歴
 未処理リクエストのうち `action='connect'` のものは**接続リクエスト**である（見知らぬ peer が初めて接触したときに A2A の受信経路が生成する）。承認（`allow_*`）するとその peer が `peer_contacts` に書き込まれて接続が成立し、拒否すれば成立しない。
 
 `action='ask'` のものは**接続済み peer からの保留中の質問**で、その質問に対して Agent の policy が `ask_user` と判定したときに A2A の受信経路が生成する（`03-protocol.md` の「Pending inbox（不在時の代理応答）」を参照）。承認（`allow_*`）すると Agent が保留中の質問に答え、拒否すれば答えない。
+
+`allow_always` / `deny_always` は**継続的な決定**である。保留中の質問に対しては、その連絡先の policy override の先頭に `{ action: 'ask', decision: 'allow' | 'deny' }` ルールを書き込む（既存のものは置き換える）ため、この peer からの以後の質問は保留されずに応答または拒否される。オーナーは連絡先詳細の policy でこのルールを確認・取り消しできる。接続リクエストに対しては、`deny_always` によりその peer からの以後の接続リクエストは受信箱に届かず黙って破棄される。DID を指定して手動で追加することは引き続き可能である。
 
 `GET /pending` は各リクエストに `description` を付ける（接続リクエストには発信者と最初のメッセージ、質問には発信者と質問本文）。持ち主が判断できるようにするためである。
 
@@ -251,9 +277,10 @@ POST   /api/v1/knowledge-bases/{kb_id}/documents/{doc_id}/retry # 再取り込�
 
 ```
 POST   /api/v1/attachments                       # multipart upload
-GET    /api/v1/attachments/{id}                  # ダウンロード（署名付き URL へ 302 リダイレクト）
-DELETE /api/v1/attachments/{id}
+GET    /api/v1/attachments/{id}/content          # ファイル本体：アップロードした本人、またはそのメッセージの会話の参加者に返す
 ```
+
+アップロード直後の添付はどのメッセージにも紐づかず、`POST /conversations/{id}/messages` の `attachment_ids`（最大 5 個）で紐づける。紐づけられるのは送信者自身がアップロードした未送信のものだけ。本文がなく添付だけのメッセージも有効。画像はバイト列で判別し（PNG / JPEG / GIF / WebP、1 枚 5 MB まで）、画像ブロックとしてモデルに渡す。PDF / DOCX / XLSX / テキストはアップロード時に本文を抽出し（10 MB まで）、毎ターン `<attachment>` としてそのメッセージに添える。SVG はテキストとして扱い、画像としてインライン表示しない。`content` がインラインで返すのは判別済みの画像だけで、それ以外は `application/octet-stream` のダウンロードになる。メッセージ一覧の各メッセージには `attachments` が付く。会話を削除すると添付も削除される。
 
 ### 使用量
 
@@ -307,13 +334,13 @@ read.ack                      // 既読確認
 ```
 pong
 message.new                   // 新着メッセージ
-message.updated
-message.deleted
+message.updated               // 予約済み、未送信
+message.deleted               // 予約済み、未送信
 typing.update                 // 誰が入力中か
 presence.update               // 連絡先のオンライン・オフライン
 permission.request            // ユーザーの判断を要する権限リクエスト
-agent.status                  // 自分の Agent が何をしているか（「ABC の Agent に相談中…」）
-conversation.updated
+agent.status                  // 自分の Agent が連絡先に回答中：{conversation_id, state: thinking|tool|idle, tool?}。文言はクライアントが生成
+conversation.updated          // 連絡先が {conversation_id} に書き込んだ（新しい会話の場合もある）。クライアントは一覧を更新する
 ```
 
 `message.new` の例:
@@ -410,11 +437,16 @@ POST   /a2a/v1/message:send              # SendMessage → Task
 GET    /a2a/v1/tasks/{id}                # GetTask
 GET    /a2a/v1/tasks                     # ListTasks（カーソルページング）
 POST   /a2a/v1/tasks/{id}:cancel         # CancelTask → TaskNotCancelable
-POST   /a2a/v1/message:stream            # 未実装 → UnsupportedOperation
-POST   /a2a/v1/tasks/{id}:subscribe      # 未実装 → UnsupportedOperation
+POST   /a2a/v1/message:stream            # SendStreamingMessage → SSE: Task, then statusUpdate
+GET|POST /a2a/v1/tasks/{id}:subscribe    # SubscribeToTask → SSE
+POST   /a2a/v1/tasks/{id}/pushNotificationConfigs            # → TaskPushNotificationConfig
+GET    /a2a/v1/tasks/{id}/pushNotificationConfigs            # → {configs, nextPageToken}
+GET    /a2a/v1/tasks/{id}/pushNotificationConfigs/{configId}
+DELETE /a2a/v1/tasks/{id}/pushNotificationConfigs/{configId} # idempotent
 GET    /a2a/v1/extendedAgentCard         # 未実装 → UnsupportedOperation
-*      /a2a/v1/tasks/{id}/pushNotificationConfigs…  # → PushNotificationNotSupported
 ```
+
+**ストリーミングとプッシュ。** `message:stream` は `message:send` と同じ検証とゲートを通り、`text/event-stream` で応答する。イベントは 1 行の `data:` に 1 つの `StreamResponse`：まず `{task}`、タスクが終わる（または人の承認待ちの `AUTH_REQUIRED` になる）と `{statusUpdate}` を 1 つ送り、閉じる。このパスでは回答は 1 回の LLM 呼び出しで途中出力がないため、粒度はタスクイベント単位。`:subscribe` は GET と POST の両方を受け付け（proto は GET、spec の表は POST）、終了済みのタスクには `UnsupportedOperation` を返す。プッシュ：peer はタスクに webhook を登録でき（`message:send` の `configuration.taskPushNotificationConfig` でも可）、タスクの状態が変わるたびに `{task}` を 1 回 POST する。`Authorization: {scheme} {credentials}` を付け、`token` は `X-A2A-Notification-Token` で送る。webhook は https かつ公開アドレスに解決されなければならない（送信側 A2A と同じ SSRF 規則で、配信時にも再確認し、リダイレクトは追わない）。認証情報は封印して保存し、読み出し時は `scheme` だけを返す。タスクあたり最大 5 個で、登録した peer だけが参照・削除できる。
 
 **Confer 独自の方言**（インスタンス間で使う。`/.well-known/agents.json` から発見される）:
 
@@ -447,7 +479,7 @@ Linux Foundation の **Agent2Agent v1.0** の `AgentCard` に従う（フィー�
 いくつかの意図的な取捨:
 
 - **Agent 1 つにつき Card 1 枚**。`supportedInterfaces[].tenant` はユーザー名。仕様の well-known は 1 ドメインに 1 Agent を前提にしているが、このインスタンスはマルチテナントである。`tenant` はまさに、仕様が「1 つの A2A エンドポイントの背後に複数の Agent」のために定義したルーティング用セレクタだ。`/.well-known/agent-card.json` は**公開 Agent がちょうど 1 つ**のときだけ応答し（単独セルフホストの場合）、そうでなければ 404 を返してエラーメッセージで `agents.json` を指す。適当なアカウントを 1 つ選んで「このドメインの Agent」と称するのは誤りだからである。
-- **`streaming: false`**。ストリーミングのエンドポイントは確かに存在するが、それは Confer 独自の形であって仕様の `SendStreamingMessage` ではない。標準クライアントが使えない能力を宣言するのは、宣言しないよりも悪い。
+- **`streaming: true`、`pushNotifications: true`**。`message:stream`、`:subscribe`、プッシュ設定ルートはいずれも spec の形で応答する。ストリーミングはタスクイベント単位（Task の後に確定した状態を 1 つ）。
 - **`securitySchemes` は宣言しない**。仕様がそこで用意しているのは API キー / HTTP auth / OAuth2 / OIDC / mTLS だが、このエンドポイントはそのどれも受け取らない。求めているのは署名されたリクエストである。適当に 1 つ埋めるのは、必ず拒否される方法で認証してよいとクライアントに告げるに等しい。本当の要求は**必須拡張**（`capabilities.extensions`。`uri` は RFC 9421 のアドレス、`required: true`）として宣言する。仕様がこのために用意した機構がまさにこれだ。
 - Card は**発見ドキュメント**であり、その可視性は `/.well-known/agents.json` と完全に同じである。非公開または停止中の Agent は一律 404。そうでなければこの経路が、持ち主が公開するつもりの無かったアカウントを列挙する手段になってしまう。
 
@@ -493,6 +525,8 @@ DELETE /api/v1/webhooks/{id}
 | `/api/v1/auth/register` | 3/時 per IP |
 | `/api/v1/conversations/*/messages` POST | 60/分 per user |
 | `/a2a/v1/*` | 60/分 per IP・パス、`/a2a/v1` 全体で 300/分 per IP |
+| A2A の質問（両バインディング共通） | peer DID ごと・オーナーごとに 20/分・300/日、同一ドメイン合計 60/分。超過 → 429 / `RESOURCE_EXHAUSTED`（`Retry-After` 付き） |
+| `/api/v1/consult/{peer}` POST | 30/分 per user |
 | WSS | 1 ユーザーあたり同時接続は最大 10 |
 
 制限に掛かったときのレスポンス:

@@ -1,37 +1,23 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
-import { exportPrivateKey, generateEd25519KeyPair, publicKeyToMultibase } from '@confer/identity';
-import {
-  AppError,
-  encrypt,
-  loginRequestSchema,
-  newId,
-  registerRequestSchema,
-} from '@confer/shared';
+import { AppError, loginRequestSchema, newId, registerRequestSchema } from '@confer/shared';
 import { and, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import * as jose from 'jose';
 import { z } from 'zod';
 import { getDb } from '../db/connection.js';
-import { agents, keypairs, sessions, users } from '../db/schema.js';
+import { agents, sessions, users } from '../db/schema.js';
 import { getEnv } from '../env.js';
 import { getConfigValue } from '../lib/app-config.js';
 import { uniqueViolation } from '../lib/db-errors.js';
+import { mintUserKey } from '../lib/keys.js';
+import { hashPassword, verifyPassword } from '../lib/password.js';
 import { userDid } from '../lib/public-identity.js';
-import { authMiddleware, jwtSecret, TOKEN_TYPE } from '../middleware/auth.js';
+import { consumeSecondFactor } from '../lib/two-factor.js';
+import { authMiddleware, jwtSecret, requireSession, TOKEN_TYPE } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rate-limit.js';
 import { disconnectSession, disconnectUser } from '../ws/handler.js';
 
 export const authRoutes = new Hono();
-
-async function hashPassword(password: string): Promise<string> {
-  const argon2 = await import('argon2');
-  return argon2.hash(password);
-}
-
-async function verifyPassword(hash: string, password: string): Promise<boolean> {
-  const argon2 = await import('argon2');
-  return argon2.verify(hash, password);
-}
 
 // Both tokens carry the session id (`sid`) so `/refresh` can consult the backing
 // session (revoked on logout) and `/logout` can target the exact session row.
@@ -175,23 +161,8 @@ authRoutes.post('/register', rateLimit(3, 3600_000), async (c) => {
     name: `${body.display_name ?? body.username}'s Agent`,
   });
 
-  const keyPair = await generateEd25519KeyPair();
-  const pubMultibase = await publicKeyToMultibase(keyPair.publicKey);
-  const privJwk = await exportPrivateKey(keyPair.privateKey);
-  const env = getEnv();
-  const encryptedKey = await encrypt(JSON.stringify(privJwk), env.ENCRYPTION_KEY);
-  if (!encryptedKey.ok) {
-    throw new AppError('encryption_failed', 'Failed to encrypt keypair', 500);
-  }
-
-  await db.insert(keypairs).values({
-    id: newId(),
-    owner_type: 'user',
-    owner_id: userId,
-    key_id: `${did}#key-1`,
-    public_key_multibase: pubMultibase,
-    private_key_jwk_encrypted: encryptedKey.value,
-  });
+  // The account's first signing key, `#key-1`; rotation mints the rest the same way.
+  await mintUserKey(userId, did);
 
   // Register gets a backing session too, so its freshly minted refresh token can
   // be rotated/revoked exactly like a login's (no more stranded, unrevocable
@@ -217,6 +188,10 @@ authRoutes.post('/login', rateLimit(10, 60_000), async (c) => {
   if (user.status === 'disabled') {
     throw new AppError('account_disabled', 'This account has been disabled', 403);
   }
+
+  // Only after the password: asking for a code is how the client learns to
+  // show the second step, and it must not be learnable without the password.
+  if (user.totp_enabled_at) await consumeSecondFactor(user, body);
 
   return c.json(await openSession(user, body));
 });
@@ -322,7 +297,7 @@ authRoutes.post('/refresh', rateLimit(30, 60_000), async (c) => {
   }
 });
 
-authRoutes.post('/logout', authMiddleware, async (c) => {
+authRoutes.post('/logout', authMiddleware, requireSession, async (c) => {
   const { sub, sid } = c.get('user');
   const db = getDb();
   if (sid) {

@@ -4,9 +4,22 @@ export interface LLMToolCallBlock {
   function: { name: string; arguments: string };
 }
 
+/** An image the user attached, inline as base64. Only honoured on `user` messages. */
+export interface LLMImage {
+  /** `image/png`, `image/jpeg`, `image/gif` or `image/webp` — what every vision API accepts. */
+  media_type: string;
+  data: string;
+}
+
 export interface LLMMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
   content: string | null;
+  /**
+   * Images sent with this user message. Each provider puts them in its own
+   * content-block shape; a model without vision rejects the request, which
+   * surfaces as an ordinary turn failure rather than a silently ignored image.
+   */
+  images?: LLMImage[];
   tool_calls?: LLMToolCallBlock[];
   tool_call_id?: string;
   /**

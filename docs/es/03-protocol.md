@@ -49,6 +49,8 @@ Según la especificación de did:web, un **DID con subidentificador** (es decir,
 - El documento DID admite declarar varios métodos de verificación, para rotar sin interrupciones.
 - La clave antigua se conserva al menos 30 días (para que no fallen las peticiones en vuelo).
 - La revocación se hace quitando el método de verificación del documento.
+- Implementación: `POST /api/v1/users/me/keys/rotate` crea `#key-<n>` y firma con ella al instante; la anterior queda como «retirándose» y permanece 30 días en el documento DID solo para verificar. `POST /api/v1/users/me/keys/revoke {key_id}` retira de inmediato una clave en retirada (la que está en uso no se puede revocar directamente; primero hay que rotar). Ambas solo aceptan una sesión iniciada y quedan auditadas.
+- Lado verificador: una firma cuyo keyId no está en nuestra copia en caché del documento DID del peer provoca una nueva descarga (como mucho una vez por minuto y DID), así que el primer mensaje de un peer tras rotar no se rechaza por culpa de nuestra caché.
 
 ## AgentFacts (compatible con NANDA)
 

@@ -37,6 +37,11 @@ POST   /api/v1/auth/register
 POST   /api/v1/auth/login
 POST   /api/v1/auth/refresh
 POST   /api/v1/auth/logout
+POST   /api/v1/auth/password        # {current_password, new_password}
+GET    /api/v1/auth/2fa             # {enabled, recovery_codes_left}
+POST   /api/v1/auth/2fa/setup       # → {secret, otpauth_uri}
+POST   /api/v1/auth/2fa/enable      # {code} → {recovery_codes}
+POST   /api/v1/auth/2fa/disable     # {password, totp_code | recovery_code}
 POST   /api/v1/auth/oauth/{provider}    # OAuth callback
 ```
 
@@ -62,11 +67,24 @@ POST   /api/v1/auth/oauth/{provider}    # OAuth callback
 }
 ```
 
+**দুই-ধাপের সাইন-ইন (TOTP)।** চালু থাকলে `login` সঠিক পাসওয়ার্ডের পর একটি `totp_code` (অথেনটিকেটর অ্যাপের ৬ অঙ্ক) বা `recovery_code`-ও চায়; কোনোটি না থাকলে 401 `totp_required` দেয়, যা দেখে ক্লায়েন্ট দ্বিতীয় ধাপ দেখায়, আর ভুল কোডে 401 `invalid_second_factor`। ভুল পাসওয়ার্ডে সবসময় আগে `invalid_credentials` আসে, তাই অ্যাকাউন্টে দুই-ধাপ চালু কি না তা কখনো প্রকাশ পায় না। প্রতিটি কোড একবারই চলে (ব্যবহৃত সময়-ধাপ লেখা থাকে) এবং প্রতিটি রিকভারি কোড ব্যবহারের পর বাদ যায়; দুটোই একটি শর্তযুক্ত UPDATE-এ খরচ হয়, তাই একসঙ্গে দুটি সাইন-ইন একই কোড দুবার চালাতে পারে না। `setup`-এর গোপন কী AES-256-GCM-এ এনক্রিপ্ট করে রাখা হয় এবং `enable` অ্যাপের কোড দিয়ে নিশ্চিত না করা পর্যন্ত কার্যকর হয় না; `enable` ১০টি রিকভারি কোড শুধু এই একবার দেয় এবং শুধু সেগুলোর হ্যাশ রাখা হয়। `disable`-এর জন্য পাসওয়ার্ড ও দ্বিতীয় ফ্যাক্টর লাগে। `password`-এর জন্য বর্তমান পাসওয়ার্ড লাগে এবং এটি বাকি সব সেশন বন্ধ করে দেয়। এগুলো সবই অডিট লগে লেখা হয় এবং প্রতি অ্যাকাউন্টে মিনিটে ১০ বারে সীমিত। `enable`-এর জন্যও `password` লাগে, তাই শুধু চুরি করা টোকেন দিয়ে কারও অ্যাকাউন্টের সামনে আক্রমণকারীর অথেনটিকেটর বসানো যায় না; দুই-ধাপ চালু থাকলে `password`-এর জন্যও দ্বিতীয় ফ্যাক্টর লাগে। পরপর ৫টি ভুল কোড সেই অ্যাকাউন্টের কোড চেষ্টা ১৫ মিনিটের জন্য আটকে দেয় (429 `too_many_attempts`), যা প্রতি-IP লগইন সীমার অতিরিক্ত। রিকভারি কোড সার্ভার কী দিয়ে HMAC হিসেবে রাখা হয়। যে ব্যবহারকারী অথেনটিকেটর ও রিকভারি কোড দুটোই হারিয়েছেন, তাঁর জন্য অ্যাডমিন `POST /api/v1/admin/users/{id}/reset-2fa` দিয়ে এটি বন্ধ করতে পারেন (অডিট হয়, আর অ্যাডমিনের নিজের অ্যাকাউন্টে কখনো নয়)।
+
+```
+GET    /api/v1/tokens              # [{id, name, prefix, created_at, last_used_at, expires_at}]
+POST   /api/v1/tokens              # {name, expires_in_days?} → {token: {..., token}}
+DELETE /api/v1/tokens/{id}
+```
+
+**ব্যক্তিগত API টোকেন।** যেসব স্ক্রিপ্ট ও টুল মালিক হিসেবে API ডাকে, তাদের জন্য: `Authorization: Bearer cfr_…`, সেশনের access token যে হেডার ব্যবহার করে সেটিই। টোকেন শুধু তৈরির সময় সাদা লেখায় ফেরত আসে; সার্ভার এর SHA-256 আর চেনার জন্য একটি প্রিফিক্স রাখে। ১–৩৬৫ দিনের ঐচ্ছিক মেয়াদ, প্রতি ব্যবহারকারীর সর্বোচ্চ ২০টি, আর মালিক নিষ্ক্রিয় হলেই টোকেন কাজ বন্ধ করে। টোকেন চ্যাটে মালিক যা পারেন তা করতে পারে, কিন্তু এই কাজগুলো শুধু সাইন-ইন সেশন গ্রহণ করে এবং টোকেনকে 403 `session_required` দেয়: লগআউট, পাসওয়ার্ড ও দুই-ধাপের সাইন-ইন, টোকেন পরিচালনা, অনুমতি অনুরোধ ও errand কার্ডে সিদ্ধান্ত, LLM কী বদলানো, এবং সব admin রুট। ফাঁস হওয়া টোকেন মালিকের কাজ করে দিতে পারে, কিন্তু তাঁর হয়ে সিদ্ধান্ত নিতে বা তাঁকে বাইরে আটকে দিতে পারে না। তৈরি ও বাতিল দুটোই অডিট হয়।
+
 ### ব্যবহারকারী ও Agent-এর বিন্যাস
 
 ```
 GET    /api/v1/users/me
 PATCH  /api/v1/users/me
+GET    /api/v1/users/me/keys          # signing keys: current / retiring / revoked
+POST   /api/v1/users/me/keys/rotate   # session only
+POST   /api/v1/users/me/keys/revoke   # {key_id}, session only
 GET    /api/v1/agents/me
 PATCH  /api/v1/agents/me
 PUT    /api/v1/agents/me/policies
@@ -141,6 +159,12 @@ DELETE /api/v1/conversations/{id}/participants/{p_id}
 POST   /api/v1/conversations/{id}/read             # পঠিত চিহ্নিত করুন
 ```
 
+`GET` ডিফল্টভাবে আর্কাইভ না করা কথোপকথন দেয়, আর `?archived=1` দিলে আর্কাইভ করাগুলো; প্রতিটিতে থাকে `unread_count`, অর্থাৎ ব্যবহারকারী শেষবার পঠিত চিহ্নিত করার পর থেকে (কখনো না করে থাকলে যোগ দেওয়ার পর থেকে) অন্যরা যত বার্তা লিখেছে — নিজের বার্তা গোনা হয় না। `PATCH` নেয় `{ name?, archived? }` এবং শুধু কথোপকথনের স্রষ্টা এটি ব্যবহার করতে পারেন। `POST .../read` কলকারীর `last_read_at` এখনকার সময়ে সেট করে। কোনো পরিচিতি আর্কাইভ করা কথোপকথনে লিখলে সেটি আর্কাইভ থেকে বেরিয়ে সবার উপরে চলে আসে।
+
+`GET /api/v1/search/messages?q=&limit=` ব্যবহারকারী যেসব কথোপকথনে আছেন (আর্কাইভ করা সহ) সেগুলোর বার্তার লেখায় উপ-স্ট্রিং খোঁজে, নতুনগুলো আগে; `q` ১–২০০ অক্ষরের, `limit` ডিফল্ট ২০, সর্বোচ্চ ৫০। ফেরত দেয় `{ results: [{ message_id, conversation_id, conversation_name, sender_type, content, created_at }] }`। Postgres-এর পূর্ণ-লেখা অনুসন্ধানের বদলে উপ-স্ট্রিং মিল ব্যবহার করা হয়, কারণ এর অন্তর্নির্মিত কনফিগারেশন চীনা লেখাকে শব্দে ভাগ করে না।
+
+`GET /api/v1/conversations/{id}/export` শুধু অংশগ্রহণকারীদের পুরো কথোপকথন ফেরত দেয়, পুরোনোগুলো আগে এবং সর্বোচ্চ ৫০০০টি: `{ conversation, messages, truncated }`; প্রতিটি বার্তায় থাকে `sender_type`, `sender_did`, অপর পক্ষের এজেন্টের `sender_name`, `content`, `content_json` ও `citations_json`। এটি শুধু তথ্য দেয়; Markdown ক্লায়েন্ট পাঠকের ভাষায় তৈরি করে (কে "আপনি" আর কে "আপনার এজেন্ট")।
+
 `POST /api/v1/conversations/{id}/messages` অনুরোধ:
 
 ```json
@@ -182,6 +206,8 @@ GET    /api/v1/permissions/history               # ইতিহাস
 ঝুলে থাকা অনুরোধের মধ্যে যেগুলোর `action='connect'`, সেগুলো **সংযোগের অনুরোধ** (অচেনা peer প্রথমবার যোগাযোগ করলে A2A প্রবেশপথ এগুলো তৈরি করে)। অনুমোদন (`allow_*`) সেই peer-কে `peer_contacts`-এ লিখে সংযোগ গড়ে; নাকচ করলে গড়ে না।
 
 যেগুলোর `action='ask'`, সেগুলো **আগে থেকেই যুক্ত peer-এর ঝুলে থাকা প্রশ্ন** — Agent-এর নীতি সেই প্রশ্নে `ask_user` স্থির করলে A2A প্রবেশপথ এগুলো তৈরি করে (দেখুন `03-protocol.md`-এর «ঝুলন্ত ইনবক্স (অনুপস্থিতিতে উত্তর)»)। অনুমোদন (`allow_*`) হলে Agent সেই ঝুলে থাকা প্রশ্নের উত্তর দেয়; নাকচ হলে দেয় না।
+
+`allow_always` / `deny_always` হলো **স্থায়ী সিদ্ধান্ত**। আটকে থাকা প্রশ্নে এগুলো সেই পরিচিতির policy override-এর শুরুতে `{ action: 'ask', decision: 'allow' | 'deny' }` নিয়ম লেখে (বা প্রতিস্থাপন করে), ফলে এই peer-এর পরের প্রশ্নগুলোর উত্তর দেওয়া হয় বা প্রত্যাখ্যান করা হয়, আটকে রাখা হয় না; মালিক পরিচিতির policy প্যানেলে নিয়মটি দেখতে ও বাতিল করতে পারেন। সংযোগ অনুরোধে `deny_always` দিলে সেই peer-এর পরের সংযোগ অনুরোধগুলো ইনবক্সে না এসে নিঃশব্দে বাদ পড়ে; DID দিয়ে হাতে peer যোগ করা এখনও কাজ করে।
 
 `GET /pending` প্রতিটি অনুরোধের সঙ্গে একটি `description` দেয় (সংযোগের অনুরোধে কে শুরু করেছে ও তার প্রথম বার্তা; প্রশ্নে কে জিজ্ঞেস করছে ও প্রশ্নের পাঠ) যাতে মালিক বিচার করতে পারেন।
 
@@ -251,9 +277,10 @@ POST   /api/v1/knowledge-bases/{kb_id}/documents/{doc_id}/retry # আবার �
 
 ```
 POST   /api/v1/attachments                       # multipart upload
-GET    /api/v1/attachments/{id}                  # ডাউনলোড (স্বাক্ষরিত URL-এ 302)
-DELETE /api/v1/attachments/{id}
+GET    /api/v1/attachments/{id}/content          # ফাইলটি নিজেই, আপলোডকারী বা সেই বার্তার কথোপকথনের অংশগ্রহণকারীদের জন্য
 ```
+
+আপলোড শুরুতে কোনো বার্তার সঙ্গে যুক্ত থাকে না; `POST /conversations/{id}/messages` `attachment_ids` (সর্বোচ্চ ৫টি) দিয়ে সেটি দাবি করে, আর শুধু প্রেরকের নিজের, এখনও না-পাঠানো আপলোডই দাবি করা যায়। লেখা ছাড়া শুধু সংযুক্তিসহ বার্তাও বৈধ। ছবি বাইট দেখে চেনা হয় (PNG / JPEG / GIF / WebP, প্রতিটি সর্বোচ্চ ৫ MB) এবং মডেলের কাছে ছবি ব্লক হিসেবে যায়; PDF / DOCX / XLSX / লেখা আপলোডের সময় পড়া হয় (সর্বোচ্চ ১০ MB) এবং প্রতিটি টার্নে তাদের লেখা `<attachment>` হিসেবে বার্তার সঙ্গে যায়। SVG লেখা হিসেবে ধরা হয় এবং কখনো ছবি হিসেবে ইনলাইন দেখানো হয় না। `content` শুধু চেনা ছবিই ইনলাইন দেয়; বাকি সব `application/octet-stream` ডাউনলোড। তালিকার প্রতিটি বার্তায় `attachments` থাকে। কথোপকথন মুছলে তার সংযুক্তিও মুছে যায়।
 
 ### ব্যবহার
 
@@ -307,13 +334,13 @@ read.ack                      // পড়ার স্বীকৃতি
 ```
 pong
 message.new                   // নতুন বার্তা
-message.updated
-message.deleted
+message.updated               // সংরক্ষিত, এখনও পাঠানো হয় না
+message.deleted               // সংরক্ষিত, এখনও পাঠানো হয় না
 typing.update                 // কে লিখছে
 presence.update               // পরিচিতজনের আসা-যাওয়া
 permission.request            // যে অনুমতির অনুরোধে ব্যবহারকারীকে সিদ্ধান্ত নিতে হবে
-agent.status                  // আমার Agent কী করছে («ABC-র Agent-কে জিজ্ঞেস করছি…»)
-conversation.updated
+agent.status                  // আমার Agent একটি পরিচিতিকে উত্তর দিচ্ছে: {conversation_id, state: thinking|tool|idle, tool?}; লেখা তৈরি করে ক্লায়েন্ট
+conversation.updated          // একটি পরিচিতি {conversation_id}-এ লিখেছে (হয়তো নতুন কথোপকথন); ক্লায়েন্ট তালিকা হালনাগাদ করে
 ```
 
 `message.new` উদাহরণ:
@@ -410,11 +437,16 @@ POST   /a2a/v1/message:send              # SendMessage → Task
 GET    /a2a/v1/tasks/{id}                # GetTask
 GET    /a2a/v1/tasks                     # ListTasks(কার্সর দিয়ে পৃষ্ঠাভাগ)
 POST   /a2a/v1/tasks/{id}:cancel         # CancelTask → TaskNotCancelable
-POST   /a2a/v1/message:stream            # অবাস্তবায়িত → UnsupportedOperation
-POST   /a2a/v1/tasks/{id}:subscribe      # অবাস্তবায়িত → UnsupportedOperation
+POST   /a2a/v1/message:stream            # SendStreamingMessage → SSE: Task, then statusUpdate
+GET|POST /a2a/v1/tasks/{id}:subscribe    # SubscribeToTask → SSE
+POST   /a2a/v1/tasks/{id}/pushNotificationConfigs            # → TaskPushNotificationConfig
+GET    /a2a/v1/tasks/{id}/pushNotificationConfigs            # → {configs, nextPageToken}
+GET    /a2a/v1/tasks/{id}/pushNotificationConfigs/{configId}
+DELETE /a2a/v1/tasks/{id}/pushNotificationConfigs/{configId} # idempotent
 GET    /a2a/v1/extendedAgentCard         # অবাস্তবায়িত → UnsupportedOperation
-*      /a2a/v1/tasks/{id}/pushNotificationConfigs…  # → PushNotificationNotSupported
 ```
+
+**স্ট্রিমিং ও পুশ।** `message:stream` একই যাচাই ও গেটের মধ্য দিয়ে যায় যেমন `message:send`, এবং `text/event-stream`-এ উত্তর দেয়, প্রতিটি `StreamResponse`-এর জন্য একটি `data:` লাইন: প্রথমে `{task}`, তারপর কাজ শেষ হলে (বা কারও অনুমোদনের অপেক্ষায় `AUTH_REQUIRED`-এ পৌঁছালে) একটি `{statusUpdate}`, তারপর স্ট্রিম বন্ধ। এই পথে উত্তর আংশিক আউটপুট ছাড়া একটি LLM টার্ন, তাই গ্রানুলারিটি কাজ-ঘটনা স্তরের। `:subscribe` GET ও POST দুটোই নেয় (proto-তে GET, spec-এর টেবিলে POST) এবং শেষ হওয়া কাজে `UnsupportedOperation` দেয়। পুশ: peer কোনো কাজে webhook নিবন্ধন করে (বা `message:send`-এ `configuration.taskPushNotificationConfig` দেয়), আর কাজ যে অবস্থায় পৌঁছায় তা একবার `{task}` হিসেবে POST হয়, `Authorization: {scheme} {credentials}` সহ এবং `token` থাকে `X-A2A-Notification-Token`-এ। webhook অবশ্যই https এবং পাবলিক ঠিকানায় রিজলভ হতে হবে (আউটবাউন্ড A2A-র একই SSRF নিয়ম, ডেলিভারির সময় আবার যাচাই হয়, রিডাইরেক্ট মানা হয় না); ক্রেডেনশিয়াল সিল করে রাখা হয় আর শুধু `scheme` ফেরত দেওয়া হয়। প্রতি কাজে সর্বোচ্চ ৫টি, শুধু নিবন্ধনকারী peer দেখতে বা মুছতে পারে।
 
 **Confer-এর নিজস্ব উপভাষা** (ইনস্ট্যান্সে-ইনস্ট্যান্সে; `/.well-known/agents.json` দিয়ে খুঁজে পাওয়া যায়):
 
@@ -447,7 +479,7 @@ Linux Foundation-এর **Agent2Agent v1.0**-এর `AgentCard` অনুসা�
 কয়েকটি সচেতন সিদ্ধান্ত:
 
 - **প্রতি Agent-এ একটি Card**, যেখানে `supportedInterfaces[].tenant` = ব্যবহারকারী-নাম। নির্দেশনার well-known ধরে নেয় এক ডোমেইনে এক Agent, অথচ এই ইনস্ট্যান্স বহু-ভাড়াটে; «একই A2A প্রান্তবিন্দুর পিছনে একাধিক Agent»-এর জন্য নির্দেশনা যে রাউটিং নির্বাচক দিয়েছে, `tenant` ঠিক সেটাই। `/.well-known/agent-card.json` কেবল তখনই উত্তর দেয় যখন **ঠিক একটিই প্রকাশ্য Agent** থাকে (একা স্ব-হোস্ট করার ক্ষেত্র), নইলে 404 দেয় আর ত্রুটি-বার্তায় `agents.json`-এর দিকে দেখায় — যেকোনো একটি অ্যাকাউন্ট বেছে «এই ডোমেইনের Agent» বলা ভুল হতো।
-- **`streaming: false`**। ধারা-আকারের প্রান্তবিন্দু সত্যিই আছে, তবে সেগুলো Confer-এর নিজস্ব আকারের, নির্দেশনার `SendStreamingMessage`-এর নয়। প্রমিত ক্লায়েন্ট ব্যবহার করতে পারবে না এমন সামর্থ্য ঘোষণা করা, না করার চেয়েও খারাপ।
+- **`streaming: true`, `pushNotifications: true`।** `message:stream`, `:subscribe` ও পুশ-কনফিগ রুটগুলো spec-এর আকারে উত্তর দেয়; স্ট্রিমিং কাজ-ঘটনা স্তরের (Task, তারপর একটি চূড়ান্ত অবস্থা)।
 - **`securitySchemes` ঘোষণা করা হয় না**। নির্দেশনা সেখানে দেয় API চাবি, HTTP auth, OAuth2, OIDC কিংবা mTLS — এই প্রান্তবিন্দু এদের একটিও নেয় না; তার চাই স্বাক্ষরিত অনুরোধ। যেকোনো একটি বসিয়ে দেওয়া মানে ক্লায়েন্টকে বলা যে সে এমন উপায়ে প্রমাণীকরণ করতে পারে যা নিশ্চিতভাবেই নাকচ হবে। আসল দাবিটি ঘোষিত হয় **আবশ্যিক এক্সটেনশন** হিসেবে (`capabilities.extensions`, যেখানে `uri` হলো RFC 9421-এর ঠিকানা আর `required: true`) — নির্দেশনা এই কাজের জন্যই এই কলটি রেখেছে।
 - Card একটি **আবিষ্কার-নথি**, আর তার দৃশ্যমানতা হুবহু `/.well-known/agents.json`-এর মতো: অপ্রকাশ্য বা নিষ্ক্রিয় Agent সবসময় 404 দেয়, নইলে এই পথই হয়ে দাঁড়াত মালিক যেসব অ্যাকাউন্ট প্রকাশ করতে চাননি সেগুলো গুনে নেওয়ার উপায়।
 
@@ -493,6 +525,8 @@ DELETE /api/v1/webhooks/{id}
 | `/api/v1/auth/register` | ৩/ঘণ্টা প্রতি IP |
 | `/api/v1/conversations/*/messages` POST | ৬০/মিনিট প্রতি ব্যবহারকারী |
 | `/a2a/v1/*` | ৬০/মিনিট প্রতি IP ও পাথ, পুরো `/a2a/v1` জুড়ে ৩০০/মিনিট প্রতি IP |
+| A2A প্রশ্ন (দুটি বাইন্ডিংই) | প্রতি peer DID প্রতি মালিক ২০/মিনিট ও ৩০০/দিন; প্রতি peer ডোমেইন ৬০/মিনিট। ছাড়ালে → 429 / `RESOURCE_EXHAUSTED`, `Retry-After` সহ |
+| `/api/v1/consult/{peer}` POST | ৩০/মিনিট প্রতি ব্যবহারকারী |
 | WSS | প্রতি ব্যবহারকারীতে সর্বোচ্চ ১০টি যুগপৎ সংযোগ |
 
 সীমা ছাড়ালে উত্তর:

@@ -61,10 +61,11 @@ describe('buildAgentCard', () => {
     expect(extension?.required).toBe(true);
   });
 
-  test('does not claim streaming it cannot deliver in the spec shape', () => {
-    // There IS a streaming endpoint, but it is Confer's own shape rather than
-    // SendStreamingMessage. Advertising it would fail on first use.
-    expect(build().capabilities.streaming).toBe(false);
+  test('claims streaming and push, which the binding serves in the spec shapes', () => {
+    // `message:stream`, `:subscribe` and the push-config routes all answer as
+    // §3.1.2–§3.1.10 describe (see a2a-rest.integration.test.ts); a client that
+    // trusts the Card must not meet UNSUPPORTED_OPERATION on first use.
+    expect(build().capabilities).toMatchObject({ streaming: true, pushNotifications: true });
   });
 
   test('advertises no securityScheme, because it accepts none of them', () => {

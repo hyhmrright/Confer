@@ -6,25 +6,16 @@ import {
   adminUpdateConfigSchema,
   adminUpdateUserSchema,
   adminUserListQuerySchema,
-  newId,
 } from '@confer/shared';
-import { desc, eq, like } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, like, sql } from 'drizzle-orm';
 import { type Context, Hono } from 'hono';
 import { getDb } from '../db/connection.js';
-import {
-  agents,
-  auditLog,
-  conversations,
-  messages,
-  peerContacts,
-  sessions,
-  users,
-} from '../db/schema.js';
+import { agents, conversations, messages, peerContacts, sessions, users } from '../db/schema.js';
 import { getAppConfig, setConfigValue } from '../lib/app-config.js';
-import { clientIp } from '../lib/client-ip.js';
+import { writeAudit } from '../lib/audit.js';
 import { countOf } from '../lib/pagination.js';
 import { adminMiddleware } from '../middleware/admin.js';
-import { authMiddleware } from '../middleware/auth.js';
+import { authMiddleware, requireSession } from '../middleware/auth.js';
 import type { AppEnv } from '../types.js';
 import { disconnectUser } from '../ws/handler.js';
 
@@ -32,40 +23,8 @@ export const adminRoutes = new Hono<AppEnv>();
 
 // Identity first, then role — both gates apply to every /admin/* route.
 adminRoutes.use('/*', authMiddleware);
+adminRoutes.use('/*', requireSession);
 adminRoutes.use('/*', adminMiddleware);
-
-// The audit_log.ip_address column is Postgres `inet`; anything that is not a
-// valid IPv4/IPv6 literal (e.g. `unknown` when no proxy header reached us) is
-// dropped to null rather than failing the write.
-function toInet(value: string): string | null {
-  const isIPv4 = /^(\d{1,3}\.){3}\d{1,3}$/.test(value);
-  const isIPv6 = value.includes(':');
-  return isIPv4 || isIPv6 ? value : null;
-}
-
-// Record an admin write action. Actor and client IP both come off the request
-// context, so no call site has to remember to thread them through. Stores only
-// ids/flags in details_json — never PII (per the forbidden list).
-//
-// The IP comes from `clientIp`, the same resolution the rate limiter uses. This
-// read `x-forwarded-for.split(',')[0]` — the first hop, which any caller can
-// prepend to the header — so an admin acting through a proxy of their choosing
-// could write whatever address they liked into the record of what they did.
-async function writeAudit(
-  c: Context<AppEnv>,
-  action: string,
-  details: Record<string, unknown>,
-): Promise<void> {
-  await getDb()
-    .insert(auditLog)
-    .values({
-      id: newId(),
-      user_id: c.get('user').sub,
-      action,
-      details_json: details,
-      ip_address: toInet(clientIp(c)),
-    });
-}
 
 // Every admin write is the same event: some field of some row went from
 // `before` to `after`. Audit it only when it actually moved — a PATCH that
@@ -106,6 +65,7 @@ adminRoutes.get('/users', async (c) => {
       email: users.email,
       role: users.role,
       status: users.status,
+      two_factor_enabled: sql<boolean>`${users.totp_enabled_at} is not null`,
       created_at: users.created_at,
     })
     .from(users)
@@ -176,6 +136,30 @@ adminRoutes.patch('/users/:id', async (c) => {
     reason: body.reason,
   });
 
+  return c.json({ ok: true });
+});
+
+// The way back for an owner who has lost both their authenticator and their
+// recovery codes: an admin turns two-step sign-in off for them. Never for the
+// admin's own account — from here it would need neither the password nor a
+// code, which is exactly what turning it off is supposed to need.
+adminRoutes.post('/users/:id/reset-2fa', async (c) => {
+  const targetId = c.req.param('id');
+  if (targetId === c.get('user').sub) {
+    throw new AppError('self_modification_forbidden', 'Turn off your own in Settings', 400);
+  }
+  const [reset] = await getDb()
+    .update(users)
+    .set({
+      totp_secret_json: null,
+      totp_enabled_at: null,
+      totp_last_step: null,
+      totp_recovery_json: null,
+    })
+    .where(and(eq(users.id, targetId), isNotNull(users.totp_enabled_at)))
+    .returning({ id: users.id });
+  if (!reset) throw new AppError('not_enabled', 'Two-step sign-in is not on for this user', 404);
+  await writeAudit(c, 'admin.user.reset_2fa', { target_id: targetId });
   return c.json({ ok: true });
 });
 

@@ -38,11 +38,51 @@ export const registerRequestSchema = z.object({
   device_info: deviceInfoSchema,
 });
 
+// The second step, for an account with two-step sign-in on: an authenticator
+// code, or one of the recovery codes issued when it was turned on.
+const secondFactorSchema = {
+  totp_code: z.string().max(16).optional(),
+  recovery_code: z.string().max(32).optional(),
+};
+
 export const loginRequestSchema = z.object({
   username: z.string(),
   password: z.string(),
   device_id: z.string().max(64),
   device_info: deviceInfoSchema,
+  ...secondFactorSchema,
+});
+
+/**
+ * Body of `POST /api/v1/auth/password`. Same length rule as registration; with
+ * two-step sign-in on, a second factor too.
+ */
+export const changePasswordRequestSchema = z.object({
+  current_password: z.string().max(128),
+  new_password: z.string().min(8).max(128),
+  ...secondFactorSchema,
+});
+
+/**
+ * Body of `POST /api/v1/auth/2fa/enable`: the password, and a code from the
+ * newly added app. The password because a stolen token alone must not be able
+ * to put the attacker's authenticator between the owner and their account.
+ */
+export const enableTwoFactorRequestSchema = z.object({
+  password: z.string().max(128),
+  code: z.string().max(16),
+});
+
+/** Body of `POST /api/v1/tokens`. No expiry means the token lasts until revoked. */
+export const createApiTokenRequestSchema = z.object({
+  name: z.string().trim().min(1).max(64),
+  expires_in_days: z.number().int().min(1).max(365).optional(),
+});
+
+/** Body of `POST /api/v1/auth/2fa/disable`: the password and a second factor. */
+export const disableTwoFactorRequestSchema = z.object({
+  password: z.string().max(128),
+  ...secondFactorSchema,
 });
 
 /**

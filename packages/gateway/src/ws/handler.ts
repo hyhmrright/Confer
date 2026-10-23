@@ -149,7 +149,7 @@ async function authenticateUpgrade(
   }
 
   if (!(await sessionIsLive(sub, sid))) return null;
-  return { user: { sub, username, sid }, expiresAt };
+  return { user: { sub, username, sid, via: 'session' }, expiresAt };
 }
 
 /** The account is enabled and the session behind the token still exists. */
@@ -191,6 +191,16 @@ export function disconnectUser(userId: string): void {
   // Copy first: `close` fires the handler below, which mutates this set.
   for (const ws of [...connections]) {
     ws.close(1008, 'Session revoked');
+  }
+}
+
+/**
+ * Close every socket the user holds except those of `keepSid` — a password
+ * change revokes the other devices and leaves the one that made it signed in.
+ */
+export function disconnectOtherSessions(userId: string, keepSid: string | undefined): void {
+  for (const ws of [...(connectionsByUser.get(userId) ?? [])]) {
+    if (ws.data.user.sid !== keepSid) ws.close(1008, 'Session revoked');
   }
 }
 

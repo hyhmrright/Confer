@@ -1,4 +1,5 @@
 import {
+  invalidateDID,
   MAX_CLOCK_SKEW_MS,
   multibaseToPublicKey,
   parseSignatureInput,
@@ -8,6 +9,34 @@ import { AppError } from '@confer/shared';
 import type { Context, MiddlewareHandler } from 'hono';
 import { resolveDidDocument } from '../lib/did-resolution.js';
 import { addNonce, hasNonce } from '../lib/nonce-cache.js';
+
+// When a peer rotates its key, its first message under the new key can arrive
+// while we still hold its old document in cache — and would be refused with a
+// key that is genuinely theirs. So an unknown key forces one fresh fetch. At
+// most once a minute per DID, though: the keyid is the caller's to choose, and
+// an unknown one must not become a way to make us hammer someone's DID host.
+const REFETCH_INTERVAL_MS = 60_000;
+const lastRefetch = new Map<string, number>();
+const MAX_REFETCH_ENTRIES = 500;
+
+async function resolveWithKey(did: string, keyId: string) {
+  const first = await resolveDidDocument(did);
+  if (!first.ok || first.value.verificationMethod.some((m) => m.id === keyId)) return first;
+  const now = Date.now();
+  if (now - (lastRefetch.get(did) ?? 0) < REFETCH_INTERVAL_MS) return first;
+  // A DID's entry only matters for a minute, and anyone can mint DIDs to fill
+  // this: entries past their minute go, and the map never holds more than a cap.
+  for (const [seen, at] of lastRefetch) {
+    if (now - at >= REFETCH_INTERVAL_MS || lastRefetch.size >= MAX_REFETCH_ENTRIES) {
+      lastRefetch.delete(seen);
+    } else break;
+  }
+  // Re-inserted, not updated, so the map stays in time order for the sweep above.
+  lastRefetch.delete(did);
+  lastRefetch.set(did, now);
+  invalidateDID(did);
+  return resolveDidDocument(did);
+}
 
 // A DID `authentication` entry is either a bare string reference to a
 // verification method id or an embedded verification-method object; the key is
@@ -46,7 +75,7 @@ export const verifyA2ASignature: MiddlewareHandler = async (c, next) => {
     throw new AppError('signature_invalid', 'Invalid keyId format in signature', 401);
   }
 
-  const didResult = await resolveDidDocument(senderDid);
+  const didResult = await resolveWithKey(senderDid, keyId);
   if (!didResult.ok) {
     throw new AppError('did_resolution_failed', didResult.error, 401);
   }

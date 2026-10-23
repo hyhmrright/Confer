@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { newId } from '@confer/shared';
 import { getDb } from '../db/connection.js';
-import { conversationParticipants } from '../db/schema.js';
-import { del, get, post, resetDb, type SeededUser, seedUser } from '../test/helpers.js';
+import { conversationParticipants, messages, peerAgents } from '../db/schema.js';
+import { del, get, patch, post, resetDb, type SeededUser, seedUser } from '../test/helpers.js';
 
 const BASE = '/api/v1/conversations';
 let user: SeededUser;
@@ -152,5 +152,149 @@ describe('conversations', () => {
     const res = await post(BASE, { token: user.token, body: {} });
     expect(res.status).toBe(201);
     expect((await res.json()).conversation.type).toBe('direct_user_agent');
+  });
+});
+
+describe('renaming and archiving', () => {
+  const listIds = async (query = '') =>
+    (
+      (await (await get(`${BASE}${query}`, { token: user.token })).json()).conversations as Array<{
+        id: string;
+      }>
+    ).map((c) => c.id);
+
+  test('renames a conversation, and an empty body changes nothing', async () => {
+    const id = await createConversation(user.token);
+
+    const renamed = await patch(`${BASE}/${id}`, {
+      token: user.token,
+      body: { name: '  Q3 plan ' },
+    });
+    expect(renamed.status).toBe(200);
+    expect((await renamed.json()).conversation.name).toBe('Q3 plan');
+
+    const untouched = await patch(`${BASE}/${id}`, { token: user.token, body: {} });
+    expect((await untouched.json()).conversation.name).toBe('Q3 plan');
+  });
+
+  test('rejects a blank name with 400', async () => {
+    const id = await createConversation(user.token);
+    const res = await patch(`${BASE}/${id}`, { token: user.token, body: { name: '   ' } });
+    expect(res.status).toBe(400);
+  });
+
+  test('archiving moves a thread from the list to the archive, and back', async () => {
+    const id = await createConversation(user.token);
+
+    await patch(`${BASE}/${id}`, { token: user.token, body: { archived: true } });
+    expect(await listIds()).toEqual([]);
+    expect(await listIds('?archived=1')).toEqual([id]);
+
+    await patch(`${BASE}/${id}`, { token: user.token, body: { archived: false } });
+    expect(await listIds()).toEqual([id]);
+    expect(await listIds('?archived=1')).toEqual([]);
+  });
+
+  test('only the creator may rename or archive', async () => {
+    const id = await createConversation(user.token);
+    const participant = await seedUser();
+    await getDb().insert(conversationParticipants).values({
+      id: newId(),
+      conversation_id: id,
+      participant_type: 'user',
+      user_id: participant.id,
+    });
+
+    const res = await patch(`${BASE}/${id}`, {
+      token: participant.token,
+      body: { name: 'mine now', archived: true },
+    });
+    expect(res.status).toBe(404);
+    expect(await listIds()).toEqual([id]);
+  });
+});
+
+describe('unread counts', () => {
+  const unreadOf = async (id: string, token = user.token) => {
+    const { conversations } = await (await get(BASE, { token })).json();
+    return (conversations as Array<{ id: string; unread_count: number }>).find((c) => c.id === id)
+      ?.unread_count;
+  };
+
+  // What the agent (or a peer) wrote counts; what the owner wrote does not.
+  async function seedMessage(id: string, sender_type: string, sender_id: string) {
+    await getDb().insert(messages).values({
+      id: newId(),
+      conversation_id: id,
+      sender_type,
+      sender_id,
+      content_type: 'text',
+      content: 'x',
+    });
+  }
+
+  test('counts others’ messages since the last read, and reading clears them', async () => {
+    const id = await createConversation(user.token);
+    await seedMessage(id, 'user', user.id);
+    await seedMessage(id, 'peer_agent', newId());
+    await seedMessage(id, 'own_agent', newId());
+    expect(await unreadOf(id)).toBe(2);
+
+    expect((await post(`${BASE}/${id}/read`, { token: user.token })).status).toBe(200);
+    expect(await unreadOf(id)).toBe(0);
+
+    await seedMessage(id, 'peer_agent', newId());
+    expect(await unreadOf(id)).toBe(1);
+  });
+
+  test('only a participant may mark a thread read', async () => {
+    const id = await createConversation(user.token);
+    const outsider = await seedUser();
+    expect((await post(`${BASE}/${id}/read`, { token: outsider.token })).status).toBe(403);
+  });
+});
+
+describe('export', () => {
+  test('returns the whole thread oldest first, naming the peer who wrote', async () => {
+    const id = await createConversation(user.token);
+    await post(`${BASE}/${id}/messages`, { token: user.token, body: { content: 'first' } });
+    const peerId = newId();
+    await getDb().insert(peerAgents).values({
+      id: peerId,
+      did: 'did:web:vendor.example',
+      name: 'Vendor Bot',
+      endpoint: 'https://vendor.example/a2a/v1',
+      public_key_json: {},
+      agent_facts_json: {},
+    });
+    await getDb().insert(messages).values({
+      id: newId(),
+      conversation_id: id,
+      sender_type: 'peer_agent',
+      sender_id: peerId,
+      sender_did: 'did:web:vendor.example',
+      content: 'second',
+    });
+
+    const res = await get(`${BASE}/${id}/export`, { token: user.token });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.conversation).toMatchObject({ id, name: 'Chat' });
+    expect(body.truncated).toBe(false);
+    expect(
+      body.messages.map((m: { content: string; sender_name: string | null }) => [
+        m.content,
+        m.sender_name,
+      ]),
+    ).toEqual([
+      ['first', null],
+      ['second', 'Vendor Bot'],
+    ]);
+  });
+
+  test('only a participant may export', async () => {
+    const id = await createConversation(user.token);
+    const outsider = await seedUser();
+    expect((await get(`${BASE}/${id}/export`, { token: outsider.token })).status).toBe(403);
   });
 });

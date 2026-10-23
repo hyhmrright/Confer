@@ -31,3 +31,13 @@ export const createConversationRequestSchema = z.object({
 // The type vocabulary survives because it now has a job: it is what validates
 // the `type` a caller may ask for. Note the table also holds `consult` and
 // `probe` threads, which the routes create themselves and no caller may request.
+
+/**
+ * Body of `PATCH /api/v1/conversations/{id}`. Both fields optional; an empty
+ * body changes nothing. `archived` is a toggle rather than a timestamp so the
+ * server, not the caller, decides when the archive happened.
+ */
+export const updateConversationRequestSchema = z.object({
+  name: z.string().trim().min(1).max(255).optional(),
+  archived: z.boolean().optional(),
+});

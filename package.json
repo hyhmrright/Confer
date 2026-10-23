@@ -20,16 +20,16 @@
     "eval:rag": "bun run --filter @confer/gateway eval:rag"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.14",
-    "@types/bun": "^1.4.2",
+    "@biomejs/biome": "^2.5.15",
+    "@types/bun": "^1.4.3",
     "typescript": "^7.0.2"
   },
   "overrides": {
     "@napi-rs/canvas": "0.1.80",
     "fast-uri": "^3.1.5",
-    "zod": "^4.6.5",
+    "zod": "^4.6.7",
     "ip-address": "^10.4.0",
-    "postcss": "^8.5.28",
+    "postcss": "^8.5.30",
     "shell-quote": "^1.10.0",
     "nanoid": "^3.3.18",
     "source-map-js": "^1.2.2"

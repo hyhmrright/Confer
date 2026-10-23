@@ -1,30 +1,34 @@
 import type { PolicyOverrides } from '@confer/shared';
 import { useTranslation } from 'react-i18next';
 import { POLICY_DECISION_LABEL_KEY, POLICY_DECISIONS, POLICY_INHERIT } from '../../lib/policy.js';
-import { SELECT_FIELD_CLS } from '../../lib/styles.js';
+import { FOCUS_RING, SELECT_FIELD_CLS } from '../../lib/styles.js';
 
 type PolicyRule = NonNullable<PolicyOverrides['rules']>[number];
 
-// Shared decision selector + read-only existing-rules display, reused by the
-// agent-default editor (PolicyTab) and the per-contact editor (ContactDetail).
+// Shared decision selector + existing-rules list, reused by the agent-default
+// editor (PolicyTab) and the per-contact editor (ContactDetail).
 // `inheritLabel` is null for the agent default (it has nothing to inherit) and a
 // label string for a per-contact override (the "use agent default" option, which
 // maps to omitting `default`).
 //
-// TODO: rules are rendered read-only in this MVP. A full visual rules editor
-// (add/remove per-action/per-peer decisions) is deferred — see plan §4.
+// Rules can be removed but not composed here. The engine only evaluates the
+// `ask` action today, so the default selector already says everything a new
+// rule could; rules arrive from "Always allow/deny" on a permission card, and
+// removing one is how that standing decision is undone.
 export function PolicyEditor({
   id,
   decision,
   onChange,
   inheritLabel,
   rules,
+  onRemoveRule,
 }: {
   id?: string;
   decision: string;
   onChange: (value: string) => void;
   inheritLabel: string | null;
   rules?: PolicyRule[];
+  onRemoveRule: (index: number) => void;
 }) {
   const { t } = useTranslation();
 
@@ -48,12 +52,12 @@ export function PolicyEditor({
         <span className="block text-xs font-medium text-ink-secondary mb-1">
           {t('policy.rulesHeading')}
         </span>
-        <p className="text-[11px] text-ink-muted mb-2">{t('policy.rulesReadonlyHint')}</p>
+        <p className="text-[11px] text-ink-muted mb-2">{t('policy.rulesHint')}</p>
         {rules && rules.length > 0 ? (
           <ul className="space-y-1.5">
             {rules.map((rule, i) => (
               <li
-                // biome-ignore lint/suspicious/noArrayIndexKey: rules carry no id and action+peer_did can repeat; the list is read-only and never reordered, so the index is a safe tiebreaker
+                // biome-ignore lint/suspicious/noArrayIndexKey: rules carry no id and action+peer_did can repeat; the list is never reordered and has no per-row state, so the index is a safe tiebreaker
                 key={`${rule.action}-${rule.peer_did ?? ''}-${i}`}
                 className="flex items-center gap-2 text-xs px-3 py-2 bg-dark-input border border-dark-border rounded-lg"
               >
@@ -64,6 +68,13 @@ export function PolicyEditor({
                 <span className="ms-auto text-ink-primary shrink-0">
                   {t(POLICY_DECISION_LABEL_KEY[rule.decision])}
                 </span>
+                <button
+                  type="button"
+                  onClick={() => onRemoveRule(i)}
+                  className={`shrink-0 px-2 py-0.5 rounded text-ink-muted hover:text-red-400 hover:bg-dark-hover ${FOCUS_RING}`}
+                >
+                  {t('policy.removeRule')}
+                </button>
               </li>
             ))}
           </ul>

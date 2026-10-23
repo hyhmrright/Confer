@@ -1,12 +1,14 @@
 import { parsePolicyConfig } from '@confer/agent-runtime';
+import { domainFromDid } from '@confer/identity';
 import { newId } from '@confer/shared';
 import { and, eq } from 'drizzle-orm';
 import { getDb } from '../db/connection.js';
-import { type agents, messages, peerContacts } from '../db/schema.js';
+import { type agents, conversations, messages, peerContacts } from '../db/schema.js';
 import { decideAdmission } from '../lib/a2a-admission.js';
 import { runDetached } from '../lib/background.js';
 import { isContact } from '../lib/tenant.js';
-import { broadcastToConversation } from '../ws/handler.js';
+import { consumeQuota } from '../middleware/rate-limit.js';
+import { broadcastToConversation, sendToUser } from '../ws/handler.js';
 import { processA2AMessage } from './answer.js';
 import { holdA2AQuestion, upsertConnectionRequest } from './inbound-permissions.js';
 import { ensurePeerAgent, resolveOrCreateThread } from './inbound-thread.js';
@@ -24,6 +26,8 @@ export type InboundAdmission =
   | { status: 'pending_connection' }
   /** Policy refused the sender outright. Nothing was stored. */
   | { status: 'denied' }
+  /** The peer is over its question quota with this owner. Nothing was stored. */
+  | { status: 'rate_limited'; retryAfterSeconds: number }
   /** Stored, and held for the owner to approve before the agent answers. */
   | { status: 'held'; messageId: string; conversationId: string }
   /** Stored, and the agent loop is running for it in the background. */
@@ -46,6 +50,24 @@ export interface InboundMessageParams {
   };
 }
 
+/** Questions one peer may ask one owner. Generous for a person-paced exchange. */
+export const PEER_QUESTION_LIMITS = [
+  { scope: 'did', limit: 20, windowMs: 60_000 },
+  { scope: 'did', limit: 300, windowMs: 24 * 60 * 60_000 },
+  { scope: 'domain', limit: 60, windowMs: 60_000 },
+] as const;
+
+/** Seconds until the peer may ask again, or 0 when it is within every quota. */
+function overQuota(ownerId: string, peerDid: string): number {
+  const domain = domainFromDid(peerDid) ?? peerDid;
+  for (const { scope, limit, windowMs } of PEER_QUESTION_LIMITS) {
+    const who = scope === 'did' ? peerDid : domain;
+    const used = consumeQuota(`a2a:${scope}:${windowMs}:${ownerId}:${who}`, limit, windowMs);
+    if (!used.ok) return used.retryAfterSeconds;
+  }
+  return 0;
+}
+
 export async function admitInboundMessage(params: InboundMessageParams): Promise<InboundAdmission> {
   const { targetAgent, senderDid, signerDid, threadId, message } = params;
   const db = getDb();
@@ -58,6 +80,15 @@ export async function admitInboundMessage(params: InboundMessageParams): Promise
   if (!(await isContact(targetAgent.user_id, peer.id))) {
     await upsertConnectionRequest(targetAgent.user_id, peer, message.content);
     return { status: 'pending_connection' };
+  }
+
+  // Every question costs the owner a model turn, and the IP limit in front of
+  // this says nothing about who is asking. So a connected peer gets a quota
+  // with each owner — and so does its whole domain, which can mint as many
+  // DIDs as it likes. Answers and notifications cost nothing and are not counted.
+  if (message.type === 'question') {
+    const over = overQuota(targetAgent.user_id, peer.did);
+    if (over) return { status: 'rate_limited', retryAfterSeconds: over };
   }
 
   const [contact] = await db
@@ -107,6 +138,20 @@ export async function admitInboundMessage(params: InboundMessageParams): Promise
       in_reply_to: threadId,
     },
   });
+  // A peer writing is activity: the thread moves to the top of the owner's list,
+  // and comes off the archive shelf if it was there — the way mail does.
+  await db
+    .update(conversations)
+    .set({ updated_at: new Date(), archived_at: null })
+    .where(eq(conversations.id, conversationId));
+
+  // `message.new` only reaches sockets already subscribed to this thread. A
+  // peer opening a new thread has none, so the owner's list never showed it
+  // until they reloaded; this goes to the owner wherever they are.
+  sendToUser(targetAgent.user_id, {
+    type: 'conversation.updated',
+    data: { conversation_id: conversationId },
+  });
 
   // Only a question can be held — an answer or notification never auto-replies,
   // so there is nothing to gate.
@@ -145,6 +190,7 @@ export async function admitInboundMessage(params: InboundMessageParams): Promise
         conversationId,
         peerThreadId: threadId,
         inboundMessageId: messageId,
+        language: message.language,
       }),
     ),
     (error) => console.error('A2A processing failed:', error),

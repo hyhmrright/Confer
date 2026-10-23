@@ -106,6 +106,14 @@ export function PermissionCard({
         </button>
         <button
           type="button"
+          onClick={() => handleDecide('deny_always')}
+          disabled={deciding}
+          className={`px-3 py-1 text-xs rounded-md text-ink-secondary hover:text-ink-primary hover:bg-dark-hover ${DISABLED} ${FOCUS_RING}`}
+        >
+          {t('permission.denyAlways')}
+        </button>
+        <button
+          type="button"
           onClick={() => handleDecide('allow_always')}
           disabled={deciding}
           className={`px-3 py-1 text-xs rounded-md text-ink-secondary hover:text-ink-primary hover:bg-dark-hover ${DISABLED} ${FOCUS_RING}`}

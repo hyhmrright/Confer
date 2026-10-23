@@ -280,14 +280,17 @@
 @media (prefers-reduced-motion: reduce) {
   /* Biome flags the `!important`s below. They are the mechanism, not a
      shortcut around specificity: this override has to beat every animation
-     utility Tailwind emits, including ones authored inline at the call site.
-     Warnings only — `biome check` still exits 0, so CI stays green. */
+     utility Tailwind emits, including ones authored inline at the call site. */
   *,
   *::before,
   *::after {
+    /* biome-ignore lint/complexity/noImportantStyles: Reduced motion must override animation utilities and inline styles. */
     animation-duration: 0.01ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: Reduced motion must stop repeated animations. */
     animation-iteration-count: 1 !important;
+    /* biome-ignore lint/complexity/noImportantStyles: Reduced motion must override transition utilities and inline styles. */
     transition-duration: 0.01ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: Reduced motion must override smooth scrolling. */
     scroll-behavior: auto !important;
   }
 }

@@ -5,6 +5,12 @@ import { api, getToken } from '../lib/api.js';
 import { formatShortDateTime } from '../lib/format-date.js';
 import { gatewayOrigin } from '../lib/gateway.js';
 import { prependNew } from '../lib/list.js';
+import {
+  messageCacheKey,
+  readMessageCache,
+  removeMessageCache,
+  writeMessageCache,
+} from '../lib/message-cache.js';
 import { useAuthStore } from './auth.js';
 
 // Exported because the components that render a thread need the same two
@@ -18,6 +24,14 @@ export interface Citation {
   trust_level?: string;
 }
 
+/** A file sent with a message; the bytes are fetched on demand. */
+export interface AttachmentMeta {
+  id: string;
+  filename: string;
+  content_type: string | null;
+  size_bytes: number | null;
+}
+
 export interface Message {
   id: string;
   conversation_id: string;
@@ -29,6 +43,7 @@ export interface Message {
   created_at: string;
   in_reply_to?: string;
   content_json?: unknown;
+  attachments?: AttachmentMeta[];
 }
 
 interface Conversation {
@@ -37,10 +52,12 @@ interface Conversation {
   name?: string;
   created_at: string;
   updated_at: string;
+  unread_count?: number;
 }
 
 // Matches the gateway's cap for this endpoint's default; one "load older" step.
 const MESSAGE_PAGE_SIZE = 50;
+const INITIAL_MESSAGE_LIMIT = 100;
 
 /**
  * What to show the reader for a stream error, or null when there is nothing to
@@ -58,6 +75,12 @@ interface MessagePage {
   messages: Array<Message & { citations_json?: unknown }>;
 }
 
+export interface PeerTurn {
+  conversation_id: string;
+  state: 'thinking' | 'tool';
+  tool?: string;
+}
+
 interface ChatState {
   conversations: Conversation[];
   activeConversationId: string | null;
@@ -66,21 +89,37 @@ interface ChatState {
   streamContent: string;
   streamCitations: Citation[];
   agentStatus: string | null;
+  // What the owner's agent is doing for a PEER right now (an inbound A2A turn),
+  // which arrives over the socket rather than this tab's own SSE stream. Kept
+  // apart from `agentStatus` because it is not tied to `streaming`, and as facts
+  // rather than a sentence so the header can word it in the reader's locale.
+  peerTurn: PeerTurn | null;
 
   messagesLoading: boolean;
   loadingOlder: boolean;
   // Keyset paging has no total to compare against, so "there is more" is
   // inferred from the last page coming back full.
   hasOlderMessages: boolean;
+  // Which shelf the list shows: live threads, or the archived ones.
+  showArchived: boolean;
+  // The open thread's name as of when it was opened. The list is the fresher
+  // source, but switching shelves can take the open thread out of it.
+  activeConversationName?: string;
 
   loadConversations: () => Promise<void>;
-  selectConversation: (id: string) => Promise<void>;
+  setShowArchived: (show: boolean) => Promise<void>;
+  renameConversation: (id: string, name: string) => Promise<void>;
+  setArchived: (id: string, archived: boolean) => Promise<void>;
+  markRead: (id: string) => Promise<void>;
+  // `name` covers a thread that is not in the list on screen, e.g. a search
+  // hit in the other shelf.
+  selectConversation: (id: string, name?: string) => Promise<void>;
   loadOlderMessages: () => Promise<void>;
   createConversation: (name?: string) => Promise<string>;
   deleteConversation: (id: string) => Promise<void>;
-  sendMessage: (content: string) => Promise<void>;
+  sendMessage: (content: string, attachments?: AttachmentMeta[]) => Promise<void>;
   addMessage: (msg: Message) => void;
-  setAgentStatus: (status: string | null) => void;
+  setPeerTurn: (turn: PeerTurn | null) => void;
 }
 
 // Backend stores RAG citations as `citations_json` (an array of raw doc/kb/excerpt
@@ -100,6 +139,10 @@ function normalizeMessage(apiMsg: Message & { citations_json?: unknown }): Messa
   return apiMsg;
 }
 
+// A view has an identity beyond its conversation id: A → B → A must not
+// revive requests or streams belonging to the first visit to A.
+let conversationView = 0;
+
 export const useChatStore = create<ChatState>((set, get) => ({
   conversations: [],
   activeConversationId: null,
@@ -111,16 +154,54 @@ export const useChatStore = create<ChatState>((set, get) => ({
   streamContent: '',
   streamCitations: [],
   agentStatus: null,
+  peerTurn: null,
+  showArchived: false,
 
   loadConversations: async () => {
-    const data = await api.get<{ conversations: Conversation[] }>('/conversations');
-    set({ conversations: data.conversations });
+    const shelf = get().showArchived;
+    const data = await api.get<{ conversations: Conversation[] }>(
+      shelf ? '/conversations?archived=1' : '/conversations',
+    );
+    // A reply for the other shelf, if the owner switched while it was in flight.
+    if (get().showArchived === shelf) set({ conversations: data.conversations });
   },
 
-  selectConversation: async (id) => {
-    set({
+  setShowArchived: async (show) => {
+    set({ showArchived: show, conversations: [] });
+    await get().loadConversations();
+  },
+
+  renameConversation: async (id, name) => {
+    const data = await api.patch<{ conversation: Conversation }>(`/conversations/${id}`, { name });
+    set((s) => ({
+      conversations: s.conversations.map((c) =>
+        c.id === id ? { ...c, name: data.conversation.name } : c,
+      ),
+    }));
+  },
+
+  // Either way the thread leaves the shelf on screen; it is on the other one now.
+  setArchived: async (id, archived) => {
+    await api.patch(`/conversations/${id}`, { archived });
+    set((s) => ({ conversations: s.conversations.filter((c) => c.id !== id) }));
+  },
+
+  markRead: async (id) => {
+    set((s) => ({
+      conversations: s.conversations.map((c) => (c.id === id ? { ...c, unread_count: 0 } : c)),
+    }));
+    await api.post(`/conversations/${id}/read`, {});
+  },
+
+  selectConversation: async (id, name) => {
+    const view = ++conversationView;
+    const key = currentCacheKey(id);
+    const cached = key ? await readMessageCache(key) : [];
+    if (conversationView !== view || currentCacheKey(id) !== key) return;
+    set((s) => ({
       activeConversationId: id,
-      messages: [],
+      activeConversationName: s.conversations.find((c) => c.id === id)?.name ?? name,
+      messages: cached,
       messagesLoading: true,
       // Thread-scoped, so they reset with the thread. This also releases the
       // flag if an older-history fetch is still in flight — it will find the
@@ -131,19 +212,42 @@ export const useChatStore = create<ChatState>((set, get) => ({
       streamContent: '',
       streamCitations: [],
       agentStatus: null,
-    });
+    }));
     try {
       const data = await api.get<MessagePage>(
-        `/conversations/${id}/messages?limit=${MESSAGE_PAGE_SIZE}`,
+        `/conversations/${id}/messages?limit=${INITIAL_MESSAGE_LIMIT}`,
       );
+      if (
+        conversationView !== view ||
+        get().activeConversationId !== id ||
+        currentCacheKey(id) !== key
+      )
+        return;
       set({
         messages: data.messages.map(normalizeMessage),
         messagesLoading: false,
-        hasOlderMessages: data.messages.length === MESSAGE_PAGE_SIZE,
+        hasOlderMessages: data.messages.length === INITIAL_MESSAGE_LIMIT,
       });
-    } catch {
-      set({ messagesLoading: false });
+    } catch (error) {
+      if (
+        conversationView !== view ||
+        get().activeConversationId !== id ||
+        currentCacheKey(id) !== key
+      )
+        return;
+      const status = error && typeof error === 'object' && 'status' in error ? error.status : null;
+      if (status === 403 || status === 404) {
+        if (key) void removeMessageCache(key);
+        set({ messages: [], messagesLoading: false });
+      } else {
+        set({ messagesLoading: false });
+      }
+      return;
     }
+    // Best-effort: a failed mark leaves a stale badge, not a broken thread.
+    get()
+      .markRead(id)
+      .catch(() => {});
   },
 
   // Walk backwards through the thread. The endpoint has always supported this
@@ -152,6 +256,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   // unreachable from the UI.
   loadOlderMessages: async () => {
     const { activeConversationId, messages, loadingOlder, hasOlderMessages } = get();
+    const view = conversationView;
     const oldest = messages[0];
     if (!activeConversationId || !oldest || loadingOlder || !hasOlderMessages) return;
 
@@ -162,7 +267,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       );
       // The user can switch conversations while this is in flight; without this
       // check the older page would be prepended to a different thread.
-      if (get().activeConversationId !== activeConversationId) return;
+      if (conversationView !== view || get().activeConversationId !== activeConversationId) return;
       const older = data.messages.map(normalizeMessage);
       set((s) => ({
         messages: prependNew(s.messages, older),
@@ -170,6 +275,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         loadingOlder: false,
       }));
     } catch {
+      if (conversationView !== view || get().activeConversationId !== activeConversationId) return;
       set({ loadingOlder: false });
     }
   },
@@ -191,6 +297,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   deleteConversation: async (id) => {
     await api.delete(`/conversations/${id}`);
+    const key = currentCacheKey(id);
+    if (key) void removeMessageCache(key);
     set((s) => {
       const filtered = s.conversations.filter((c) => c.id !== id);
       const next =
@@ -203,13 +311,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
   },
 
-  sendMessage: async (content) => {
+  sendMessage: async (content, attachments = []) => {
     const { activeConversationId } = get();
     if (!activeConversationId) return;
 
+    const view = conversationView;
+    // Keep consuming the original stream so its server-side turn can complete,
+    // but only the view that started it may display its progress or result.
+    const setCurrent: typeof set = (update) => {
+      if (conversationView === view && get().activeConversationId === activeConversationId) {
+        set(update);
+      }
+    };
+
     const data = await api.post<{ id: string; stream_url: string }>(
       `/conversations/${activeConversationId}/messages`,
-      { content, content_type: 'text', via: 'web' },
+      { content, content_type: 'text', via: 'web', attachment_ids: attachments.map((a) => a.id) },
     );
 
     const { user } = useAuthStore.getState();
@@ -221,10 +338,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
       content,
       content_type: 'text',
       created_at: new Date().toISOString(),
+      attachments,
     };
-    set((s) => ({ messages: [...s.messages, userMsg] }));
+    setCurrent((s) => ({ messages: [...s.messages, userMsg] }));
 
-    set({
+    setCurrent({
       streaming: true,
       streamContent: '',
       streamCitations: [],
@@ -240,7 +358,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         headers: { Authorization: `Bearer ${getToken() ?? ''}` },
       });
       if (!res.ok || !res.body) {
-        set({ streaming: false, agentStatus: null });
+        setCurrent({ streaming: false, agentStatus: null });
         return;
       }
 
@@ -262,7 +380,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           created_at: new Date().toISOString(),
           in_reply_to: data.id,
         };
-        set((s) => ({
+        setCurrent((s) => ({
           // The gateway broadcasts `message.new` over the WebSocket *before* it
           // writes the stream's `done` event, so this same reply has usually
           // already arrived via addMessage. Appending unconditionally rendered
@@ -296,20 +414,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
             if (event.text) {
               fullContent += event.text;
-              set({ streamContent: fullContent, agentStatus: null });
+              setCurrent({ streamContent: fullContent, agentStatus: null });
             }
 
             if (event.source) {
               citations.push(event);
-              set({ streamCitations: [...citations] });
+              setCurrent({ streamCitations: [...citations] });
             }
 
             if (event.tool) {
-              set({ agentStatus: i18n.t('message.statusCallingTool', { tool: event.tool }) });
+              setCurrent({
+                agentStatus: i18n.t('message.statusCallingTool', { tool: event.tool }),
+              });
             }
 
             if (event.result !== undefined) {
-              set({ agentStatus: null });
+              setCurrent({ agentStatus: null });
             }
 
             // The reader keys off the payload, not the `event:` line it skips,
@@ -318,7 +438,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             // committed an empty reply under a made-up id — a blank bubble
             // presented as the agent's answer.
             if (event.message) {
-              set({
+              setCurrent({
                 streaming: false,
                 streamContent: '',
                 streamCitations: [],
@@ -340,19 +460,65 @@ export const useChatStore = create<ChatState>((set, get) => ({
         finalizeAgent();
       }
     } catch {
-      set({ streaming: false, streamContent: '', agentStatus: null });
+      setCurrent({ streaming: false, streamContent: '', agentStatus: null });
     }
   },
 
   addMessage: (msg) => {
     set((s) => {
-      if (msg.conversation_id !== s.activeConversationId) return s;
-      if (s.messages.some((m) => m.id === msg.id)) return s;
-      return { messages: [...s.messages, msg] };
+      // The agent's reply ends its peer turn. The `idle` status says so too, but
+      // a socket that dropped mid-turn never hears it, and the header would
+      // otherwise claim the agent is still answering for good.
+      const peerTurn =
+        msg.sender_type === 'own_agent' && s.peerTurn?.conversation_id === msg.conversation_id
+          ? null
+          : s.peerTurn;
+      if (msg.conversation_id !== s.activeConversationId) return { peerTurn };
+      if (s.messages.some((m) => m.id === msg.id)) return { peerTurn };
+      return { messages: [...s.messages, msg], peerTurn };
     });
   },
 
-  setAgentStatus: (status) => {
-    set({ agentStatus: status });
+  setPeerTurn: (turn) => {
+    set({ peerTurn: turn });
   },
 }));
+
+function currentCacheKey(conversationId: string): string | null {
+  const userId = useAuthStore.getState().user?.id;
+  return userId
+    ? messageCacheKey(gatewayOrigin() || location.origin, userId, conversationId)
+    : null;
+}
+
+// Only settled pages and message writes are snapshots; SSE tokens are ephemeral.
+useChatStore.subscribe((state, previous) => {
+  if (
+    state.messages === previous.messages ||
+    state.messagesLoading ||
+    !state.activeConversationId ||
+    state.activeConversationId !== previous.activeConversationId
+  )
+    return;
+  const key = currentCacheKey(state.activeConversationId);
+  if (key) void writeMessageCache(key, state.messages);
+});
+
+// Invalidate in-flight views before a later account can see their responses.
+useAuthStore.subscribe((state, previous) => {
+  if (state.user?.id === previous.user?.id) return;
+  ++conversationView;
+  useChatStore.setState({
+    conversations: [],
+    activeConversationId: null,
+    messages: [],
+    messagesLoading: false,
+    loadingOlder: false,
+    hasOlderMessages: false,
+    streaming: false,
+    streamContent: '',
+    streamCitations: [],
+    agentStatus: null,
+    peerTurn: null,
+  });
+});

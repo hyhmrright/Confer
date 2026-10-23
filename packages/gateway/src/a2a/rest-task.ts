@@ -124,6 +124,14 @@ export async function describeTasks(
  * from the same monotonic generator, so the oldest id in the batch is a sound
  * floor and never hides a row that could have matched.
  */
+/**
+ * The decisions that refuse a held question — what `POST /permissions/:id/decide`
+ * actually writes. This matched a `'denied'` that nothing writes (only a test
+ * fixture did), so a question the owner refused sat at WORKING forever instead
+ * of REJECTED, and a client waiting on it waited for good.
+ */
+const DENIALS: string[] = ['deny', 'deny_always'];
+
 async function approvalGates(unanswered: MessageRow[]): Promise<Map<string, 'pending' | 'denied'>> {
   const gates = new Map<string, 'pending' | 'denied'>();
   if (unanswered.length === 0) return gates;
@@ -148,7 +156,7 @@ async function approvalGates(unanswered: MessageRow[]): Promise<Map<string, 'pen
         inArray(permissions.user_id, ownerIds),
         inArray(permissions.peer_id, peerIds),
         eq(permissions.action, 'ask'),
-        inArray(permissions.decision, ['pending', 'denied']),
+        inArray(permissions.decision, ['pending', ...DENIALS]),
         gte(permissions.id, oldest),
       ),
     );
@@ -156,8 +164,9 @@ async function approvalGates(unanswered: MessageRow[]): Promise<Map<string, 'pen
   for (const row of rows) {
     const scope = asA2AQuestionScope(row.scope);
     if (!scope) continue;
-    if (row.decision === 'pending' || row.decision === 'denied') {
-      gates.set(scope.inbound_message_id, row.decision);
+    if (row.decision === 'pending') gates.set(scope.inbound_message_id, 'pending');
+    else if (row.decision && DENIALS.includes(row.decision)) {
+      gates.set(scope.inbound_message_id, 'denied');
     }
   }
   return gates;

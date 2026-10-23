@@ -1,8 +1,6 @@
 import { decrypt, type EncryptedValue, err, ok, type Result } from '@confer/shared';
-import { and, eq } from 'drizzle-orm';
-import { getDb } from '../db/connection.js';
-import { keypairs } from '../db/schema.js';
 import { getEnv } from '../env.js';
+import { currentKey, userKeys } from '../lib/keys.js';
 
 export interface AgentSigningKey {
   keyId: string;
@@ -29,19 +27,9 @@ export interface AgentSigningKey {
 export async function loadOwnerSigningKey(
   userId: string,
 ): Promise<Result<AgentSigningKey, string>> {
-  const db = getDb();
-  const [keypair] = await db
-    .select()
-    .from(keypairs)
-    .where(
-      and(
-        eq(keypairs.owner_type, 'user'),
-        eq(keypairs.owner_id, userId),
-        eq(keypairs.is_active, true),
-      ),
-    )
-    .limit(1);
-
+  // The current key, never a retiring one: after a rotation the new key signs
+  // from the first request, and the old one only lingers to verify.
+  const keypair = await currentKey(userKeys(userId));
   if (!keypair) return err('no_signing_key');
 
   const decrypted = await decrypt(

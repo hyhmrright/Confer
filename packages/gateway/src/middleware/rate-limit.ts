@@ -26,6 +26,32 @@ function sweepExpired(now: number): void {
   }
 }
 
+/**
+ * Count one use of `key` against `limit` per `windowMs`. The counting itself,
+ * for callers that are not middleware — the A2A admission flow limits by who
+ * the signature proved the caller to be, which no request header can tell.
+ */
+export function consumeQuota(
+  key: string,
+  limit: number,
+  windowMs: number,
+): { ok: true } | { ok: false; retryAfterSeconds: number } {
+  const now = Date.now();
+  sweepExpired(now);
+
+  let entry = counters.get(key);
+  if (!entry || now > entry.resetAt) {
+    entry = { count: 0, resetAt: now + windowMs };
+    counters.set(key, entry);
+  }
+
+  entry.count++;
+  if (entry.count > limit) {
+    return { ok: false, retryAfterSeconds: Math.ceil((entry.resetAt - now) / 1000) };
+  }
+  return { ok: true };
+}
+
 interface RateLimitOptions<E extends Env> {
   // Build the throttle key from the request. When provided the key is used
   // as-is (the caller owns any namespacing); otherwise the default keys by
@@ -40,19 +66,9 @@ export function rateLimit<E extends Env = Env>(
 ) {
   return createMiddleware<E>(async (c, next) => {
     const key = opts?.keyBy ? opts.keyBy(c) : `${clientIp(c)}:${c.req.path}`;
-    const now = Date.now();
-    sweepExpired(now);
-
-    let entry = counters.get(key);
-    if (!entry || now > entry.resetAt) {
-      entry = { count: 0, resetAt: now + windowMs };
-      counters.set(key, entry);
-    }
-
-    entry.count++;
-    if (entry.count > limit) {
-      const retryAfter = Math.ceil((entry.resetAt - now) / 1000);
-      c.header('Retry-After', String(retryAfter));
+    const used = consumeQuota(key, limit, windowMs);
+    if (!used.ok) {
+      c.header('Retry-After', String(used.retryAfterSeconds));
       throw new AppError('rate_limited', 'Too many requests', 429);
     }
 

@@ -9,6 +9,7 @@ import { useAuthStore } from '../stores/auth.js';
 import type { Message } from '../stores/chat.js';
 import { useContactsStore } from '../stores/contacts.js';
 import { CitationCapsule } from './CitationCapsule.js';
+import { MessageAttachments } from './MessageAttachments.js';
 import { MessageEntry } from './MessageEntry.js';
 import { PermissionCard } from './PermissionCard.js';
 
@@ -92,6 +93,7 @@ export const MessageBubble = memo(function MessageBubble({ message }: { message:
       <div className="markdown-content text-sm leading-relaxed">
         <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content ?? ''}</ReactMarkdown>
       </div>
+      {message.attachments && <MessageAttachments attachments={message.attachments} />}
       {message.citations && <CitationCapsule citations={message.citations} />}
     </MessageEntry>
   );

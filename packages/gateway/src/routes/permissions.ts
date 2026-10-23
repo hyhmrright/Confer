@@ -1,12 +1,19 @@
-import { AppError, decidePermissionRequestSchema, newId } from '@confer/shared';
+import {
+  AppError,
+  decidePermissionRequestSchema,
+  newId,
+  policyOverridesSchema,
+} from '@confer/shared';
 import { and, desc, eq, isNull, ne, or } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { resumeHeldA2AQuestion } from '../a2a/answer.js';
+import { asA2AQuestionScope } from '../a2a/inbound-permissions.js';
+import { queueTaskPush } from '../a2a/push.js';
 import { getDb } from '../db/connection.js';
 import { peerAgents, peerContacts, permissions } from '../db/schema.js';
 import { runDetached } from '../lib/background.js';
 import { toPermissionRequestEvent } from '../lib/permission-notify.js';
-import { authMiddleware } from '../middleware/auth.js';
+import { authMiddleware, requireSession } from '../middleware/auth.js';
 import type { AppEnv } from '../types.js';
 
 export const permissionRoutes = new Hono<AppEnv>();
@@ -45,7 +52,8 @@ permissionRoutes.get('/pending', async (c) => {
   return c.json({ permissions: rows.map(toPermissionRequestEvent) });
 });
 
-permissionRoutes.post('/:id/decide', async (c) => {
+// A decision is the owner's consent; a script holding their token may not give it.
+permissionRoutes.post('/:id/decide', requireSession, async (c) => {
   const user = c.get('user');
   const db = getDb();
   const id = c.req.param('id');
@@ -97,6 +105,23 @@ permissionRoutes.post('/:id/decide', async (c) => {
       .onConflictDoNothing();
   }
 
+  // "Always" on a held question is a standing grant for this peer, so the next
+  // question is not held again. It becomes a rule on the contact's own policy —
+  // where the owner can see and revoke it in the contact panel — rather than a
+  // permission row every later request would have to go looking for.
+  if (row.action === 'ask' && row.peer_id && body.decision.endsWith('_always')) {
+    await setStandingAskRule(
+      user.sub,
+      row.peer_id,
+      body.decision === 'allow_always' ? 'allow' : 'deny',
+    );
+  }
+
+  // A refusal ends the peer's task (REJECTED); a webhook on it should hear so.
+  // An approval needs no push here: the answer it leads to sends its own.
+  const held = row.action === 'ask' ? asA2AQuestionScope(row.scope_json) : null;
+  if (held && body.decision.startsWith('deny')) queueTaskPush(held.inbound_message_id);
+
   // Approving a held A2A question lets the agent answer it now. Run the agent
   // loop fire-and-forget so this endpoint returns immediately without waiting
   // on the LLM; denials simply leave the request in history with no reply.
@@ -115,6 +140,33 @@ permissionRoutes.post('/:id/decide', async (c) => {
 
   return c.json({ ok: true });
 });
+
+// Put an `ask` rule at the front of the contact's policy override, replacing any
+// earlier one so repeated "always" decisions don't stack. A peer that is no
+// longer a contact has nothing to attach a rule to; the consent gate already
+// keeps it out.
+async function setStandingAskRule(
+  userId: string,
+  peerId: string,
+  decision: 'allow' | 'deny',
+): Promise<void> {
+  const db = getDb();
+  const [contact] = await db
+    .select({ id: peerContacts.id, overrides: peerContacts.policy_overrides_json })
+    .from(peerContacts)
+    .where(and(eq(peerContacts.user_id, userId), eq(peerContacts.peer_id, peerId)))
+    .limit(1);
+  if (!contact) return;
+
+  const parsed = policyOverridesSchema.safeParse(contact.overrides ?? {});
+  const current = parsed.success ? parsed.data : {};
+  const rules = (current.rules ?? []).filter((r) => r.action !== 'ask');
+
+  await db
+    .update(peerContacts)
+    .set({ policy_overrides_json: { ...current, rules: [{ action: 'ask', decision }, ...rules] } })
+    .where(eq(peerContacts.id, contact.id));
+}
 
 permissionRoutes.get('/history', async (c) => {
   const user = c.get('user');

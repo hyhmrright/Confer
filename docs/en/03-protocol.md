@@ -43,6 +43,8 @@ The DID form of a user Agent: `did:web:acme.com:agents:laowang` — primary inst
 - The DID document supports declaring multiple verification methods for smooth rotation
 - Old keys are retained for at least 30 days (to prevent in-flight requests from failing)
 - Revocation is done by removing the verification method from the document
+- Implementation: `POST /api/v1/users/me/keys/rotate` mints `#key-<n>` and signs with it at once; the old key is marked retiring and stays in the DID document for 30 days, for verification only. `POST /api/v1/users/me/keys/revoke {key_id}` takes a retiring key out immediately (the key in use cannot be revoked directly; rotate first). Both accept only a signed-in session and are audited.
+- Verifier side: a signature whose keyId is not in our cached copy of the peer's DID document triggers one fresh fetch (at most once a minute per DID), so a peer's first message after it rotates is not refused because of our cache.
 
 ## AgentFacts (NANDA-compatible)
 

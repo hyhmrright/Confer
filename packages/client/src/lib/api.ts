@@ -178,6 +178,7 @@ export interface ApiClient {
   put: <T>(path: string, body: unknown) => Promise<T>;
   delete: <T>(path: string) => Promise<T>;
   postForm: <T>(path: string, form: FormData) => Promise<T>;
+  getBlob: (path: string) => Promise<Blob>;
 }
 
 export const api: ApiClient = {
@@ -197,5 +198,13 @@ export const api: ApiClient = {
   postForm: async <T>(path: string, form: FormData): Promise<T> => {
     const res = await fetchWithAuth(path, { method: 'POST', body: form });
     return parseOrThrow<T>(res, 'Upload failed');
+  },
+
+  // A file the API serves, fetched with the session's token — which an <img>
+  // or <a href> cannot send, since the token lives in JS rather than a cookie.
+  getBlob: async (path: string): Promise<Blob> => {
+    const res = await fetchWithAuth(path, {});
+    if (!res.ok) throw new ApiError(res.status, 'Download failed');
+    return res.blob();
   },
 };

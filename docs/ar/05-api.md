@@ -37,6 +37,11 @@ POST   /api/v1/auth/register
 POST   /api/v1/auth/login
 POST   /api/v1/auth/refresh
 POST   /api/v1/auth/logout
+POST   /api/v1/auth/password        # {current_password, new_password}
+GET    /api/v1/auth/2fa             # {enabled, recovery_codes_left}
+POST   /api/v1/auth/2fa/setup       # → {secret, otpauth_uri}
+POST   /api/v1/auth/2fa/enable      # {code} → {recovery_codes}
+POST   /api/v1/auth/2fa/disable     # {password, totp_code | recovery_code}
 POST   /api/v1/auth/oauth/{provider}    # OAuth callback
 ```
 
@@ -62,11 +67,24 @@ POST   /api/v1/auth/oauth/{provider}    # OAuth callback
 }
 ```
 
+**تسجيل الدخول بخطوتين (TOTP).** عند تفعيله، يطلب `login` بعد كلمة مرور صحيحة أيضًا `totp_code` (6 أرقام من تطبيق مصادقة) أو `recovery_code`؛ وبدونهما يرد بـ 401 `totp_required`، وبه يعرف العميل أن عليه إظهار الخطوة الثانية، ويرد على الرمز الخاطئ بـ 401 `invalid_second_factor`. كلمة المرور الخاطئة يُرد عليها دائمًا أولًا بـ `invalid_credentials`، فلا يُكشف أبدًا إن كان الحساب يستخدم الخطوتين. كل رمز يصلح مرة واحدة (تُسجَّل الخطوة الزمنية المستخدمة)، وكل رمز استرداد يُشطب عند استخدامه؛ ويُستهلك كلاهما بعملية UPDATE مشروطة واحدة، فلا يمكن لعمليتي دخول متزامنتين إعادة استخدام رمز. يُخزَّن سر `setup` مشفرًا بـ AES-256-GCM ولا يعمل حتى يؤكد `enable` رمزًا من التطبيق؛ ويعيد `enable` رموز الاسترداد العشرة هذه المرة فقط ولا يُحتفظ إلا بتجزئاتها. يتطلب `disable` كلمة المرور وعاملًا ثانيًا. ويتطلب `password` كلمة المرور الحالية ويُنهي كل الجلسات الأخرى. كل ذلك يُسجَّل في سجل التدقيق ومحدود بـ 10 مرات في الدقيقة لكل حساب. يتطلب `enable` أيضًا `password`، فلا يكفي رمز مسروق وحده لوضع تطبيق مصادقة المهاجم أمام حساب شخص آخر؛ ومع تفعيل الخطوتين، يتطلب `password` عاملًا ثانيًا أيضًا. خمسة رموز خاطئة متتالية تقفل محاولات الرمز لذلك الحساب لمدة 15 دقيقة (429 `too_many_attempts`)، إضافة إلى حد تسجيل الدخول لكل IP. تُخزَّن رموز الاسترداد كـ HMAC بمفتاح الخادم. وللمستخدم الذي فقد تطبيق المصادقة ورموز الاسترداد معًا، يستطيع المسؤول إيقافه عبر `POST /api/v1/admin/users/{id}/reset-2fa` (يُسجَّل في سجل التدقيق، ولا يُستخدم أبدًا لحساب المسؤول نفسه).
+
+```
+GET    /api/v1/tokens              # [{id, name, prefix, created_at, last_used_at, expires_at}]
+POST   /api/v1/tokens              # {name, expires_in_days?} → {token: {..., token}}
+DELETE /api/v1/tokens/{id}
+```
+
+**رموز API الشخصية.** للبرامج النصية والأدوات التي تستدعي الـ API باسم المالك: `Authorization: Bearer cfr_…`، وهو الترويسة نفسها التي يستخدمها access token للجلسة. لا يُعاد الرمز نصًا صريحًا إلا عند إنشائه؛ ويحتفظ الخادم بتجزئة SHA-256 له وببادئة للتعرف عليه. صلاحية اختيارية من 1 إلى 365 يومًا، و20 رمزًا كحد أقصى لكل مستخدم، ويتوقف الرمز عن العمل فور تعطيل صاحبه. يستطيع الرمز فعل ما يفعله المالك في الدردشة، لكن العمليات التالية لا تقبل إلا جلسة مسجّلة وترد على الرمز بـ 403 `session_required`: تسجيل الخروج، وكلمة المرور والتحقق بخطوتين، وإدارة الرموز، والبت في طلبات الأذونات وبطاقات errands، وتغيير مفاتيح LLM، وكل مسارات المسؤول. يستطيع الرمز المسرّب قضاء مهام المالك، لكنه لا يستطيع اتخاذ القرار عنه ولا إقفاله خارج حسابه. الإنشاء والإبطال يُسجَّلان في سجل التدقيق.
+
 ### إعدادات المستخدم والوكيل
 
 ```
 GET    /api/v1/users/me
 PATCH  /api/v1/users/me
+GET    /api/v1/users/me/keys          # signing keys: current / retiring / revoked
+POST   /api/v1/users/me/keys/rotate   # session only
+POST   /api/v1/users/me/keys/revoke   # {key_id}, session only
 GET    /api/v1/agents/me
 PATCH  /api/v1/agents/me
 PUT    /api/v1/agents/me/policies
@@ -141,6 +159,12 @@ DELETE /api/v1/conversations/{id}/participants/{p_id}
 POST   /api/v1/conversations/{id}/read             # التعليم كمقروء
 ```
 
+يعرض `GET` افتراضيًا المحادثات غير المؤرشفة، ومع `?archived=1` المؤرشفة؛ وتحمل كل محادثة `unread_count`، أي عدد الرسائل التي كتبها الآخرون منذ آخر مرة علّمها المستخدم مقروءة (أو منذ انضمامه إن لم يفعل قط)، ولا تُحتسب رسائله هو. يقبل `PATCH` الحقلين `{ name?, archived? }` ولا يستخدمه إلا منشئ المحادثة. يضبط `POST .../read` قيمة `last_read_at` للمستخدم على الوقت الحالي. وإذا كتبت جهة اتصال في محادثة مؤرشفة، تُلغى أرشفتها وتنتقل إلى الأعلى.
+
+يبحث `GET /api/v1/search/messages?q=&limit=` عن سلسلة جزئية في نص الرسائل عبر كل المحادثات التي يشارك فيها المستخدم، بما فيها المؤرشفة، والأحدث أولًا؛ طول `q` من 1 إلى 200 حرف، و`limit` افتراضيًا 20 وبحد أقصى 50. يعيد `{ results: [{ message_id, conversation_id, conversation_name, sender_type, content, created_at }] }`. يُستخدم البحث بالسلسلة الجزئية بدل البحث النصي الكامل في Postgres لأن إعداداته المدمجة لا تقطّع النص الصيني.
+
+يعيد `GET /api/v1/conversations/{id}/export` المحادثة كاملة، من الأقدم إلى الأحدث وبحد أقصى 5000 رسالة، للمشاركين فقط: `{ conversation, messages, truncated }`، وتحمل كل رسالة `sender_type` و`sender_did` و`sender_name` لوكيل الطرف الآخر و`content` و`content_json` و`citations_json`. يعيد الحقائق فقط، ويصوغ العميل ملف Markdown بلغة القارئ (من هو «أنت» ومن هو «وكيلك»).
+
 `POST /api/v1/conversations/{id}/messages` الطلب:
 
 ```json
@@ -182,6 +206,8 @@ GET    /api/v1/permissions/history               # السجل
 ما كان من الطلبات المعلّقة بـ`action='connect'` فهو **طلب اتصال** (يولّده مسار A2A الوارد عند أول اتصال من قرين مجهول). والموافقة (`allow_*`) تكتب ذلك القرين في `peer_contacts` فينعقد الاتصال؛ والرفض لا ينعقد معه شيء.
 
 وما كان بـ`action='ask'` فهو **سؤال معلّق من قرين موصول من قبل**، يولّده مسار A2A الوارد حين تقضي سياسة الوكيل في ذلك السؤال بـ`ask_user` (انظر «صندوق الانتظار (الجواب في غياب صاحبه)» في `03-protocol.md`). فالموافقة (`allow_*`) تدفع الوكيل إلى الإجابة عن السؤال المعلّق؛ والرفض يدعه بلا جواب.
+
+`allow_always` / `deny_always` **قراران دائمان**. على سؤال معلّق، يكتبان (أو يستبدلان) قاعدة `{ action: 'ask', decision: 'allow' | 'deny' }` في بداية سياسة جهة الاتصال، فتُجاب أسئلة هذا الـ peer اللاحقة أو تُرفض دون تعليق؛ ويستطيع المالك رؤية القاعدة وإلغاءها في لوحة سياسة جهة الاتصال. وعلى طلب اتصال، يجعل `deny_always` طلبات الاتصال اللاحقة من هذا الـ peer تُسقَط بصمت بدل أن تصل إلى صندوق الوارد؛ وتظل إضافة الـ peer يدويًا عبر DID ممكنة.
 
 يرفق `GET /pending` بكل طلب حقل `description` (ففي طلب الاتصال اسم المبادِر ورسالته الأولى، وفي السؤال اسم السائل ونصّ سؤاله) ليتمكّن صاحب الوكيل من الحكم.
 
@@ -251,9 +277,10 @@ POST   /api/v1/knowledge-bases/{kb_id}/documents/{doc_id}/retry # إعادة ا�
 
 ```
 POST   /api/v1/attachments                       # multipart upload
-GET    /api/v1/attachments/{id}                  # تنزيل (تحويل 302 إلى عنوان موقَّع)
-DELETE /api/v1/attachments/{id}
+GET    /api/v1/attachments/{id}/content          # الملف نفسه، لمن رفعه أو للمشاركين في محادثة رسالته
 ```
+
+يبدأ المرفوع غير مرتبط؛ ويطالب به `POST /conversations/{id}/messages` عبر `attachment_ids` (5 كحد أقصى)، ولا يمكن المطالبة إلا بما رفعه المرسل نفسه ولم يُرسَل بعد. الرسالة ذات المرفقات بلا نص صالحة. تُعرَف الصور من بايتاتها (PNG / JPEG / GIF / WebP، حتى 5 ميغابايت لكل صورة) وتصل إلى النموذج ككتل صور؛ وتُقرأ ملفات PDF / DOCX / XLSX / النصوص عند الرفع (حتى 10 ميغابايت) ويرافق نصها الرسالة كـ `<attachment>` في كل دورة. يُعامَل SVG كنص ولا يُعرض أبدًا كصورة مضمّنة. لا يقدّم `content` مضمّنًا إلا صورة معروفة، وكل ما عدا ذلك يُنزَّل بنوع `application/octet-stream`. تحمل كل رسالة في القائمة `attachments`. حذف المحادثة يحذف مرفقاتها.
 
 ### الاستخدام
 
@@ -307,13 +334,13 @@ read.ack                      // إقرار القراءة
 ```
 pong
 message.new                   // رسالة جديدة
-message.updated
-message.deleted
+message.updated               // محجوز، لا يُرسَل بعد
+message.deleted               // محجوز، لا يُرسَل بعد
 typing.update                 // من يكتب الآن
 presence.update               // اتصال جهة اتصال أو انقطاعها
 permission.request            // طلب إذن يحتاج قرار المستخدم
-agent.status                  // ماذا يفعل وكيلي («أستشير وكيل ABC…»)
-conversation.updated
+agent.status                  // الـ Agent الخاص بي يجيب على جهة اتصال: {conversation_id, state: thinking|tool|idle, tool?}؛ يصوغ العميل النص
+conversation.updated          // كتبت جهة اتصال في {conversation_id} (ربما محادثة جديدة)؛ يحدّث العميل قائمته
 ```
 
 `message.new` مثال:
@@ -410,11 +437,16 @@ POST   /a2a/v1/message:send              # SendMessage → Task
 GET    /a2a/v1/tasks/{id}                # GetTask
 GET    /a2a/v1/tasks                     # ListTasks(تصفّح بمؤشّر)
 POST   /a2a/v1/tasks/{id}:cancel         # CancelTask → TaskNotCancelable
-POST   /a2a/v1/message:stream            # غير منجَز → UnsupportedOperation
-POST   /a2a/v1/tasks/{id}:subscribe      # غير منجَز → UnsupportedOperation
+POST   /a2a/v1/message:stream            # SendStreamingMessage → SSE: Task, then statusUpdate
+GET|POST /a2a/v1/tasks/{id}:subscribe    # SubscribeToTask → SSE
+POST   /a2a/v1/tasks/{id}/pushNotificationConfigs            # → TaskPushNotificationConfig
+GET    /a2a/v1/tasks/{id}/pushNotificationConfigs            # → {configs, nextPageToken}
+GET    /a2a/v1/tasks/{id}/pushNotificationConfigs/{configId}
+DELETE /a2a/v1/tasks/{id}/pushNotificationConfigs/{configId} # idempotent
 GET    /a2a/v1/extendedAgentCard         # غير منجَز → UnsupportedOperation
-*      /a2a/v1/tasks/{id}/pushNotificationConfigs…  # → PushNotificationNotSupported
 ```
+
+**البث والإشعارات الفورية.** يمر `message:stream` بنفس عمليات التحقق والبوابات التي يمر بها `message:send` ويرد بـ `text/event-stream`، بسطر `data:` واحد لكل `StreamResponse`: أولًا `{task}`، ثم `{statusUpdate}` واحد عند انتهاء المهمة (أو بلوغها `AUTH_REQUIRED` بانتظار شخص)، ثم يُغلق البث. الإجابة على هذا المسار دورة LLM واحدة بلا مخرجات جزئية، لذا فالدقة على مستوى أحداث المهمة. يقبل `:subscribe` كلًا من GET وPOST (الـ proto يقول GET وجداول المواصفة تقول POST) ويرد بـ `UnsupportedOperation` على المهمة المنتهية. الإشعارات: يسجّل الـ peer عنوان webhook على مهمة (أو يمرر `configuration.taskPushNotificationConfig` في `message:send`)، وتُرسَل كل حالة تبلغها المهمة مرة واحدة بطلب POST على شكل `{task}`، مع `Authorization: {scheme} {credentials}` ووضع `token` في `X-A2A-Notification-Token`. يجب أن يكون الـ webhook بـ https وأن يُحل إلى عنوان عام (قاعدة SSRF نفسها المطبقة على A2A الصادر، ويُعاد التحقق عند التسليم، ولا تُتبع إعادات التوجيه)؛ وتُخزَّن بيانات الاعتماد مختومة ولا يُعاد إلا `scheme`. خمسة كحد أقصى لكل مهمة، ولا يراها أو يحذفها إلا الـ peer الذي سجّلها.
 
 **لهجة Confer الخاصة** (بين النسخ؛ تُكتشف عبر `/.well-known/agents.json`):
 
@@ -447,7 +479,7 @@ GET    /.well-known/agent-card.json         # المثل، فقط إن كان ف
 بضعة اختيارات مقصودة:
 
 - **بطاقة لكل وكيل**، وفيها `supportedInterfaces[].tenant` = اسم المستخدم. فمسار well-known في المواصفة يفترض وكيلًا واحدًا لكل نطاق، وهذه النسخة متعدّدة المستأجرين؛ و`tenant` هو بعينه مُحدِّد التوجيه الذي عرّفته المواصفة لحالة «عدّة وكلاء خلف مسار A2A واحد». ولا يجيب `/.well-known/agent-card.json` إلا إذا كان الوكيل العلني **واحدًا بالضبط** (حالة من يستضيف لنفسه وحده)، وإلا أعاد 404 وأشار في نص الخطأ إلى `agents.json` — فاختيار حساب أيًّا كان وتسميته «وكيل هذا النطاق» باطل.
-- **`streaming: false`**. المسارات التدفّقية موجودة فعلًا، لكنها على هيئة Confer الخاصة لا على `SendStreamingMessage` الذي في المواصفة. والإعلان عن قدرة لا يستطيع عميل قياسي استعمالها أسوأ من ترك الإعلان.
+- **`streaming: true` و`pushNotifications: true`.** تجيب `message:stream` و`:subscribe` ومسارات إعداد الإشعارات بأشكال المواصفة؛ والبث على مستوى أحداث المهمة (الـ Task ثم حالة نهائية واحدة).
 - **لا يُعلَن `securitySchemes`**. فما تعرضه المواصفة هناك هو مفتاح واجهة أو توثيق HTTP أو OAuth2 أو OIDC أو mTLS، وهذا المسار لا يقبل واحدًا منها: إنما يريد طلبًا موقَّعًا. وملء أيٍّ منها اعتباطًا يعادل إخبار العميل بأنه يستطيع التوثّق بطريقة سيُرفض بها حتمًا. أما الاشتراط الحقيقي فمعلَن بوصفه **امتدادًا لازمًا** (`capabilities.extensions`، حيث `uri` عنوان RFC 9421 و`required: true`)، وهي الآلية التي وفّرتها المواصفة لهذا الغرض بعينه.
 - البطاقة **مستند اكتشاف**، وظهورها مطابق تمامًا لظهور `/.well-known/agents.json`: فالوكيل غير العلني أو المعطَّل يعيد 404 دائمًا، وإلا صار هذا المسار طريقًا إلى تعداد حسابات لم يُرِد صاحبها إعلانها.
 
@@ -493,6 +525,8 @@ DELETE /api/v1/webhooks/{id}
 | `/api/v1/auth/register` | 3 في الساعة لكل عنوان IP |
 | `/api/v1/conversations/*/messages` POST | 60 في الدقيقة لكل مستخدم |
 | `/a2a/v1/*` | 60 في الدقيقة لكل عنوان IP ومسار، و300 في الدقيقة لكل عنوان IP على كامل `/a2a/v1` |
+| أسئلة A2A (الربطان كلاهما) | لكل DID للطرف ولكل مالك 20/دقيقة و300/يوم؛ ولكل نطاق للطرف 60/دقيقة. عند التجاوز → 429 / `RESOURCE_EXHAUSTED` مع `Retry-After` |
+| `/api/v1/consult/{peer}` POST | 30/دقيقة لكل مستخدم |
 | WSS | عشرة اتصالات متزامنة للمستخدم الواحد على الأكثر |
 
 الاستجابة عند تجاوز الحدّ:

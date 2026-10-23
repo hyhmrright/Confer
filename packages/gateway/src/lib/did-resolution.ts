@@ -1,8 +1,9 @@
 import { buildDIDDocument, type DIDDocument, resolveDID } from '@confer/identity';
 import { err, ok, type Result } from '@confer/shared';
-import { and, eq, type SQL } from 'drizzle-orm';
+import { eq, type SQL } from 'drizzle-orm';
 import { getDb } from '../db/connection.js';
-import { keypairs, users } from '../db/schema.js';
+import { users } from '../db/schema.js';
+import { instanceKeys, publishedKeys, userKeys } from './keys.js';
 import { instanceDid, selfA2AEndpoint } from './public-identity.js';
 
 /*
@@ -47,10 +48,9 @@ export function isOwnIdentity(did: string): boolean {
 }
 
 async function resolveLocally(did: string): Promise<Result<DIDDocument, string>> {
-  let key: PublishedKey | undefined;
-
+  let owner: SQL;
   if (did === instanceDid()) {
-    key = await activeKey(eq(keypairs.owner_type, 'instance'));
+    owner = instanceKeys();
   } else {
     // Matched against the stored `users.did` exactly. Deriving a username from
     // the DID's path segments instead would let a stale or re-hosted row answer
@@ -61,26 +61,12 @@ async function resolveLocally(did: string): Promise<Result<DIDDocument, string>>
       .where(eq(users.did, did))
       .limit(1);
     if (!user) return err(`No identity on this instance for ${did}`);
-    key = await activeKey(and(eq(keypairs.owner_type, 'user'), eq(keypairs.owner_id, user.id)));
+    owner = userKeys(user.id);
   }
 
-  // A known identity with no active key is served keyless during a key-rotation
-  // gap, exactly as both routes serve it: the caller then reports a missing key,
-  // which is truer than a resolution failure.
-  return ok(buildDIDDocument({ did, serviceEndpoint: selfA2AEndpoint(), key }));
-}
-
-interface PublishedKey {
-  keyId: string;
-  publicKeyMultibase: string;
-}
-
-async function activeKey(owner: SQL | undefined): Promise<PublishedKey | undefined> {
-  // Only public columns — never `private_key_jwk_encrypted`.
-  const [kp] = await getDb()
-    .select({ key_id: keypairs.key_id, public_key_multibase: keypairs.public_key_multibase })
-    .from(keypairs)
-    .where(and(owner, eq(keypairs.is_active, true)))
-    .limit(1);
-  return kp ? { keyId: kp.key_id, publicKeyMultibase: kp.public_key_multibase } : undefined;
+  // A known identity with no live key is served keyless, exactly as both routes
+  // serve it: the caller then reports a missing key, which is truer than a
+  // resolution failure.
+  const keys = await publishedKeys(owner);
+  return ok(buildDIDDocument({ did, serviceEndpoint: selfA2AEndpoint(), keys }));
 }

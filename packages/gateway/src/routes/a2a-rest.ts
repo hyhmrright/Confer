@@ -1,8 +1,11 @@
 import { AppError } from '@confer/shared';
 import type { Context, MiddlewareHandler } from 'hono';
 import { Hono } from 'hono';
+import { type SSEStreamingApi, streamSSE } from 'hono/streaming';
 import { z } from 'zod';
 import { admitInboundMessage } from '../a2a/inbound.js';
+import { refusePeerUrl } from '../a2a/outbound.js';
+import { createPushConfig, deletePushConfig, getPushConfig, listPushConfigs } from '../a2a/push.js';
 import {
   type A2AErrorReason,
   type A2ATask,
@@ -166,6 +169,27 @@ const partSchema = z.object({
   filename: z.string().max(256).optional(),
 });
 
+// §4.3 `TaskPushNotificationConfig`: where to be told about a task, and how to
+// prove it is us. `taskId`/`id` are ours to assign, so they are not read.
+// Both end up in a request header at delivery, where fetch would throw on a
+// bad one — inside a retry loop, long after the peer could have been told.
+const headerValue = z.string().regex(/^[^\r\n\0]*$/, 'must not contain line breaks');
+const pushConfigSchema = z.object({
+  url: z.string().url().max(2048),
+  token: headerValue.max(512).optional(),
+  authentication: z
+    .object({
+      // An RFC 7235 auth-scheme is a token.
+      scheme: z
+        .string()
+        .min(1)
+        .max(64)
+        .regex(/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/, 'must be an HTTP auth scheme token'),
+      credentials: headerValue.max(4096).optional(),
+    })
+    .optional(),
+});
+
 const sendMessageSchema = z.object({
   tenant: z.string().max(128).optional(),
   message: z.object({
@@ -183,7 +207,7 @@ const sendMessageSchema = z.object({
       acceptedOutputModes: z.array(z.string().max(128)).max(32).optional(),
       historyLength: z.number().int().min(0).max(1000).optional(),
       returnImmediately: z.boolean().optional(),
-      taskPushNotificationConfig: z.unknown().optional(),
+      taskPushNotificationConfig: pushConfigSchema.optional(),
     })
     .optional(),
 });
@@ -194,7 +218,18 @@ function acceptsPlainText(modes: string[] | undefined): boolean {
   return modes.some((mode) => mode === '*/*' || mode === 'text/*' || mode.startsWith('text/plain'));
 }
 
-a2aRestRoutes.post('/message:send', ...guards, async (c) => {
+type Admitted = {
+  taskId: string;
+  held: boolean;
+  configuration: z.infer<typeof sendMessageSchema>['configuration'];
+};
+
+/**
+ * Everything `message:send` and `message:stream` share: validate the request,
+ * resolve the agent it is for, and admit the question through the one inbound
+ * flow. Returns the new task, or the error response to send instead.
+ */
+async function admitSendRequest(c: Context): Promise<Admitted | Response> {
   const parsed = sendMessageSchema.safeParse(await c.req.json().catch(() => null));
   if (!parsed.success) {
     return fail(c, 'INVALID_ARGUMENT', `Malformed SendMessageRequest: ${parsed.error.message}`);
@@ -204,19 +239,19 @@ a2aRestRoutes.post('/message:send', ...guards, async (c) => {
   if (message.role !== 'ROLE_USER') {
     return fail(c, 'INVALID_ARGUMENT', 'message.role must be ROLE_USER on a request.');
   }
-  if (configuration?.taskPushNotificationConfig) {
-    return fail(
-      c,
-      'PUSH_NOTIFICATION_NOT_SUPPORTED',
-      'This agent does not support push notifications.',
-    );
-  }
   if (!acceptsPlainText(configuration?.acceptedOutputModes)) {
     return fail(
       c,
       'CONTENT_TYPE_NOT_SUPPORTED',
       'This agent only produces text/plain, which the request did not accept.',
     );
+  }
+  // Checked before anything is stored, so a bad webhook refuses the request
+  // instead of leaving an admitted question nobody will be told about.
+  const push = configuration?.taskPushNotificationConfig;
+  if (push) {
+    const refused = await refusePeerUrl(push.url, { allowQuery: true });
+    if (refused) return fail(c, 'INVALID_ARGUMENT', `taskPushNotificationConfig.url: ${refused}`);
   }
 
   const text = textFromParts(message.parts);
@@ -269,9 +304,32 @@ a2aRestRoutes.post('/message:send', ...guards, async (c) => {
       return fail(c, 'PERMISSION_DENIED', "This agent's policy refuses requests from you.", {
         confer_status: 'policy_denied',
       });
+    case 'rate_limited':
+      c.header('Retry-After', String(admitted.retryAfterSeconds));
+      return fail(c, 'RESOURCE_EXHAUSTED', 'Too many questions to this agent; retry later.', {
+        retryAfterSeconds: String(admitted.retryAfterSeconds),
+      });
+    case 'stored':
+      // A question never lands here; the type says otherwise only because the
+      // inbound flow also stores answers and notifications.
+      return fail(c, 'INTERNAL', 'The question was stored but not admitted as a task.');
     default:
       break;
   }
+
+  if (push) {
+    const created = await createPushConfig(admitted.messageId, callerDid(c), push, {
+      urlVetted: true,
+    });
+    if (!created.ok) return fail(c, 'INVALID_ARGUMENT', created.message);
+  }
+  return { taskId: admitted.messageId, held: admitted.status === 'held', configuration };
+}
+
+a2aRestRoutes.post('/message:send', ...guards, async (c) => {
+  const admitted = await admitSendRequest(c);
+  if (admitted instanceof Response) return admitted;
+  const { taskId, held, configuration } = admitted;
 
   const historyLength = configuration?.historyLength;
   const immediately = configuration?.returnImmediately === true;
@@ -279,9 +337,9 @@ a2aRestRoutes.post('/message:send', ...guards, async (c) => {
   // A held question is already in an interrupted state, so even a blocking call
   // returns now — there is nothing to wait for until a human acts.
   const task =
-    immediately || admitted.status === 'held'
-      ? (await loadTask(admitted.messageId, callerDid(c), historyLength))?.task
-      : await waitForTask(admitted.messageId, callerDid(c), historyLength);
+    immediately || held
+      ? (await loadTask(taskId, callerDid(c), historyLength))?.task
+      : await waitForTask(taskId, callerDid(c), historyLength);
 
   // A task we just created must be readable back. If it is not, something wrote
   // a row this process cannot see — and saying so in the binding's own error
@@ -290,6 +348,14 @@ a2aRestRoutes.post('/message:send', ...guards, async (c) => {
     return fail(c, 'INTERNAL', 'The task could not be read back after it was created.');
   }
   return a2aJson(c, task, 200);
+});
+
+// §3.1.2: the same request as `message:send`, answered as a stream of the
+// task's progress instead of one snapshot.
+a2aRestRoutes.post('/message:stream', ...guards, async (c) => {
+  const admitted = await admitSendRequest(c);
+  if (admitted instanceof Response) return admitted;
+  return streamTask(c, admitted.taskId, admitted.configuration?.historyLength);
 });
 
 /** Poll until the answer lands, or until the blocking budget runs out. */
@@ -359,6 +425,13 @@ a2aRestRoutes.get('/tasks', ...guards, async (c) => {
 });
 
 a2aRestRoutes.get('/tasks/:id', ...guards, async (c) => {
+  // The proto maps `:subscribe` to GET while the spec's tables say POST (1.0.0
+  // and 1.0.1 alike), so both are answered. `:id` swallows the suffix — Hono
+  // cannot route a literal after a parameter — so it is split off here.
+  const SUBSCRIBE = ':subscribe';
+  if (c.req.param('id').endsWith(SUBSCRIBE)) {
+    return subscribe(c, c.req.param('id').slice(0, -SUBSCRIBE.length));
+  }
   const loaded = await loadTask(
     c.req.param('id'),
     callerDid(c),
@@ -391,10 +464,7 @@ a2aRestRoutes.post('/tasks/:target', ...guards, async (c) => {
     );
   }
 
-  if (verb === 'subscribe') {
-    // capabilities.streaming is false, and §3.3.4 requires this exact error.
-    return fail(c, 'UNSUPPORTED_OPERATION', 'This agent does not support streaming.');
-  }
+  if (verb === 'subscribe') return subscribe(c, id);
 
   const loaded = await loadTask(id, callerDid(c));
   if (!loaded) return fail(c, 'TASK_NOT_FOUND', 'No such task.', { taskId: id });
@@ -415,20 +485,152 @@ a2aRestRoutes.post('/tasks/:target', ...guards, async (c) => {
 });
 
 // ---------------------------------------------------------------------------
-// Capabilities this agent does not have (§3.3.4 requires each to say so)
+// Streaming (§3.1.2, §3.1.6, §11.7)
 // ---------------------------------------------------------------------------
 
-a2aRestRoutes.post('/message:stream', ...guards, (c) =>
-  fail(c, 'UNSUPPORTED_OPERATION', 'This agent does not support streaming.'),
-);
+/** How often a stream checks for the answer, and says it is still alive. */
+const STREAM_POLL_MS = 500;
+const STREAM_KEEPALIVE_MS = 15_000;
+/** A stream is closed after this long; `:subscribe` picks the task up again. */
+const STREAM_MAX_MS = 10 * 60_000;
 
-const pushNotSupported = (c: Context) =>
-  fail(c, 'PUSH_NOTIFICATION_NOT_SUPPORTED', 'This agent does not support push notifications.');
+/** A task the stream has said all it can about: finished, or waiting on a person. */
+const settled = (state: TaskState) => isTerminal(state) || state === 'TASK_STATE_AUTH_REQUIRED';
 
-a2aRestRoutes.post('/tasks/:id/pushNotificationConfigs', ...guards, pushNotSupported);
-a2aRestRoutes.get('/tasks/:id/pushNotificationConfigs', ...guards, pushNotSupported);
-a2aRestRoutes.get('/tasks/:id/pushNotificationConfigs/:configId', ...guards, pushNotSupported);
-a2aRestRoutes.delete('/tasks/:id/pushNotificationConfigs/:configId', ...guards, pushNotSupported);
+/**
+ * The task as a stream of `StreamResponse` events: the task first, as §3.1.2
+ * requires, then one status update when it settles, then the stream closes.
+ * The answer is one LLM turn with no partial output on this path, so there is
+ * nothing between those two events to send — and §11.7 closes the stream on an
+ * interrupted state as well as a terminal one, since only a person can move a
+ * task out of `AUTH_REQUIRED`.
+ */
+/**
+ * Open streams per peer. Each holds a connection for up to ten minutes and
+ * checks the database twice a second, and the request limit alone would let
+ * one peer keep hundreds of them going.
+ */
+const MAX_STREAMS_PER_PEER = 5;
+const openStreams = new Map<string, number>();
+
+function streamTask(c: Context, taskId: string, historyLength: number | undefined): Response {
+  const caller = callerDid(c);
+  const open = openStreams.get(caller) ?? 0;
+  if (open >= MAX_STREAMS_PER_PEER) {
+    return fail(
+      c,
+      'RESOURCE_EXHAUSTED',
+      `At most ${MAX_STREAMS_PER_PEER} open streams per caller.`,
+    );
+  }
+  openStreams.set(caller, open + 1);
+  const release = () => {
+    const left = (openStreams.get(caller) ?? 1) - 1;
+    if (left <= 0) openStreams.delete(caller);
+    else openStreams.set(caller, left);
+  };
+  return streamSSE(
+    c,
+    async (stream) => {
+      try {
+        await runStream(stream);
+      } finally {
+        release();
+      }
+    },
+    async () => {
+      // A write to a client that has gone is the only error here; the stream ends.
+    },
+  );
+
+  async function runStream(stream: SSEStreamingApi): Promise<void> {
+    const send = (event: unknown) => stream.writeSSE({ data: JSON.stringify(event) });
+    const first = await loadTask(taskId, caller, historyLength);
+    if (!first) return;
+    await send({ task: first.task });
+    if (settled(first.state)) return;
+
+    // Unsettled means WORKING, and a WORKING task leaves that state only by
+    // acquiring a reply — so the cheap check runs twice a second and the
+    // whole task is rebuilt once, as in `waitForTask`.
+    const deadline = Date.now() + STREAM_MAX_MS;
+    let quietSince = Date.now();
+    while (!stream.aborted && Date.now() < deadline) {
+      await Bun.sleep(STREAM_POLL_MS);
+      if (await hasReply(taskId)) {
+        const now = await loadTask(taskId, caller, historyLength);
+        if (!now) return;
+        await send({
+          statusUpdate: { taskId, contextId: now.task.contextId, status: now.task.status },
+        });
+        return;
+      }
+      // Bun closes a connection silent for 255 s, and so do most proxies for
+      // less: an SSE comment keeps it open without being an event.
+      if (Date.now() - quietSince >= STREAM_KEEPALIVE_MS) {
+        await stream.write(': keepalive\n\n');
+        quietSince = Date.now();
+      }
+    }
+  }
+}
+
+/** §3.1.6: a finished task has nothing left to stream. */
+async function subscribe(c: Context, id: string): Promise<Response> {
+  const loaded = await loadTask(id, callerDid(c));
+  if (!loaded) return fail(c, 'TASK_NOT_FOUND', 'No such task.', { taskId: id });
+  if (isTerminal(loaded.state)) {
+    return fail(c, 'UNSUPPORTED_OPERATION', 'That task has already finished.', {
+      taskId: id,
+      state: loaded.state,
+    });
+  }
+  return streamTask(c, id, optionalInt(c.req.query('historyLength')));
+}
+
+// ---------------------------------------------------------------------------
+// Push notification configs (§3.1.7–§3.1.10)
+// ---------------------------------------------------------------------------
+
+a2aRestRoutes.post('/tasks/:id/pushNotificationConfigs', ...guards, async (c) => {
+  const parsed = pushConfigSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) {
+    return fail(
+      c,
+      'INVALID_ARGUMENT',
+      `Malformed TaskPushNotificationConfig: ${parsed.error.message}`,
+    );
+  }
+  const created = await createPushConfig(c.req.param('id'), callerDid(c), parsed.data);
+  if (!created.ok) {
+    return created.reason === 'not_found'
+      ? fail(c, 'TASK_NOT_FOUND', created.message, { taskId: c.req.param('id') })
+      : fail(c, 'INVALID_ARGUMENT', created.message);
+  }
+  return a2aJson(c, created.value);
+});
+
+a2aRestRoutes.get('/tasks/:id/pushNotificationConfigs', ...guards, async (c) => {
+  if (!(await loadTask(c.req.param('id'), callerDid(c)))) {
+    return fail(c, 'TASK_NOT_FOUND', 'No such task.', { taskId: c.req.param('id') });
+  }
+  // At most five per task, so a page is always all of them.
+  return a2aJson(c, {
+    configs: await listPushConfigs(c.req.param('id'), callerDid(c)),
+    nextPageToken: '',
+  });
+});
+
+a2aRestRoutes.get('/tasks/:id/pushNotificationConfigs/:configId', ...guards, async (c) => {
+  const config = await getPushConfig(c.req.param('id'), c.req.param('configId'), callerDid(c));
+  if (!config) return fail(c, 'TASK_NOT_FOUND', 'No such push notification config.');
+  return a2aJson(c, config);
+});
+
+a2aRestRoutes.delete('/tasks/:id/pushNotificationConfigs/:configId', ...guards, async (c) => {
+  await deletePushConfig(c.req.param('id'), c.req.param('configId'), callerDid(c));
+  return a2aJson(c, {});
+});
 
 a2aRestRoutes.get('/extendedAgentCard', ...guards, (c) =>
   fail(

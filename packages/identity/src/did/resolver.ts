@@ -155,3 +155,8 @@ export async function resolveDID(did: string): Promise<Result<DIDDocument, strin
 export function clearDIDCache(): void {
   cache.clear();
 }
+
+/** Forget one DID's cached document, so the next resolution fetches it afresh. */
+export function invalidateDID(did: string): void {
+  cache.delete(did);
+}

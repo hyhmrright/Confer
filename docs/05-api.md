@@ -42,6 +42,11 @@ POST   /api/v1/auth/register
 POST   /api/v1/auth/login
 POST   /api/v1/auth/refresh
 POST   /api/v1/auth/logout
+POST   /api/v1/auth/password        # {current_password, new_password}
+GET    /api/v1/auth/2fa             # {enabled, recovery_codes_left}
+POST   /api/v1/auth/2fa/setup       # → {secret, otpauth_uri}
+POST   /api/v1/auth/2fa/enable      # {code} → {recovery_codes}
+POST   /api/v1/auth/2fa/disable     # {password, totp_code | recovery_code}
 POST   /api/v1/auth/oauth/{provider}    # OAuth callback
 ```
 
@@ -67,11 +72,24 @@ POST   /api/v1/auth/oauth/{provider}    # OAuth callback
 }
 ```
 
+**两步登录（TOTP）。** 开启后，`login` 在密码正确之后还要求 `totp_code`（身份验证器 App 的 6 位码）或 `recovery_code`；两者都没带时返回 401 `totp_required`，客户端据此显示第二步，码不对返回 401 `invalid_second_factor`。密码错误时永远先返回 `invalid_credentials`，不会透露账号是否开了两步登录。每个验证码只能用一次（记录已用的时间步），每个恢复码用后作废；两者都用一条带条件的 UPDATE 消费，并发登录不能重复使用。`setup` 生成的密钥用 AES-256-GCM 加密保存，在 `enable` 用 App 里的码确认之前不生效；`enable` 只返回这一次恢复码（10 个），服务端只存哈希。`disable` 需要密码加第二因素。`password` 修改密码需要当前密码，并注销该用户的所有其他会话。这些操作都写审计日志，且按账号每分钟限 10 次。 `enable` 同样需要 `password`，这样仅凭盗来的 token 不能把攻击者的身份验证器装进别人的账号；开启两步登录后，`password` 修改密码也需要第二因素。同一账号连续 5 个错误的码会锁定该账号的验证码尝试 15 分钟（429 `too_many_attempts`），与按 IP 的登录限流叠加。恢复码用服务端密钥做 HMAC 保存。用户同时丢失身份验证器和恢复码时，管理员可用 `POST /api/v1/admin/users/{id}/reset-2fa` 为其关闭两步登录（会写审计日志，不能对自己使用）。
+
+```
+GET    /api/v1/tokens              # [{id, name, prefix, created_at, last_used_at, expires_at}]
+POST   /api/v1/tokens              # {name, expires_in_days?} → {token: {..., token}}
+DELETE /api/v1/tokens/{id}
+```
+
+**个人 API 令牌。** 给以主人身份调用 API 的脚本和工具使用：`Authorization: Bearer cfr_…`，与会话的 access token 用同一个请求头。令牌明文只在创建时返回一次，服务端只存 SHA-256 和用于辨认的前缀；可选 1–365 天有效期，每个用户最多 20 个；令牌所属账号被停用后立即失效。令牌能做主人在聊天里能做的事，但下列操作只接受登录会话，令牌调用会得到 403 `session_required`：登出、改密码和两步登录、管理令牌本身、审批权限请求和 errand 卡片、修改 LLM 密钥、所有 admin 接口。泄露的令牌可以替主人跑腿，但不能替主人做决定或把主人锁在外面。管理令牌本身也只接受会话。创建和吊销都写审计日志。
+
 ### 用户和 Agent 配置
 
 ```
 GET    /api/v1/users/me
 PATCH  /api/v1/users/me
+GET    /api/v1/users/me/keys          # signing keys: current / retiring / revoked
+POST   /api/v1/users/me/keys/rotate   # session only
+POST   /api/v1/users/me/keys/revoke   # {key_id}, session only
 GET    /api/v1/agents/me
 PATCH  /api/v1/agents/me
 PUT    /api/v1/agents/me/policies
@@ -148,6 +166,12 @@ DELETE /api/v1/conversations/{id}/participants/{p_id}
 POST   /api/v1/conversations/{id}/read             # 标记已读
 ```
 
+`GET` 默认只列未归档的对话，`?archived=1` 列已归档的；每条带 `unread_count`：自上次标记已读（从未标记则从加入时起）以来别人写的消息数，自己发的不算。`PATCH` 接受 `{ name?, archived? }`，只有对话创建者能改。`POST .../read` 把当前用户的 `last_read_at` 设为现在。联系人在已归档的对话里写新消息时，对话会自动取消归档并排到最前。
+
+`GET /api/v1/search/messages?q=&limit=` 在当前用户参与的所有对话（含已归档）里按子串搜索消息正文，最新的在前；`q` 为 1–200 个字符，`limit` 默认 20、最大 50。返回 `{ results: [{ message_id, conversation_id, conversation_name, sender_type, content, created_at }] }`。用子串匹配而不是 Postgres 全文检索，因为内置分词不切中文。
+
+`GET /api/v1/conversations/{id}/export` 返回整段对话（最早的在前，最多 5000 条），只给参与者：`{ conversation, messages, truncated }`，每条消息带 `sender_type`、`sender_did`、对方 agent 的 `sender_name`、`content`、`content_json` 和 `citations_json`。只返回事实，Markdown 由客户端按读者的语言生成（谁是"我"、谁是"我的 Agent"）。
+
 `POST /api/v1/conversations/{id}/messages` 请求:
 
 ```json
@@ -189,6 +213,8 @@ GET    /api/v1/permissions/history               # 历史记录
 待批请求里 `action='connect'` 的是**连接请求**（陌生 peer 首次接触时由 A2A 入站生成）。批准（`allow_*`）会把该 peer 写入 `peer_contacts`，建立连接；拒绝则不建立。
 
 `action='ask'` 的是**已连接 peer 的待批提问**——当主人的 Agent 策略对该提问判为 `ask_user` 时由 A2A 入站生成（见 `03-protocol.md` 的「Pending inbox（离线代答）」）。批准（`allow_*`）触发 Agent 代答这条挂起的提问；拒绝则不回答。
+
+`allow_always` / `deny_always` 是**长期决定**。对挂起的提问，它们会在该联系人的策略覆盖里写入（或替换）一条 `{ action: 'ask', decision: 'allow' | 'deny' }` 规则，排在最前面，所以这个 peer 之后的提问直接代答或直接拒绝，不再挂起；主人可以在联系人详情的策略里看到并撤销。对连接请求，`deny_always` 会让这个 peer 之后的连接请求被静默丢弃，不再进收件箱；主人手动按 DID 添加它仍然有效。
 
 `GET /pending` 为每条请求附带 `description`（连接请求含发起方与首条留言；提问含发起方与问题正文）便于主人判断。
 
@@ -258,9 +284,10 @@ POST   /api/v1/knowledge-bases/{kb_id}/documents/{doc_id}/retry # 重新入库
 
 ```
 POST   /api/v1/attachments                       # multipart upload
-GET    /api/v1/attachments/{id}                  # 下载（302 redirect 到签名 URL）
-DELETE /api/v1/attachments/{id}
+GET    /api/v1/attachments/{id}/content          # 文件本身：上传者或该消息所在对话的参与者
 ```
+
+上传后附件处于未绑定状态，发送消息时在 `POST /conversations/{id}/messages` 里用 `attachment_ids`（最多 5 个）认领，只能认领自己上传且还没被发送过的；只有附件没有正文的消息也合法。图片按文件内容识别（PNG / JPEG / GIF / WebP，每张最多 5 MB），以多模态图片块交给模型；PDF / DOCX / XLSX / 文本在上传时读出文字（最多 10 MB），每轮按 `<attachment>` 附在该消息后面。SVG 只当文本处理，绝不作为图片内联。`content` 只对识别出的图片内联返回，其它一律以 `application/octet-stream` 下载。消息列表里每条消息带 `attachments`。删除对话会一并删除其附件。
 
 ### 用量
 
@@ -321,13 +348,13 @@ read.ack                      // 已读确认
 ```
 pong
 message.new                   // 新消息
-message.updated
-message.deleted
+message.updated               // 预留，尚未发送
+message.deleted               // 预留，尚未发送
 typing.update                 // 谁在打字
 presence.update               // 联系人上下线
 permission.request            // 需要用户决定的权限请求
-agent.status                  // 我的 Agent 在做什么（"正在咨询 ABC Agent..."）
-conversation.updated
+agent.status                  // 我的 Agent 正在回答联系人：{conversation_id, state: thinking|tool|idle, tool?}，文案由客户端生成
+conversation.updated          // 联系人在 {conversation_id} 里发了消息（可能是新会话），客户端据此刷新列表
 ```
 
 `message.new` 示例:
@@ -428,11 +455,16 @@ POST   /a2a/v1/message:send              # SendMessage → Task
 GET    /a2a/v1/tasks/{id}                # GetTask
 GET    /a2a/v1/tasks                     # ListTasks（游标分页）
 POST   /a2a/v1/tasks/{id}:cancel         # CancelTask → TaskNotCancelable
-POST   /a2a/v1/message:stream            # 未实现 → UnsupportedOperation
-POST   /a2a/v1/tasks/{id}:subscribe      # 未实现 → UnsupportedOperation
+POST   /a2a/v1/message:stream            # SendStreamingMessage → SSE: Task, then statusUpdate
+GET|POST /a2a/v1/tasks/{id}:subscribe    # SubscribeToTask → SSE
+POST   /a2a/v1/tasks/{id}/pushNotificationConfigs            # → TaskPushNotificationConfig
+GET    /a2a/v1/tasks/{id}/pushNotificationConfigs            # → {configs, nextPageToken}
+GET    /a2a/v1/tasks/{id}/pushNotificationConfigs/{configId}
+DELETE /a2a/v1/tasks/{id}/pushNotificationConfigs/{configId} # idempotent
 GET    /a2a/v1/extendedAgentCard         # 未实现 → UnsupportedOperation
-*      /a2a/v1/tasks/{id}/pushNotificationConfigs…  # → PushNotificationNotSupported
 ```
+
+**流式与推送。** `message:stream` 与 `message:send` 走同一套校验和闸门，回答为 `text/event-stream`，每个事件是一行 `data:`，内容为一个 `StreamResponse`：先是 `{task}`，任务结束（或进入需要人批准的 `AUTH_REQUIRED`）时再发一个 `{statusUpdate}`，然后关闭；回答在这条路径上是一次完整的 LLM 调用，没有逐字输出，所以是任务事件粒度。`:subscribe` 同时接受 GET 和 POST（proto 写 GET，spec 表格写 POST），对已结束的任务返回 `UnsupportedOperation`。推送：对方在任务上登记 webhook（也可在 `message:send` 的 `configuration.taskPushNotificationConfig` 里带上），任务状态每变一次就 POST 一次 `{task}`，同一状态只发一次；带 `Authorization: {scheme} {credentials}`，`token` 放在 `X-A2A-Notification-Token`。webhook 必须是 https 且解析到公网地址（与出站 A2A 同一条 SSRF 规则，投递时再查一遍，不跟随重定向）；凭据密封保存，读取时只回显 `scheme`。每个任务最多 5 个，只有登记它的那个 peer 能看到或删除。
 
 **Confer 自己的方言**（实例之间用，经 `/.well-known/agents.json` 发现）：
 
@@ -465,7 +497,7 @@ GET    /.well-known/agent-card.json         # 同上，仅当本实例只有一�
 几个刻意的取舍：
 
 - **每个 Agent 一张 Card**，`supportedInterfaces[].tenant` = 用户名。spec 的 well-known 假设一个域名一个 Agent，而本实例是多租户；`tenant` 正是 spec 为「单个 A2A 端点后面多个 Agent」定义的路由选择器。`/.well-known/agent-card.json` 只在**恰好一个公开 Agent** 时作答（单人自托管场景），否则 404 并在错误信息里指向 `agents.json` —— 随便挑一个账号称之为「本域名的 Agent」是错的。
-- **`streaming: false`**。确实有流式端点，但那是 Confer 自己的形状，不是 spec 的 `SendStreamingMessage`。宣称一个标准客户端用不了的能力，比不宣称更糟。
+- **`streaming: true`、`pushNotifications: true`**。`message:stream`、`:subscribe` 和推送配置路由都按 spec 的形状作答，流式是任务事件粒度（先 Task，再一个结束状态）。
 - **不声明 `securitySchemes`**。spec 那套是 API key / HTTP auth / OAuth2 / OIDC / mTLS，本端点一个都不收——它要的是请求签名。随便挑一个填上，等于告诉客户端可以用一种必然被拒的方式认证。真实要求改用**必需扩展**（`capabilities.extensions`，`uri` 为 RFC 9421 的地址，`required: true`）声明，这正是 spec 为此提供的机制。
 - Card 是**发现文档**，可见性与 `/.well-known/agents.json` 完全一致：非公开或已停用的 Agent 一律 404，否则这条路由就成了枚举主人没打算公开的账号的办法。
 
@@ -511,6 +543,8 @@ DELETE /api/v1/webhooks/{id}
 | `/api/v1/auth/register` | 3/小时 per IP |
 | `/api/v1/conversations/*/messages` POST | 60/分钟 per user |
 | `/a2a/v1/*` | 60/分钟 per IP + 路径；整个 `/a2a/v1` 合计 300/分钟 per IP |
+| A2A 提问（两套绑定共用） | 每个 peer DID 对每个主人 20/分钟、300/天；同一域名合计 60/分钟。超出 → 429 / `RESOURCE_EXHAUSTED`，带 `Retry-After` |
+| `/api/v1/consult/{peer}` POST | 30/分钟 per user |
 | WSS | 单用户最多 10 个并发连接 |
 
 限流响应：

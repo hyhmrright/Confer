@@ -1,12 +1,16 @@
 import { buildDIDDocument } from '@confer/identity';
 import { AppError } from '@confer/shared';
-import { and, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { getDb } from '../db/connection.js';
-import { keypairs, users } from '../db/schema.js';
+import { users } from '../db/schema.js';
+import { publishedKeys, userKeys } from '../lib/keys.js';
 import { selfA2AEndpoint } from '../lib/public-identity.js';
 
 export const agentDidRoutes = new Hono();
+
+/** How long a verifier may keep one of our DID documents (see lib/keys.ts). */
+export const DID_DOCUMENT_CACHE = 'public, max-age=60';
 
 // Per-user DID document. A sub-identifier DID (`did:web:<host>:agents:<username>`)
 // resolves here per the did:web spec; inbound A2A signature verification fetches
@@ -25,32 +29,20 @@ agentDidRoutes.get('/:username/did.json', async (c) => {
     throw new AppError('user_not_found', 'User not found', 404);
   }
 
-  // Only public columns — never `private_key_jwk_encrypted`.
-  const [kp] = await db
-    .select({
-      key_id: keypairs.key_id,
-      public_key_multibase: keypairs.public_key_multibase,
-    })
-    .from(keypairs)
-    .where(
-      and(
-        eq(keypairs.owner_type, 'user'),
-        eq(keypairs.owner_id, user.id),
-        eq(keypairs.is_active, true),
-      ),
-    )
-    .limit(1);
-
-  // `verificationMethod[0].id` must be the STORED key_id (not rebuilt from Host):
+  // Each `verificationMethod[].id` is the STORED key_id (not rebuilt from Host):
   // inbound verification matches `vm.id === keyId` where keyId comes from the
   // request's Signature-Input, so any divergence breaks all inbound A2A auth.
-  // Serve a keyless document during a key-rotation gap rather than 404ing (same
-  // behavior as the instance document in well-known.ts).
+  // Every live key is published — the current one and any still retiring after
+  // a rotation — and an account with none is served keyless rather than 404ing
+  // (same behavior as the instance document in well-known.ts).
   const doc = buildDIDDocument({
     did: user.did,
     serviceEndpoint: selfA2AEndpoint(),
-    key: kp ? { keyId: kp.key_id, publicKeyMultibase: kp.public_key_multibase } : undefined,
+    keys: await publishedKeys(userKeys(user.id)),
   });
 
+  // Stated rather than left to each verifier's guess: a revoked key stops
+  // verifying within a minute everywhere, not whenever a cache feels like it.
+  c.header('cache-control', DID_DOCUMENT_CACHE);
   return c.json(doc);
 });

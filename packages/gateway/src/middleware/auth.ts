@@ -5,6 +5,7 @@ import * as jose from 'jose';
 import { getDb } from '../db/connection.js';
 import { users } from '../db/schema.js';
 import { getEnv } from '../env.js';
+import { API_TOKEN_PREFIX, resolveApiToken } from '../lib/api-tokens.js';
 
 // What a token is for. Access and refresh differed only in `exp` — same issuer,
 // same subject, same claims, same secret — so each was accepted wherever the
@@ -26,8 +27,13 @@ export interface AuthPayload {
   sub: string;
   username: string;
   // Session id from the token, used by `/logout` to revoke the exact session.
-  // Absent on legacy tokens minted before session revocation existed.
+  // Absent on legacy tokens minted before session revocation existed, and on
+  // an API token, which belongs to no session.
   sid?: string;
+  // What authenticated the request: a signed-in person, or a personal API
+  // token handed to a script. `requireSession` keeps the second away from
+  // credentials and consent.
+  via: 'session' | 'api_token';
 }
 
 export const authMiddleware = createMiddleware<{
@@ -39,6 +45,13 @@ export const authMiddleware = createMiddleware<{
   }
 
   const token = header.slice(7);
+  if (token.startsWith(API_TOKEN_PREFIX)) {
+    const owner = await resolveApiToken(token);
+    if (!owner) throw new AppError('unauthorized', 'Invalid or expired token', 401);
+    c.set('user', { sub: owner.userId, username: owner.username, via: 'api_token' });
+    return next();
+  }
+
   const env = getEnv();
   const secret = jwtSecret();
 
@@ -80,7 +93,22 @@ export const authMiddleware = createMiddleware<{
     throw new AppError('account_disabled', 'This account has been disabled', 403);
   }
 
-  c.set('user', { sub, username, sid });
+  c.set('user', { sub, username, sid, via: 'session' });
 
+  await next();
+});
+
+/**
+ * For what only the person may do, never a script holding their API token:
+ * change a credential, manage the tokens themselves, approve on their behalf,
+ * or act as an admin. A token that leaks should be able to do the owner's
+ * errands, not decide for them or lock them out. Runs after `authMiddleware`.
+ */
+export const requireSession = createMiddleware<{
+  Variables: { user: AuthPayload };
+}>(async (c, next) => {
+  if (c.get('user').via !== 'session') {
+    throw new AppError('session_required', 'This needs a signed-in session, not an API token', 403);
+  }
   await next();
 });

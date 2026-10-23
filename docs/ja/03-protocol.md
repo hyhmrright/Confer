@@ -43,6 +43,8 @@ DID document の構造（W3C DID v1.0 互換）:
 - DID document は複数の verification method の宣言をサポートし、スムーズなローテーションを実現します
 - 旧鍵は少なくとも 30 日間保持します（処理中のリクエストが失敗するのを防ぐため）
 - 失効は、document から verification method を削除することで行います
+- 実装：`POST /api/v1/users/me/keys/rotate` は `#key-<n>` を生成してすぐにそれで署名する。古い鍵は退役予定となり、検証専用として 30 日間 DID document に残る。`POST /api/v1/users/me/keys/revoke {key_id}` は退役中の鍵を即座に外す（使用中の鍵は直接失効できないので、先にローテーションする）。どちらもサインイン済みセッションのみを受け付け、監査ログに記録される。
+- 検証側：署名の keyId が、キャッシュした相手の DID document に無い場合は、キャッシュを迂回して一度だけ取り直す（DID ごとに 1 分に 1 回まで）。相手がローテーションした直後の最初のメッセージが、こちらのキャッシュのせいで拒否されることはない。
 
 ## AgentFacts (NANDA-compatible)
 

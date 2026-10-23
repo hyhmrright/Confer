@@ -10,7 +10,7 @@ import { Hono } from 'hono';
 import { getDb } from '../db/connection.js';
 import { errandCards, errands, users } from '../db/schema.js';
 import { isAdminUser } from '../middleware/admin.js';
-import { authMiddleware } from '../middleware/auth.js';
+import { authMiddleware, requireSession } from '../middleware/auth.js';
 import type { AppEnv } from '../types.js';
 
 // Idea A — outbound delegate-assistant errand decision cards. REST surface (Bearer
@@ -177,7 +177,8 @@ errandRoutes.post('/:id/cards', async (c) => {
 // belonging to another owner's errand is 403). An expired card is 409. No
 // permission-level classification and no autonomous release — the decision is the
 // authorization.
-errandRoutes.post('/cards/:cardId/decide', async (c) => {
+// The owner's own approval; never given by a script holding their API token.
+errandRoutes.post('/cards/:cardId/decide', requireSession, async (c) => {
   const user = c.get('user');
   const db = getDb();
   const cardId = c.req.param('cardId');

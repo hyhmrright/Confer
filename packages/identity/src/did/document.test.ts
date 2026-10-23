@@ -14,7 +14,7 @@ describe('buildDIDDocument', () => {
     const doc = buildDIDDocument({
       did: 'did:web:example.com',
       serviceEndpoint: 'https://example.com/a2a/v1',
-      key: KEY,
+      keys: [KEY],
     });
 
     expect(doc.id).toBe('did:web:example.com');
@@ -26,7 +26,7 @@ describe('buildDIDDocument', () => {
     const doc = buildDIDDocument({
       did: 'did:web:example.com',
       serviceEndpoint: 'https://example.com/a2a/v1',
-      key: KEY,
+      keys: [KEY],
     });
 
     expect(doc.verificationMethod[0]).toEqual({
@@ -42,15 +42,30 @@ describe('buildDIDDocument', () => {
     const doc = buildDIDDocument({
       did: 'did:web:example.com',
       serviceEndpoint: 'https://example.com/a2a/v1',
-      key: KEY,
+      keys: [KEY],
     });
     expect(doc.service?.[0]?.serviceEndpoint).toBe('https://example.com/a2a/v1');
+  });
+
+  // A rotation publishes the new key beside the one it replaces, so a message
+  // signed with either still verifies until the old one retires.
+  test('publishes and authorizes every key it is given', () => {
+    const next = { keyId: 'did:web:example.com#key-2', publicKeyMultibase: 'zNext' };
+    const doc = buildDIDDocument({
+      did: 'did:web:example.com',
+      serviceEndpoint: 'https://example.com/a2a/v1',
+      keys: [next, KEY],
+    });
+    expect(doc.verificationMethod.map((vm) => vm.id)).toEqual([next.keyId, KEY.keyId]);
+    expect(doc.authentication).toEqual([next.keyId, KEY.keyId]);
+    expect(didDocumentSchema.safeParse(doc).success).toBe(true);
   });
 
   test('omits verification material but keeps the service when no key is given', () => {
     const doc = buildDIDDocument({
       did: 'did:web:example.com',
       serviceEndpoint: 'https://example.com/a2a/v1',
+      keys: [],
     });
 
     expect(doc.verificationMethod).toEqual([]);

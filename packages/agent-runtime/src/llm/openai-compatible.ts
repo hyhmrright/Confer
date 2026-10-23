@@ -17,6 +17,18 @@ function toOpenAIMessage(m: LLMMessage): Record<string, unknown> {
   if (m.tool_calls) {
     return { role: 'assistant', content: m.content, tool_calls: m.tool_calls };
   }
+  if (m.role === 'user' && m.images?.length) {
+    return {
+      role: 'user',
+      content: [
+        ...m.images.map((img) => ({
+          type: 'image_url',
+          image_url: { url: `data:${img.media_type};base64,${img.data}` },
+        })),
+        ...(m.content?.trim() ? [{ type: 'text', text: m.content }] : []),
+      ],
+    };
+  }
   return { role: m.role, content: m.content ?? '' };
 }
 

@@ -3,17 +3,41 @@ import {
   createConversationRequestSchema,
   newId,
   sendMessageRequestSchema,
+  updateConversationRequestSchema,
 } from '@confer/shared';
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  ne,
+  or,
+  sql,
+} from 'drizzle-orm';
 import { Hono } from 'hono';
 import { getDb } from '../db/connection.js';
-import { conversationParticipants, conversations, messages } from '../db/schema.js';
+import {
+  attachments,
+  conversationParticipants,
+  conversations,
+  messages,
+  peerAgents,
+} from '../db/schema.js';
+import { attachmentsByMessage, storageKeys } from '../lib/attachments.js';
+import { runDetached } from '../lib/background.js';
 import { historyBefore } from '../lib/conversation-history.js';
 import { parseLimit } from '../lib/pagination.js';
+import { removeObject } from '../lib/storage.js';
 import { assertIsConversationParticipant, assertOwnsConversation } from '../lib/tenant.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rate-limit.js';
 import type { AppEnv } from '../types.js';
+import { sendToUser } from '../ws/handler.js';
 
 export const conversationRoutes = new Hono<AppEnv>();
 
@@ -22,6 +46,8 @@ conversationRoutes.use('/*', authMiddleware);
 conversationRoutes.get('/', async (c) => {
   const user = c.get('user');
   const db = getDb();
+  // The list shows live threads by default; `?archived=1` shows the shelf.
+  const archived = c.req.query('archived') === '1';
 
   const participantRows = await db
     .select({ conversation_id: conversationParticipants.conversation_id })
@@ -41,12 +67,93 @@ conversationRoutes.get('/', async (c) => {
         inArray(conversations.id, convIds),
         // Admin-hidden conversations are invisible to regular users.
         eq(conversations.moderation_status, 'visible'),
+        archived ? isNotNull(conversations.archived_at) : isNull(conversations.archived_at),
       ),
     )
     .orderBy(desc(conversations.updated_at))
     .limit(50);
 
-  return c.json({ conversations: convs });
+  const unread = await unreadCounts(
+    user.sub,
+    convs.map((conv) => conv.id),
+  );
+  return c.json({
+    conversations: convs.map((conv) => ({ ...conv, unread_count: unread.get(conv.id) ?? 0 })),
+  });
+});
+
+// Messages someone other than this user wrote since they last marked the
+// thread read. A participant who never has counts from when they joined, which
+// for an inbound A2A thread is the moment the peer opened it.
+async function unreadCounts(userId: string, convIds: string[]): Promise<Map<string, number>> {
+  if (convIds.length === 0) return new Map();
+  const rows = await getDb()
+    .select({ conversation_id: messages.conversation_id, count: count() })
+    .from(messages)
+    .innerJoin(
+      conversationParticipants,
+      and(
+        eq(conversationParticipants.conversation_id, messages.conversation_id),
+        eq(conversationParticipants.user_id, userId),
+      ),
+    )
+    .where(
+      and(
+        inArray(messages.conversation_id, convIds),
+        eq(messages.moderation_status, 'visible'),
+        or(ne(messages.sender_type, 'user'), ne(messages.sender_id, userId)),
+        gt(
+          messages.created_at,
+          sql`coalesce(${conversationParticipants.last_read_at}, ${conversationParticipants.joined_at})`,
+        ),
+      ),
+    )
+    .groupBy(messages.conversation_id);
+  return new Map(rows.map((r) => [r.conversation_id, r.count]));
+}
+
+conversationRoutes.patch('/:id', async (c) => {
+  const user = c.get('user');
+  const db = getDb();
+  const convId = c.req.param('id');
+  const body = updateConversationRequestSchema.parse(await c.req.json());
+
+  // Renaming or shelving a thread changes it for everyone in it, so like
+  // deletion it is the creator's call.
+  await assertOwnsConversation(user.sub, convId);
+
+  const updates: Partial<typeof conversations.$inferInsert> = {};
+  if (body.name !== undefined) updates.name = body.name;
+  if (body.archived !== undefined) updates.archived_at = body.archived ? new Date() : null;
+
+  // An empty SET clause is a 500; an empty body is a no-op.
+  const [conv] =
+    Object.keys(updates).length === 0
+      ? await db.select().from(conversations).where(eq(conversations.id, convId))
+      : await db.update(conversations).set(updates).where(eq(conversations.id, convId)).returning();
+
+  // The owner's other tabs keep their lists in step.
+  sendToUser(user.sub, { type: 'conversation.updated', data: { conversation_id: convId } });
+  return c.json({ conversation: conv });
+});
+
+conversationRoutes.post('/:id/read', async (c) => {
+  const user = c.get('user');
+  const convId = c.req.param('id');
+
+  await assertIsConversationParticipant(user.sub, convId);
+
+  await getDb()
+    .update(conversationParticipants)
+    .set({ last_read_at: new Date() })
+    .where(
+      and(
+        eq(conversationParticipants.conversation_id, convId),
+        eq(conversationParticipants.user_id, user.sub),
+      ),
+    );
+
+  return c.json({ ok: true });
 });
 
 conversationRoutes.post('/', async (c) => {
@@ -112,7 +219,61 @@ conversationRoutes.get('/:id/messages', async (c) => {
   // The cursor and the ordering are the same key — see historyBefore. This
   // paged by id while ordering by created_at, and the two disagreed often
   // enough for a page to skip a message or repeat one.
-  return c.json({ messages: await historyBefore(convId, before, limit) });
+  const page = await historyBefore(convId, before, limit);
+  const files = await attachmentsByMessage(page.map((m) => m.id));
+  return c.json({
+    messages: page.map((m) => ({ ...m, attachments: files.get(m.id) ?? [] })),
+  });
+});
+
+// The cap on one export. Far past any thread a person reads, and a bound on
+// what one request can make the database and the process hold.
+const EXPORT_MAX_MESSAGES = 5000;
+
+// The whole thread, oldest first, for the owner to keep. Facts only: the
+// client words the transcript (who "you" and "your agent" are) in the reader's
+// language. A peer's display name rides along because the client has no other
+// way to put one on a message from a contact it has since removed.
+conversationRoutes.get('/:id/export', async (c) => {
+  const user = c.get('user');
+  const db = getDb();
+  const convId = c.req.param('id');
+
+  await assertIsConversationParticipant(user.sub, convId);
+  const [conversation] = await db
+    .select({
+      id: conversations.id,
+      name: conversations.name,
+      created_at: conversations.created_at,
+    })
+    .from(conversations)
+    .where(and(eq(conversations.id, convId), eq(conversations.moderation_status, 'visible')))
+    .limit(1);
+  if (!conversation) throw new AppError('not_found', 'Conversation not found', 404);
+
+  const rows = await db
+    .select({
+      id: messages.id,
+      sender_type: messages.sender_type,
+      sender_did: messages.sender_did,
+      sender_name: peerAgents.name,
+      content_type: messages.content_type,
+      content: messages.content,
+      content_json: messages.content_json,
+      citations_json: messages.citations_json,
+      created_at: messages.created_at,
+    })
+    .from(messages)
+    .leftJoin(peerAgents, eq(peerAgents.id, messages.sender_id))
+    .where(and(eq(messages.conversation_id, convId), eq(messages.moderation_status, 'visible')))
+    .orderBy(asc(messages.id))
+    .limit(EXPORT_MAX_MESSAGES);
+
+  return c.json({
+    conversation,
+    messages: rows,
+    truncated: rows.length === EXPORT_MAX_MESSAGES,
+  });
 });
 
 conversationRoutes.delete('/:id', async (c) => {
@@ -129,13 +290,29 @@ conversationRoutes.delete('/:id', async (c) => {
   // — a thread nobody can read and nobody can be added back to. An inbound A2A
   // conversation id is derived from the peer's thread id, so that dead row
   // would be found again by the peer's next message and quietly collect it.
-  await db.transaction(async (tx) => {
+  // Attachments reference their message, so they go first — and their files
+  // only once the rows are gone, since a stored file without a row is merely
+  // waste while a row without its file is a broken message.
+  const files = await db.transaction(async (tx) => {
+    const removed = await tx
+      .delete(attachments)
+      .where(
+        inArray(
+          attachments.message_id,
+          tx.select({ id: messages.id }).from(messages).where(eq(messages.conversation_id, convId)),
+        ),
+      )
+      .returning({ storage_url: attachments.storage_url, content_type: attachments.content_type });
     await tx
       .delete(conversationParticipants)
       .where(eq(conversationParticipants.conversation_id, convId));
     await tx.delete(messages).where(eq(messages.conversation_id, convId));
     await tx.delete(conversations).where(eq(conversations.id, convId));
+    return removed;
   });
+  runDetached(Promise.all(files.flatMap(storageKeys).map(removeObject)), (e) =>
+    console.error('attachment cleanup failed:', e),
+  );
 
   return c.json({ ok: true });
 });
@@ -156,19 +333,41 @@ conversationRoutes.post(
     const body = sendMessageRequestSchema.parse(await c.req.json());
 
     const msgId = newId();
-    const [msg] = await db
-      .insert(messages)
-      .values({
-        id: msgId,
-        conversation_id: convId,
-        sender_type: 'user',
-        sender_id: user.sub,
-        content_type: body.content_type,
-        content: body.content,
-        in_reply_to: body.in_reply_to,
-        via: body.via,
-      })
-      .returning();
+    const msg = await db.transaction(async (tx) => {
+      const [row] = await tx
+        .insert(messages)
+        .values({
+          id: msgId,
+          conversation_id: convId,
+          sender_type: 'user',
+          sender_id: user.sub,
+          content_type: body.content_type,
+          content: body.content,
+          in_reply_to: body.in_reply_to,
+          via: body.via,
+        })
+        .returning();
+      if (body.attachment_ids.length > 0) {
+        // Only the sender's own uploads, and only ones no message has claimed:
+        // an id is not a capability, so someone else's file cannot be attached
+        // and a sent one cannot be moved to another thread.
+        const claimed = await tx
+          .update(attachments)
+          .set({ message_id: msgId })
+          .where(
+            and(
+              inArray(attachments.id, body.attachment_ids),
+              eq(attachments.user_id, user.sub),
+              isNull(attachments.message_id),
+            ),
+          )
+          .returning({ id: attachments.id });
+        if (claimed.length !== new Set(body.attachment_ids).size) {
+          throw new AppError('invalid_attachment', 'Unknown or already sent attachment', 400);
+        }
+      }
+      return row;
+    });
 
     if (!msg) {
       throw new AppError('message_creation_failed', 'Failed to create message', 500);

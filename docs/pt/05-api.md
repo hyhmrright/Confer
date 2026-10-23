@@ -37,6 +37,11 @@ POST   /api/v1/auth/register
 POST   /api/v1/auth/login
 POST   /api/v1/auth/refresh
 POST   /api/v1/auth/logout
+POST   /api/v1/auth/password        # {current_password, new_password}
+GET    /api/v1/auth/2fa             # {enabled, recovery_codes_left}
+POST   /api/v1/auth/2fa/setup       # → {secret, otpauth_uri}
+POST   /api/v1/auth/2fa/enable      # {code} → {recovery_codes}
+POST   /api/v1/auth/2fa/disable     # {password, totp_code | recovery_code}
 POST   /api/v1/auth/oauth/{provider}    # OAuth callback
 ```
 
@@ -62,11 +67,24 @@ Resposta:
 }
 ```
 
+**Início de sessão em dois passos (TOTP).** Depois de ativado, `login` pede também, após uma palavra-passe correta, um `totp_code` (6 dígitos de uma app de autenticação) ou um `recovery_code`; sem nenhum responde 401 `totp_required`, que é como o cliente sabe mostrar o segundo passo, e um código errado dá 401 `invalid_second_factor`. Uma palavra-passe errada responde sempre primeiro `invalid_credentials`, por isso nunca revela se a conta tem dois passos. Cada código serve uma vez (o passo de tempo usado é registado) e cada código de recuperação é riscado ao ser usado; ambos são gastos por um único UPDATE condicional, pelo que dois inícios de sessão simultâneos não podem reutilizar um. O segredo de `setup` é guardado cifrado com AES-256-GCM e não tem efeito até `enable` confirmar um código da app; `enable` devolve esta única vez os 10 códigos de recuperação e só os seus hashes são guardados. `disable` pede a palavra-passe e um segundo fator. `password` pede a palavra-passe atual e termina todas as outras sessões. Tudo isto é auditado e limitado a 10 por minuto por conta. `enable` também pede `password`, para que um token roubado não chegue para pôr a app de autenticação de um atacante à frente da conta de outra pessoa; com os dois passos ativados, `password` também pede um segundo fator. Cinco códigos errados seguidos bloqueiam as tentativas de código dessa conta durante 15 minutos (429 `too_many_attempts`), além do limite de início de sessão por IP. Os códigos de recuperação são guardados como HMAC com a chave do servidor. Para um utilizador que perdeu a app de autenticação e os códigos de recuperação, um administrador pode desativá-lo com `POST /api/v1/admin/users/{id}/reset-2fa` (auditado, e nunca para a conta do próprio administrador).
+
+```
+GET    /api/v1/tokens              # [{id, name, prefix, created_at, last_used_at, expires_at}]
+POST   /api/v1/tokens              # {name, expires_in_days?} → {token: {..., token}}
+DELETE /api/v1/tokens/{id}
+```
+
+**Tokens de API pessoais.** Para scripts e ferramentas que chamam a API como o dono: `Authorization: Bearer cfr_…`, o mesmo cabeçalho que o access token de uma sessão usa. O token só é devolvido em claro quando é criado; o servidor guarda o seu SHA-256 e um prefixo para o reconhecer. Validade opcional de 1 a 365 dias, no máximo 20 por utilizador, e um token deixa de funcionar assim que o dono é desativado. Um token pode fazer o que o dono faz no chat, mas estas operações só aceitam uma sessão iniciada e respondem a um token com 403 `session_required`: terminar sessão, palavra-passe e início de sessão em dois passos, gerir tokens, decidir pedidos de permissão e cartões de errands, mudar chaves de LLM e todas as rotas de administração. Um token divulgado pode fazer os recados do dono, mas não decidir por ele nem trancá-lo fora. Criar e revogar fica auditado.
+
 ### Configuração do usuário e do Agente
 
 ```
 GET    /api/v1/users/me
 PATCH  /api/v1/users/me
+GET    /api/v1/users/me/keys          # signing keys: current / retiring / revoked
+POST   /api/v1/users/me/keys/rotate   # session only
+POST   /api/v1/users/me/keys/revoke   # {key_id}, session only
 GET    /api/v1/agents/me
 PATCH  /api/v1/agents/me
 PUT    /api/v1/agents/me/policies
@@ -141,6 +159,12 @@ DELETE /api/v1/conversations/{id}/participants/{p_id}
 POST   /api/v1/conversations/{id}/read             # marca como lida
 ```
 
+`GET` lista por predefinição as conversas não arquivadas e, com `?archived=1`, as arquivadas; cada uma traz `unread_count`, as mensagens que outros escreveram desde que o utilizador a marcou como lida pela última vez (ou desde que entrou, se nunca o fez) — as próprias não contam. `PATCH` aceita `{ name?, archived? }` e só quem criou a conversa o pode usar. `POST .../read` define o `last_read_at` do utilizador para agora. Se um contacto escrever numa conversa arquivada, ela é desarquivada e passa para o topo.
+
+`GET /api/v1/search/messages?q=&limit=` procura por subcadeia no texto das mensagens de todas as conversas em que o utilizador participa, arquivadas incluídas, das mais recentes para as mais antigas; `q` tem 1–200 caracteres e `limit` é 20 por predefinição, 50 no máximo. Devolve `{ results: [{ message_id, conversation_id, conversation_name, sender_type, content, created_at }] }`. Usa-se correspondência por subcadeia e não a pesquisa de texto completo do Postgres, porque as configurações incluídas não segmentam chinês.
+
+`GET /api/v1/conversations/{id}/export` devolve a conversa inteira, da mais antiga para a mais recente e com no máximo 5000 mensagens, apenas aos participantes: `{ conversation, messages, truncated }`, cada mensagem com `sender_type`, `sender_did`, o `sender_name` do agente do peer, `content`, `content_json` e `citations_json`. Devolve apenas factos; o cliente redige o Markdown na língua de quem lê (quem é «eu» e quem é «o meu agente»).
+
 `POST /api/v1/conversations/{id}/messages` requisição:
 
 ```json
@@ -182,6 +206,8 @@ GET    /api/v1/permissions/history               # histórico
 Entre os pedidos pendentes, os de `action='connect'` são **pedidos de conexão** (gerados pela entrada A2A no primeiro contato de um peer desconhecido). Aprovar (`allow_*`) grava esse peer em `peer_contacts` e estabelece a conexão; recusar não estabelece.
 
 Os de `action='ask'` são **perguntas pendentes de um peer já conectado**: a entrada A2A os gera quando a política do Agente decide `ask_user` para aquela pergunta (veja «Caixa de pendências (resposta em diferido)» em `03-protocol.md`). Aprovar (`allow_*`) faz o Agente responder à pergunta suspensa; recusar a deixa sem resposta.
+
+`allow_always` / `deny_always` são **decisões permanentes**. Numa pergunta pendente, gravam (ou substituem) uma regra `{ action: 'ask', decision: 'allow' | 'deny' }` no início da política do contacto, para que as perguntas seguintes desse peer sejam respondidas ou recusadas sem ficarem pendentes; o dono pode ver e revogar a regra no painel de política do contacto. Num pedido de ligação, `deny_always` faz com que os pedidos seguintes desse peer sejam descartados em silêncio em vez de chegarem à caixa de entrada; adicionar o peer à mão pelo seu DID continua a funcionar.
 
 `GET /pending` acompanha cada pedido de uma `description` (o pedido de conexão traz quem o iniciou e a primeira mensagem; a pergunta traz quem pergunta e o texto) para o dono poder decidir.
 
@@ -251,9 +277,10 @@ Todos os endpoints são limitados a `user.sub`: acessar a base ou o documento de
 
 ```
 POST   /api/v1/attachments                       # multipart upload
-GET    /api/v1/attachments/{id}                  # download (302 para uma URL assinada)
-DELETE /api/v1/attachments/{id}
+GET    /api/v1/attachments/{id}/content          # o próprio ficheiro, para quem o carregou ou para os participantes da conversa da sua mensagem
 ```
+
+Um carregamento começa sem vínculo; `POST /conversations/{id}/messages` reclama-o através de `attachment_ids` (no máximo 5), e só podem ser reclamados carregamentos do próprio remetente ainda não enviados. Uma mensagem com anexos e sem texto é válida. As imagens são reconhecidas pelos bytes (PNG / JPEG / GIF / WebP, até 5 MB cada) e chegam ao modelo como blocos de imagem; PDF / DOCX / XLSX / texto são lidos no carregamento (até 10 MB) e o texto acompanha a mensagem como `<attachment>` em cada turno. O SVG é tratado como texto e nunca é mostrado em linha como imagem. `content` só serve em linha uma imagem reconhecida; tudo o resto é uma transferência `application/octet-stream`. Cada mensagem da lista traz `attachments`. Apagar uma conversa apaga os anexos.
 
 ### Uso
 
@@ -307,13 +334,13 @@ A difusão de `typing.*` segue o conjunto de assinaturas daquele socket. Quando 
 ```
 pong
 message.new                   // mensagem nova
-message.updated
-message.deleted
+message.updated               // reservado, ainda não enviado
+message.deleted               // reservado, ainda não enviado
 typing.update                 // quem está digitando
 presence.update               // um contato entra ou sai
 permission.request            // um pedido de permissão que o usuário precisa decidir
-agent.status                  // o que o meu Agente está fazendo («consultando o Agente da ABC…»)
-conversation.updated
+agent.status                  // o meu Agente está a responder a um contacto: {conversation_id, state: thinking|tool|idle, tool?}; o cliente redige o texto
+conversation.updated          // um contacto escreveu em {conversation_id} (talvez um tópico novo); o cliente atualiza a lista
 ```
 
 `message.new` por exemplo:
@@ -410,11 +437,16 @@ POST   /a2a/v1/message:send              # SendMessage → Task
 GET    /a2a/v1/tasks/{id}                # GetTask
 GET    /a2a/v1/tasks                     # ListTasks (paginação por cursor)
 POST   /a2a/v1/tasks/{id}:cancel         # CancelTask → TaskNotCancelable
-POST   /a2a/v1/message:stream            # não implementado → UnsupportedOperation
-POST   /a2a/v1/tasks/{id}:subscribe      # não implementado → UnsupportedOperation
+POST   /a2a/v1/message:stream            # SendStreamingMessage → SSE: Task, then statusUpdate
+GET|POST /a2a/v1/tasks/{id}:subscribe    # SubscribeToTask → SSE
+POST   /a2a/v1/tasks/{id}/pushNotificationConfigs            # → TaskPushNotificationConfig
+GET    /a2a/v1/tasks/{id}/pushNotificationConfigs            # → {configs, nextPageToken}
+GET    /a2a/v1/tasks/{id}/pushNotificationConfigs/{configId}
+DELETE /a2a/v1/tasks/{id}/pushNotificationConfigs/{configId} # idempotent
 GET    /a2a/v1/extendedAgentCard         # não implementado → UnsupportedOperation
-*      /a2a/v1/tasks/{id}/pushNotificationConfigs…  # → PushNotificationNotSupported
 ```
+
+**Streaming e push.** `message:stream` passa pelas mesmas validações e barreiras que `message:send` e responde `text/event-stream`, uma linha `data:` por `StreamResponse`: primeiro `{task}`, depois um `{statusUpdate}` quando a tarefa termina (ou chega a `AUTH_REQUIRED`, à espera de uma pessoa), e fecha. Neste caminho a resposta é um único turno do LLM sem saída parcial, por isso a granularidade é de eventos de tarefa. `:subscribe` aceita GET e POST (o proto diz GET, as tabelas da spec POST) e responde `UnsupportedOperation` a uma tarefa terminada. Push: um peer regista um webhook numa tarefa (ou envia `configuration.taskPushNotificationConfig` em `message:send`), e cada estado que a tarefa atinge é enviado uma vez por POST como `{task}`, com `Authorization: {scheme} {credentials}` e o `token` em `X-A2A-Notification-Token`. O webhook tem de ser https e resolver para um endereço público (a mesma regra SSRF do A2A de saída, verificada de novo na entrega, sem seguir redirecionamentos); as credenciais ficam seladas e só o `scheme` é devolvido. No máximo 5 por tarefa, visíveis e apagáveis só pelo peer que os registou.
 
 **O dialeto próprio do Confer** (entre instâncias; descoberto por `/.well-known/agents.json`):
 
@@ -447,7 +479,7 @@ Segue o `AgentCard` do **Agent2Agent v1.0** da Linux Foundation (campos tirados 
 Algumas escolhas deliberadas:
 
 - **Um Card por Agente**, com `supportedInterfaces[].tenant` = nome de usuário. O well-known da especificação pressupõe um Agente por domínio, e esta instância é multi-inquilino; `tenant` é precisamente o seletor de roteamento que a especificação define para «vários Agentes atrás de um mesmo endpoint A2A». `/.well-known/agent-card.json` só responde quando há **exatamente um Agente público** (o caso de quem se auto-hospeda sozinho); caso contrário devolve 404 e aponta para `agents.json` na mensagem de erro — escolher uma conta qualquer e chamá-la de «o Agente deste domínio» seria falso.
-- **`streaming: false`**. Endpoints em fluxo existem, sim, mas no formato próprio do Confer, não no `SendStreamingMessage` da especificação. Anunciar uma capacidade que um cliente padrão não consegue usar é pior do que não anunciar nada.
+- **`streaming: true`, `pushNotifications: true`.** `message:stream`, `:subscribe` e as rotas de configuração de push respondem nas formas da spec; o streaming é ao nível de eventos de tarefa (a Task e depois um estado final).
 - **Não se declara `securitySchemes`**. O que a especificação oferece ali é chave de API, autenticação HTTP, OAuth2, OIDC ou mTLS, e este endpoint não aceita nenhum: o que ele quer é uma requisição assinada. Preencher um qualquer equivaleria a dizer ao cliente que ele pode se autenticar de um modo que será infalivelmente recusado. A exigência real é declarada como **extensão obrigatória** (`capabilities.extensions`, com o endereço da RFC 9421 em `uri` e `required: true`), que é exatamente o mecanismo que a especificação prevê para isso.
 - O Card é um **documento de descoberta** e a sua visibilidade é idêntica à de `/.well-known/agents.json`: um Agente não público ou desativado devolve sempre 404; do contrário esta rota viraria um jeito de enumerar contas que o dono não quis tornar públicas.
 
@@ -493,6 +525,8 @@ Eventos suportados: `message.new.peer`, `permission.granted`, `thread.archived`.
 | `/api/v1/auth/register` | 3/hora por IP |
 | `/api/v1/conversations/*/messages` POST | 60/minuto por usuário |
 | `/a2a/v1/*` | 60/minuto por IP e caminho, e 300/minuto por IP em todo o `/a2a/v1` |
+| Perguntas A2A (ambos os bindings) | Por DID de peer e dono 20/minuto e 300/dia; por domínio do peer 60/minuto. Excedido → 429 / `RESOURCE_EXHAUSTED` com `Retry-After` |
+| `/api/v1/consult/{peer}` POST | 30/minuto por utilizador |
 | WSS | no máximo 10 conexões simultâneas por usuário |
 
 Resposta ao exceder o limite:

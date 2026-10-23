@@ -37,6 +37,11 @@ POST   /api/v1/auth/register
 POST   /api/v1/auth/login
 POST   /api/v1/auth/refresh
 POST   /api/v1/auth/logout
+POST   /api/v1/auth/password        # {current_password, new_password}
+GET    /api/v1/auth/2fa             # {enabled, recovery_codes_left}
+POST   /api/v1/auth/2fa/setup       # → {secret, otpauth_uri}
+POST   /api/v1/auth/2fa/enable      # {code} → {recovery_codes}
+POST   /api/v1/auth/2fa/disable     # {password, totp_code | recovery_code}
 POST   /api/v1/auth/oauth/{provider}    # OAuth callback
 ```
 
@@ -62,11 +67,24 @@ POST   /api/v1/auth/oauth/{provider}    # OAuth callback
 }
 ```
 
+**دو مرحلہ سائن ان (TOTP)۔** فعال ہونے پر `login` درست پاس ورڈ کے بعد ایک `totp_code` (تصدیقی ایپ کے 6 ہندسے) یا `recovery_code` بھی مانگتا ہے؛ دونوں نہ ہوں تو 401 `totp_required` لوٹاتا ہے، جس سے کلائنٹ جانتا ہے کہ دوسرا مرحلہ دکھانا ہے، اور غلط کوڈ پر 401 `invalid_second_factor`۔ غلط پاس ورڈ پر ہمیشہ پہلے `invalid_credentials` آتا ہے، اس لیے یہ کبھی ظاہر نہیں ہوتا کہ اکاؤنٹ میں دو مرحلہ سائن ان فعال ہے۔ ہر کوڈ ایک ہی بار چلتا ہے (استعمال شدہ وقتی مرحلہ درج ہوتا ہے) اور ہر بازیابی کوڈ استعمال ہوتے ہی کاٹ دیا جاتا ہے؛ دونوں ایک ہی مشروط UPDATE سے خرچ ہوتے ہیں، اس لیے بیک وقت دو سائن ان ایک کوڈ دوبارہ نہیں چلا سکتے۔ `setup` کا راز AES-256-GCM سے خفیہ کر کے رکھا جاتا ہے اور جب تک `enable` ایپ کے کوڈ سے اس کی تصدیق نہ کرے، بے اثر رہتا ہے؛ `enable` 10 بازیابی کوڈ صرف اسی ایک بار لوٹاتا ہے اور صرف ان کے ہیش رکھے جاتے ہیں۔ `disable` کے لیے پاس ورڈ اور دوسرا عنصر درکار ہے۔ `password` کے لیے موجودہ پاس ورڈ درکار ہے اور یہ باقی تمام سیشن ختم کر دیتا ہے۔ یہ سب آڈٹ لاگ میں درج ہوتے ہیں اور ہر اکاؤنٹ کے لیے فی منٹ 10 تک محدود ہیں۔ `enable` کے لیے بھی `password` درکار ہے، تاکہ صرف چوری شدہ ٹوکن سے کسی کے اکاؤنٹ کے آگے حملہ آور کی تصدیقی ایپ نہ لگائی جا سکے؛ دو مرحلہ سائن ان فعال ہونے پر `password` کے لیے بھی دوسرا عنصر درکار ہے۔ لگاتار 5 غلط کوڈ اس اکاؤنٹ کی کوڈ کوششوں کو 15 منٹ کے لیے روک دیتے ہیں (429 `too_many_attempts`)، جو فی IP لاگ ان حد کے علاوہ ہے۔ بازیابی کوڈ سرور کلید کے ساتھ HMAC کی صورت میں رکھے جاتے ہیں۔ جس صارف کی تصدیقی ایپ اور بازیابی کوڈ دونوں گم ہو گئے ہوں، اس کے لیے منتظم `POST /api/v1/admin/users/{id}/reset-2fa` سے اسے بند کر سکتا ہے (آڈٹ ہوتا ہے، اور منتظم کے اپنے اکاؤنٹ پر کبھی نہیں)۔
+
+```
+GET    /api/v1/tokens              # [{id, name, prefix, created_at, last_used_at, expires_at}]
+POST   /api/v1/tokens              # {name, expires_in_days?} → {token: {..., token}}
+DELETE /api/v1/tokens/{id}
+```
+
+**ذاتی API ٹوکن۔** ان اسکرپٹس اور ٹولز کے لیے جو مالک کے طور پر API کو کال کرتے ہیں: `Authorization: Bearer cfr_…`، وہی ہیڈر جو سیشن کا access token استعمال کرتا ہے۔ ٹوکن سادہ متن میں صرف بناتے وقت لوٹایا جاتا ہے؛ سرور اس کا SHA-256 اور پہچان کے لیے ایک سابقہ رکھتا ہے۔ 1 سے 365 دن کی اختیاری میعاد، فی صارف زیادہ سے زیادہ 20، اور مالک کے غیر فعال ہوتے ہی ٹوکن کام کرنا بند کر دیتا ہے۔ ٹوکن وہ کر سکتا ہے جو مالک چیٹ میں کرتا ہے، مگر یہ کارروائیاں صرف سائن ان سیشن قبول کرتی ہیں اور ٹوکن کو 403 `session_required` لوٹاتی ہیں: لاگ آؤٹ، پاس ورڈ اور دو مرحلہ سائن ان، ٹوکن کا انتظام، اجازت کی درخواستوں اور errand کارڈز پر فیصلہ، LLM کلیدیں بدلنا، اور تمام admin راستے۔ لیک ہونے والا ٹوکن مالک کے کام کر سکتا ہے، مگر اس کی جگہ فیصلہ نہیں کر سکتا اور اسے باہر بند نہیں کر سکتا۔ بنانا اور منسوخ کرنا آڈٹ ہوتا ہے۔
+
 ### صارف اور Agent کی ترتیب
 
 ```
 GET    /api/v1/users/me
 PATCH  /api/v1/users/me
+GET    /api/v1/users/me/keys          # signing keys: current / retiring / revoked
+POST   /api/v1/users/me/keys/rotate   # session only
+POST   /api/v1/users/me/keys/revoke   # {key_id}, session only
 GET    /api/v1/agents/me
 PATCH  /api/v1/agents/me
 PUT    /api/v1/agents/me/policies
@@ -141,6 +159,12 @@ DELETE /api/v1/conversations/{id}/participants/{p_id}
 POST   /api/v1/conversations/{id}/read             # پڑھا ہوا نشان زد کریں
 ```
 
+`GET` بطور طے شدہ غیر محفوظ شدہ گفتگو اور `?archived=1` کے ساتھ محفوظ شدہ گفتگو دیتا ہے؛ ہر گفتگو میں `unread_count` ہوتا ہے، یعنی صارف کے آخری بار پڑھا ہوا نشان لگانے کے بعد سے (اگر کبھی نہ لگایا ہو تو شامل ہونے کے بعد سے) دوسروں کے لکھے پیغامات — اپنے پیغامات شمار نہیں ہوتے۔ `PATCH` `{ name?, archived? }` لیتا ہے اور اسے صرف گفتگو بنانے والا استعمال کر سکتا ہے۔ `POST .../read` کال کرنے والے کا `last_read_at` موجودہ وقت پر کر دیتا ہے۔ کوئی رابطہ محفوظ شدہ گفتگو میں لکھے تو وہ محفوظ شدہ سے نکل کر سب سے اوپر آ جاتی ہے۔
+
+`GET /api/v1/search/messages?q=&limit=` صارف جن تمام گفتگوؤں میں شامل ہے (محفوظ شدہ سمیت) ان کے پیغامات کے متن میں ذیلی سلسلہ تلاش کرتا ہے، نئے پہلے؛ `q` ‏1–200 حروف کا ہوتا ہے اور `limit` بطور طے شدہ 20، زیادہ سے زیادہ 50۔ یہ `{ results: [{ message_id, conversation_id, conversation_name, sender_type, content, created_at }] }` لوٹاتا ہے۔ Postgres کی مکمل متن تلاش کے بجائے ذیلی سلسلہ مماثلت اس لیے، کہ اس کی بلٹ اِن ترتیبات چینی متن کو الفاظ میں تقسیم نہیں کرتیں۔
+
+`GET /api/v1/conversations/{id}/export` صرف شرکاء کو پوری گفتگو لوٹاتا ہے، پرانے پیغامات پہلے اور زیادہ سے زیادہ 5000: `{ conversation, messages, truncated }`؛ ہر پیغام میں `sender_type`، `sender_did`، دوسرے فریق کے ایجنٹ کا `sender_name`، `content`، `content_json` اور `citations_json` ہوتے ہیں۔ یہ صرف حقائق لوٹاتا ہے؛ Markdown کلائنٹ قاری کی زبان میں بناتا ہے (کون "آپ" ہیں اور کون "آپ کا ایجنٹ")۔
+
 `POST /api/v1/conversations/{id}/messages` درخواست:
 
 ```json
@@ -182,6 +206,8 @@ GET    /api/v1/permissions/history               # تاریخچہ
 زیرِ التوا درخواستوں میں جن کا `action='connect'` ہے وہ **کنکشن کی درخواستیں** ہیں (اجنبی peer کے پہلے رابطے پر A2A داخلی راستہ انہیں بناتا ہے)۔ منظوری (`allow_*`) اس peer کو `peer_contacts` میں لکھ کر کنکشن بنا دیتی ہے؛ انکار سے نہیں بنتا۔
 
 جن کا `action='ask'` ہے وہ **پہلے سے جڑے peer کے زیرِ التوا سوال** ہیں — جب Agent کی پالیسی اُس سوال پر `ask_user` طے کرتی ہے تب A2A داخلی راستہ انہیں بناتا ہے (دیکھیں `03-protocol.md` کا «معلق ان باکس (غیر حاضری میں جواب)»)۔ منظوری (`allow_*`) پر Agent اُس معلق سوال کا جواب دیتا ہے؛ انکار پر نہیں دیتا۔
+
+`allow_always` / `deny_always` **مستقل فیصلے** ہیں۔ رکے ہوئے سوال پر یہ اس رابطے کی policy override کے شروع میں `{ action: 'ask', decision: 'allow' | 'deny' }` قاعدہ لکھتے (یا بدلتے) ہیں، اس لیے اس peer کے بعد کے سوالوں کا جواب دیا جاتا ہے یا انکار کیا جاتا ہے، روکا نہیں جاتا؛ مالک رابطے کے policy پینل میں یہ قاعدہ دیکھ اور منسوخ کر سکتا ہے۔ کنکشن کی درخواست پر `deny_always` سے اس peer کی بعد کی کنکشن درخواستیں انباکس تک پہنچنے کے بجائے خاموشی سے رد ہو جاتی ہیں؛ DID کے ذریعے peer کو ہاتھ سے شامل کرنا اب بھی کام کرتا ہے۔
 
 `GET /pending` ہر درخواست کے ساتھ ایک `description` دیتا ہے (کنکشن کی درخواست میں پہل کرنے والا اور اس کا پہلا پیغام؛ سوال میں پوچھنے والا اور سوال کا متن) تاکہ مالک فیصلہ کر سکے۔
 
@@ -251,9 +277,10 @@ POST   /api/v1/knowledge-bases/{kb_id}/documents/{doc_id}/retry # دوبارہ �
 
 ```
 POST   /api/v1/attachments                       # multipart upload
-GET    /api/v1/attachments/{id}                  # ڈاؤن لوڈ (دستخط شدہ URL پر 302)
-DELETE /api/v1/attachments/{id}
+GET    /api/v1/attachments/{id}/content          # فائل خود، اپ لوڈ کرنے والے کو یا اس کے پیغام کی گفتگو کے شرکاء کو
 ```
+
+اپ لوڈ شروع میں کسی پیغام سے منسلک نہیں ہوتا؛ `POST /conversations/{id}/messages` اسے `attachment_ids` (زیادہ سے زیادہ 5) کے ذریعے منسلک کرتا ہے، اور صرف بھیجنے والے کے اپنے، ابھی نہ بھیجے گئے اپ لوڈ ہی منسلک ہو سکتے ہیں۔ بغیر متن کے صرف منسلکات والا پیغام بھی درست ہے۔ تصاویر ان کے بائٹس سے پہچانی جاتی ہیں (PNG / JPEG / GIF / WebP، ہر ایک زیادہ سے زیادہ 5 MB) اور ماڈل تک تصویری بلاک کے طور پر پہنچتی ہیں؛ PDF / DOCX / XLSX / متن اپ لوڈ پر پڑھے جاتے ہیں (زیادہ سے زیادہ 10 MB) اور ان کا متن ہر باری میں `<attachment>` کے طور پر پیغام کے ساتھ جاتا ہے۔ SVG کو متن سمجھا جاتا ہے اور کبھی تصویر کی طرح ان لائن نہیں دکھایا جاتا۔ `content` صرف پہچانی گئی تصویر کو ان لائن دیتا ہے؛ باقی سب `application/octet-stream` ڈاؤن لوڈ ہوتا ہے۔ فہرست کے ہر پیغام میں `attachments` ہوتا ہے۔ گفتگو حذف کرنے سے اس کے منسلکات بھی حذف ہو جاتے ہیں۔
 
 ### استعمال
 
@@ -307,13 +334,13 @@ read.ack                      // پڑھے جانے کی تصدیق
 ```
 pong
 message.new                   // نیا پیغام
-message.updated
-message.deleted
+message.updated               // محفوظ، ابھی بھیجا نہیں جاتا
+message.deleted               // محفوظ، ابھی بھیجا نہیں جاتا
 typing.update                 // کون لکھ رہا ہے
 presence.update               // رابطے کا آنا جانا
 permission.request            // اجازت کی درخواست جس پر صارف کو فیصلہ کرنا ہے
-agent.status                  // میرا Agent کیا کر رہا ہے («ABC کے Agent سے پوچھ رہا ہوں…»)
-conversation.updated
+agent.status                  // میرا Agent کسی رابطے کو جواب دے رہا ہے: {conversation_id, state: thinking|tool|idle, tool?}؛ عبارت کلائنٹ بناتا ہے
+conversation.updated          // کسی رابطے نے {conversation_id} میں لکھا (شاید نئی گفتگو)؛ کلائنٹ اپنی فہرست تازہ کرتا ہے
 ```
 
 `message.new` مثال:
@@ -410,11 +437,16 @@ POST   /a2a/v1/message:send              # SendMessage → Task
 GET    /a2a/v1/tasks/{id}                # GetTask
 GET    /a2a/v1/tasks                     # ListTasks(کرسر سے صفحہ بندی)
 POST   /a2a/v1/tasks/{id}:cancel         # CancelTask → TaskNotCancelable
-POST   /a2a/v1/message:stream            # غیر نافذ → UnsupportedOperation
-POST   /a2a/v1/tasks/{id}:subscribe      # غیر نافذ → UnsupportedOperation
+POST   /a2a/v1/message:stream            # SendStreamingMessage → SSE: Task, then statusUpdate
+GET|POST /a2a/v1/tasks/{id}:subscribe    # SubscribeToTask → SSE
+POST   /a2a/v1/tasks/{id}/pushNotificationConfigs            # → TaskPushNotificationConfig
+GET    /a2a/v1/tasks/{id}/pushNotificationConfigs            # → {configs, nextPageToken}
+GET    /a2a/v1/tasks/{id}/pushNotificationConfigs/{configId}
+DELETE /a2a/v1/tasks/{id}/pushNotificationConfigs/{configId} # idempotent
 GET    /a2a/v1/extendedAgentCard         # غیر نافذ → UnsupportedOperation
-*      /a2a/v1/tasks/{id}/pushNotificationConfigs…  # → PushNotificationNotSupported
 ```
+
+**اسٹریمنگ اور پش۔** `message:stream` انہی جانچوں اور دروازوں سے گزرتا ہے جن سے `message:send`، اور `text/event-stream` سے جواب دیتا ہے، ہر `StreamResponse` کے لیے ایک `data:` سطر: پہلے `{task}`، پھر کام ختم ہونے (یا کسی شخص کے انتظار میں `AUTH_REQUIRED` تک پہنچنے) پر ایک `{statusUpdate}`، پھر اسٹریم بند۔ اس راستے پر جواب بغیر جزوی آؤٹ پٹ کے ایک LLM باری ہے، اس لیے باریکی کام کے واقعات کی سطح پر ہے۔ `:subscribe` GET اور POST دونوں قبول کرتا ہے (proto میں GET، spec کی جدولوں میں POST) اور ختم شدہ کام پر `UnsupportedOperation` دیتا ہے۔ پش: peer کسی کام پر webhook درج کرتا ہے (یا `message:send` میں `configuration.taskPushNotificationConfig` دیتا ہے)، اور کام جس حالت میں بھی پہنچے وہ ایک بار `{task}` کی صورت میں POST ہوتی ہے، `Authorization: {scheme} {credentials}` کے ساتھ اور `token` `X-A2A-Notification-Token` میں۔ webhook لازماً https ہو اور عوامی پتے پر حل ہو (باہر جانے والے A2A والا وہی SSRF اصول، ترسیل پر دوبارہ جانچا جاتا ہے، ری ڈائریکٹ نہیں مانے جاتے)؛ اسناد مہر بند رکھی جاتی ہیں اور صرف `scheme` لوٹایا جاتا ہے۔ فی کام زیادہ سے زیادہ 5، جنہیں صرف درج کرنے والا peer دیکھ یا حذف کر سکتا ہے۔
 
 **Confer کی اپنی بولی** (انسٹنسوں کے درمیان؛ `/.well-known/agents.json` سے دریافت ہوتی ہے):
 
@@ -447,7 +479,7 @@ Linux Foundation کے **Agent2Agent v1.0** کے `AgentCard` کے مطابق (خ�
 چند جان بوجھ کر کیے گئے فیصلے:
 
 - **ہر Agent کا اپنا Card**، جس میں `supportedInterfaces[].tenant` = صارف نام۔ تفصیلات کا well-known فرض کرتا ہے کہ ایک ڈومین پر ایک Agent ہے، جبکہ یہ انسٹنس کثیر کرایہ دار ہے؛ `tenant` ٹھیک وہی راہ گزینی کا انتخاب کنندہ ہے جسے تفصیلات نے «ایک ہی A2A راستے کے پیچھے کئی Agent» کے لیے متعین کیا۔ `/.well-known/agent-card.json` تبھی جواب دیتا ہے جب **ٹھیک ایک عوامی Agent** ہو (اکیلے خود میزبانی کرنے والے کی صورت)، ورنہ 404 دیتا ہے اور خرابی کے پیغام میں `agents.json` کی طرف اشارہ کرتا ہے — کسی بھی کھاتے کو اٹھا کر «اس ڈومین کا Agent» کہہ دینا غلط ہوتا۔
-- **`streaming: false`**۔ رواں راستے واقعی موجود ہیں، مگر وہ Confer کی اپنی صورت کے ہیں، تفصیلات کے `SendStreamingMessage` کے نہیں۔ ایسی صلاحیت کا اعلان کرنا جسے معیاری کلائنٹ برت ہی نہ سکے، اعلان نہ کرنے سے بدتر ہے۔
+- **`streaming: true`، `pushNotifications: true`۔** `message:stream`، `:subscribe` اور پش کنفیگ راستے spec کی شکل میں جواب دیتے ہیں؛ اسٹریمنگ کام کے واقعات کی سطح پر ہے (Task، پھر ایک حتمی حالت)۔
 - **`securitySchemes` کا اعلان نہیں ہوتا**۔ تفصیلات وہاں API کلید، HTTP توثیق، OAuth2، OIDC یا mTLS دیتی ہیں، اور یہ راستہ ان میں سے ایک بھی نہیں لیتا — اسے دستخط شدہ درخواست چاہیے۔ کوئی بھی ایک بھر دینا کلائنٹ سے یہ کہنے کے مترادف ہے کہ وہ ایسے طریقے سے توثیق کر سکتا ہے جو یقیناً مسترد ہو گا۔ اصل تقاضا **لازمی توسیع** کے طور پر بیان ہوتا ہے (`capabilities.extensions`، جس میں `uri` RFC 9421 کا پتہ ہے اور `required: true`) — تفصیلات نے اسی کام کے لیے یہ طریقہ رکھا ہے۔
 - Card ایک **دریافت دستاویز** ہے اور اس کی نمائش بالکل `/.well-known/agents.json` جیسی ہے: غیر عوامی یا معطل Agent ہمیشہ 404 دیتا ہے، ورنہ یہ راستہ اُن کھاتوں کو گننے کا ذریعہ بن جاتا جنہیں مالک نے عام کرنے کا ارادہ ہی نہ کیا تھا۔
 
@@ -493,6 +525,8 @@ DELETE /api/v1/webhooks/{id}
 | `/api/v1/auth/register` | 3/گھنٹہ فی IP |
 | `/api/v1/conversations/*/messages` POST | 60/منٹ فی صارف |
 | `/a2a/v1/*` | 60/منٹ فی IP اور پاتھ، پورے `/a2a/v1` پر 300/منٹ فی IP |
+| A2A سوالات (دونوں بائنڈنگز) | فی peer DID فی مالک 20/منٹ اور 300/دن؛ فی peer ڈومین 60/منٹ۔ حد سے زیادہ → 429 / `RESOURCE_EXHAUSTED`، `Retry-After` کے ساتھ |
+| `/api/v1/consult/{peer}` POST | 30/منٹ فی صارف |
 | WSS | فی صارف زیادہ سے زیادہ 10 بیک وقت کنکشن |
 
 حد پار ہونے پر جواب:

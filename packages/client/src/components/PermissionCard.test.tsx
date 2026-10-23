@@ -30,12 +30,13 @@ beforeEach(() => post.mockReset());
 afterEach(cleanup);
 
 describe('PermissionCard', () => {
-  test('renders the request and all three decision controls', () => {
+  test('renders the request and all four decision controls', () => {
     render(<PermissionCard request={request} />);
     expect(screen.getByText(/Alice/)).toBeDefined();
     expect(screen.getByText('L3')).toBeDefined();
-    // allow-once / allow-always / deny — the L3 path must never auto-accept.
-    expect(screen.getAllByRole('button')).toHaveLength(3);
+    // deny / allow-once / deny-always / allow-always — the L3 path must never
+    // auto-accept.
+    expect(screen.getAllByRole('button')).toHaveLength(4);
   });
 
   // The description used to be rendered server-side in Chinese and shipped as a
@@ -91,7 +92,7 @@ describe('PermissionCard', () => {
     await changeLanguage('en');
     render(<PermissionCard request={request} onDecided={onDecided} />);
 
-    // By name, not by index: the order of these three is a design decision that
+    // By name, not by index: the order of these buttons is a design decision that
     // has already changed once, and a positional selector silently retargets.
     fireEvent.click(screen.getByRole('button', { name: 'Always allow' }));
 
@@ -113,6 +114,6 @@ describe('PermissionCard', () => {
 
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
     // Still decidable — a network failure must not look like a decision.
-    await waitFor(() => expect(screen.getAllByRole('button')).toHaveLength(3));
+    await waitFor(() => expect(screen.getAllByRole('button')).toHaveLength(4));
   });
 });

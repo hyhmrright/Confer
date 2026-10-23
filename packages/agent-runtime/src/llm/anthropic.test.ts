@@ -76,6 +76,32 @@ describe('toAnthropicMessages (via request body)', () => {
     });
   });
 
+  test('sends a user message’s images as base64 image blocks before its text', async () => {
+    mockFetch(
+      () =>
+        new Response(
+          JSON.stringify({
+            content: [{ type: 'text', text: 'a cat' }],
+            stop_reason: 'end_turn',
+            usage: { input_tokens: 0, output_tokens: 0 },
+          }),
+        ),
+    );
+    const image = { media_type: 'image/png', data: 'iVBORw0KGgo=' };
+    await new AnthropicProvider('key').chat([
+      { role: 'user', content: 'what is this?', images: [image] },
+      // A caption-less image: an empty text block would be a 400.
+      { role: 'user', content: '', images: [image] },
+    ]);
+    const sent = lastBody().messages as Array<{ content: unknown }>;
+    const imageBlock = {
+      type: 'image',
+      source: { type: 'base64', media_type: 'image/png', data: 'iVBORw0KGgo=' },
+    };
+    expect(sent[0]?.content).toEqual([imageBlock, { type: 'text', text: 'what is this?' }]);
+    expect(sent[1]?.content).toEqual([imageBlock]);
+  });
+
   test('maps assistant tool_calls to assistant with tool_use blocks', async () => {
     mockFetch(
       () =>

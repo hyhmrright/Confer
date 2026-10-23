@@ -37,6 +37,11 @@ POST   /api/v1/auth/register
 POST   /api/v1/auth/login
 POST   /api/v1/auth/refresh
 POST   /api/v1/auth/logout
+POST   /api/v1/auth/password        # {current_password, new_password}
+GET    /api/v1/auth/2fa             # {enabled, recovery_codes_left}
+POST   /api/v1/auth/2fa/setup       # → {secret, otpauth_uri}
+POST   /api/v1/auth/2fa/enable      # {code} → {recovery_codes}
+POST   /api/v1/auth/2fa/disable     # {password, totp_code | recovery_code}
 POST   /api/v1/auth/oauth/{provider}    # OAuth callback
 ```
 
@@ -62,11 +67,24 @@ Response:
 }
 ```
 
+**Two-step sign-in (TOTP).** Once on, `login` also needs a `totp_code` (6 digits from an authenticator app) or a `recovery_code` after a correct password; with neither it answers 401 `totp_required`, which is how the client knows to show the second step, and a wrong one is 401 `invalid_second_factor`. A wrong password always answers `invalid_credentials` first, so it never reveals whether the account has two-step sign-in. Each code works once (the used time step is recorded) and each recovery code is struck off when used; both are spent by one conditional UPDATE, so concurrent sign-ins cannot reuse one. The secret from `setup` is stored under AES-256-GCM and does nothing until `enable` confirms a code from the app; `enable` returns the 10 recovery codes this once and only their hashes are kept. `disable` takes the password and a second factor. `password` needs the current password and signs out every other session. All of these are audited and limited to 10 a minute per account. `enable` also takes `password`, so a stolen token alone cannot put an attacker's authenticator in front of someone's account; with two-step sign-in on, `password` also takes a second factor. Five wrong codes in a row lock code attempts for that account for 15 minutes (429 `too_many_attempts`), on top of the per-IP login limit. Recovery codes are stored as an HMAC under the server key. For a user who has lost both their authenticator and their recovery codes, an admin can turn it off with `POST /api/v1/admin/users/{id}/reset-2fa` (audited, and never for the admin's own account).
+
+```
+GET    /api/v1/tokens              # [{id, name, prefix, created_at, last_used_at, expires_at}]
+POST   /api/v1/tokens              # {name, expires_in_days?} → {token: {..., token}}
+DELETE /api/v1/tokens/{id}
+```
+
+**Personal API tokens.** For scripts and tools that call the API as the owner: `Authorization: Bearer cfr_…`, the same header a session's access token uses. The token is returned in plain text only when it is created; the server keeps its SHA-256 and a prefix to recognise it by. An optional expiry of 1–365 days, at most 20 per user, and a token stops working the moment its owner is disabled. A token can do what the owner can do in chat, but these accept only a signed-in session and answer a token with 403 `session_required`: logout, password and two-step sign-in, managing tokens, deciding permission requests and errand cards, changing LLM keys, and every admin route. A leaked token can run the owner's errands; it cannot decide for them or lock them out. Creating and revoking are audited.
+
 ### User and Agent configuration
 
 ```
 GET    /api/v1/users/me
 PATCH  /api/v1/users/me
+GET    /api/v1/users/me/keys          # signing keys: current / retiring / revoked
+POST   /api/v1/users/me/keys/rotate   # session only
+POST   /api/v1/users/me/keys/revoke   # {key_id}, session only
 GET    /api/v1/agents/me
 PATCH  /api/v1/agents/me
 PUT    /api/v1/agents/me/policies
@@ -141,6 +159,12 @@ DELETE /api/v1/conversations/{id}/participants/{p_id}
 POST   /api/v1/conversations/{id}/read             # mark as read
 ```
 
+`GET` lists unarchived conversations by default and archived ones with `?archived=1`; each carries `unread_count`, the messages others wrote since the user last marked it read (or since they joined, if they never have) — their own do not count. `PATCH` takes `{ name?, archived? }` and only the conversation's creator may use it. `POST .../read` sets the caller's `last_read_at` to now. A contact writing into an archived conversation unarchives it and moves it to the top.
+
+`GET /api/v1/search/messages?q=&limit=` searches message text by substring across every conversation the caller takes part in, archived ones included, newest first; `q` is 1–200 characters and `limit` defaults to 20, at most 50. It returns `{ results: [{ message_id, conversation_id, conversation_name, sender_type, content, created_at }] }`. Substring matching rather than Postgres full-text search, because the built-in configurations do not segment Chinese.
+
+`GET /api/v1/conversations/{id}/export` returns the whole conversation, oldest first and at most 5000 messages, to participants only: `{ conversation, messages, truncated }`, each message carrying `sender_type`, `sender_did`, the peer agent's `sender_name`, `content`, `content_json` and `citations_json`. It returns facts only; the client writes the Markdown in the reader's language (who "you" and "your agent" are).
+
 `POST /api/v1/conversations/{id}/messages` request:
 
 ```json
@@ -182,6 +206,8 @@ GET    /api/v1/permissions/history               # history
 Among the pending requests, those with `action='connect'` are **connection requests** (generated by the inbound A2A path when an unknown peer makes first contact). Approving (`allow_*`) writes that peer into `peer_contacts` and establishes the connection; denying does not.
 
 Those with `action='ask'` are **pending questions from an already-connected peer** — the inbound A2A path generates them when the Agent's policy resolves to `ask_user` for that question (see "Pending inbox (answering while away)" in `03-protocol.md`). Approving (`allow_*`) makes the Agent answer the suspended question; denying leaves it unanswered.
+
+`allow_always` / `deny_always` are **standing decisions**. On a held question they write (or replace) a `{ action: 'ask', decision: 'allow' | 'deny' }` rule at the front of that contact's policy override, so this peer's later questions are answered or refused without being held; the owner can see and revoke the rule in the contact's policy panel. On a connection request, `deny_always` makes later connection requests from that peer drop silently instead of reaching the inbox; adding the peer by DID by hand still works.
 
 `GET /pending` attaches a `description` to each request (a connection request carries who started it and their first message; a question carries who asked and the text) so the owner has something to judge by.
 
@@ -251,9 +277,10 @@ Every endpoint is scoped to `user.sub`: reaching for someone else's base or docu
 
 ```
 POST   /api/v1/attachments                       # multipart upload
-GET    /api/v1/attachments/{id}                  # download (302 to a signed URL)
-DELETE /api/v1/attachments/{id}
+GET    /api/v1/attachments/{id}/content          # the file itself, to its uploader or a participant of its message's conversation
 ```
+
+An upload starts unbound; `POST /conversations/{id}/messages` claims it through `attachment_ids` (at most 5), and only the sender's own, not-yet-sent uploads can be claimed. A message with attachments and no text is valid. Images are recognised by their bytes (PNG / JPEG / GIF / WebP, at most 5 MB each) and reach the model as image blocks; PDF / DOCX / XLSX / text files are read at upload (at most 10 MB) and their text rides with the message as `<attachment>` on every turn. SVG is treated as text and never inlined as an image. `content` serves only a recognised image inline; everything else is an `application/octet-stream` download. Each message in the message list carries `attachments`. Deleting a conversation deletes its attachments.
 
 ### Usage
 
@@ -307,13 +334,13 @@ read.ack                      // read receipt
 ```
 pong
 message.new                   // new message
-message.updated
-message.deleted
+message.updated               // reserved, not sent yet
+message.deleted               // reserved, not sent yet
 typing.update                 // who is typing
 presence.update               // a contact came online or went offline
 permission.request            // a permission request the user must decide
-agent.status                  // what my Agent is doing ("consulting ABC's Agent…")
-conversation.updated
+agent.status                  // my Agent is answering a contact: {conversation_id, state: thinking|tool|idle, tool?}; the client words it
+conversation.updated          // a contact wrote in {conversation_id} (possibly a new thread); the client refreshes its list
 ```
 
 `message.new` example:
@@ -410,11 +437,16 @@ POST   /a2a/v1/message:send              # SendMessage → Task
 GET    /a2a/v1/tasks/{id}                # GetTask
 GET    /a2a/v1/tasks                     # ListTasks (cursor pagination)
 POST   /a2a/v1/tasks/{id}:cancel         # CancelTask → TaskNotCancelable
-POST   /a2a/v1/message:stream            # not implemented → UnsupportedOperation
-POST   /a2a/v1/tasks/{id}:subscribe      # not implemented → UnsupportedOperation
+POST   /a2a/v1/message:stream            # SendStreamingMessage → SSE: Task, then statusUpdate
+GET|POST /a2a/v1/tasks/{id}:subscribe    # SubscribeToTask → SSE
+POST   /a2a/v1/tasks/{id}/pushNotificationConfigs            # → TaskPushNotificationConfig
+GET    /a2a/v1/tasks/{id}/pushNotificationConfigs            # → {configs, nextPageToken}
+GET    /a2a/v1/tasks/{id}/pushNotificationConfigs/{configId}
+DELETE /a2a/v1/tasks/{id}/pushNotificationConfigs/{configId} # idempotent
 GET    /a2a/v1/extendedAgentCard         # not implemented → UnsupportedOperation
-*      /a2a/v1/tasks/{id}/pushNotificationConfigs…  # → PushNotificationNotSupported
 ```
+
+**Streaming and push.** `message:stream` goes through the same validation and gates as `message:send` and answers `text/event-stream`, one `data:` line per `StreamResponse`: the `{task}` first, then one `{statusUpdate}` when the task finishes (or reaches `AUTH_REQUIRED`, waiting on a person), then the stream closes. An answer is one LLM turn with no partial output on this path, so the granularity is task events. `:subscribe` accepts GET and POST (the proto says GET, the spec's tables POST) and answers `UnsupportedOperation` for a finished task. Push: a peer registers a webhook on a task (or passes `configuration.taskPushNotificationConfig` on `message:send`), and each state the task reaches is POSTed once as `{task}`, with `Authorization: {scheme} {credentials}` and the `token` in `X-A2A-Notification-Token`. The webhook must be https and resolve to a public address (the same SSRF rule as outbound A2A, checked again at delivery, redirects not followed); credentials are sealed and only `scheme` is echoed. At most 5 per task, visible to and deletable by only the peer that registered them.
 
 **Confer's own dialect** (instance to instance; discovered through `/.well-known/agents.json`):
 
@@ -447,7 +479,7 @@ Follows the `AgentCard` of the Linux Foundation's **Agent2Agent v1.0** (fields t
 A few deliberate trade-offs:
 
 - **One Card per Agent**, with `supportedInterfaces[].tenant` = the username. The spec's well-known assumes one Agent per domain, and this instance is multi-tenant; `tenant` is precisely the routing selector the spec defines for "several Agents behind one A2A endpoint". `/.well-known/agent-card.json` answers only when there is **exactly one public Agent** (the solo self-hosting case); otherwise it 404s and points at `agents.json` in the error message — picking an arbitrary account and calling it "this domain's Agent" would simply be false.
-- **`streaming: false`**. Streaming endpoints do exist, but in Confer's own shape, not the spec's `SendStreamingMessage`. Advertising a capability a standard client cannot use is worse than advertising nothing.
+- **`streaming: true`, `pushNotifications: true`.** `message:stream`, `:subscribe` and the push-config routes answer in the spec's shapes; streaming is at task-event granularity (the Task, then one settled status).
 - **No `securitySchemes` declared**. What the spec offers there is API key, HTTP auth, OAuth2, OIDC or mTLS, and this endpoint accepts none of them: what it wants is a signed request. Filling in an arbitrary one would be telling the client it may authenticate in a way that is certain to be rejected. The real requirement is declared as a **required extension** (`capabilities.extensions`, with the RFC 9421 address as `uri` and `required: true`), which is exactly the mechanism the spec provides for this.
 - The Card is a **discovery document**, and its visibility is identical to that of `/.well-known/agents.json`: a non-public or disabled Agent always 404s, or this route would become a way to enumerate accounts their owner never meant to publish.
 
@@ -493,6 +525,8 @@ Supported events: `message.new.peer`, `permission.granted`, `thread.archived`.
 | `/api/v1/auth/register` | 3/hour per IP |
 | `/api/v1/conversations/*/messages` POST | 60/minute per user |
 | `/a2a/v1/*` | 60/minute per IP and path, and 300/minute per IP across all of `/a2a/v1` |
+| A2A questions (both bindings) | Per peer DID per owner 20/minute and 300/day; per peer domain 60/minute. Over → 429 / `RESOURCE_EXHAUSTED` with `Retry-After` |
+| `/api/v1/consult/{peer}` POST | 30/minute per user |
 | WSS | at most 10 concurrent connections per user |
 
 Response when the limit is exceeded:

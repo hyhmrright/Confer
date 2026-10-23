@@ -54,7 +54,7 @@ beforeEach(async () => {
   document = buildDIDDocument({
     did: DID,
     serviceEndpoint: `https://${DOMAIN}/a2a/v1`,
-    key: { keyId: `${DID}#key-1`, publicKeyMultibase: multibase },
+    keys: [{ keyId: `${DID}#key-1`, publicKeyMultibase: multibase }],
   });
 });
 
@@ -81,7 +81,7 @@ describe('resolveDID', () => {
     const subDoc = buildDIDDocument({
       did: subDid,
       serviceEndpoint: `https://${DOMAIN}/a2a/v1`,
-      key: { keyId: `${subDid}#key-1`, publicKeyMultibase: multibase },
+      keys: [{ keyId: `${subDid}#key-1`, publicKeyMultibase: multibase }],
     });
     mockFetch(() => jsonResponse(subDoc));
 

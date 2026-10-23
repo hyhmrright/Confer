@@ -14,6 +14,7 @@ import { extractAndStore } from '../tools/memory.js';
 import { broadcastToConversation } from '../ws/handler.js';
 import { asA2AQuestionScope } from './inbound-permissions.js';
 import { type OutboundA2AMessage, sendA2AMessage } from './outbound.js';
+import { queueTaskPush } from './push.js';
 import { loadOwnerSigningKey } from './signing.js';
 
 export interface ProcessA2AMessageParams {
@@ -25,6 +26,8 @@ export interface ProcessA2AMessageParams {
   /** The thread id the peer sent, which the reply must be addressed with. */
   peerThreadId?: string;
   inboundMessageId: string;
+  /** The language the asker said they read, when the wire carried one. */
+  language?: string;
 }
 
 // The recent visible messages of an A2A thread as LLM history (the window
@@ -121,6 +124,23 @@ function broadcastReply(params: ProcessA2AMessageParams, id: string, content: st
   });
 }
 
+/**
+ * Tell the owner's open thread what their agent is doing for the peer. The
+ * owner's own chat learns this from its SSE stream; an A2A turn has no stream,
+ * so without this the thread showed the peer's question and then nothing until
+ * the answer landed. Facts only — the client words them in the reader's locale.
+ */
+function broadcastTurnState(
+  conversationId: string,
+  state: 'thinking' | 'tool' | 'idle',
+  tool?: string,
+): void {
+  broadcastToConversation(conversationId, {
+    type: 'agent.status',
+    data: { conversation_id: conversationId, state, tool },
+  });
+}
+
 type A2AFailure = ModelConfigError | 'agent_error';
 
 /** One-line English summary of a turn that could not be run, sent to the asker. */
@@ -174,6 +194,8 @@ async function notifyPeerOfFailure(
   });
 
   broadcastReply(params, noticeId, prose);
+  // The REST binding's task is now FAILED; a peer that left a webhook hears so.
+  queueTaskPush(inboundMessageId);
 
   await sendToPeer(params, {
     type: 'notification',
@@ -211,6 +233,7 @@ export async function processA2AMessage(params: ProcessA2AMessageParams): Promis
 
   const history = await loadA2AHistory(conversationId, inboundMessageId);
 
+  broadcastTurnState(conversationId, 'thinking');
   // A rejected key, a provider outage, a model that no longer exists: each of
   // these ended the turn here with a log line and nothing on the wire, leaving
   // the asker to poll a question that would never be answered.
@@ -231,10 +254,14 @@ export async function processA2AMessage(params: ProcessA2AMessageParams): Promis
     hasKb,
     kbScope,
     recallMemory,
-  }).catch((error) => {
-    console.error(`Agent turn failed for agent ${targetAgent.id}:`, error);
-    return null;
-  });
+    replyLanguage: params.language,
+    emit: { onTool: (name) => broadcastTurnState(conversationId, 'tool', name) },
+  })
+    .catch((error) => {
+      console.error(`Agent turn failed for agent ${targetAgent.id}:`, error);
+      return null;
+    })
+    .finally(() => broadcastTurnState(conversationId, 'idle'));
   if (!turn) {
     await notifyPeerOfFailure(params, 'agent_error');
     return;
@@ -258,6 +285,7 @@ export async function processA2AMessage(params: ProcessA2AMessageParams): Promis
   });
 
   broadcastReply(params, replyId, replyContent);
+  queueTaskPush(inboundMessageId);
 
   // Fire-and-forget: distil durable facts from this A2A turn into long-term
   // memory, mirroring the chat path. Runs before the outbound delivery block so
@@ -300,7 +328,7 @@ export async function resumeHeldA2AQuestion(row: typeof permissions.$inferSelect
   const db = getDb();
 
   const [inbound] = await db
-    .select({ content: messages.content })
+    .select({ content: messages.content, language: messages.language })
     .from(messages)
     .where(eq(messages.id, scope.inbound_message_id))
     .limit(1);
@@ -339,5 +367,6 @@ export async function resumeHeldA2AQuestion(row: typeof permissions.$inferSelect
     conversationId: scope.conversation_id,
     peerThreadId: scope.peer_thread_id,
     inboundMessageId: scope.inbound_message_id,
+    language: inbound.language ?? undefined,
   });
 }

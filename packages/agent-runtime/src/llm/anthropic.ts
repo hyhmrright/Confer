@@ -118,6 +118,16 @@ function toAnthropicMessage(m: LLMMessage): AnthropicMessage {
     }
     return { role: 'assistant', content };
   }
+  if (m.role === 'user' && m.images?.length) {
+    // Images first, then the question about them — the order Anthropic's own
+    // examples use. An empty text block is a 400, so a caption-less image goes alone.
+    const content: AnthropicBlock[] = m.images.map((img) => ({
+      type: 'image',
+      source: { type: 'base64', media_type: img.media_type, data: img.data },
+    }));
+    if (m.content?.trim()) content.push({ type: 'text', text: m.content });
+    return { role: 'user', content };
+  }
   return { role: m.role, content: m.content ?? '' };
 }
 

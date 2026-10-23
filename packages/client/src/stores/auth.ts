@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import i18n from '../i18n/index.js';
 import { api, setOnAuthExpired, setRefreshToken, setToken } from '../lib/api.js';
 import { captureError } from '../lib/error.js';
+import { clearMessageCache } from '../lib/message-cache.js';
+import { secondFactorFields } from '../lib/second-factor.js';
 
 interface User {
   id: string;
@@ -21,7 +23,8 @@ interface AuthState {
   loading: boolean;
   error: string | null;
 
-  login: (username: string, password: string) => Promise<void>;
+  // `secondFactor` is the code box's text, for an account with two-step sign-in.
+  login: (username: string, password: string, secondFactor?: string) => Promise<void>;
   register: (username: string, password: string, displayName?: string) => Promise<void>;
   logout: () => void;
   restoreSession: () => void;
@@ -70,8 +73,13 @@ export const useAuthStore = create<AuthState>((set) => ({
   loading: false,
   error: null,
 
-  login: (username, password) =>
-    authenticate(set, '/auth/login', { username, password }, 'Login failed'),
+  login: (username, password, secondFactor) =>
+    authenticate(
+      set,
+      '/auth/login',
+      { username, password, ...(secondFactor ? secondFactorFields(secondFactor) : {}) },
+      'Login failed',
+    ),
 
   register: (username, password, displayName) =>
     authenticate(
@@ -82,6 +90,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     ),
 
   logout: () => {
+    void clearMessageCache();
     setToken(null);
     setRefreshToken(null);
     localStorage.removeItem('confer_auth');

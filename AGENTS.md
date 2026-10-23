@@ -2,6 +2,16 @@
 
 A2A protocol platform for AI Agents to communicate on behalf of their owners.
 
+## Codex workflow
+
+- Project skills live in `.agents/skills/`: `deploy`, `create-migration`, `rag-debug`, `sync-env`, `reset-user-password`, plus `a2a-contract-reviewer`, `migration-reviewer`, and `rag-pipeline-reviewer`. Invoke with `$skill-name`. The three review skills are checklists usable directly; they do not require spawning agents.
+- `.claude/settings.json` and `.claude/hooks/` are Claude Code configuration. They do not provide automatic enforcement or post-edit checks in Codex. Follow the rules below explicitly.
+- Never hand-edit Drizzle SQL or its journal; change `schema.ts` and run `bun run db:generate`. Do not edit live `.env*` files with tools; templates are editable. Compare key names without exposing values via `$sync-env`.
+- Run tests through `bun run test`, never bare `bun test`. Use the isolated test stack for gateway integration tests.
+- After code edits, run Biome on the changed supported files and type-check the owning project: `bun run typecheck` for root packages, `bunx tsc --noEmit -p packages/client/tsconfig.json` for the client. Root typecheck excludes the client. Run relevant tests, review, then deploy affected services before committing per Deployment below.
+- The Claude-only ban on shell file viewers does not apply to Codex; use available file tools and `rg` as appropriate.
+- Project MCP configuration lives in `.codex/config.toml`; credentials are forwarded from the launching environment, never committed. See `docs/codex-migration.md` for activation and validation.
+
 ## Commands
 
 ```bash
@@ -16,6 +26,7 @@ bun run db:generate          # generate Drizzle migration from schema changes
 bun run db:migrate           # run gateway DB migrations (apply generated files)
 bun run test:setup           # start isolated test stack + build test schema (run once before `bun run test`)
 bun run test:stack:down      # tear down the isolated test stack
+bun run eval:rag             # retrieval evaluation; requires a real embedding key
 ```
 
 ## Testing

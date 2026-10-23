@@ -9,6 +9,7 @@ export interface AdminUser {
   email?: string | null;
   role: string;
   status: string;
+  two_factor_enabled?: boolean;
   created_at: string;
 }
 
@@ -89,6 +90,7 @@ interface AdminState {
   loadUsers: (opts?: { page?: number; query?: string }) => Promise<void>;
   loadStats: () => Promise<void>;
   updateUser: (id: string, patch: { role?: string; status?: string }) => Promise<void>;
+  resetTwoFactor: (id: string) => Promise<void>;
   loadAgents: (opts?: { page?: number }) => Promise<void>;
   updateAgent: (id: string, status: string) => Promise<void>;
   loadConversations: (opts?: { page?: number }) => Promise<void>;
@@ -206,6 +208,11 @@ export const useAdminStore = create<AdminState>((set, get) => {
 
     updateUser: async (id, patch) => {
       await api.patch(`/admin/users/${id}`, patch);
+      await get().loadUsers();
+    },
+
+    resetTwoFactor: async (id) => {
+      await api.post(`/admin/users/${id}/reset-2fa`, {});
       await get().loadUsers();
     },
 

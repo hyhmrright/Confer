@@ -37,6 +37,11 @@ POST   /api/v1/auth/register
 POST   /api/v1/auth/login
 POST   /api/v1/auth/refresh
 POST   /api/v1/auth/logout
+POST   /api/v1/auth/password        # {current_password, new_password}
+GET    /api/v1/auth/2fa             # {enabled, recovery_codes_left}
+POST   /api/v1/auth/2fa/setup       # → {secret, otpauth_uri}
+POST   /api/v1/auth/2fa/enable      # {code} → {recovery_codes}
+POST   /api/v1/auth/2fa/disable     # {password, totp_code | recovery_code}
 POST   /api/v1/auth/oauth/{provider}    # OAuth callback
 ```
 
@@ -62,11 +67,24 @@ POST   /api/v1/auth/oauth/{provider}    # OAuth callback
 }
 ```
 
+**दो-चरणीय साइन-इन (TOTP)।** चालू होने पर `login` सही पासवर्ड के बाद एक `totp_code` (ऑथेंटिकेटर ऐप के 6 अंक) या `recovery_code` भी माँगता है; दोनों न हों तो 401 `totp_required` लौटाता है, जिससे क्लाइंट समझता है कि दूसरा चरण दिखाना है, और गलत कोड पर 401 `invalid_second_factor`। गलत पासवर्ड पर हमेशा पहले `invalid_credentials` आता है, इसलिए यह कभी पता नहीं चलता कि खाते में दो-चरणीय साइन-इन है। हर कोड एक ही बार चलता है (इस्तेमाल हुआ समय-चरण दर्ज होता है) और हर रिकवरी कोड इस्तेमाल होते ही काट दिया जाता है; दोनों एक ही सशर्त UPDATE से खर्च होते हैं, इसलिए एक साथ हुए साइन-इन किसी कोड को दोबारा नहीं चला सकते। `setup` का रहस्य AES-256-GCM से एन्क्रिप्ट होकर रखा जाता है और तब तक कुछ नहीं करता जब तक `enable` ऐप के कोड से उसकी पुष्टि न करे; `enable` 10 रिकवरी कोड केवल इसी एक बार लौटाता है और केवल उनके हैश रखे जाते हैं। `disable` के लिए पासवर्ड और दूसरा कारक चाहिए। `password` के लिए वर्तमान पासवर्ड चाहिए और यह बाकी सभी सत्र समाप्त कर देता है। ये सब ऑडिट लॉग में दर्ज होते हैं और हर खाते के लिए प्रति मिनट 10 तक सीमित हैं। `enable` के लिए भी `password` चाहिए, ताकि अकेले चुराया गया टोकन किसी के खाते के आगे हमलावर का ऑथेंटिकेटर न लगा सके; दो-चरणीय साइन-इन चालू होने पर `password` के लिए भी दूसरा कारक चाहिए। लगातार 5 गलत कोड उस खाते के कोड प्रयासों को 15 मिनट के लिए रोक देते हैं (429 `too_many_attempts`), जो प्रति-IP लॉगिन सीमा के अतिरिक्त है। रिकवरी कोड सर्वर कुंजी से HMAC के रूप में रखे जाते हैं। जिस उपयोगकर्ता का ऑथेंटिकेटर और रिकवरी कोड दोनों खो गए हों, उसके लिए व्यवस्थापक `POST /api/v1/admin/users/{id}/reset-2fa` से इसे बंद कर सकता है (ऑडिट होता है, और व्यवस्थापक के अपने खाते पर कभी नहीं)।
+
+```
+GET    /api/v1/tokens              # [{id, name, prefix, created_at, last_used_at, expires_at}]
+POST   /api/v1/tokens              # {name, expires_in_days?} → {token: {..., token}}
+DELETE /api/v1/tokens/{id}
+```
+
+**व्यक्तिगत API टोकन।** उन स्क्रिप्ट और टूल के लिए जो मालिक के रूप में API को कॉल करते हैं: `Authorization: Bearer cfr_…`, वही हेडर जो सत्र का access token इस्तेमाल करता है। टोकन सादे रूप में केवल बनाते समय लौटाया जाता है; सर्वर उसका SHA-256 और पहचान के लिए एक उपसर्ग रखता है। 1–365 दिन की वैकल्पिक समाप्ति, प्रति उपयोगकर्ता अधिकतम 20, और मालिक के अक्षम होते ही टोकन काम करना बंद कर देता है। टोकन वह कर सकता है जो मालिक चैट में करता है, पर ये संचालन केवल साइन-इन सत्र स्वीकारते हैं और टोकन को 403 `session_required` लौटाते हैं: लॉगआउट, पासवर्ड और दो-चरणीय साइन-इन, टोकन प्रबंधन, अनुमति अनुरोधों और errand कार्डों पर निर्णय, LLM कुंजियाँ बदलना, और सभी admin मार्ग। लीक हुआ टोकन मालिक के काम कर सकता है, पर उसकी ओर से निर्णय नहीं ले सकता और उसे बाहर बंद नहीं कर सकता। बनाना और रद्द करना ऑडिट होता है।
+
 ### उपयोगकर्ता और Agent का विन्यास
 
 ```
 GET    /api/v1/users/me
 PATCH  /api/v1/users/me
+GET    /api/v1/users/me/keys          # signing keys: current / retiring / revoked
+POST   /api/v1/users/me/keys/rotate   # session only
+POST   /api/v1/users/me/keys/revoke   # {key_id}, session only
 GET    /api/v1/agents/me
 PATCH  /api/v1/agents/me
 PUT    /api/v1/agents/me/policies
@@ -141,6 +159,12 @@ DELETE /api/v1/conversations/{id}/participants/{p_id}
 POST   /api/v1/conversations/{id}/read             # पढ़ा हुआ चिह्नित करें
 ```
 
+`GET` डिफ़ॉल्ट रूप से असंग्रहित बातचीत और `?archived=1` के साथ संग्रहित बातचीत लौटाता है; हर बातचीत में `unread_count` होता है, यानी उपयोगकर्ता के पिछली बार पढ़ा हुआ चिह्नित करने के बाद से (कभी चिह्नित न किया हो तो जुड़ने के बाद से) दूसरों के लिखे संदेश — अपने संदेश नहीं गिने जाते। `PATCH` `{ name?, archived? }` लेता है और इसे केवल बातचीत बनाने वाला उपयोग कर सकता है। `POST .../read` कॉल करने वाले का `last_read_at` अभी के समय पर सेट करता है। कोई संपर्क संग्रहित बातचीत में लिखे तो वह संग्रह से निकलकर सबसे ऊपर आ जाती है।
+
+`GET /api/v1/search/messages?q=&limit=` उपयोगकर्ता जिन सभी बातचीतों में शामिल है (संग्रहित सहित) उनके संदेश पाठ में उप-स्ट्रिंग खोजता है, नवीनतम पहले; `q` 1–200 अक्षरों का होता है और `limit` डिफ़ॉल्ट 20, अधिकतम 50। यह `{ results: [{ message_id, conversation_id, conversation_name, sender_type, content, created_at }] }` लौटाता है। Postgres के पूर्ण-पाठ खोज के बजाय उप-स्ट्रिंग मिलान इसलिए, क्योंकि उसके अंतर्निहित कॉन्फ़िगरेशन चीनी पाठ को शब्दों में नहीं बाँटते।
+
+`GET /api/v1/conversations/{id}/export` केवल प्रतिभागियों को पूरी बातचीत लौटाता है, सबसे पुराने संदेश पहले और अधिकतम 5000: `{ conversation, messages, truncated }`; हर संदेश में `sender_type`, `sender_did`, सामने वाले एजेंट का `sender_name`, `content`, `content_json` और `citations_json` होते हैं। यह केवल तथ्य लौटाता है; Markdown क्लाइंट पाठक की भाषा में बनाता है (कौन "आप" हैं और कौन "आपका एजेंट")।
+
 `POST /api/v1/conversations/{id}/messages` अनुरोध:
 
 ```json
@@ -182,6 +206,8 @@ GET    /api/v1/permissions/history               # इतिहास
 लंबित अनुरोधों में जिनका `action='connect'` है वे **कनेक्शन अनुरोध** हैं (अजनबी peer के पहले संपर्क पर A2A प्रवेश-पथ इन्हें बनाता है)। स्वीकृति (`allow_*`) उस peer को `peer_contacts` में लिखकर कनेक्शन बना देती है; अस्वीकृति नहीं बनाती।
 
 जिनका `action='ask'` है वे **पहले से जुड़े peer के लंबित प्रश्न** हैं — जब Agent की नीति उस प्रश्न पर `ask_user` तय करती है तब A2A प्रवेश-पथ इन्हें बनाता है (देखें `03-protocol.md` का «लंबित इनबॉक्स (अनुपस्थिति में उत्तर)»)। स्वीकृति (`allow_*`) पर Agent उस टँगे प्रश्न का उत्तर देता है; अस्वीकृति पर नहीं देता।
+
+`allow_always` / `deny_always` **स्थायी निर्णय** हैं। रुके हुए प्रश्न पर ये उस संपर्क की policy override की शुरुआत में `{ action: 'ask', decision: 'allow' | 'deny' }` नियम लिखते (या बदलते) हैं, इसलिए इस peer के आगे के प्रश्नों का उत्तर दिया जाता है या उन्हें अस्वीकार किया जाता है, रोका नहीं जाता; मालिक संपर्क के policy पैनल में यह नियम देख और रद्द कर सकता है। कनेक्शन अनुरोध पर `deny_always` से उस peer के आगे के कनेक्शन अनुरोध इनबॉक्स तक पहुँचने के बजाय चुपचाप छोड़ दिए जाते हैं; DID से peer को हाथ से जोड़ना अब भी काम करता है।
 
 `GET /pending` हर अनुरोध के साथ एक `description` देता है (कनेक्शन अनुरोध में पहल करने वाला और उसका पहला संदेश; प्रश्न में पूछने वाला और प्रश्न का पाठ) ताकि मालिक निर्णय ले सके।
 
@@ -251,9 +277,10 @@ POST   /api/v1/knowledge-bases/{kb_id}/documents/{doc_id}/retry # दोबा�
 
 ```
 POST   /api/v1/attachments                       # multipart upload
-GET    /api/v1/attachments/{id}                  # डाउनलोड (हस्ताक्षरित URL पर 302)
-DELETE /api/v1/attachments/{id}
+GET    /api/v1/attachments/{id}/content          # फ़ाइल स्वयं, अपलोड करने वाले को या उसके संदेश की बातचीत के प्रतिभागियों को
 ```
+
+अपलोड शुरू में किसी संदेश से नहीं जुड़ा होता; `POST /conversations/{id}/messages` उसे `attachment_ids` (अधिकतम 5) से जोड़ता है, और केवल प्रेषक के अपने, अभी तक न भेजे गए अपलोड ही जोड़े जा सकते हैं। बिना पाठ के केवल संलग्नक वाला संदेश भी मान्य है। चित्र उनके बाइट्स से पहचाने जाते हैं (PNG / JPEG / GIF / WebP, प्रत्येक अधिकतम 5 MB) और मॉडल तक चित्र ब्लॉक के रूप में पहुँचते हैं; PDF / DOCX / XLSX / पाठ फ़ाइलें अपलोड पर पढ़ी जाती हैं (अधिकतम 10 MB) और उनका पाठ हर टर्न में `<attachment>` के रूप में संदेश के साथ जाता है। SVG को पाठ माना जाता है और कभी चित्र की तरह इनलाइन नहीं दिखाया जाता। `content` केवल पहचाने गए चित्र को इनलाइन देता है; बाकी सब `application/octet-stream` डाउनलोड होता है। सूची के हर संदेश में `attachments` होता है। बातचीत हटाने पर उसके संलग्नक भी हट जाते हैं।
 
 ### उपयोग
 
@@ -307,13 +334,13 @@ read.ack                      // पढ़े जाने की पुष्�
 ```
 pong
 message.new                   // नया संदेश
-message.updated
-message.deleted
+message.updated               // आरक्षित, अभी भेजा नहीं जाता
+message.deleted               // आरक्षित, अभी भेजा नहीं जाता
 typing.update                 // कौन लिख रहा है
 presence.update               // संपर्क का आना-जाना
 permission.request            // अनुमति का अनुरोध जिस पर उपयोगकर्ता को निर्णय लेना है
-agent.status                  // मेरा Agent क्या कर रहा है («ABC के Agent से पूछ रहा हूँ…»)
-conversation.updated
+agent.status                  // मेरा Agent किसी संपर्क को उत्तर दे रहा है: {conversation_id, state: thinking|tool|idle, tool?}; पाठ क्लाइंट बनाता है
+conversation.updated          // किसी संपर्क ने {conversation_id} में लिखा (शायद नई बातचीत); क्लाइंट अपनी सूची ताज़ा करता है
 ```
 
 `message.new` उदाहरण:
@@ -410,11 +437,16 @@ POST   /a2a/v1/message:send              # SendMessage → Task
 GET    /a2a/v1/tasks/{id}                # GetTask
 GET    /a2a/v1/tasks                     # ListTasks(कर्सर से पृष्ठ-विभाजन)
 POST   /a2a/v1/tasks/{id}:cancel         # CancelTask → TaskNotCancelable
-POST   /a2a/v1/message:stream            # अलागू → UnsupportedOperation
-POST   /a2a/v1/tasks/{id}:subscribe      # अलागू → UnsupportedOperation
+POST   /a2a/v1/message:stream            # SendStreamingMessage → SSE: Task, then statusUpdate
+GET|POST /a2a/v1/tasks/{id}:subscribe    # SubscribeToTask → SSE
+POST   /a2a/v1/tasks/{id}/pushNotificationConfigs            # → TaskPushNotificationConfig
+GET    /a2a/v1/tasks/{id}/pushNotificationConfigs            # → {configs, nextPageToken}
+GET    /a2a/v1/tasks/{id}/pushNotificationConfigs/{configId}
+DELETE /a2a/v1/tasks/{id}/pushNotificationConfigs/{configId} # idempotent
 GET    /a2a/v1/extendedAgentCard         # अलागू → UnsupportedOperation
-*      /a2a/v1/tasks/{id}/pushNotificationConfigs…  # → PushNotificationNotSupported
 ```
+
+**स्ट्रीमिंग और पुश।** `message:stream` उन्हीं जाँचों और द्वारों से गुज़रता है जिनसे `message:send`, और `text/event-stream` से उत्तर देता है, हर `StreamResponse` के लिए एक `data:` पंक्ति: पहले `{task}`, फिर कार्य समाप्त होने (या किसी व्यक्ति की प्रतीक्षा में `AUTH_REQUIRED` तक पहुँचने) पर एक `{statusUpdate}`, फिर स्ट्रीम बंद। इस पथ पर उत्तर बिना आंशिक आउटपुट वाला एक LLM टर्न है, इसलिए ग्रैन्युलैरिटी कार्य-घटना स्तर की है। `:subscribe` GET और POST दोनों स्वीकारता है (proto में GET, spec की तालिकाओं में POST) और समाप्त कार्य पर `UnsupportedOperation` देता है। पुश: peer किसी कार्य पर webhook पंजीकृत करता है (या `message:send` में `configuration.taskPushNotificationConfig` देता है), और कार्य जिस भी स्थिति में पहुँचे, वह एक बार `{task}` के रूप में POST होती है, `Authorization: {scheme} {credentials}` के साथ और `token` `X-A2A-Notification-Token` में। webhook https होना चाहिए और सार्वजनिक पते पर रिज़ॉल्व होना चाहिए (आउटबाउंड A2A वाला ही SSRF नियम, डिलीवरी पर फिर जाँचा जाता है, रीडायरेक्ट नहीं माने जाते); क्रेडेंशियल सीलबंद रखे जाते हैं और केवल `scheme` लौटाया जाता है। प्रति कार्य अधिकतम 5, जिन्हें केवल पंजीकृत करने वाला peer देख या हटा सकता है।
 
 **Confer की अपनी बोली** (इंस्टेंसों के बीच; `/.well-known/agents.json` से खोजी जाती है):
 
@@ -447,7 +479,7 @@ Linux Foundation के **Agent2Agent v1.0** के `AgentCard` के अनु
 कुछ जान-बूझकर लिए गए निर्णय:
 
 - **हर Agent का अपना Card**, जिसमें `supportedInterfaces[].tenant` = उपयोगकर्ता-नाम। विनिर्देश का well-known मानकर चलता है कि एक डोमेन पर एक Agent है, जबकि यह इंस्टेंस बहु-किरायेदार है; `tenant` ठीक वही रूटिंग चयनक है जिसे विनिर्देश ने «एक ही A2A endpoint के पीछे कई Agent» के लिए परिभाषित किया है। `/.well-known/agent-card.json` तभी उत्तर देता है जब **ठीक एक सार्वजनिक Agent** हो (अकेले स्व-होस्ट करने वाले का मामला), वरना 404 देता है और त्रुटि-संदेश में `agents.json` की ओर इशारा करता है — किसी भी खाते को उठाकर «इस डोमेन का Agent» कह देना ग़लत होगा।
-- **`streaming: false`**। धारा-रूप endpoint हैं ज़रूर, पर वे Confer के अपने आकार के हैं, विनिर्देश के `SendStreamingMessage` के नहीं। ऐसी क्षमता घोषित करना जिसे मानक क्लाइंट बरत ही न सके, घोषित न करने से बुरा है।
+- **`streaming: true`, `pushNotifications: true`।** `message:stream`, `:subscribe` और पुश-कॉन्फ़िग मार्ग spec के आकार में उत्तर देते हैं; स्ट्रीमिंग कार्य-घटना स्तर की है (Task, फिर एक अंतिम स्थिति)।
 - **`securitySchemes` घोषित नहीं होते**। विनिर्देश वहाँ API कुंजी, HTTP auth, OAuth2, OIDC या mTLS देता है, और यह endpoint इनमें से एक भी नहीं लेता — उसे चाहिए हस्ताक्षरित अनुरोध। कोई भी एक भर देना क्लाइंट से यह कहने जैसा है कि वह ऐसे तरीक़े से प्रमाणित हो सकता है जो निश्चित रूप से ठुकराया जाएगा। असली अपेक्षा **अनिवार्य विस्तार** के रूप में घोषित है (`capabilities.extensions`, जिसमें `uri` RFC 9421 का पता है और `required: true`) — विनिर्देश ने इसी के लिए यह तंत्र दिया है।
 - Card एक **खोज-दस्तावेज़** है और उसकी दृश्यता बिल्कुल `/.well-known/agents.json` जैसी है: ग़ैर-सार्वजनिक या निष्क्रिय Agent हमेशा 404 देता है, वरना यह मार्ग उन खातों को गिनने का ज़रिया बन जाता जिन्हें मालिक ने सार्वजनिक करने का इरादा ही नहीं किया था।
 
@@ -493,6 +525,8 @@ DELETE /api/v1/webhooks/{id}
 | `/api/v1/auth/register` | 3/घंटा प्रति IP |
 | `/api/v1/conversations/*/messages` POST | 60/मिनट प्रति उपयोगकर्ता |
 | `/a2a/v1/*` | 60/मिनट प्रति IP और पथ, पूरे `/a2a/v1` पर 300/मिनट प्रति IP |
+| A2A प्रश्न (दोनों बाइंडिंग) | प्रति peer DID प्रति मालिक 20/मिनट और 300/दिन; प्रति peer डोमेन 60/मिनट। अधिक होने पर → 429 / `RESOURCE_EXHAUSTED`, `Retry-After` सहित |
+| `/api/v1/consult/{peer}` POST | 30/मिनट प्रति उपयोगकर्ता |
 | WSS | प्रति उपयोगकर्ता अधिकतम 10 समवर्ती कनेक्शन |
 
 सीमा पार होने पर प्रतिक्रिया:

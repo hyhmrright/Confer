@@ -191,6 +191,8 @@ export const A2A_ERRORS = {
   INVALID_ARGUMENT: { http: 400, status: 'INVALID_ARGUMENT' },
   UNAUTHENTICATED: { http: 401, status: 'UNAUTHENTICATED' },
   PERMISSION_DENIED: { http: 403, status: 'PERMISSION_DENIED' },
+  // google.rpc's code for a per-caller quota — here, open streams.
+  RESOURCE_EXHAUSTED: { http: 429, status: 'RESOURCE_EXHAUSTED' },
   INTERNAL: { http: 500, status: 'INTERNAL' },
 } as const satisfies Record<string, { http: number; status: string }>;
 

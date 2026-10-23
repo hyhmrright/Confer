@@ -1,4 +1,5 @@
 import {
+  bigint,
   boolean,
   char,
   index,
@@ -34,6 +35,15 @@ export const users = pgTable(
     status: varchar('status', { length: 16 }).notNull().default('active'),
     preferences_json: jsonb('preferences_json').default({}),
     llm_keys_json: jsonb('llm_keys_json').default({}),
+    // Two-step sign-in (TOTP). The secret is AES-256-GCM encrypted like every
+    // other credential here; setup writes it, and it guards sign-in only once
+    // `totp_enabled_at` is set, so an abandoned setup locks nobody out.
+    totp_secret_json: jsonb('totp_secret_json'),
+    totp_enabled_at: timestamp('totp_enabled_at', { withTimezone: true }),
+    // The last time step a code was accepted for: each code works once.
+    totp_last_step: bigint('totp_last_step', { mode: 'number' }),
+    // SHA-256 hashes of the recovery codes not yet used.
+    totp_recovery_json: jsonb('totp_recovery_json'),
     created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     deleted_at: timestamp('deleted_at', { withTimezone: true }),
@@ -222,6 +232,49 @@ export const permissions = pgTable(
     decided_at: timestamp('decided_at', { withTimezone: true }),
   },
   (t) => [index('idx_permissions_user_peer').on(t.user_id, t.peer_id)],
+);
+
+// Personal API tokens: a long-lived credential an owner hands to a script.
+// Only the SHA-256 of the token is kept — it is 256 random bits, so a fast
+// hash is enough — and `prefix` is what the owner recognises it by.
+export const apiTokens = pgTable(
+  'api_tokens',
+  {
+    id: char('id', { length: 26 }).primaryKey(),
+    user_id: char('user_id', { length: 26 })
+      .notNull()
+      .references(() => users.id),
+    name: varchar('name', { length: 64 }).notNull(),
+    token_hash: char('token_hash', { length: 64 }).unique().notNull(),
+    prefix: varchar('prefix', { length: 16 }).notNull(),
+    created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    last_used_at: timestamp('last_used_at', { withTimezone: true }),
+    expires_at: timestamp('expires_at', { withTimezone: true }),
+  },
+  (t) => [index('idx_api_tokens_user').on(t.user_id)],
+);
+
+// A2A push notification configs (§4.3): where a peer asked to be told about a
+// task's progress. Scoped to the peer that registered it — `caller_did` — so
+// one peer can never read or replace another's. The receiver's credentials are
+// the peer's secrets, kept sealed like every other credential here.
+export const a2aPushConfigs = pgTable(
+  'a2a_push_configs',
+  {
+    id: char('id', { length: 26 }).primaryKey(),
+    // The inbound message the task is. No foreign key: a deleted conversation
+    // takes its messages with it, and a config left pointing at nothing is inert.
+    task_id: char('task_id', { length: 26 }).notNull(),
+    caller_did: varchar('caller_did', { length: 255 }).notNull(),
+    url: text('url').notNull(),
+    token_json: jsonb('token_json'),
+    auth_scheme: varchar('auth_scheme', { length: 64 }),
+    auth_credentials_json: jsonb('auth_credentials_json'),
+    // The last state delivered, so a state is announced once, not on every change check.
+    last_state: varchar('last_state', { length: 32 }),
+    created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('idx_a2a_push_configs_task').on(t.task_id)],
 );
 
 export const sessions = pgTable(

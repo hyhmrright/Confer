@@ -8,33 +8,38 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "test": "bun test"
+    "test": "bun test",
+    "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
     "@confer/shared": "workspace:*",
-    "i18next": "^26.4.2",
+    "i18next": "^26.5.3",
     "i18next-browser-languagedetector": "^8.2.1",
-    "react": "^19.3.0",
-    "react-dom": "^19.3.0",
-    "react-i18next": "^17.0.15",
+    "qrcode-generator": "2.0.4",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-i18next": "^17.1.0",
     "react-markdown": "^10.1.0",
-    "react-router": "^8.4.0",
+    "react-router": "^8.5.0",
     "remark-gfm": "^4.0.1",
-    "zod": "^4.6.5",
-    "zustand": "^5.0.15"
+    "zod": "^4.6.7",
+    "zustand": "^5.0.15",
+    "@tauri-apps/api": "^2.12.4"
   },
   "devDependencies": {
-    "@happy-dom/global-registrator": "20.14.5",
+    "@happy-dom/global-registrator": "21.0.3",
     "@tailwindcss/postcss": "^4.3.3",
-    "@tauri-apps/cli": "^2.12.0",
+    "@tauri-apps/cli": "^2.12.3",
     "@testing-library/dom": "10.4.2",
     "@testing-library/react": "16.3.3",
-    "@types/bun": "^1.4.2",
+    "@types/bun": "^1.4.3",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
-    "@vitejs/plugin-react": "^6.1.1",
-    "postcss": "^8.5.28",
+    "@vitejs/plugin-react": "^6.1.2",
+    "postcss": "^8.5.31",
     "tailwindcss": "^4.3.3",
-    "vite": "^8.3.1"
+    "vite": "^8.3.4",
+    "drizzle-kit": "^0.31.11",
+    "drizzle-orm": "^0.45.4"
   }
 }

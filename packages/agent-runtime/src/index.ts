@@ -8,6 +8,7 @@ export {
 export type {
   Fetcher,
   LLMChatOptions,
+  LLMImage,
   LLMMessage,
   LLMProvider,
   LLMResponse,

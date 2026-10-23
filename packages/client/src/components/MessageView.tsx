@@ -1,8 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useFileAttachment } from '../hooks/useFileAttachment.js';
+import {
+  ATTACHMENT_ACCEPT,
+  MAX_ATTACHMENTS,
+  useAttachmentUploads,
+} from '../hooks/use-attachment-uploads.js';
 import { DISABLED, DISABLED_FILLED, FOCUS_RING } from '../lib/styles.js';
 import { useChatStore } from '../stores/chat.js';
+import { ExportMenu } from './ExportMenu.js';
 import { Bot, Paperclip, Send, X } from './Icons.js';
 import { LoadingDots } from './LoadingDots.js';
 import { MessageBubble } from './MessageBubble.js';
@@ -19,6 +24,11 @@ export function MessageView() {
   const sendMessage = useChatStore((s) => s.sendMessage);
   const streaming = useChatStore((s) => s.streaming);
   const agentStatus = useChatStore((s) => s.agentStatus);
+  const activeConversationId = useChatStore((s) => s.activeConversationId);
+  // Only this thread's peer turn; one running in another thread is not news here.
+  const peerTurn = useChatStore((s) =>
+    s.peerTurn?.conversation_id === s.activeConversationId ? s.peerTurn : null,
+  );
   const hasOlderMessages = useChatStore((s) => s.hasOlderMessages);
   const loadingOlder = useChatStore((s) => s.loadingOlder);
   const loadOlderMessages = useChatStore((s) => s.loadOlderMessages);
@@ -26,12 +36,13 @@ export function MessageView() {
   // to a string comparison — the header does not re-render when an unrelated
   // conversation's unread count changes.
   const conversationName = useChatStore(
-    (s) => s.conversations.find((c) => c.id === s.activeConversationId)?.name,
+    (s) =>
+      s.conversations.find((c) => c.id === s.activeConversationId)?.name ??
+      s.activeConversationName,
   );
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
-  const { attachedFile, fileInputRef, handleFileChange, openFilePicker, clearAttachment } =
-    useFileAttachment();
+  const files = useAttachmentUploads();
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollRaf = useRef(0);
@@ -56,19 +67,15 @@ export function MessageView() {
 
   const handleSend = async () => {
     const text = input.trim();
-    if ((!text && !attachedFile) || sending) return;
-
-    let fullText = text;
-    if (attachedFile) {
-      fullText = `${text ? `${text}\n\n` : ''}[文件: ${attachedFile.name}]\n\`\`\`\n${attachedFile.content}\n\`\`\``;
-    }
+    const attachments = files.ready;
+    if ((!text && attachments.length === 0) || sending || files.uploading) return;
 
     setInput('');
-    clearAttachment();
+    files.clear();
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
     setSending(true);
     try {
-      await sendMessage(fullText);
+      await sendMessage(text, attachments);
     } finally {
       setSending(false);
     }
@@ -88,7 +95,18 @@ export function MessageView() {
     el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
   };
 
-  const canSend = (input.trim().length > 0 || attachedFile !== null) && !sending && !streaming;
+  const canSend =
+    (input.trim().length > 0 || files.ready.length > 0) &&
+    !files.uploading &&
+    !sending &&
+    !streaming;
+
+  // The owner's own reply wins the header; a peer turn shows only when idle.
+  let activity: string | null = null;
+  if (streaming) activity = agentStatus ?? t('message.thinking');
+  else if (peerTurn?.state === 'tool' && peerTurn.tool)
+    activity = t('message.statusCallingTool', { tool: peerTurn.tool });
+  else if (peerTurn) activity = t('message.statusAnsweringPeer');
 
   return (
     <div className="flex-1 flex flex-col bg-dark-base min-w-0 overflow-hidden">
@@ -97,12 +115,15 @@ export function MessageView() {
         <h1 className="font-display text-base text-ink-primary truncate min-w-0">
           {conversationName ?? t('message.title')}
         </h1>
-        {streaming && (
-          <div className="ms-auto shrink-0 flex items-center gap-1.5 eyebrow text-primary-400">
-            <span className="w-1.5 h-1.5 rounded-full bg-primary-400 animate-pulse" />
-            {agentStatus ?? t('message.thinking')}
-          </div>
-        )}
+        <div className="ms-auto shrink-0 flex items-center gap-3">
+          {activity && (
+            <div className="flex items-center gap-1.5 eyebrow text-primary-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-primary-400 animate-pulse" />
+              {activity}
+            </div>
+          )}
+          {activeConversationId && <ExportMenu conversationId={activeConversationId} />}
+        </div>
       </div>
 
       {/*
@@ -116,7 +137,7 @@ export function MessageView() {
           the last entry could never be scrolled out from under it. */}
       <div className="flex-1 overflow-y-auto scrollbar-thin px-6 pt-6 pb-28">
         <div className="mx-auto w-full max-w-[860px] space-y-6">
-          {messagesLoading ? (
+          {messagesLoading && messages.length === 0 ? (
             <div className="flex items-center justify-center py-20">
               <LoadingDots size="md" />
             </div>
@@ -166,35 +187,51 @@ export function MessageView() {
             and 4.39:1 against the field, both well past the 3:1 WCAG 2.4.11 asks
             of a focus indicator, so the quiet version is the compliant one too. */}
         <div className="rounded-xl border border-dark-border bg-dark-input transition-colors focus-within:border-primary-500">
-          {/* Attached file preview */}
-          {attachedFile && (
-            <div className="flex items-center gap-2 px-3 pt-3 pb-0">
-              <div className="flex items-center gap-2 px-2.5 py-1 rounded-md bg-primary-600/10 border border-primary-600/20 text-xs text-primary-300 min-w-0">
-                <Paperclip className="w-3 h-3 shrink-0" />
-                <span className="truncate">{attachedFile.name}</span>
-                <button
-                  type="button"
-                  onClick={clearAttachment}
-                  className="shrink-0 hover:text-red-400 transition-colors ms-1"
+          {files.uploads.length > 0 && (
+            <ul className="flex flex-wrap items-center gap-2 px-3 pt-3 pb-0">
+              {files.uploads.map((u) => (
+                <li
+                  key={u.key}
+                  className={`flex items-center gap-2 px-2.5 py-1 rounded-md border text-xs min-w-0 ${
+                    u.status === 'error'
+                      ? 'bg-red-900/20 border-red-800/40 text-red-300'
+                      : 'bg-primary-600/10 border-primary-600/20 text-primary-300'
+                  }`}
                 >
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-            </div>
+                  <Paperclip className="w-3 h-3 shrink-0" />
+                  <span className="truncate max-w-48">{u.name}</span>
+                  {u.status === 'uploading' && (
+                    <span className="shrink-0">{t('message.uploading')}</span>
+                  )}
+                  {u.status === 'error' && (
+                    <span className="shrink-0">{t('message.uploadFailed')}</span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => files.remove(u.key)}
+                    aria-label={t('message.removeAttachment', { name: u.name })}
+                    className="shrink-0 hover:text-red-400 transition-colors ms-1"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </li>
+              ))}
+            </ul>
           )}
 
           <div className="flex items-end gap-1 px-2 py-2">
             <input
-              ref={fileInputRef}
+              ref={files.fileInputRef}
               type="file"
-              accept=".txt,.md,.csv,.json,.yaml,.yml,.toml,.xml,.html,.css,.js,.ts,.py,.go,.rs,.java,.c,.cpp,.sh"
+              multiple
+              accept={ATTACHMENT_ACCEPT}
               className="hidden"
-              onChange={handleFileChange}
+              onChange={files.handleFileChange}
             />
             <button
               type="button"
-              onClick={openFilePicker}
-              disabled={sending || streaming}
+              onClick={files.openFilePicker}
+              disabled={sending || streaming || files.uploads.length >= MAX_ATTACHMENTS}
               className={`p-2 text-ink-muted hover:text-primary-400 hover:bg-primary-600/10 rounded-lg ${DISABLED} transition-colors shrink-0`}
               title={t('message.uploadFile')}
             >
