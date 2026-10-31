@@ -17,7 +17,7 @@
 | `gateway` | 由 `infra/gateway.Dockerfile` 构建 | Hono API、A2A 端点、WebSocket——**单副本,原因见下** |
 | `migrate` | 一次性任务 | 执行 Drizzle 迁移后退出 |
 | `postgres` | `postgres:18-alpine` | 主数据存储 |
-| `qdrant` | `qdrant/qdrant:v1.19.0` | RAG 知识库的向量检索 |
+| `qdrant` | `qdrant/qdrant:v1.20.0` | RAG 知识库的向量检索 |
 | `minio` | `pgsty/silo` | S3 兼容的文件存储 |
 
 > **不要把 `gateway` 扩到一个副本以上。**WebSocket 连接、A2A 重放 nonce 和限流计数
@@ -408,3 +408,11 @@ console.log(j.result.points_count);'
 - [`docs/02-architecture.md`](./02-architecture.md) — 系统架构与服务边界
 - [`CONTRIBUTING.md`](../CONTRIBUTING.md) — 开发环境搭建、测试栈、约定
 - [`plugins/confer-a2a/README.md`](../plugins/confer-a2a/README.md) — Claude Code 插件参考
+
+## 依赖升级验证（2026-10-31）
+
+Qdrant 1.19.2 → 1.20.0 已在停止旧实例后复制的生产卷上启动验证：两个集合、11 个知识分块的向量和 payload 逐项一致。完整隔离测试栈也运行在 1.20.0；升级其他版本仍须重新验证，不能从本次结果推断兼容性。
+
+安全审计通过根目录 overrides 固定 body-parser ≥2.4.0、decode-uri-component ≥0.5.1，happy-dom 随开发依赖更新至 21.0.4。decode-uri-component 的修复版为 ESM，而 MinIO 的 query-string 7.1.3 仍以 CommonJS 调用它，因此 `patches/query-string@7.1.3.patch` 读取其 default 导出。两个 Dockerfile 必须在安装依赖前复制 patches；待上游解决兼容性后再移除补丁和对应覆盖。
+
+`docker-compose.ghcr.yml` 的版本变化要到下一次手动发布 confer-cli 才会进入 npm tarball；本次依赖维护没有发布新的 app 或 CLI 版本。

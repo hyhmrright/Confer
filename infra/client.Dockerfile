@@ -1,5 +1,6 @@
 FROM oven/bun:1 AS build
 WORKDIR /app
+COPY patches ./patches
 COPY package.json bun.lock tsconfig.json ./
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/identity/package.json ./packages/identity/
