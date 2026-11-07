@@ -7,6 +7,7 @@ FROM oven/bun:1-alpine AS base
 WORKDIR /app
 
 FROM base AS install
+COPY patches ./patches
 COPY package.json bun.lock ./
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/identity/package.json ./packages/identity/

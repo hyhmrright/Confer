@@ -1,16 +1,17 @@
 import { describe, expect, mock, test } from 'bun:test';
+import type { LookupAllOptions } from 'node:dns';
+import { lookup as realLookup } from 'node:dns/promises';
+
+// Capture before mock.module replaces the shared module registry.
+const lookup = realLookup;
 
 // This file owns the only node:dns mock in the package, which is why it is its
 // own file: `mock.module` replaces the module registry for the whole process,
 // so the mock has to be somewhere its blast radius is obvious rather than
 // buried in a suite about something else.
 //
-// Nothing else in @confer/identity resolves a hostname — every other guard test
-// passes an IP literal, and resolver.test.ts uses one deliberately (a real DNS
-// query in that suite once cost a CI run a 5000ms timeout). The default branch
-// below therefore throws instead of falling back to real DNS: if some future
-// test does start depending on a lookup, it should fail saying so, not quietly
-// dial out.
+// Only the fixture hostnames below are intercepted. Other suites exercise real
+// OS resolution (localhost and numeric address spellings), so delegate those.
 const STALLED = 'resolver-never-answers.test';
 const MISSING = 'no-such-host.test';
 const SLOW_MISSING = 'slow-no-such-host.test';
@@ -25,7 +26,7 @@ function notFound(hostname: string): Error {
 }
 
 mock.module('node:dns/promises', () => ({
-  lookup: (hostname: string) => {
+  lookup: (hostname: string, options: LookupAllOptions) => {
     if (hostname === STALLED) return new Promise(() => {}); // never settles
     if (hostname === MISSING) return Promise.reject(notFound(hostname));
     if (hostname === SLOW_MISSING) {
@@ -35,9 +36,7 @@ mock.module('node:dns/promises', () => ({
     }
     if (hostname === INTERNAL) return Promise.resolve([{ address: '10.0.0.5', family: 4 }]);
     if (hostname === PUBLIC) return Promise.resolve([{ address: '203.0.113.10', family: 4 }]);
-    throw new Error(
-      `dns-timeout.test has node:dns/promises mocked; unexpected lookup: ${hostname}`,
-    );
+    return lookup(hostname, options);
   },
 }));
 
