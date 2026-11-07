@@ -40,3 +40,27 @@ export function runDetached(
 export async function settleDetached(): Promise<void> {
   while (inFlight.size > 0) await Promise.all(inFlight);
 }
+
+/** Metadata only: backup readiness must include detached writes. */
+export function pendingDetachedCount(): number {
+  return inFlight.size;
+}
+
+/** A streaming response can be cancelled before its writer has stopped writing
+ * to the stores. Track the writer separately while leaving its error handling
+ * with Hono/the caller. The readiness join itself never rejects. */
+export function trackResponseWork<T>(
+  handler: (stream: T) => Promise<void>,
+): (stream: T) => Promise<void> {
+  return (stream) => {
+    const work = handler(stream);
+    const joined = work
+      .then(
+        () => {},
+        () => {},
+      )
+      .finally(() => inFlight.delete(joined));
+    inFlight.add(joined);
+    return work;
+  };
+}

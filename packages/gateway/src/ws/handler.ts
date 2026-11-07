@@ -12,6 +12,7 @@ import {
 } from '../db/schema.js';
 import { getEnv } from '../env.js';
 import { runDetached } from '../lib/background.js';
+import { isMaintaining } from '../lib/maintenance.js';
 import { isConversationParticipant, ownsConversation } from '../lib/tenant.js';
 import { type AuthPayload, jwtSecret, TOKEN_TYPE } from '../middleware/auth.js';
 
@@ -233,6 +234,7 @@ export const websocket = {
       return new Response('Too many connections', { status: 429 });
     }
 
+    if (isMaintaining()) return new Response('Backup in progress', { status: 503 });
     const success = server.upgrade(req, {
       data: {
         user: auth.user,
@@ -245,6 +247,10 @@ export const websocket = {
   },
 
   open(ws: ServerWebSocket<WsData>) {
+    if (isMaintaining()) {
+      ws.close(1012, 'Backup in progress');
+      return;
+    }
     const userId = ws.data.user.sub;
     let set = connectionsByUser.get(userId);
     if (!set) {
@@ -272,6 +278,10 @@ export const websocket = {
   },
 
   message(ws: ServerWebSocket<WsData>, raw: string | Buffer) {
+    if (isMaintaining()) {
+      ws.close(1012, 'Backup in progress');
+      return;
+    }
     const text = typeof raw === 'string' ? raw : new TextDecoder().decode(raw);
 
     let parsed: unknown;
@@ -342,9 +352,10 @@ export const websocket = {
       set.delete(ws);
       if (set.size === 0) {
         connectionsByUser.delete(userId);
-        runDetached(broadcastPresence(userId, ws.data.user.username, false), (e) =>
-          console.error('presence broadcast failed:', e),
-        );
+        if (!isMaintaining())
+          runDetached(broadcastPresence(userId, ws.data.user.username, false), (e) =>
+            console.error('presence broadcast failed:', e),
+          );
       }
     }
   },

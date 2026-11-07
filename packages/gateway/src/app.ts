@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { clientIp } from './lib/client-ip.js';
+import { maintenanceStatus } from './lib/maintenance.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { rateLimit } from './middleware/rate-limit.js';
 import { a2aRoutes } from './routes/a2a.js';
@@ -75,7 +76,7 @@ if (process.env.NODE_ENV !== 'test') {
 }
 app.onError(errorHandler);
 
-app.get('/health', (c) => c.json({ status: 'ok', version: '0.1.0' }));
+app.get('/health', (c) => c.json({ status: 'ok', version: '0.1.0', ...maintenanceStatus() }));
 
 app.route('/.well-known', wellKnownRoutes);
 // Root-level `/agents/:username/did.json` — per-user DID documents for did:web

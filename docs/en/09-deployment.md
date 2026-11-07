@@ -439,3 +439,11 @@ the instance for a while — they are the only way back.
 - [`docs/02-architecture.md`](./02-architecture.md) — system architecture and service boundaries
 - [`CONTRIBUTING.md`](../CONTRIBUTING.md) — developer setup, test stack, conventions
 - [`plugins/confer-a2a/README.md`](../plugins/confer-a2a/README.md) — Claude Code plugin reference
+
+## Automatic encrypted backups
+
+The source checkout now provides `./infra/backup.sh backup`, `install`, `status` and `verify <snapshot-directory>`. Deploy the current gateway first, run a verified backup, then install the local launchd/systemd-user schedule. The backup day starts at 03:00 Asia/Shanghai; missed or failed runs are retried every 15 minutes. Seven verified restore points are retained by default.
+
+Backups include Postgres, Qdrant snapshots and vectors, uploaded objects, recovery configuration and immutable runtime images. Application writes are drained during capture; the service resumes before the isolated restore drill. Archives use authenticated AES-256-GCM encryption, with the key stored outside both the checkout and archive directory. Keep an offline key copy and copy encrypted archives off this host.
+
+See [the detailed backup runbook](../11-backup-recovery.md) for paths, options, recovery checks and boundaries. Restore verification uses a new internal Docker network, disposable containers and fresh data volumes, and checks table contents, every point/vector, objects, encrypted credentials and application authentication.

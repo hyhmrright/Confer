@@ -49,3 +49,7 @@ CLAUDE-SECURITY-*/
 # Local sync bookkeeping; Markdown and non-secret project.json may be committed.
 .confer/peers/*/.sync.json
 .confer/peers/*/*.tmp
+
+# Backup archives belong outside the checkout; encryption keys must never be committed.
+backups/
+*.backup.key

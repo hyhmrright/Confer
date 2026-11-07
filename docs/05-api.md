@@ -614,3 +614,8 @@ Content-Type: application/json
 | `POST /knowledge-bases/:kbId/documents/:docId/outdated` | 自有文档排除检索；保留原件，可重试索引恢复 |
 
 A2A `X-Confer-Capability` 的无效/到期/撤销返回 403；HTTP+JSON binding 使用 `PERMISSION_DENIED`，原生使用 `invalid_capability`。缺失必需凭据不允许进入回答流程。签名、联系人同意和已有策略仍然是必经边界。
+
+
+## 备份维护元数据
+
+`GET /health` 增加 `backup_control`、进程 `instance_id`、维护 `generation`、`maintenance`、`ready` 与 `lease_until` 元数据。维护仅由宿主的容器内进程信号开启/续期/解除，HTTP 不能申请维护。开始维护后新请求返回 503 和 `Retry-After: 30`；已有响应体与 detached 工作全部结束才会 ready。详见 [备份流程](11-backup-recovery.md)。
