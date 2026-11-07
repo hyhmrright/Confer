@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { clientIp } from './lib/client-ip.js';
+import { maintenanceStatus } from './lib/maintenance.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { rateLimit } from './middleware/rate-limit.js';
 import { a2aRoutes } from './routes/a2a.js';
@@ -14,10 +15,13 @@ import { agentFactsRoutes } from './routes/agent-facts.js';
 import { apiTokenRoutes } from './routes/api-tokens.js';
 import { attachmentRoutes } from './routes/attachments.js';
 import { authRoutes } from './routes/auth.js';
+import { capabilityRoutes } from './routes/capabilities.js';
 import { consultRoutes } from './routes/consult.js';
 import { contactRoutes } from './routes/contacts.js';
 import { conversationRoutes } from './routes/conversations.js';
+import { deviceAuthRoutes } from './routes/device-auth.js';
 import { errandRoutes } from './routes/errands.js';
+import { feedbackRoutes } from './routes/feedback.js';
 import { knowledgeBasesRoutes } from './routes/knowledge-bases.js';
 import { memoriesRoutes } from './routes/memories.js';
 import { permissionRoutes } from './routes/permissions.js';
@@ -72,7 +76,7 @@ if (process.env.NODE_ENV !== 'test') {
 }
 app.onError(errorHandler);
 
-app.get('/health', (c) => c.json({ status: 'ok', version: '0.1.0' }));
+app.get('/health', (c) => c.json({ status: 'ok', version: '0.1.0', ...maintenanceStatus() }));
 
 app.route('/.well-known', wellKnownRoutes);
 // Root-level `/agents/:username/did.json` — per-user DID documents for did:web
@@ -84,6 +88,8 @@ app.route('/agents', agentCardRoutes);
 app.route('/api/v1/auth', authRoutes);
 app.route('/api/v1/auth', accountSecurityRoutes);
 app.route('/api/v1/tokens', apiTokenRoutes);
+app.route('/api/v1/capabilities', capabilityRoutes);
+app.route('/api/v1/device-auth', deviceAuthRoutes);
 app.route('/api/v1/users', userRoutes);
 app.route('/api/v1/agents', agentRoutes);
 app.route('/api/v1/contacts', contactRoutes);
@@ -96,6 +102,7 @@ app.route('/api/v1/permissions', permissionRoutes);
 app.route('/api/v1/probe', probeRoutes);
 app.route('/api/v1/projects', projectsRoutes);
 app.route('/api/v1/errands', errandRoutes);
+app.route('/api/v1/feedback', feedbackRoutes);
 app.route('/api/v1/memories', memoriesRoutes);
 app.route('/api/v1/knowledge-bases', knowledgeBasesRoutes);
 app.route('/api/v1/usage', usageRoutes);

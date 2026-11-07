@@ -5,6 +5,6 @@ project_doc_max_bytes = 98304
 [mcp_servers.confer-a2a]
 command = "bun"
 args = ["run", "packages/mcp-a2a/src/server.ts"]
-env_vars = ["CONFER_USERNAME", "CONFER_PASSWORD", "CONFER_GATEWAY_URL", "CONFER_CONSULT_WAIT", "CONFER_PROJECT_ID"]
+env_vars = ["CONFER_API_TOKEN", "CONFER_USERNAME", "CONFER_PASSWORD", "CONFER_GATEWAY_URL", "CONFER_CONSULT_WAIT", "CONFER_PROJECT_ID"]
 startup_timeout_sec = 20
 tool_timeout_sec = 120

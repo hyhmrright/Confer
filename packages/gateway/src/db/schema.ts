@@ -10,6 +10,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   varchar,
 } from 'drizzle-orm/pg-core';
 
@@ -182,6 +183,7 @@ export const messages = pgTable(
     in_reply_to: char('in_reply_to', { length: 26 }),
     thread_root: char('thread_root', { length: 26 }),
     citations_json: jsonb('citations_json'),
+    capability_id: char('capability_id', { length: 26 }),
     language: varchar('language', { length: 8 }),
     translation_json: jsonb('translation_json'),
     via: varchar('via', { length: 32 }),
@@ -582,4 +584,87 @@ export const llmUsage = pgTable(
     created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index('idx_llm_usage_user_created').on(t.user_id, t.created_at)],
+);
+
+// Receiver-issued, sender-bound grants. Raw credentials are shown once only.
+export const capabilityGrants = pgTable(
+  'capability_grants',
+  {
+    id: char('id', { length: 26 }).primaryKey(),
+    user_id: char('user_id', { length: 26 })
+      .notNull()
+      .references(() => users.id),
+    peer_id: char('peer_id', { length: 26 })
+      .notNull()
+      .references(() => peerAgents.id),
+    signer_did: varchar('signer_did', { length: 255 }).notNull(),
+    name: varchar('name', { length: 64 }).notNull(),
+    token_hash: char('token_hash', { length: 64 }).unique().notNull(),
+    kb_ids: jsonb('kb_ids').$type<string[]>().notNull(),
+    expires_at: timestamp('expires_at', { withTimezone: true }).notNull(),
+    revoked_at: timestamp('revoked_at', { withTimezone: true }),
+    created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('idx_capability_grants_user').on(t.user_id)],
+);
+
+// Short-lived device authorization requests. Approval records consent; only the
+// device holding the high-entropy secret can exchange it, exactly once.
+export const deviceAuthorizations = pgTable('device_authorizations', {
+  id: char('id', { length: 26 }).primaryKey(),
+  device_hash: char('device_hash', { length: 64 }).unique().notNull(),
+  user_code: varchar('user_code', { length: 16 }).unique().notNull(),
+  name: varchar('name', { length: 64 }).notNull(),
+  user_id: char('user_id', { length: 26 }).references(() => users.id),
+  expires_at: timestamp('expires_at', { withTimezone: true }).notNull(),
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const errandEvents = pgTable(
+  'errand_events',
+  {
+    id: char('id', { length: 26 }).primaryKey(),
+    errand_id: char('errand_id', { length: 26 })
+      .notNull()
+      .references(() => errands.id),
+    actor_id: char('actor_id', { length: 26 })
+      .notNull()
+      .references(() => users.id),
+    status: varchar('status', { length: 16 }).notNull(),
+    note: text('note').notNull(),
+    created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('idx_errand_events_errand').on(t.errand_id)],
+);
+
+export const answerFeedback = pgTable(
+  'answer_feedback',
+  {
+    id: char('id', { length: 26 }).primaryKey(),
+    user_id: char('user_id', { length: 26 })
+      .notNull()
+      .references(() => users.id),
+    message_id: char('message_id', { length: 26 }).notNull(),
+    kind: varchar('kind', { length: 32 }).notNull(),
+    note: text('note').notNull(),
+    created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('idx_answer_feedback_user').on(t.user_id)],
+);
+
+// Recipient-issued capabilities held for outbound consults: sealed, tenant scoped,
+// never included in contact responses or sent back to the client.
+export const peerCredentials = pgTable(
+  'peer_credentials',
+  {
+    id: char('id', { length: 26 }).primaryKey(),
+    user_id: char('user_id', { length: 26 })
+      .notNull()
+      .references(() => users.id),
+    peer_id: char('peer_id', { length: 26 })
+      .notNull()
+      .references(() => peerAgents.id),
+    token_json: jsonb('token_json').notNull(),
+  },
+  (t) => [uniqueIndex('idx_peer_credentials_owner_peer').on(t.user_id, t.peer_id)],
 );

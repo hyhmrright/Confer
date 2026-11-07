@@ -1,3 +1,5 @@
+> 2026-11-07 实现更新：项目记忆现可通过 `sync_project_memory` 显式同步为 `.confer/peers/<peerId>/facts.md` 与 `decisions.md`，共享配置为 `.confer/project.json`。不依赖单一开发工具目录；下文早期 `.claude/peers` 布局是历史设计。冲突与操作流程见 [Agent 工作流](10-agent-workflows.md)。
+
 # Confer — 项目记忆（.claude/peers/）
 
 定义 Claude Code 集成下，知识沉淀到项目里的文件格式。这是 Confer 的核心创新之一：**让供应商知识跟着项目走，跨 session、跨开发者、跨设备都不丢**。

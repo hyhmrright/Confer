@@ -6,6 +6,8 @@ import { rerankCandidates } from '../lib/rerank.js';
 import { detectLang } from '../lib/text-lang.js';
 
 export interface KbCitation {
+  doc_id?: string;
+  kb_id?: string;
   kb_name: string;
   doc_name: string;
   excerpt: string;
@@ -57,6 +59,8 @@ export async function searchKnowledgeBase(
   const ranked = rerank ? await applyRerank(query, results, rerank) : results;
 
   const citations: KbCitation[] = ranked.map((r) => ({
+    kb_id: r.kb_id,
+    doc_id: r.doc_id,
     kb_name: r.kb_name,
     doc_name: r.doc_name,
     excerpt: r.text,

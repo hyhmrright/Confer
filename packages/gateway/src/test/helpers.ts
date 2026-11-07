@@ -113,7 +113,11 @@ export function apiRequest(path: string, init?: RequestInit): Promise<Response> 
 // fetch a fully-built Request — outbound A2A signs one — and then the body is
 // on the Request, not on `init`. Reading `init.body` there yields undefined.
 export function mockFetch(
-  handler: (url: string, init?: RequestInit, input?: RequestInfo | URL) => Response | undefined,
+  handler: (
+    url: string,
+    init?: RequestInit,
+    input?: RequestInfo | URL,
+  ) => Response | Promise<Response> | undefined,
 ): () => void {
   const realFetch = globalThis.fetch;
   globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {

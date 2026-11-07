@@ -17,7 +17,8 @@
     "lint:fix": "biome check --write .",
     "db:generate": "bun run --filter @confer/gateway db:generate",
     "db:migrate": "bun run --filter @confer/gateway db:migrate",
-    "eval:rag": "bun run --filter @confer/gateway eval:rag"
+    "eval:rag": "bun run --filter @confer/gateway eval:rag",
+    "backup:test:integration": "bun run packages/gateway/scripts/backup-integration.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.6.4",

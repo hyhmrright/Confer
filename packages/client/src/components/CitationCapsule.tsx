@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TranslationKey } from '../i18n/index.js';
+import { api } from '../lib/api.js';
 import type { Citation } from '../stores/chat.js';
 import { BookOpen, ChevronDown, ChevronRight, ExternalLink } from './Icons.js';
 
@@ -22,6 +23,9 @@ const trustBadge: Record<string, { labelKey: TranslationKey; color: string }> = 
 export function CitationCapsule({ citations }: { citations: Citation[] }) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
+  const [excluded, setExcluded] = useState<string[]>([]);
+  const [error, setError] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   if (citations.length === 0) return null;
 
@@ -37,6 +41,11 @@ export function CitationCapsule({ citations }: { citations: Citation[] }) {
         {expanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
       </button>
 
+      {error && (
+        <p role="alert" className="text-xs">
+          {t('features.failed')}
+        </p>
+      )}
       {expanded && (
         <div className="mt-2 space-y-1.5 animate-fade-in">
           {citations.map((cite, i) => {
@@ -71,6 +80,32 @@ export function CitationCapsule({ citations }: { citations: Citation[] }) {
                       </p>
                     )}
                   </div>
+                  {cite.doc_id && cite.kb_id && (
+                    <button
+                      type="button"
+                      className="text-xs shrink-0"
+                      disabled={busy || excluded.includes(cite.doc_id)}
+                      onClick={async () => {
+                        setBusy(true);
+                        setError(false);
+                        try {
+                          await api.post(
+                            `/knowledge-bases/${cite.kb_id}/documents/${cite.doc_id}/outdated`,
+                            {},
+                          );
+                          setExcluded((ids) => [...ids, cite.doc_id as string]);
+                        } catch {
+                          setError(true);
+                        } finally {
+                          setBusy(false);
+                        }
+                      }}
+                    >
+                      {excluded.includes(cite.doc_id)
+                        ? t('features.excluded')
+                        : t('features.excludeSource')}
+                    </button>
+                  )}
                   {cite.url && /^https?:\/\//.test(cite.url) && (
                     <a
                       href={cite.url}

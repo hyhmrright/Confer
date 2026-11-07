@@ -21,6 +21,7 @@ function statusBadge(status: string | null) {
     ready: i18n.t('knowledge.statusReady'),
     processing: i18n.t('knowledge.statusProcessing'),
     failed: i18n.t('knowledge.statusFailed'),
+    outdated: i18n.t('features.excluded'),
   };
   return (
     <span
@@ -53,7 +54,7 @@ function DocRow({
         )}
       </div>
       <div className="flex items-center gap-1 ms-2 shrink-0 opacity-0 group-hover:opacity-100">
-        {doc.status === 'failed' && onRetry && (
+        {(doc.status === 'failed' || doc.status === 'outdated') && onRetry && (
           <button
             type="button"
             onClick={onRetry}

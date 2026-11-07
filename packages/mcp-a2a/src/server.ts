@@ -3,7 +3,10 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { loadConfig } from './config.js';
+import { readCredentials } from './credentials.js';
+import { deviceLogin, normalizeGateway } from './device-login.js';
 import { GatewayClient } from './gateway-client.js';
+import { loadProjectConfig } from './project-config.js';
 import { askMultiple, checkReply } from './tools/advanced.js';
 import { askPerson } from './tools/ask-person.js';
 import { askAgent, followUp, getConversation } from './tools/consult.js';
@@ -12,8 +15,42 @@ import { findAgents, getAgentCapabilities, listAgents } from './tools/discovery.
 import { whoami } from './tools/ops.js';
 import { readProjectMemory, writeProjectMemory } from './tools/project-memory.js';
 import { requestCodeReview, requestDesignReview } from './tools/review.js';
+import { syncProjectMemory } from './tools/sync-project-memory.js';
 
-const cfg = loadConfig();
+if (process.argv.includes('--login')) {
+  const index = process.argv.indexOf('--gateway');
+  await deviceLogin(
+    index >= 0
+      ? (process.argv[index + 1] ?? '')
+      : (process.env.CONFER_GATEWAY_URL ??
+          loadProjectConfig(process.cwd()).gatewayUrl ??
+          'http://localhost'),
+  );
+  process.exit(0);
+}
+const env = { ...process.env };
+for (const key of [
+  'CONFER_GATEWAY_URL',
+  'CONFER_USERNAME',
+  'CONFER_PASSWORD',
+  'CONFER_API_TOKEN',
+  'CONFER_PROJECT_ID',
+]) {
+  if (/^\$\{.*\}$/.test(env[key] ?? '')) delete env[key];
+}
+const project = loadProjectConfig(process.cwd());
+env.CONFER_GATEWAY_URL ??= project.gatewayUrl;
+env.CONFER_PROJECT_ID ??= project.projectId;
+if (!env.CONFER_API_TOKEN && !env.CONFER_PASSWORD) {
+  const origin = normalizeGateway(env.CONFER_GATEWAY_URL ?? 'http://localhost');
+  const saved = readCredentials(origin);
+  if (saved) {
+    env.CONFER_GATEWAY_URL = origin;
+    env.CONFER_API_TOKEN = saved.token;
+    env.CONFER_USERNAME = saved.username;
+  }
+}
+const cfg = loadConfig(env);
 const client = new GatewayClient(cfg);
 const server = new McpServer({ name: 'confer-a2a', version: '0.1.0' });
 
@@ -36,6 +73,33 @@ const askShape = {
   language: z.string().optional(),
   waitSeconds: waitSecondsField,
 };
+
+server.registerTool(
+  'sync_project_memory',
+  {
+    description:
+      'Pull server project memory into .confer/peers Markdown, or push reviewed local edits with conflict protection. Uses this checkout only; never overwrites unreviewed changes.',
+    inputSchema: {
+      peerId: z.string().regex(/^[0-9A-HJKMNP-TV-Z]{26}$/),
+      direction: z.enum(['pull', 'push']),
+    },
+  },
+  async ({ peerId, direction }) => {
+    const profile = z
+      .object({ user: z.object({ id: z.string().min(1) }) })
+      .parse(await client.get('/api/v1/users/me'));
+    return json(
+      await syncProjectMemory(client, {
+        gateway: cfg.gatewayUrl,
+        accountId: profile.user.id,
+        projectId: cfg.projectId,
+        peerId,
+        direction,
+        root: process.cwd(),
+      }),
+    );
+  },
+);
 
 // --- Domain 1: discovery ---
 server.registerTool(
@@ -115,7 +179,7 @@ server.registerTool(
 server.registerTool(
   'whoami',
   { description: 'Show which Confer user this MCP server acts as.', inputSchema: {} },
-  async () => json(whoami(client)),
+  async () => json(await whoami(client)),
 );
 
 // --- Domain 5: ask a specific person's agent ---

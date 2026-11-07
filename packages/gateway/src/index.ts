@@ -1,13 +1,15 @@
 import { app } from './app.js';
 import { bootstrap } from './bootstrap.js';
 import { getEnv } from './env.js';
+import { runDetached } from './lib/background.js';
+import { isMaintaining, maintenanceRequest, setMaintenance } from './lib/maintenance.js';
 import { websocket } from './ws/handler.js';
 
 const env = getEnv();
 
-bootstrap().catch((err) => {
-  console.error('Bootstrap failed:', err);
-});
+runDetached(bootstrap(), (err) => console.error('Bootstrap failed:', err));
+process.on('SIGUSR2', () => setMaintenance(true));
+process.on('SIGUSR1', () => setMaintenance(false));
 
 console.log(`Confer gateway starting on ${env.HOST}:${env.PORT}`);
 
@@ -26,10 +28,16 @@ export default {
   idleTimeout: IDLE_TIMEOUT_SECONDS,
   fetch(req: Request, server: import('bun').Server<unknown>) {
     const url = new URL(req.url);
+    if (isMaintaining() && url.pathname === '/ws')
+      return new Response('Backup in progress', { status: 503 });
     if (url.pathname === '/ws' && req.headers.get('upgrade') === 'websocket') {
       return websocket.upgrade(req, server);
     }
-    return app.fetch(req, { ip: server.requestIP(req)?.address });
+    const ip = server.requestIP(req)?.address;
+    const continuation =
+      url.pathname.startsWith('/a2a/v1/') &&
+      ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(ip ?? '');
+    return maintenanceRequest(req, () => app.fetch(req, { ip }), continuation);
   },
   websocket: {
     open: websocket.open,

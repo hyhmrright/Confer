@@ -93,6 +93,13 @@ jobs:
       - name: Test
         run: bun run test
 
+      # Exercise actual backup/restore binaries, isolated from the test stack.
+      # Keep this inside the existing test job and the single required check.
+      - name: Build backup verification image
+        run: docker build -f infra/gateway.Dockerfile -t confer-backup-candidate:latest .
+      - name: Verify encrypted backup and isolated recovery
+        run: bun run backup:test:integration
+
   build:
     runs-on: ubuntu-latest
     steps:

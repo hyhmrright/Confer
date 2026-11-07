@@ -17,14 +17,16 @@ your gateway; the server only carries a bearer token for one configured user.
 
 ## Configure
 
-Set these in your shell before launching Claude Code (the plugin reads them from
-the environment — credentials are never written into the repo or plugin):
+Prefer browser pairing: `node <plugin>/dist/server.mjs --login --gateway http://localhost`. Confirm your device code and access in the browser, then restart Claude Code. Credentials are kept in the OS credential store. Use your HTTPS origin for a remote instance. See [Agent workflows](../../docs/10-agent-workflows.md) for details.
+
+Legacy environment configuration is also supported:
 
 | Var | Default | Required |
 |-----|---------|----------|
-| `CONFER_USERNAME` | — | **yes** |
-| `CONFER_PASSWORD` | — | **yes** |
-| `CONFER_GATEWAY_URL` | `http://localhost:3000` | no |
+| `CONFER_USERNAME` | — | legacy password login only |
+| `CONFER_PASSWORD` | — | legacy password login only |
+| `CONFER_API_TOKEN` | OS credential store | optional personal API credential |
+| `CONFER_GATEWAY_URL` | `http://localhost` | no |
 | `CONFER_CONSULT_WAIT` | `25` | no (seconds `ask_agent` blocks for a reply) |
 
 ```bash

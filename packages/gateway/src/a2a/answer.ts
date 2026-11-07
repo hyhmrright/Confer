@@ -6,10 +6,12 @@ import { agents, messages, peerAgents, type permissions } from '../db/schema.js'
 import { getEnv } from '../env.js';
 import { type ModelConfigError, resolveAgentModel } from '../lib/agent-model.js';
 import { runDetached } from '../lib/background.js';
+import { capabilityScope, requiresCapability } from '../lib/capability-grants.js';
 import { turnHistory } from '../lib/conversation-history.js';
 import { getUserLlmKeys, resolveAgentCapabilities } from '../lib/llm-keys.js';
 import { isContact } from '../lib/tenant.js';
 import { runAgentTurn } from '../orchestration/agent-orchestrator.js';
+import type { KbCitation } from '../tools/knowledge-base.js';
 import { extractAndStore } from '../tools/memory.js';
 import { broadcastToConversation } from '../ws/handler.js';
 import { asA2AQuestionScope } from './inbound-permissions.js';
@@ -18,6 +20,7 @@ import { queueTaskPush } from './push.js';
 import { loadOwnerSigningKey } from './signing.js';
 
 export interface ProcessA2AMessageParams {
+  capabilityId?: string;
   targetAgent: typeof agents.$inferSelect;
   senderDid: string;
   senderPeer: typeof peerAgents.$inferSelect;
@@ -109,7 +112,12 @@ async function sendToPeer(
 }
 
 /** Push this agent's reply to the inbound question to the owner's open sockets. */
-function broadcastReply(params: ProcessA2AMessageParams, id: string, content: string): void {
+function broadcastReply(
+  params: ProcessA2AMessageParams,
+  id: string,
+  content: string,
+  citations: KbCitation[] = [],
+): void {
   const { targetAgent, conversationId, inboundMessageId } = params;
   broadcastToConversation(conversationId, {
     type: 'message.new',
@@ -120,6 +128,12 @@ function broadcastReply(params: ProcessA2AMessageParams, id: string, content: st
       sender_id: targetAgent.id,
       content,
       in_reply_to: inboundMessageId,
+      citations: citations.map((cite) => ({
+        source: `${cite.doc_name}（${cite.kb_name}）`,
+        passage: cite.excerpt,
+        doc_id: cite.doc_id,
+        kb_id: cite.kb_id,
+      })),
     },
   });
 }
@@ -141,10 +155,11 @@ function broadcastTurnState(
   });
 }
 
-type A2AFailure = ModelConfigError | 'agent_error';
+type A2AFailure = ModelConfigError | 'agent_error' | 'capability_expired';
 
 /** One-line English summary of a turn that could not be run, sent to the asker. */
 const FAILURE_NOTICE: Record<A2AFailure, string> = {
+  capability_expired: 'The authorization for this question expired or was revoked.',
   no_model_configured: 'The agent you asked has no model configured yet.',
   unknown_provider: 'The agent you asked is configured with an unknown model provider.',
   no_key_for_provider: 'The agent you asked has no API key for its configured provider.',
@@ -208,6 +223,15 @@ export async function processA2AMessage(params: ProcessA2AMessageParams): Promis
   const { targetAgent, messageContent, conversationId, inboundMessageId } = params;
 
   const db = getDb();
+  const restrictedScope = params.capabilityId
+    ? await capabilityScope(params.capabilityId, targetAgent.user_id, params.senderPeer.id)
+    : undefined;
+  const missingRequired =
+    !params.capabilityId && (await requiresCapability(targetAgent.user_id, params.senderPeer.id));
+  if (restrictedScope === null || missingRequired) {
+    await notifyPeerOfFailure(params, 'capability_expired');
+    return;
+  }
   const env = getEnv();
   const llmKeys = await getUserLlmKeys(targetAgent.user_id);
 
@@ -231,7 +255,8 @@ export async function processA2AMessage(params: ProcessA2AMessageParams): Promis
   const { embeddingKey, embeddingProvider, tavilyApiKey, hasKb, kbScope, recallMemory } =
     await resolveAgentCapabilities(targetAgent.user_id, llmKeys, env, 'peer');
 
-  const history = await loadA2AHistory(conversationId, inboundMessageId);
+  // Prior answers may have used a broader grant. Never replay them into a restricted turn.
+  const history = restrictedScope ? [] : await loadA2AHistory(conversationId, inboundMessageId);
 
   broadcastTurnState(conversationId, 'thinking');
   // A rejected key, a provider outage, a model that no longer exists: each of
@@ -250,9 +275,9 @@ export async function processA2AMessage(params: ProcessA2AMessageParams): Promis
     agentId: targetAgent.id,
     embeddingKey,
     embeddingProvider,
-    tavilyApiKey,
-    hasKb,
-    kbScope,
+    tavilyApiKey: restrictedScope ? '' : tavilyApiKey,
+    hasKb: restrictedScope ? restrictedScope.length > 0 && hasKb : hasKb,
+    kbScope: restrictedScope ?? kbScope,
     recallMemory,
     replyLanguage: params.language,
     emit: { onTool: (name) => broadcastTurnState(conversationId, 'tool', name) },
@@ -264,6 +289,17 @@ export async function processA2AMessage(params: ProcessA2AMessageParams): Promis
     .finally(() => broadcastTurnState(conversationId, 'idle'));
   if (!turn) {
     await notifyPeerOfFailure(params, 'agent_error');
+    return;
+  }
+  const freshScope = params.capabilityId
+    ? await capabilityScope(params.capabilityId, targetAgent.user_id, params.senderPeer.id)
+    : undefined;
+  if (
+    (params.capabilityId &&
+      (!freshScope || restrictedScope?.some((id) => !freshScope.includes(id)))) ||
+    (!params.capabilityId && (await requiresCapability(targetAgent.user_id, params.senderPeer.id)))
+  ) {
+    await notifyPeerOfFailure(params, 'capability_expired');
     return;
   }
   const { content: replyContent, citations } = turn;
@@ -284,7 +320,7 @@ export async function processA2AMessage(params: ProcessA2AMessageParams): Promis
     delivered_at: new Date(),
   });
 
-  broadcastReply(params, replyId, replyContent);
+  broadcastReply(params, replyId, replyContent, citations);
   queueTaskPush(inboundMessageId);
 
   // Fire-and-forget: distil durable facts from this A2A turn into long-term
@@ -307,7 +343,19 @@ export async function processA2AMessage(params: ProcessA2AMessageParams): Promis
     );
   }
 
-  await sendToPeer(params, { type: 'answer', content: replyContent });
+  await sendToPeer(params, {
+    type: 'answer',
+    content: replyContent,
+    context: {
+      // The peer gets source passages, never our local document/KB identifiers.
+      citations: citations.slice(0, 10).map((cite) => ({
+        kb_name: cite.kb_name,
+        doc_name: cite.doc_name,
+        excerpt: cite.excerpt.slice(0, 4000),
+        score: cite.score,
+      })),
+    },
+  });
 }
 
 // Resume a held A2A question after the owner approves it. Re-reads the target
@@ -328,7 +376,11 @@ export async function resumeHeldA2AQuestion(row: typeof permissions.$inferSelect
   const db = getDb();
 
   const [inbound] = await db
-    .select({ content: messages.content, language: messages.language })
+    .select({
+      content: messages.content,
+      language: messages.language,
+      capabilityId: messages.capability_id,
+    })
     .from(messages)
     .where(eq(messages.id, scope.inbound_message_id))
     .limit(1);
@@ -361,6 +413,7 @@ export async function resumeHeldA2AQuestion(row: typeof permissions.$inferSelect
   // copy kept in scope_json for the inbox card.
   await processA2AMessage({
     targetAgent,
+    capabilityId: inbound.capabilityId ?? undefined,
     senderDid: scope.sender_did,
     senderPeer,
     messageContent: inbound.content,

@@ -127,6 +127,20 @@
       "when": 1791688672452,
       "tag": "0017_a2a_push_configs",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1794043145697,
+      "tag": "0018_crazy_stingray",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1794043833854,
+      "tag": "0019_melodic_songbird",
+      "breakpoints": true
     }
   ]
 }

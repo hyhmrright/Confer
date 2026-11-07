@@ -6,6 +6,8 @@ import { secondFactorFields } from '../../lib/second-factor.js';
 import { DISABLED_FILLED, FOCUS_RING, INPUT_FIELD_CLS } from '../../lib/styles.js';
 import { LoadingDots } from '../LoadingDots.js';
 import { ApiTokens } from './ApiTokens.js';
+import { CapabilityGrants } from './CapabilityGrants.js';
+import { FeedbackHistory } from './FeedbackHistory.js';
 import { FieldLabel, StatusMsg } from './SettingsShared.js';
 import { SigningKeys } from './SigningKeys.js';
 
@@ -55,6 +57,8 @@ export function SecurityTab() {
       <TwoStepSignIn status={status} reload={load} />
       <SigningKeys />
       <ApiTokens />
+      <CapabilityGrants />
+      <FeedbackHistory />
     </div>
   );
 }

@@ -1,6 +1,75 @@
 import type { Resources } from './zh.js';
 
 export const es: Resources = {
+  features: {
+    remoteGrant:
+      'Pega la credencial emitida por este contacto. Se cifrará en el servidor y se adjuntará a tus consultas firmadas.',
+    configured: 'Credencial del contacto configurada',
+    grants: 'Acceso temporal de agentes',
+    grantHint:
+      'Limita al contacto a las bases compartidas seleccionadas. Tras emitir un permiso, cada pregunta requiere uno válido; se mantienen firmas y políticas.',
+    name: 'Nombre',
+    signer: 'DID del firmante verificado (contacto o propietario)',
+    hours: 'Vigencia (horas)',
+    tokenOnce:
+      'Copia la credencial ahora y entrégala de forma segura. Solo se muestra una vez. Usa X-Confer-Capability en las solicitudes A2A firmadas.',
+    failed: 'No se pudo completar. Comprueba tus permisos e inténtalo de nuevo.',
+    revoked: 'Revocado',
+    revoke: 'Revocar',
+    connect: 'Conectar una herramienta',
+    signInFirst: 'Inicia sesión en esta instancia para revisar la solicitud.',
+    connectHint: 'Aprueba solo solicitudes que hayas iniciado. Cuenta: {{username}}.',
+    deviceCode: 'Código del dispositivo',
+    review: 'Revisar solicitud',
+    deviceAccess:
+      'La herramienta recibe una credencial API personal de 90 días. Puede leer y modificar datos, pero no gestionar seguridad ni aprobar decisiones. Revócala en Ajustes → Seguridad.',
+    authorize: 'Autorizar',
+    deny: 'Denegar',
+    connectDone: 'Solicitud procesada. Vuelve a la herramienta.',
+    back: 'Volver a Confer',
+    tasks: 'Tareas delegadas',
+    taskHint:
+      'Tú o tu operador registráis el progreso. Crear una tarea no contacta a nadie. Asume el control para pausar al operador; añade instrucciones y reanuda.',
+    note: 'Detalles o corrección',
+    running: 'En curso / reanudar',
+    waitingPeer: 'Esperando al contacto',
+    waitingInput: 'Esperando tu información',
+    humanControl: 'Asumir el control',
+    completed: 'Completada',
+    cancelled: 'Cancelada',
+    feedback: 'Informar de un problema',
+    incorrectAnswer: 'Respuesta incorrecta',
+    incorrectMemory: 'Memoria incorrecta',
+    outdatedSource: 'Fuente desactualizada',
+    feedbackSaved:
+      'Informe guardado en Ajustes → Seguridad. Corrige la memoria o excluye la fuente para cambiar futuras búsquedas; el informe no reentrena el modelo.',
+    correctMemory: 'Corregir memoria',
+    excludeSource: 'Excluir fuente desactualizada',
+    excluded: 'Excluida de la búsqueda',
+    demo: 'Probar el agente de demostración',
+    demoHint:
+      'Demostración sin conexión con datos ficticios. No necesita cuenta ni clave; no contacta a personas reales. Permisos y compras son simulados; recargar reinicia todo.',
+    demoPeer: 'Asistente de demostración',
+    demoProfile: 'Consulta el manual ficticio X100 con fuentes y aprobación del propietario.',
+    connected: 'Contacto añadido',
+    addContact: 'Añadir contacto de demostración',
+    demoScope:
+      'Solo el manual X100 durante dos minutos. No incluye memorias privadas ni datos de clientes.',
+    demoNeedsGrant: 'Autoriza antes de preguntar. Revocar o caducar detiene las consultas.',
+    demoAsk: 'Preguntar al agente',
+    demoTechnical: '¿Cómo conecto el X100?',
+    demoPrivate: 'Mostrar la lista de clientes del propietario',
+    demoPurchase: 'Comprar un X100',
+    demoAnswer:
+      'El manual indica 24 V CC y Modbus RTU sobre RS-485, dirección 1 y 9600 8N1. Consulta la fuente.',
+    demoRefusal: 'La lista de clientes está fuera del manual autorizado y no es accesible.',
+    demoApproval:
+      'Esta compra ficticia de 100 USD necesita tu decisión explícita. No habrá pedido ni pago real.',
+    demoApproved: 'Aprobación simulada registrada. No se hizo ningún pedido.',
+    demoDenied: 'Compra simulada denegada.',
+    resetDemo: 'Reiniciar demostración',
+  },
+
   common: {
     copy: 'Copiar',
     copied: 'Copiado',

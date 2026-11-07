@@ -23,6 +23,16 @@ const AdminPage = lazy(() =>
   import('./components/AdminPage.js').then((m) => ({ default: m.AdminPage })),
 );
 
+const DeviceConnectPage = lazy(() =>
+  import('./components/DeviceConnectPage.js').then((m) => ({ default: m.DeviceConnectPage })),
+);
+const ErrandsPage = lazy(() =>
+  import('./components/ErrandsPage.js').then((m) => ({ default: m.ErrandsPage })),
+);
+const DemoPage = lazy(() =>
+  import('./components/DemoPage.js').then((m) => ({ default: m.DemoPage })),
+);
+
 function RouteFallback() {
   return (
     <div className="h-screen flex items-center justify-center bg-dark-base">
@@ -84,6 +94,16 @@ void initI18n()
             <Suspense fallback={<RouteFallback />}>
               <Routes>
                 <Route path="/login" element={<LoginPage />} />
+                <Route path="/connect" element={<DeviceConnectPage />} />
+                <Route path="/demo" element={<DemoPage />} />
+                <Route
+                  path="/tasks"
+                  element={
+                    <ProtectedRoute>
+                      <ErrandsPage />
+                    </ProtectedRoute>
+                  }
+                />
                 <Route
                   path="/settings"
                   element={

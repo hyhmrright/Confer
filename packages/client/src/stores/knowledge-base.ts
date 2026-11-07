@@ -43,7 +43,7 @@ interface KbState {
   retryDocument: (kbId: string, docId: string) => Promise<void>;
 }
 
-const TERMINAL_STATUSES = new Set(['ready', 'error', 'failed']);
+const TERMINAL_STATUSES = new Set(['ready', 'error', 'failed', 'outdated']);
 
 // A knowledge base is an upload target, so this list is the one that genuinely
 // grows. One "load more" step; the gateway caps `limit` at 100.

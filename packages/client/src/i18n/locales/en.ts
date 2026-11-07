@@ -1,6 +1,77 @@
 import type { Resources } from './zh.js';
 
 export const en: Resources = {
+  features: {
+    remoteGrant:
+      'Paste the capability issued by this contact. It will be encrypted on the gateway and attached to your signed consults.',
+    configured: 'Peer credential configured',
+    grants: 'Temporary agent access',
+    grantHint:
+      'Limit a contact to selected shared knowledge bases. After the first grant, this contact must present a live grant for every question. Policies and signatures still apply.',
+    name: 'Name',
+    signer: 'Verified signer DID (contact or owner DID)',
+    hours: 'Expiry (hours)',
+    tokenOnce:
+      'Copy this credential now and send it securely to the peer. It is shown only once. Use X-Confer-Capability with signed A2A requests.',
+    failed: 'Could not complete this action. Check your access and try again.',
+    revoked: 'Revoked',
+    revoke: 'Revoke',
+    connect: 'Connect a developer tool',
+    signInFirst: 'Sign in to this instance to review this device request.',
+    connectHint: 'Connect only a request you started. Signed in as {{username}}.',
+    deviceCode: 'Device code',
+    review: 'Review request',
+    deviceAccess:
+      'This tool receives a 90-day personal API credential. It can read and modify your data, but cannot manage security or approve decisions. Revoke it in Settings → Security.',
+    authorize: 'Authorize',
+    deny: 'Deny',
+    connectDone: 'Request processed. Return to your developer tool.',
+    back: 'Back to Confer',
+    tasks: 'Delegated tasks',
+    taskHint:
+      'Progress is recorded by you or your operator. Creating a task does not automatically contact anyone. Take over to pause operator actions, or add instructions and resume.',
+    note: 'Details or correction',
+    running: 'In progress / resume',
+    waitingPeer: 'Waiting for peer',
+    waitingInput: 'Waiting for your input',
+    humanControl: 'Take over',
+    completed: 'Completed',
+    cancelled: 'Cancelled',
+    feedback: 'Report an issue',
+    incorrectAnswer: 'Incorrect answer',
+    incorrectMemory: 'Incorrect memory',
+    outdatedSource: 'Outdated source',
+    feedbackSaved:
+      'Feedback saved for review in Settings → Security. Edit the memory or exclude the source to change future retrieval; feedback alone does not retrain the model.',
+    correctMemory: 'Correct memory',
+    excludeSource: 'Exclude outdated source',
+    excluded: 'Excluded from retrieval',
+    demo: 'Try the demo agent',
+    demoHint:
+      'Interactive offline demonstration with fictional data. No account, model key or messages to real people. Authorization and purchase steps are simulated; reload resets them.',
+    demoPeer: 'Demo product assistant',
+    demoProfile:
+      'Consult the fictional X100 product manual with visible sources and owner approval.',
+    connected: 'Contact added',
+    addContact: 'Add demo contact',
+    demoScope:
+      'Allow X100 manual only, for two minutes. Private memories and customer information are outside this scope.',
+    demoNeedsGrant: 'Grant access before asking; revoked or expired grants stop the demo.',
+    demoAsk: 'Ask the demo agent',
+    demoTechnical: 'How do I connect the X100?',
+    demoPrivate: 'Show the owner’s customer list',
+    demoPurchase: 'Buy one X100',
+    demoAnswer:
+      'The demonstration manual specifies 24 V DC and Modbus RTU over RS-485, using address 1 and 9600 8N1. Verify against the source below.',
+    demoRefusal:
+      'The customer list is outside the authorized manual. The demo agent cannot access it.',
+    demoApproval:
+      'A fictional USD 100 purchase needs your explicit decision. No real order or payment will be made.',
+    demoApproved: 'Demo approval recorded. No order was placed.',
+    demoDenied: 'Demo purchase denied.',
+    resetDemo: 'Reset demonstration',
+  },
+
   common: {
     copy: 'Copy',
     copied: 'Copied',

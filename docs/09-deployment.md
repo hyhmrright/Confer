@@ -416,3 +416,9 @@ Qdrant 1.19.2 → 1.20.0 已在停止旧实例后复制的生产卷上启动验�
 安全审计通过根目录 overrides 固定 body-parser ≥2.4.0、decode-uri-component ≥0.5.1，happy-dom 随开发依赖更新至 21.0.4。decode-uri-component 的修复版为 ESM，而 MinIO 的 query-string 7.1.3 仍以 CommonJS 调用它，因此 `patches/query-string@7.1.3.patch` 读取其 default 导出。两个 Dockerfile 必须在安装依赖前复制 patches；待上游解决兼容性后再移除补丁和对应覆盖。
 
 `docker-compose.ghcr.yml` 的版本变化要到下一次手动发布 confer-cli 才会进入 npm tarball；本次依赖维护没有发布新的 app 或 CLI 版本。
+
+## 自动备份与恢复演练
+
+完整操作见 [自动备份与恢复验证](11-backup-recovery.md)。先部署当前网关，再运行 `./infra/backup.sh backup` 完成首次加密全量备份与真实隔离恢复验证，最后 `./infra/backup.sh install` 注册每天北京时间 03:00 的本地调度，默认保留最近 7 份验证通过的备份。
+
+备份包括 Postgres、Qdrant snapshots/向量、上传文件、恢复密钥配置，以及这四个服务的运行镜像；源服务在一致性采集期间短暂进入维护，采集结束即恢复访问。主密钥单独保存在代码仓库/备份目录之外，需要独立离线保管；默认本机存储需要另做异地副本。

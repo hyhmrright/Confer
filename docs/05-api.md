@@ -590,3 +590,32 @@ Content-Type: application/json
 返回该咨询线程的完整消息历史（最多 200 条）。
 
 > 契约：入站 A2A 仅对 `message.type==='question'` 触发本地 agent 自动回复；`answer`/`notification` 只落库 + 广播，避免咨询回复触发无限对答。
+
+
+## Agent 工作流补充
+
+完整交互与权限边界见 [Agent 工作流](10-agent-workflows.md)。
+
+| 方法与路径（均以 `/api/v1` 开头） | 用途 |
+|---|---|
+| `GET /capabilities` | 本人 session 查看签发记录，不返回凭据/哈希 |
+| `POST /capabilities` | 本人签发：`name, peer_id, signer_did, kb_ids, expires_in_hours`；201 返回 `grant, token`，凭据只显示一次 |
+| `DELETE /capabilities/:id` | 本人撤销 |
+| `GET/PUT/DELETE /capabilities/remote/:peerId` | 本人查看是否配置、加密保存或移除对方签发的凭据；PUT 为 `{token}` |
+| `POST /device-auth/start` | 无登录启动设备绑定：`{name}` → 设备 secret、用户验证码、确认路径、600 秒、5 秒轮询间隔 |
+| `POST /device-auth/request` | 本人 session 用 `{user_code}` 核对工具名称与到期时间 |
+| `POST /device-auth/decide` | 本人 session 提交 `{user_code, approve}` |
+| `POST /device-auth/token` | 设备 secret 兑换，等待为 202，成功仅一次返回 90 天个人凭据，过期/拒绝为 400 |
+| `POST /errands/:id/progress` | 所有者或管理员记录 `{status,note}`；接管/取消/恢复有额外 session 限制 |
+| `GET /errands/:id` | 附带最近 100 条 `events` 和决策卡 |
+| `GET/PUT /projects/:projectId/peers/:peerId/memory` | 两份 Markdown 的原子快照；PUT 为 `facts_md, decisions_md, expected_version`，冲突 409 |
+| `POST /feedback` | 本账号所有会话的回答反馈：`message_id, kind, note` |
+| `GET /feedback` | 本账号最近 100 条反馈 |
+| `POST /knowledge-bases/:kbId/documents/:docId/outdated` | 自有文档排除检索；保留原件，可重试索引恢复 |
+
+A2A `X-Confer-Capability` 的无效/到期/撤销返回 403；HTTP+JSON binding 使用 `PERMISSION_DENIED`，原生使用 `invalid_capability`。缺失必需凭据不允许进入回答流程。签名、联系人同意和已有策略仍然是必经边界。
+
+
+## 备份维护元数据
+
+`GET /health` 增加 `backup_control`、进程 `instance_id`、维护 `generation`、`maintenance`、`ready` 与 `lease_until` 元数据。维护仅由宿主的容器内进程信号开启/续期/解除，HTTP 不能申请维护。开始维护后新请求返回 503 和 `Retry-After: 30`；已有响应体与 detached 工作全部结束才会 ready。详见 [备份流程](11-backup-recovery.md)。

@@ -17,6 +17,8 @@ import { useAuthStore } from './auth.js';
 // shapes, and each had been re-declaring them verbatim — `Citation` in three
 // files, `Message` in two. The store is what fills them, so it owns them.
 export interface Citation {
+  doc_id?: string;
+  kb_id?: string;
   source: string;
   url?: string;
   page?: number;
@@ -133,6 +135,9 @@ function normalizeMessage(apiMsg: Message & { citations_json?: unknown }): Messa
       citations: raw.map((c) => ({
         source: `${c.doc_name as string}（${c.kb_name as string}）`,
         passage: c.excerpt as string | undefined,
+        doc_id: c.doc_id as string | undefined,
+        kb_id: c.kb_id as string | undefined,
+        trust_level: c.trust_level as string | undefined,
       })),
     };
   }

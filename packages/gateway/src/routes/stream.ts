@@ -2,13 +2,13 @@ import type { LLMMessage } from '@confer/agent-runtime';
 import { AppError, newId } from '@confer/shared';
 import { eq } from 'drizzle-orm';
 import { type Context, Hono } from 'hono';
-import { streamSSE } from 'hono/streaming';
+import { type SSEStreamingApi, streamSSE } from 'hono/streaming';
 import { getDb } from '../db/connection.js';
 import { agents, messages } from '../db/schema.js';
 import { getEnv } from '../env.js';
 import { resolveAgentModel } from '../lib/agent-model.js';
 import { turnAttachments } from '../lib/attachments.js';
-import { runDetached } from '../lib/background.js';
+import { runDetached, trackResponseWork } from '../lib/background.js';
 import { turnHistory } from '../lib/conversation-history.js';
 import { getUserLlmKeys, resolveAgentCapabilities } from '../lib/llm-keys.js';
 import { assertIsConversationParticipant } from '../lib/tenant.js';
@@ -113,152 +113,157 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
     return sseEvents(c, [{ event: 'error', data: { message: 'already_generating' } }]);
   }
 
-  return streamSSE(c, async (stream) => {
-    try {
-      const modelConfig = agent.model_config_json as Record<string, unknown> | null;
-      const systemPrompt = (modelConfig?.system_prompt as string) ?? DEFAULT_SYSTEM_PROMPT;
+  return streamSSE(
+    c,
+    trackResponseWork(async (stream: SSEStreamingApi) => {
+      try {
+        const modelConfig = agent.model_config_json as Record<string, unknown> | null;
+        const systemPrompt = (modelConfig?.system_prompt as string) ?? DEFAULT_SYSTEM_PROMPT;
 
-      const llmKeys = await getUserLlmKeys(user.sub);
-      const resolved = await resolveAgentModel(modelConfig, llmKeys, env.ENCRYPTION_KEY);
-      if (!resolved.ok) {
-        // A machine code, not a sentence: the gateway has no locale context, and
-        // the reader distinguishes "you have not chosen a model yet" from "the
-        // provider you chose has no key" — different fixes, different screens.
-        await stream.writeSSE({
-          event: 'error',
-          data: JSON.stringify({ message: resolved.error }),
+        const llmKeys = await getUserLlmKeys(user.sub);
+        const resolved = await resolveAgentModel(modelConfig, llmKeys, env.ENCRYPTION_KEY);
+        if (!resolved.ok) {
+          // A machine code, not a sentence: the gateway has no locale context, and
+          // the reader distinguishes "you have not chosen a model yet" from "the
+          // provider you chose has no key" — different fixes, different screens.
+          await stream.writeSSE({
+            event: 'error',
+            data: JSON.stringify({ message: resolved.error }),
+          });
+          return;
+        }
+        const { provider, model } = resolved.value;
+
+        // Moderator-hidden messages stay out of the model's context; see
+        // turnHistory for how the window is sized.
+        const historyRows = await turnHistory(conversationId, messageId);
+        // Files ride with the message they were sent with, on every turn that
+        // still has it in its window, so the model can be asked about them later.
+        const files = await turnAttachments([...historyRows.map((m) => m.id), messageId]);
+        const withFiles = (id: string, text: string) => text + (files.get(id)?.text ?? '');
+
+        // A peer's message is not something this agent said. Mapped to
+        // `assistant`, a connected peer's text in an A2A thread reached the
+        // owner's turn — the one with every knowledge base, memory and the
+        // contact list — as the agent's own earlier words, to be continued.
+        // It goes in as input, and labelled, since it is not the owner's either.
+        const history = historyRows.map((m): LLMMessage => {
+          const content = m.content ?? '';
+          if (m.sender_type === 'peer_agent') {
+            return { role: 'user', content: `[Message from a connected peer agent]\n${content}` };
+          }
+          if (m.sender_type === 'user') {
+            return {
+              role: 'user',
+              content: withFiles(m.id, content),
+              images: files.get(m.id)?.images,
+            };
+          }
+          return { role: 'assistant', content };
         });
-        return;
-      }
-      const { provider, model } = resolved.value;
 
-      // Moderator-hidden messages stay out of the model's context; see
-      // turnHistory for how the window is sized.
-      const historyRows = await turnHistory(conversationId, messageId);
-      // Files ride with the message they were sent with, on every turn that
-      // still has it in its window, so the model can be asked about them later.
-      const files = await turnAttachments([...historyRows.map((m) => m.id), messageId]);
-      const withFiles = (id: string, text: string) => text + (files.get(id)?.text ?? '');
+        const { embeddingKey, embeddingProvider, tavilyApiKey, hasKb, recallMemory } =
+          await resolveAgentCapabilities(user.sub, llmKeys, env, 'owner');
 
-      // A peer's message is not something this agent said. Mapped to
-      // `assistant`, a connected peer's text in an A2A thread reached the
-      // owner's turn — the one with every knowledge base, memory and the
-      // contact list — as the agent's own earlier words, to be continued.
-      // It goes in as input, and labelled, since it is not the owner's either.
-      const history = historyRows.map((m): LLMMessage => {
-        const content = m.content ?? '';
-        if (m.sender_type === 'peer_agent') {
-          return { role: 'user', content: `[Message from a connected peer agent]\n${content}` };
-        }
-        if (m.sender_type === 'user') {
-          return {
-            role: 'user',
-            content: withFiles(m.id, content),
-            images: files.get(m.id)?.images,
-          };
-        }
-        return { role: 'assistant', content };
-      });
-
-      const { embeddingKey, embeddingProvider, tavilyApiKey, hasKb, recallMemory } =
-        await resolveAgentCapabilities(user.sub, llmKeys, env, 'owner');
-
-      const { content: fullContent, citations } = await runAgentTurn({
-        provider,
-        // The owner asking their own agent; same value passed to
-        // resolveAgentCapabilities above, and the two must not drift.
-        audience: 'owner',
-        systemPromptBase: systemPrompt,
-        model,
-        history,
-        userMessage: withFiles(messageId, msg.content ?? ''),
-        userImages: files.get(messageId)?.images,
-        userId: user.sub,
-        agentId: agent.id,
-        embeddingKey,
-        embeddingProvider,
-        tavilyApiKey,
-        hasKb,
-        recallMemory,
-        emit: {
-          onToken: (text) => stream.writeSSE({ event: 'token', data: JSON.stringify({ text }) }),
-          onTool: (tool) => stream.writeSSE({ event: 'tool', data: JSON.stringify({ tool }) }),
-          onToolResult: (result) =>
-            stream.writeSSE({ event: 'tool_result', data: JSON.stringify({ result }) }),
-          onCitation: (cite) =>
-            stream.writeSSE({
-              event: 'citation',
-              data: JSON.stringify({
-                source: `${cite.doc_name}（${cite.kb_name}）`,
-                passage: cite.excerpt,
+        const { content: fullContent, citations } = await runAgentTurn({
+          provider,
+          // The owner asking their own agent; same value passed to
+          // resolveAgentCapabilities above, and the two must not drift.
+          audience: 'owner',
+          systemPromptBase: systemPrompt,
+          model,
+          history,
+          userMessage: withFiles(messageId, msg.content ?? ''),
+          userImages: files.get(messageId)?.images,
+          userId: user.sub,
+          agentId: agent.id,
+          embeddingKey,
+          embeddingProvider,
+          tavilyApiKey,
+          hasKb,
+          recallMemory,
+          emit: {
+            onToken: (text) => stream.writeSSE({ event: 'token', data: JSON.stringify({ text }) }),
+            onTool: (tool) => stream.writeSSE({ event: 'tool', data: JSON.stringify({ tool }) }),
+            onToolResult: (result) =>
+              stream.writeSSE({ event: 'tool_result', data: JSON.stringify({ result }) }),
+            onCitation: (cite) =>
+              stream.writeSSE({
+                event: 'citation',
+                data: JSON.stringify({
+                  source: `${cite.doc_name}（${cite.kb_name}）`,
+                  passage: cite.excerpt,
+                  doc_id: cite.doc_id,
+                  kb_id: cite.kb_id,
+                }),
               }),
-            }),
-        },
-      });
+          },
+        });
 
-      const replyId = newId();
-      await db.insert(messages).values({
-        id: replyId,
-        conversation_id: conversationId,
-        sender_type: 'agent',
-        sender_id: agent.id,
-        content_type: 'text',
-        content: fullContent,
-        in_reply_to: messageId,
-        citations_json: citations.length > 0 ? citations : undefined,
-        delivered_at: new Date(),
-      });
-
-      broadcastToConversation(conversationId, {
-        type: 'message.new',
-        data: {
+        const replyId = newId();
+        await db.insert(messages).values({
           id: replyId,
           conversation_id: conversationId,
           sender_type: 'agent',
           sender_id: agent.id,
+          content_type: 'text',
           content: fullContent,
           in_reply_to: messageId,
-        },
-      });
+          citations_json: citations.length > 0 ? citations : undefined,
+          delivered_at: new Date(),
+        });
 
-      await stream.writeSSE({
-        event: 'done',
-        data: JSON.stringify({ message_id: replyId }),
-      });
+        broadcastToConversation(conversationId, {
+          type: 'message.new',
+          data: {
+            id: replyId,
+            conversation_id: conversationId,
+            sender_type: 'agent',
+            sender_id: agent.id,
+            content: fullContent,
+            in_reply_to: messageId,
+          },
+        });
 
-      // Fire-and-forget: extract durable facts from this turn into long-term
-      // memory. Never block or fail the response on memory errors.
-      if (embeddingKey && fullContent) {
-        const recentTurns = `用户：${msg.content ?? ''}\n助手：${fullContent}`;
-        runDetached(
-          extractAndStore({
-            userId: user.sub,
-            provider,
-            model,
-            embeddingKey,
-            embeddingProvider,
-            recentTurns,
-            source: 'auto',
-          }),
-          (err) => console.error(`Memory extraction failed for user ${user.sub}:`, err),
-        );
+        await stream.writeSSE({
+          event: 'done',
+          data: JSON.stringify({ message_id: replyId }),
+        });
+
+        // Fire-and-forget: extract durable facts from this turn into long-term
+        // memory. Never block or fail the response on memory errors.
+        if (embeddingKey && fullContent) {
+          const recentTurns = `用户：${msg.content ?? ''}\n助手：${fullContent}`;
+          runDetached(
+            extractAndStore({
+              userId: user.sub,
+              provider,
+              model,
+              embeddingKey,
+              embeddingProvider,
+              recentTurns,
+              source: 'auto',
+            }),
+            (err) => console.error(`Memory extraction failed for user ${user.sub}:`, err),
+          );
+        }
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : 'Stream failed';
+        // Log server-side: the SSE error reaches only that one client, so an
+        // otherwise-clean log made provider misconfiguration invisible to operators.
+        console.error(`Stream turn failed for user ${user.sub}: ${detail}`);
+        // A code, not the detail. `detail` here is whatever threw — and for the
+        // common case that is `${vendor} API error (${status}): ${body}`, the
+        // vendor's raw response relayed verbatim into the browser. It is also
+        // English prose from a process with no locale, which is the same reason
+        // the model-config branch above sends a code.
+        await stream.writeSSE({ event: 'error', data: JSON.stringify({ message: 'turn_failed' }) });
+      } finally {
+        // Released on failure too, or one dropped turn would wedge that message
+        // permanently: no reply row exists to replay, and every retry would be
+        // turned away as already generating.
+        inFlight.delete(messageId);
       }
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : 'Stream failed';
-      // Log server-side: the SSE error reaches only that one client, so an
-      // otherwise-clean log made provider misconfiguration invisible to operators.
-      console.error(`Stream turn failed for user ${user.sub}: ${detail}`);
-      // A code, not the detail. `detail` here is whatever threw — and for the
-      // common case that is `${vendor} API error (${status}): ${body}`, the
-      // vendor's raw response relayed verbatim into the browser. It is also
-      // English prose from a process with no locale, which is the same reason
-      // the model-config branch above sends a code.
-      await stream.writeSSE({ event: 'error', data: JSON.stringify({ message: 'turn_failed' }) });
-    } finally {
-      // Released on failure too, or one dropped turn would wedge that message
-      // permanently: no reply row exists to replay, and every retry would be
-      // turned away as already generating.
-      inFlight.delete(messageId);
-    }
-  });
+    }),
+  );
 });

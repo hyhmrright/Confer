@@ -4,10 +4,11 @@
       "command": "node",
       "args": ["${CLAUDE_PLUGIN_ROOT}/dist/server.mjs"],
       "env": {
-        "CONFER_GATEWAY_URL": "${CONFER_GATEWAY_URL:-http://localhost:3000}",
+        "CONFER_GATEWAY_URL": "${CONFER_GATEWAY_URL:-http://localhost}",
         "CONFER_USERNAME": "${CONFER_USERNAME}",
         "CONFER_PASSWORD": "${CONFER_PASSWORD}",
-        "CONFER_CONSULT_WAIT": "${CONFER_CONSULT_WAIT:-25}"
+        "CONFER_CONSULT_WAIT": "${CONFER_CONSULT_WAIT:-25}",
+        "CONFER_API_TOKEN": "${CONFER_API_TOKEN}"
       }
     }
   }

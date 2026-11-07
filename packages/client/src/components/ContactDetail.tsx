@@ -4,6 +4,7 @@ import { usePolicyDraft } from '../hooks/use-policy-draft.js';
 import { useContactsStore } from '../stores/contacts.js';
 import { Bot } from './Icons.js';
 import { Modal } from './Modal.js';
+import { PeerCredential } from './PeerCredential.js';
 import { SaveButton } from './SaveButton.js';
 import { PolicyEditor } from './settings/PolicyEditor.js';
 import { FieldLabel, StatusMsg } from './settings/SettingsShared.js';
@@ -88,6 +89,7 @@ export function ContactDetail() {
           )}
         </div>
 
+        <PeerCredential key={peer.id} peerId={peer.id} />
         <StatusMsg error={error} success={success} />
       </div>
 

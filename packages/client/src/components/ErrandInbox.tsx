@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router';
 import { DISABLED_FILLED } from '../lib/styles.js';
 import { useErrandsStore } from '../stores/errands.js';
 import { ErrandCard } from './ErrandCard.js';
@@ -21,7 +22,7 @@ export function ErrandInbox() {
   const submit = async () => {
     const value = title.trim();
     if (!value) return;
-    await createErrand(value);
+    if (!(await createErrand(value))) return;
     setTitle('');
     setOpen(false);
   };
@@ -32,19 +33,30 @@ export function ErrandInbox() {
 
   if (pendingCards.length === 0 && !open) {
     return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className={`${ANCHOR} flex items-center gap-1.5 px-3 py-2 rounded-full bg-dark-card/90 backdrop-blur-sm border border-dark-border text-xs text-ink-secondary hover:text-ink-primary hover:border-dark-active shadow-lg shadow-black/30 transition-colors`}
-      >
-        <Plus className="w-3.5 h-3.5" />
-        {t('errand.createTitle')}
-      </button>
+      <div className={`${ANCHOR} flex gap-2 items-center`}>
+        <Link
+          className="text-xs rounded-full bg-dark-card border border-dark-border px-3 py-2"
+          to="/tasks"
+        >
+          {t('features.tasks')}
+        </Link>
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className={`flex items-center gap-1.5 px-3 py-2 rounded-full bg-dark-card/90 backdrop-blur-sm border border-dark-border text-xs text-ink-secondary hover:text-ink-primary hover:border-dark-active shadow-lg shadow-black/30 transition-colors`}
+        >
+          <Plus className="w-3.5 h-3.5" />
+          {t('errand.createTitle')}
+        </button>
+      </div>
     );
   }
 
   return (
     <div className={`${ANCHOR} w-80 max-w-[calc(100vw-2rem)] space-y-2`}>
+      <Link className="block text-xs text-ink-secondary" to="/tasks">
+        {t('features.tasks')}
+      </Link>
       {/* The stack floats over the app with nothing saying what it is. The label
           for it already existed in all three locales and had simply never been
           rendered. */}
@@ -59,6 +71,7 @@ export function ErrandInbox() {
         <div className="rounded-lg border border-dark-border bg-dark-card px-4 py-3 space-y-2 shadow-lg shadow-black/30">
           <p className="text-xs font-medium text-ink-secondary">{t('errand.createTitle')}</p>
           <input
+            maxLength={255}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             onKeyDown={(e) => {

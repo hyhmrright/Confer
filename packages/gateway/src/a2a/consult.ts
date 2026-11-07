@@ -2,6 +2,7 @@ import { err, ok, type Result } from '@confer/shared';
 import { eq } from 'drizzle-orm';
 import { getDb } from '../db/connection.js';
 import { agents, peerAgents } from '../db/schema.js';
+import { outboundCapability } from '../lib/peer-credentials.js';
 import { sendA2AMessage } from './outbound.js';
 import { loadOwnerSigningKey } from './signing.js';
 
@@ -46,6 +47,7 @@ export async function deliverConsult(
       message: { type: 'question', content: input.content },
     },
     key.value,
+    await outboundCapability(input.userId, input.peerId),
   );
 
   if (!result.ok) return err(result.error);

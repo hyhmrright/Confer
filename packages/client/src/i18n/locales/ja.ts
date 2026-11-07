@@ -1,6 +1,74 @@
 import type { Resources } from './zh.js';
 
 export const ja: Resources = {
+  features: {
+    remoteGrant:
+      'この連絡先が発行した認証情報を貼り付けます。ゲートウェイで暗号化し、署名済みの相談に付加します。',
+    configured: '相手の認証情報を設定済み',
+    grants: 'Agent の期限付き権限',
+    grantHint:
+      '連絡先を選択した共有ナレッジベースに限定します。一度発行すると、質問には有効な権限が必須になります。署名と既存のポリシーも適用されます。',
+    name: '名前',
+    signer: '検証済み署名者 DID（連絡先または所有者）',
+    hours: '有効期間（時間）',
+    tokenOnce:
+      '今コピーして相手に安全に渡してください。一度だけ表示します。署名済み A2A リクエストの X-Confer-Capability に設定します。',
+    failed: '操作できませんでした。権限を確認して再試行してください。',
+    revoked: '取り消し済み',
+    revoke: '取り消す',
+    connect: '開発ツールを接続',
+    signInFirst: 'このインスタンスにログインしてデバイス要求を確認してください。',
+    connectHint: '自分が開始した要求だけを承認してください。ログイン中：{{username}}。',
+    deviceCode: 'デバイスコード',
+    review: '要求を確認',
+    deviceAccess:
+      'ツールに90日間の個人 API 認証情報を付与します。データの読み書きは可能ですが、安全設定の管理や判断の承認はできません。設定 → セキュリティで取り消せます。',
+    authorize: '承認',
+    deny: '拒否',
+    connectDone: '要求を処理しました。開発ツールに戻ってください。',
+    back: 'Confer に戻る',
+    tasks: '委任タスク',
+    taskHint:
+      '進捗は本人または担当者が記録します。作成だけでは誰にも連絡しません。引き継ぐと担当者の操作が停止し、指示を追加して再開できます。',
+    note: '詳細または訂正',
+    running: '進行中 / 再開',
+    waitingPeer: '相手待ち',
+    waitingInput: '入力待ち',
+    humanControl: '手動で引き継ぐ',
+    completed: '完了',
+    cancelled: 'キャンセル済み',
+    feedback: '問題を報告',
+    incorrectAnswer: '回答の誤り',
+    incorrectMemory: '記憶の誤り',
+    outdatedSource: '古い資料',
+    feedbackSaved:
+      '報告は設定 → セキュリティで確認できます。今後の検索を変えるには記憶を修正するか資料を除外してください。報告だけでモデルは再学習しません。',
+    correctMemory: '記憶を修正',
+    excludeSource: '古い資料を除外',
+    excluded: '検索対象外',
+    demo: 'デモ Agent を試す',
+    demoHint:
+      '架空の資料を使うオフラインデモです。アカウントやモデルキーは不要で、実在の相手には送信しません。権限と購入はシミュレーションで、再読み込みするとリセットされます。',
+    demoPeer: 'デモ製品アシスタント',
+    demoProfile: '架空の X100 マニュアルについて相談し、出典と本人の承認を確認します。',
+    connected: '連絡先追加済み',
+    addContact: 'デモ連絡先を追加',
+    demoScope: 'X100 マニュアルのみ2分間許可します。個人の記憶や顧客情報は含みません。',
+    demoNeedsGrant: '質問する前に許可してください。取り消しや期限切れで停止します。',
+    demoAsk: 'デモ Agent に質問',
+    demoTechnical: 'X100 の接続方法は？',
+    demoPrivate: '所有者の顧客一覧を表示',
+    demoPurchase: 'X100 を1台購入',
+    demoAnswer:
+      'デモマニュアルでは24 V DC、RS-485 の Modbus RTU、アドレス1、9600 8N1を指定しています。以下の原文を確認してください。',
+    demoRefusal: '顧客一覧は許可したマニュアルの範囲外で、アクセスできません。',
+    demoApproval:
+      '架空の100米ドルの購入には明示的な判断が必要です。実際の注文や支払いは発生しません。',
+    demoApproved: 'デモの承認を記録しました。注文はしていません。',
+    demoDenied: 'デモ購入を拒否しました。',
+    resetDemo: 'デモをリセット',
+  },
+
   common: {
     copy: 'コピー',
     copied: 'コピーしました',

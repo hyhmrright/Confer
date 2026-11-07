@@ -32,6 +32,8 @@ import { Sidebar } from './Sidebar.js';
 export type Tab = 'conversations' | 'contacts' | 'memory' | 'knowledge';
 
 const wsCitationSchema = z.object({
+  doc_id: z.string().optional(),
+  kb_id: z.string().optional(),
   source: z.string(),
   url: z.string().optional(),
   page: z.number().optional(),

@@ -3,6 +3,7 @@ import { api } from '../lib/api.js';
 import { captureError } from '../lib/error.js';
 
 export interface ErrandCard {
+  decision?: string;
   id: string;
   errand_id: string;
   errand_title: string;
@@ -24,7 +25,7 @@ interface ErrandsState {
   error: string | null;
 
   loadPendingCards: () => Promise<void>;
-  createErrand: (title: string, kind?: string) => Promise<void>;
+  createErrand: (title: string, kind?: string) => Promise<boolean>;
   decideCard: (cardId: string, decision: CardDecision, newPriceCents?: number) => Promise<void>;
   removeCard: (cardId: string) => void;
 }
@@ -57,8 +58,10 @@ export const useErrandsStore = create<ErrandsState>((set, get) => ({
     try {
       await api.post('/errands', { title, kind });
       set({ creating: false });
+      return true;
     } catch (e) {
       set({ creating: false, error: captureError(e, 'Failed to create errand') });
+      return false;
     }
   },
 

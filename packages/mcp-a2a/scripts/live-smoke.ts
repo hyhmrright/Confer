@@ -26,7 +26,7 @@ async function main(): Promise<void> {
     defaultWaitSeconds: 1,
   });
 
-  console.log('whoami:', JSON.stringify(whoami(client)));
+  console.log('whoami:', JSON.stringify(await whoami(client)));
 
   const agents = await listAgents(client);
   console.log(`list_agents: ${agents.length} contacts (expected 0 for fresh user)`);

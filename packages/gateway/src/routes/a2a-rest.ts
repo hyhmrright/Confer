@@ -279,6 +279,7 @@ async function admitSendRequest(c: Context): Promise<Admitted | Response> {
   }
 
   const admitted = await admitInboundMessage({
+    capabilityToken: c.req.header('X-Confer-Capability'),
     targetAgent: target.agent,
     // There is no `from` field in this binding: identity is the signature, and
     // the signer DID is the only thing a peer can prove about itself.
@@ -300,6 +301,10 @@ async function admitSendRequest(c: Context): Promise<Admitted | Response> {
         "You are not a contact of this agent's owner. A connection request has been raised; retry once it is accepted.",
         { confer_status: 'pending_connection' },
       );
+    case 'invalid_capability':
+      return fail(c, 'PERMISSION_DENIED', 'Invalid or expired capability.', {
+        confer_status: 'invalid_capability',
+      });
     case 'denied':
       return fail(c, 'PERMISSION_DENIED', "This agent's policy refuses requests from you.", {
         confer_status: 'policy_denied',
