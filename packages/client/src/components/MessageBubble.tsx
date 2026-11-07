@@ -8,6 +8,7 @@ import { agentFailureText } from '../lib/agent-failure-text.js';
 import { useAuthStore } from '../stores/auth.js';
 import type { Message } from '../stores/chat.js';
 import { useContactsStore } from '../stores/contacts.js';
+import { AnswerFeedback } from './AnswerFeedback.js';
 import { CitationCapsule } from './CitationCapsule.js';
 import { MessageAttachments } from './MessageAttachments.js';
 import { MessageEntry } from './MessageEntry.js';
@@ -93,6 +94,8 @@ export const MessageBubble = memo(function MessageBubble({ message }: { message:
       <div className="markdown-content text-sm leading-relaxed">
         <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content ?? ''}</ReactMarkdown>
       </div>
+      {['agent', 'own_agent', 'peer_agent'].includes(message.sender_type) &&
+        message.content_type === 'text' && <AnswerFeedback messageId={message.id} />}
       {message.attachments && <MessageAttachments attachments={message.attachments} />}
       {message.citations && <CitationCapsule citations={message.citations} />}
     </MessageEntry>

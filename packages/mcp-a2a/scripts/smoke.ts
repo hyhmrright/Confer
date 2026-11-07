@@ -61,6 +61,13 @@ setTimeout(() => {
 
 proc.on('exit', () => {
   const expected = [
+    'sync_project_memory',
+    'ask_person_agent',
+    'discover_peer',
+    'request_design_review',
+    'request_code_review',
+    'read_project_memory',
+    'write_project_memory',
     'list_agents',
     'get_agent_capabilities',
     'find_agents',
@@ -77,6 +84,6 @@ proc.on('exit', () => {
     console.error(`SMOKE FAIL: missing ${missing.join(', ')}`);
     process.exit(1);
   }
-  console.log('SMOKE PASS: all 9 tools registered with valid schemas');
+  console.log(`SMOKE PASS: all ${expected.length} tools registered with valid schemas`);
   process.exit(0);
 });

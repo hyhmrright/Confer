@@ -141,3 +141,67 @@ for (const { path, column, parse, patch } of SECTIONS) {
     });
   });
 }
+
+// One snapshot/version for both files. Sync must never combine sections read on
+// opposite sides of a write, or overwrite a newer server edit.
+projectsRoutes.get('/:projectId/peers/:peerId/memory', async (c) => {
+  const row = await readSection(
+    c.get('user').sub,
+    parseProjectId(c.req.param('projectId')),
+    c.req.param('peerId'),
+  );
+  return c.json({
+    facts_md: row?.facts_md ?? '',
+    decisions_md: row?.decisions_md ?? '',
+    version: row?.version ?? 0,
+  });
+});
+projectsRoutes.put('/:projectId/peers/:peerId/memory', async (c) => {
+  const body = z
+    .object({
+      facts_md: z.string().max(200000),
+      decisions_md: z.string().max(200000),
+      expected_version: z.number().int().min(0),
+    })
+    .parse(await c.req.json());
+  const userId = c.get('user').sub;
+  const projectId = parseProjectId(c.req.param('projectId'));
+  const peerId = c.req.param('peerId');
+  await assertIsContact(userId, peerId);
+  const owned = and(
+    eq(projectMemory.user_id, userId),
+    eq(projectMemory.project_id, projectId),
+    eq(projectMemory.peer_id, peerId),
+  );
+  const patch = {
+    facts_md: body.facts_md,
+    decisions_md: body.decisions_md,
+    updated_at: new Date(),
+  };
+  const rows =
+    body.expected_version === 0
+      ? await getDb()
+          .insert(projectMemory)
+          .values({
+            id: newId(),
+            user_id: userId,
+            project_id: projectId,
+            peer_id: peerId,
+            ...patch,
+            version: 1,
+          })
+          .onConflictDoNothing()
+          .returning()
+      : await getDb()
+          .update(projectMemory)
+          .set({ ...patch, version: body.expected_version + 1 })
+          .where(and(owned, eq(projectMemory.version, body.expected_version)))
+          .returning();
+  if (!rows.length)
+    throw new AppError('sync_conflict', 'Project memory changed; pull and reconcile first', 409);
+  return c.json({
+    facts_md: rows[0]?.facts_md,
+    decisions_md: rows[0]?.decisions_md,
+    version: rows[0]?.version,
+  });
+});

@@ -124,6 +124,9 @@ export async function verifyRequestSignature(
   if (url.search && !covered.has('@query') && !covered.has('@target-uri')) {
     return err('Signature must cover @query for a request with a query string');
   }
+  if (request.headers.has('x-confer-capability') && !covered.has('x-confer-capability')) {
+    return err('Signature must cover x-confer-capability when present');
+  }
   const body = await request.clone().text();
   if (body.length > 0 && !covered.has('content-digest')) {
     return err('Signature must cover content-digest for a request with a body');
@@ -212,6 +215,7 @@ export async function signRequest(
     newHeaders.set('content-digest', await computeDigest(body));
     components.push('content-digest');
   }
+  if (request.headers.has('x-confer-capability')) components.push('x-confer-capability');
   components.push('date');
 
   const signed = new Request(request.url, {

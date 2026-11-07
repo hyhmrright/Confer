@@ -15,7 +15,9 @@ export class GatewayClient {
   constructor(
     private readonly cfg: McpConfig,
     private readonly fetchFn: FetchFn = fetch,
-  ) {}
+  ) {
+    this.token = cfg.apiToken ?? null;
+  }
 
   // De-duplicate concurrent logins (e.g. ask_multiple firing several requests
   // before the first token lands) into a single in-flight request.
@@ -55,7 +57,7 @@ export class GatewayClient {
       });
 
     let res = await send();
-    if (res.status === 401) {
+    if (res.status === 401 && !this.cfg.apiToken) {
       // Token rejected: drop it so ensureLogin actually re-authenticates.
       this.token = null;
       await this.ensureLogin();

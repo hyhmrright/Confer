@@ -31,6 +31,7 @@ export async function sendA2AMessage(
   endpoint: string,
   message: OutboundA2AMessage,
   key: AgentSigningKey,
+  capability?: string,
 ): Promise<Result<OutboundResult, string>> {
   try {
     const body = JSON.stringify(message);
@@ -54,6 +55,7 @@ export async function sendA2AMessage(
       method: 'POST',
       headers: {
         'content-type': 'application/json',
+        ...(capability ? { 'x-confer-capability': capability } : {}),
       },
       body,
     });

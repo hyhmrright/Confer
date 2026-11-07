@@ -270,19 +270,31 @@ knowledgeBasesRoutes.post('/:kbId/documents/:docId/retry', async (c) => {
   const db = getDb();
   const { kbId, docId } = c.req.param();
 
-  const doc = await requireDocument(docId, user.sub);
-  if (!doc.storage_key)
-    throw new AppError('bad_request', 'Original file not available for retry', 400);
-  if (doc.status === 'processing')
-    throw new AppError('bad_request', 'Document is already processing', 400);
-
   const kb = await requireKb(kbId, user.sub);
-
-  const [updated] = await db
-    .update(knowledgeDocuments)
-    .set({ status: 'processing', chunk_count: 0 })
-    .where(eq(knowledgeDocuments.id, docId))
-    .returning();
+  const { doc, updated } = await db.transaction(async (tx) => {
+    const [doc] = await tx
+      .select()
+      .from(knowledgeDocuments)
+      .where(
+        and(
+          eq(knowledgeDocuments.id, docId),
+          eq(knowledgeDocuments.user_id, user.sub),
+          eq(knowledgeDocuments.kb_id, kbId),
+        ),
+      )
+      .for('update');
+    if (!doc) throw new AppError('not_found', 'Document not found', 404);
+    if (!doc.storage_key)
+      throw new AppError('bad_request', 'Original file not available for retry', 400);
+    if (doc.status === 'processing')
+      throw new AppError('bad_request', 'Document is already processing', 400);
+    const [updated] = await tx
+      .update(knowledgeDocuments)
+      .set({ status: 'processing', chunk_count: 0 })
+      .where(eq(knowledgeDocuments.id, docId))
+      .returning();
+    return { doc: { ...doc, storage_key: doc.storage_key }, updated };
+  });
 
   const buffer = await getObject(doc.storage_key);
   const contentType = doc.content_type ?? guessContentType(doc.filename);
@@ -351,3 +363,30 @@ async function ingestDocument(job: IngestJob): Promise<void> {
     .set({ status: 'ready', chunk_count: chunks.length })
     .where(eq(knowledgeDocuments.id, docId));
 }
+
+// Preserve the original for review, but remove it from retrieval immediately.
+knowledgeBasesRoutes.post('/:kbId/documents/:docId/outdated', async (c) => {
+  await getDb().transaction(async (tx) => {
+    const [doc] = await tx
+      .select()
+      .from(knowledgeDocuments)
+      .where(
+        and(
+          eq(knowledgeDocuments.id, c.req.param('docId')),
+          eq(knowledgeDocuments.user_id, c.get('user').sub),
+          eq(knowledgeDocuments.kb_id, c.req.param('kbId')),
+        ),
+      )
+      .for('update');
+    if (!doc) throw new AppError('not_found', 'Document not found', 404);
+    if (doc.status === 'processing')
+      throw new AppError('conflict', 'Wait for ingestion to finish', 409);
+    // Same row lock as retry: exclusion cannot race a newly started ingestion.
+    await deleteByDocId(doc.id);
+    await tx
+      .update(knowledgeDocuments)
+      .set({ status: 'outdated', chunk_count: 0 })
+      .where(eq(knowledgeDocuments.id, doc.id));
+  });
+  return c.json({ ok: true });
+});

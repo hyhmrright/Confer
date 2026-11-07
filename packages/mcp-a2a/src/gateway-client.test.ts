@@ -58,3 +58,20 @@ describe('GatewayClient', () => {
     expect(logins).toBe(2);
   });
 });
+
+test('device API credentials are used directly and rejected credentials never fall back to passwords', async () => {
+  const calls: string[] = [];
+  const client = new GatewayClient(
+    { ...cfg, apiToken: 'cfr_device', password: '' },
+    fakeFetch((url, init) => {
+      calls.push(url);
+      expect((init?.headers as Record<string, string> | undefined)?.authorization).toBe(
+        'Bearer cfr_device',
+      );
+      return new Response('{}', { status: 401 });
+    }),
+  );
+  await expect(client.get('/api/v1/contacts')).rejects.toThrow('401');
+  expect(calls).toHaveLength(1);
+  expect(calls[0]).not.toContain('/auth/login');
+});

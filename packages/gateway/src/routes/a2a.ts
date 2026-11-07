@@ -56,6 +56,7 @@ a2aRoutes.post('/messages', verifyA2ASignature, async (c) => {
   }
 
   const admitted = await admitInboundMessage({
+    capabilityToken: c.req.header('X-Confer-Capability'),
     targetAgent,
     senderDid: body.from,
     signerDid,
@@ -72,6 +73,8 @@ a2aRoutes.post('/messages', verifyA2ASignature, async (c) => {
         },
         202,
       );
+    case 'invalid_capability':
+      throw new AppError('invalid_capability', 'Invalid or expired capability', 403);
     case 'denied':
       throw new AppError('policy_denied', 'Agent policy denied this request', 403);
     case 'rate_limited':

@@ -6,6 +6,7 @@ import { useMemoriesStore } from '../stores/memories.js';
 import { EmptyState } from './EmptyState.js';
 import { Trash } from './Icons.js';
 import { LoadingDots } from './LoadingDots.js';
+import { MemoryEditor } from './MemoryEditor.js';
 import { PanelForm } from './PanelForm.js';
 import { PanelHeader } from './PanelHeader.js';
 import { SearchField } from './SearchField.js';
@@ -154,6 +155,7 @@ export function MemoryPage() {
                   <p className="text-[11px] text-ink-secondary mt-1 leading-relaxed whitespace-pre-wrap line-clamp-3">
                     {mem.content}
                   </p>
+                  <MemoryEditor id={mem.id} content={mem.content} />
                   {mem.tags.length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-2">
                       {mem.tags.map((tag) => (

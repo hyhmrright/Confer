@@ -1,6 +1,75 @@
 import type { Resources } from './zh.js';
 
 export const pt: Resources = {
+  features: {
+    remoteGrant:
+      'Cole a credencial emitida por este contato. Será criptografada no servidor e enviada nas consultas assinadas.',
+    configured: 'Credencial do contato configurada',
+    grants: 'Acesso temporário de agentes',
+    grantHint:
+      'Limite o contato às bases compartilhadas selecionadas. Após a emissão, toda pergunta exige uma autorização válida; assinaturas e políticas continuam em vigor.',
+    name: 'Nome',
+    signer: 'DID do assinante verificado (contato ou proprietário)',
+    hours: 'Validade (horas)',
+    tokenOnce:
+      'Copie a credencial e entregue com segurança. Ela aparece apenas uma vez. Use X-Confer-Capability nas solicitações A2A assinadas.',
+    failed: 'Não foi possível concluir. Confira as permissões e tente novamente.',
+    revoked: 'Revogado',
+    revoke: 'Revogar',
+    connect: 'Conectar ferramenta de desenvolvimento',
+    signInFirst: 'Entre nesta instância para revisar a solicitação.',
+    connectHint: 'Aprove apenas solicitações iniciadas por você. Conta: {{username}}.',
+    deviceCode: 'Código do dispositivo',
+    review: 'Revisar solicitação',
+    deviceAccess:
+      'A ferramenta recebe uma credencial API pessoal de 90 dias. Pode ler e alterar dados, mas não gerenciar a segurança nem aprovar decisões. Revogue em Configurações → Segurança.',
+    authorize: 'Autorizar',
+    deny: 'Negar',
+    connectDone: 'Solicitação processada. Volte à ferramenta.',
+    back: 'Voltar ao Confer',
+    tasks: 'Tarefas delegadas',
+    taskHint:
+      'Você ou seu operador registra o progresso. Criar uma tarefa não contata ninguém. Assuma o controle para pausar o operador; adicione instruções e retome.',
+    note: 'Detalhes ou correção',
+    running: 'Em andamento / retomar',
+    waitingPeer: 'Aguardando contato',
+    waitingInput: 'Aguardando sua informação',
+    humanControl: 'Assumir controle',
+    completed: 'Concluída',
+    cancelled: 'Cancelada',
+    feedback: 'Relatar problema',
+    incorrectAnswer: 'Resposta incorreta',
+    incorrectMemory: 'Memória incorreta',
+    outdatedSource: 'Fonte desatualizada',
+    feedbackSaved:
+      'Relato salvo em Configurações → Segurança. Corrija a memória ou exclua a fonte para mudar buscas futuras; o relato não retreina o modelo.',
+    correctMemory: 'Corrigir memória',
+    excludeSource: 'Excluir fonte desatualizada',
+    excluded: 'Excluída da busca',
+    demo: 'Experimentar agente de demonstração',
+    demoHint:
+      'Demonstração offline com dados fictícios. Sem conta ou chave e sem mensagens reais. Autorizações e compras são simuladas; recarregar reinicia tudo.',
+    demoPeer: 'Assistente de demonstração',
+    demoProfile: 'Consulte o manual fictício X100 com fontes e aprovação humana.',
+    connected: 'Contato adicionado',
+    addContact: 'Adicionar contato de demonstração',
+    demoScope:
+      'Somente o manual X100 por dois minutos. Sem memórias privadas ou dados de clientes.',
+    demoNeedsGrant: 'Autorize antes de perguntar. Revogação ou expiração interrompe as consultas.',
+    demoAsk: 'Perguntar ao agente',
+    demoTechnical: 'Como conectar o X100?',
+    demoPrivate: 'Mostrar clientes do proprietário',
+    demoPurchase: 'Comprar um X100',
+    demoAnswer:
+      'O manual indica 24 V CC e Modbus RTU por RS-485, endereço 1 e 9600 8N1. Confira a fonte abaixo.',
+    demoRefusal: 'A lista de clientes está fora do manual autorizado e não pode ser acessada.',
+    demoApproval:
+      'Esta compra fictícia de USD 100 exige uma decisão explícita. Nenhum pedido ou pagamento real será feito.',
+    demoApproved: 'Aprovação simulada registrada. Nenhum pedido feito.',
+    demoDenied: 'Compra simulada negada.',
+    resetDemo: 'Reiniciar demonstração',
+  },
+
   common: {
     copy: 'Copiar',
     copied: 'Copiado',

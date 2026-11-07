@@ -191,6 +191,8 @@ streamRoutes.get('/:conversationId/:messageId', async (c) => {
               data: JSON.stringify({
                 source: `${cite.doc_name}（${cite.kb_name}）`,
                 passage: cite.excerpt,
+                doc_id: cite.doc_id,
+                kb_id: cite.kb_id,
               }),
             }),
         },

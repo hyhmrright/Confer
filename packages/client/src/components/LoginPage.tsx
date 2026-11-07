@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import { errorCode } from '../lib/error.js';
 import {
   gatewayOrigin,
@@ -35,6 +35,7 @@ export function LoginPage() {
   const loading = useAuthStore((s) => s.loading);
   const error = useAuthStore((s) => s.error);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   // Stores the address the form is pointed at, and reports whether it is usable
   // at all. Switching instances drops the stored session with it: tokens belong
@@ -60,7 +61,8 @@ export function LoginPage() {
       } else {
         await login(username, password, needsCode ? code : undefined);
       }
-      navigate('/');
+      const connect = searchParams.get('connect');
+      navigate(connect && /^[A-F0-9]{8}$/.test(connect) ? `/connect?code=${connect}` : '/');
     } catch (e) {
       // Everything else is set in the store. These two are worded here: the
       // server's sentence is English, and the first is not a failure at all —
@@ -90,6 +92,9 @@ export function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-dark-base">
+      <Link className="absolute top-6 start-6 text-sm text-primary-400" to="/demo">
+        {t('features.demo')}
+      </Link>
       {/* Ruled ground — the faint blue lines of a correspondence pad. Horizontal
           only: a full grid read as generic technical wallpaper, and this is the
           one screen where the product should look like stationery. The colour

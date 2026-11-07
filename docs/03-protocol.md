@@ -144,7 +144,7 @@ Date: Sun, 24 Nov 2024 14:30:00 GMT
 Content-Digest: sha-256=:X48E9qOokqqrvdts8nOJRJN3OWDUoyWxBf7kbu9DBPE=:
 Signature-Input: sig1=("@method" "@authority" "@path" "content-digest" "date");keyid="did:web:vendor-x.com#key-1";created=1732458600;alg="ed25519"
 Signature: sig1=:aBcDeF...:
-Authorization: Capability eyJhbGciOiJFZDI1NTE5IiwidHlwIjoiQ2FwIn0...
+X-Confer-Capability: cfc_<接收方签发的凭据>
 
 {
   "from": "did:web:vendor-x.com:agents:engineer-li",
@@ -176,26 +176,11 @@ Authorization: Capability eyJhbGciOiJFZDI1NTE5IiwidHlwIjoiQ2FwIn0...
 
 ### Capability token
 
-Capability token 让发送方 Agent 表明"我代表 X 用户来询问 Y 类问题"，可以细粒度限制权限。
+当前实现为接收方签发的不透明、高熵 `cfc_` 凭据，数据库只存哈希。它绑定所有者、联系人、真实签名 DID、选定共享知识库和有效期，可随时撤销；不实现转授或主题提示词授权。`X-Confer-Capability` 请求头必须被 HTTP 签名覆盖。两种 binding 都进入同一个入站授权检查。
 
-JWT 风格但用 macaroon 思路：
+首次为联系人签发后，每次提问都要求有效凭据，省略不能恢复宽泛权限。令牌不能跳过联系人同意、策略或人工批准。受限问题不读取历史回答或私人记忆；在恢复和交付前重新检查有效性。详情和使用流程见 [Agent 工作流](10-agent-workflows.md)。
 
-```json
-{
-  "iss": "did:web:vendor-x.com",
-  "sub": "did:web:vendor-x.com:users:engineer-li",
-  "aud": "did:web:acme.com",
-  "scope": ["ask:technical", "ask:product:X100"],
-  "exp": 1737000000,
-  "ctx": {
-    "thread_id": "thread_8f3a9c",
-    "delegation_depth": 1
-  }
-}
-```
-
-- `scope`：能问什么类型的问题
-- `delegation_depth`：被代理转发了几次（防止无限传递）
+原生回复的 `message.context.citations` 可携带 `kb_name`、`doc_name`、`excerpt` 和可选 `score`，最多 10 条，每条摘录最多 4000 字符。接收方作为未验证来源保存；内部资料 ID 不对外传送。
 
 ### 响应流式输出
 

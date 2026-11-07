@@ -60,3 +60,6 @@ this does not validate account login, peer connectivity, or a consult round trip
 - [Project instructions](https://developers.openai.com/codex/guides/agents-md)
 - [Skills and repository discovery](https://developers.openai.com/codex/skills)
 - [MCP configuration](https://developers.openai.com/codex/mcp)
+
+
+Browser device pairing is now supported: run `bun run packages/mcp-a2a/src/server.ts --login --gateway http://localhost`, confirm the request in your signed-in browser, then restart MCP. Personal API credentials are stored in the OS credential store; `CONFER_API_TOKEN` is forwarded when supplied. Shared non-secret project identity and explicit Markdown sync use `.confer/`. See [Agent workflows](10-agent-workflows.md).

@@ -2,6 +2,7 @@ import { basename } from 'node:path';
 
 export interface McpConfig {
   gatewayUrl: string;
+  apiToken?: string;
   username: string;
   password: string;
   defaultWaitSeconds: number;
@@ -22,10 +23,11 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
   const gatewayUrl = expanded(env.CONFER_GATEWAY_URL) ?? 'http://localhost:3000';
   const username = expanded(env.CONFER_USERNAME);
   const password = expanded(env.CONFER_PASSWORD);
-  if (!username || !password) {
+  const apiToken = expanded(env.CONFER_API_TOKEN);
+  if (!apiToken && (!username || !password)) {
     throw new Error(
-      'CONFER_USERNAME and CONFER_PASSWORD must be set for the MCP server to authenticate. ' +
-        'Export them in the shell before launching Claude Code.',
+      'Connect with --login first, set CONFER_API_TOKEN, or provide CONFER_USERNAME and CONFER_PASSWORD. ' +
+        'Use the browser-facing instance origin for --gateway.',
     );
   }
   const defaultWaitSeconds = Number(expanded(env.CONFER_CONSULT_WAIT) ?? '25');
@@ -34,8 +36,9 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
   const projectId = expanded(env.CONFER_PROJECT_ID) ?? basename(process.cwd());
   return {
     gatewayUrl: gatewayUrl.replace(/\/$/, ''),
-    username,
-    password,
+    username: username ?? '',
+    password: password ?? '',
+    ...(apiToken ? { apiToken } : {}),
     defaultWaitSeconds,
     projectId,
   };

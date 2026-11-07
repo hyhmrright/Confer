@@ -1,11 +1,13 @@
 import { parsePolicyConfig } from '@confer/agent-runtime';
 import { domainFromDid } from '@confer/identity';
-import { newId } from '@confer/shared';
+import { AppError, newId } from '@confer/shared';
 import { and, eq } from 'drizzle-orm';
+import { z } from 'zod';
 import { getDb } from '../db/connection.js';
 import { type agents, conversations, messages, peerContacts } from '../db/schema.js';
 import { decideAdmission } from '../lib/a2a-admission.js';
 import { runDetached } from '../lib/background.js';
+import { requiresCapability, resolveCapability } from '../lib/capability-grants.js';
 import { isContact } from '../lib/tenant.js';
 import { consumeQuota } from '../middleware/rate-limit.js';
 import { broadcastToConversation, sendToUser } from '../ws/handler.js';
@@ -26,6 +28,7 @@ export type InboundAdmission =
   | { status: 'pending_connection' }
   /** Policy refused the sender outright. Nothing was stored. */
   | { status: 'denied' }
+  | { status: 'invalid_capability' }
   /** The peer is over its question quota with this owner. Nothing was stored. */
   | { status: 'rate_limited'; retryAfterSeconds: number }
   /** Stored, and held for the owner to approve before the agent answers. */
@@ -36,6 +39,7 @@ export type InboundAdmission =
   | { status: 'stored'; messageId: string; conversationId: string };
 
 export interface InboundMessageParams {
+  capabilityToken?: string;
   targetAgent: typeof agents.$inferSelect;
   /** The `from` DID on the wire — already checked to sit beneath the signer. */
   senderDid: string;
@@ -47,6 +51,7 @@ export interface InboundMessageParams {
     type: 'question' | 'answer' | 'notification';
     content: string;
     language?: string;
+    context?: Record<string, unknown>;
   };
 }
 
@@ -71,8 +76,21 @@ function overQuota(ownerId: string, peerDid: string): number {
 export async function admitInboundMessage(params: InboundMessageParams): Promise<InboundAdmission> {
   const { targetAgent, senderDid, signerDid, threadId, message } = params;
   const db = getDb();
+  const grant = params.capabilityToken
+    ? await resolveCapability(
+        targetAgent.user_id,
+        signerDid ?? senderDid,
+        params.capabilityToken,
+      ).catch((error) => {
+        if (error instanceof AppError && error.code === 'invalid_capability') return null;
+        throw error;
+      })
+    : undefined;
+  if (grant === null) return { status: 'invalid_capability' };
 
   const peer = await ensurePeerAgent(targetAgent.user_id, senderDid, signerDid);
+
+  if (grant && grant.peer_id !== peer.id) return { status: 'denied' };
 
   // A message from an unconnected peer is held as a pending connection request
   // until the owner approves it in the permission inbox. Adding a contact is the
@@ -87,6 +105,10 @@ export async function admitInboundMessage(params: InboundMessageParams): Promise
   // with each owner — and so does its whole domain, which can mint as many
   // DIDs as it likes. Answers and notifications cost nothing and are not counted.
   if (message.type === 'question') {
+    // Once the owner grants scoped access to this contact, omitting the token
+    // must not restore the old, broader shared-KB access (including after revocation).
+    if (!grant && (await requiresCapability(targetAgent.user_id, peer.id)))
+      return { status: 'denied' };
     const over = overQuota(targetAgent.user_id, peer.did);
     if (over) return { status: 'rate_limited', retryAfterSeconds: over };
   }
@@ -109,9 +131,26 @@ export async function admitInboundMessage(params: InboundMessageParams): Promise
   // either way. Only the auto-reply differs (immediate vs. held for approval).
   const conversationId = await resolveOrCreateThread(threadId, peer.id, targetAgent.user_id);
 
+  const cited = z
+    .array(
+      z.object({
+        kb_name: z.string().max(255),
+        doc_name: z.string().max(255),
+        excerpt: z.string().max(4000),
+        score: z.number().finite().optional(),
+      }),
+    )
+    .max(10)
+    .safeParse(message.context?.citations);
+  const peerCitations =
+    message.type !== 'question' && cited.success
+      ? cited.data.map((cite) => ({ ...cite, trust_level: 'unverified' }))
+      : [];
   const messageId = newId();
   await db.insert(messages).values({
     id: messageId,
+    capability_id: grant?.id,
+    citations_json: peerCitations.length ? peerCitations : undefined,
     conversation_id: conversationId,
     sender_type: 'peer_agent',
     sender_id: peer.id,
@@ -136,6 +175,11 @@ export async function admitInboundMessage(params: InboundMessageParams): Promise
       sender_id: peer.id,
       content: message.content,
       in_reply_to: threadId,
+      citations: peerCitations.map((cite) => ({
+        source: `${cite.doc_name}（${cite.kb_name}）`,
+        passage: cite.excerpt,
+        trust_level: 'unverified',
+      })),
     },
   });
   // A peer writing is activity: the thread moves to the top of the owner's list,
@@ -184,6 +228,7 @@ export async function admitInboundMessage(params: InboundMessageParams): Promise
     new Promise<void>((tick) => setImmediate(tick)).then(() =>
       processA2AMessage({
         targetAgent,
+        capabilityId: grant?.id,
         senderDid,
         senderPeer: peer,
         messageContent: message.content,

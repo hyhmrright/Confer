@@ -1,6 +1,76 @@
 import type { Resources } from './zh.js';
 
 export const fr: Resources = {
+  features: {
+    remoteGrant:
+      'Collez l’autorisation émise par ce contact. Elle sera chiffrée sur le serveur et jointe à vos consultations signées.',
+    configured: 'Autorisation du contact configurée',
+    grants: 'Accès temporaire des agents',
+    grantHint:
+      'Limitez le contact aux bases partagées sélectionnées. Après émission, chaque question exige une autorisation valide. Signatures et règles restent applicables.',
+    name: 'Nom',
+    signer: 'DID du signataire vérifié (contact ou propriétaire)',
+    hours: 'Durée (heures)',
+    tokenOnce:
+      'Copiez ce secret et transmettez-le de manière sûre. Il ne sera affiché qu’une fois. Utilisez X-Confer-Capability dans les requêtes A2A signées.',
+    failed: 'Action impossible. Vérifiez vos droits et réessayez.',
+    revoked: 'Révoqué',
+    revoke: 'Révoquer',
+    connect: 'Connecter un outil de développement',
+    signInFirst: 'Connectez-vous à cette instance pour examiner la demande.',
+    connectHint: 'N’approuvez que vos propres demandes. Compte : {{username}}.',
+    deviceCode: 'Code de l’appareil',
+    review: 'Examiner la demande',
+    deviceAccess:
+      'L’outil reçoit un identifiant API personnel valable 90 jours. Il peut lire et modifier vos données, mais ne peut ni gérer la sécurité ni approuver des décisions. Révocation dans Paramètres → Sécurité.',
+    authorize: 'Autoriser',
+    deny: 'Refuser',
+    connectDone: 'Demande traitée. Revenez à votre outil.',
+    back: 'Retour à Confer',
+    tasks: 'Tâches déléguées',
+    taskHint:
+      'Vous ou votre opérateur consignez la progression. Créer une tâche ne contacte personne. Reprenez la main pour suspendre l’opérateur, puis ajoutez des consignes et reprenez.',
+    note: 'Détails ou correction',
+    running: 'En cours / reprendre',
+    waitingPeer: 'En attente du contact',
+    waitingInput: 'En attente de vos informations',
+    humanControl: 'Reprendre la main',
+    completed: 'Terminée',
+    cancelled: 'Annulée',
+    feedback: 'Signaler un problème',
+    incorrectAnswer: 'Réponse incorrecte',
+    incorrectMemory: 'Mémoire incorrecte',
+    outdatedSource: 'Source obsolète',
+    feedbackSaved:
+      'Signalement enregistré dans Paramètres → Sécurité. Corrigez la mémoire ou excluez la source pour changer les recherches futures ; le signalement ne réentraîne pas le modèle.',
+    correctMemory: 'Corriger la mémoire',
+    excludeSource: 'Exclure la source obsolète',
+    excluded: 'Exclue de la recherche',
+    demo: 'Essayer l’agent de démonstration',
+    demoHint:
+      'Démonstration hors ligne avec données fictives. Aucun compte ni clé requis, aucun message réel. Autorisation et achat sont simulés ; recharger réinitialise la démo.',
+    demoPeer: 'Assistant de démonstration',
+    demoProfile: 'Consultez le manuel fictif X100 avec sources et validation humaine.',
+    connected: 'Contact ajouté',
+    addContact: 'Ajouter le contact de démonstration',
+    demoScope:
+      'Uniquement le manuel X100, pendant deux minutes. Ni mémoires privées ni données clients.',
+    demoNeedsGrant:
+      'Autorisez avant de poser une question. Révocation ou expiration arrête les requêtes.',
+    demoAsk: 'Interroger l’agent',
+    demoTechnical: 'Comment brancher le X100 ?',
+    demoPrivate: 'Afficher les clients du propriétaire',
+    demoPurchase: 'Acheter un X100',
+    demoAnswer:
+      'Le manuel indique 24 V CC, Modbus RTU sur RS-485, adresse 1 et 9600 8N1. Vérifiez la source ci-dessous.',
+    demoRefusal: 'La liste des clients est hors du périmètre autorisé et inaccessible.',
+    demoApproval:
+      'Cet achat fictif de 100 USD nécessite votre décision explicite. Aucune commande ni paiement réel.',
+    demoApproved: 'Autorisation simulée enregistrée. Aucune commande passée.',
+    demoDenied: 'Achat simulé refusé.',
+    resetDemo: 'Réinitialiser la démo',
+  },
+
   common: {
     copy: 'Copier',
     copied: 'Copié',

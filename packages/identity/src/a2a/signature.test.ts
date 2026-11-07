@@ -412,3 +412,20 @@ describe('per-request nonce', () => {
     expect((await verifyRequestSignature(tampered, publicKey)).ok).toBe(false);
   });
 });
+
+test('capability credentials are signed: tampering, removal and unsigned injection fail', async () => {
+  const key = await generateEd25519KeyPair();
+  const request = jsonRequest({ question: 'X100' });
+  request.headers.set('x-confer-capability', 'cfc_original');
+  const signed = await signRequest(request, key.privateKey, KEY_ID);
+  expect((await verifyRequestSignature(signed, key.publicKey)).ok).toBe(true);
+  const changed = new Request(signed.clone());
+  changed.headers.set('x-confer-capability', 'cfc_other_scope');
+  expect((await verifyRequestSignature(changed, key.publicKey)).ok).toBe(false);
+  const removed = new Request(signed.clone());
+  removed.headers.delete('x-confer-capability');
+  expect((await verifyRequestSignature(removed, key.publicKey)).ok).toBe(false);
+  const injected = await signRequest(jsonRequest({ question: 'X100' }), key.privateKey, KEY_ID);
+  injected.headers.set('x-confer-capability', 'cfc_injected');
+  expect((await verifyRequestSignature(injected, key.publicKey)).ok).toBe(false);
+});
