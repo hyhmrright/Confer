@@ -19,7 +19,7 @@ services:
       retries: 15
 
   qdrant:
-    image: qdrant/qdrant:v1.20.0
+    image: qdrant/qdrant:v1.20.2
     ports:
       - "127.0.0.1:6335:6333"
 
