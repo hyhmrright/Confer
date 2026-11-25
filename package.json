@@ -21,8 +21,9 @@
     "backup:test:integration": "bun run packages/gateway/scripts/backup-integration.ts"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.6.4",
-    "@types/bun": "^1.4.4",
+    "@biomejs/biome": "^2.6.9",
+    "@types/bun": "^1.4.5",
+    "@types/node": "^26.6.10",
     "typescript": "^7.0.2"
   },
   "overrides": {
