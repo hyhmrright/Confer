@@ -54,6 +54,7 @@ export const en: Resources = {
       'Consult the fictional X100 product manual with visible sources and owner approval.',
     connected: 'Contact added',
     addContact: 'Add demo contact',
+    authorizeManual: 'Authorize X100 manual access',
     demoScope:
       'Allow X100 manual only, for two minutes. Private memories and customer information are outside this scope.',
     demoNeedsGrant: 'Grant access before asking; revoked or expired grants stop the demo.',

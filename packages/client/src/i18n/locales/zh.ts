@@ -51,6 +51,7 @@ export const zh = {
     demoProfile: '咨询虚构的 X100 手册，查看资料依据并体验人工批准。',
     connected: '已添加联系人',
     addContact: '添加演示联系人',
+    authorizeManual: '授权查询 X100 手册',
     demoScope: '只允许查询 X100 手册，有效期两分钟。不包含私人记忆或客户资料。',
     demoNeedsGrant: '请先授权再提问；撤销或过期后演示查询停止。',
     demoAsk: '向演示 Agent 提问',

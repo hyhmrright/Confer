@@ -266,7 +266,8 @@ export function ChatLayout() {
   useEffect(() => {
     if (!drawerShown) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setDrawerOpen(false);
+      if (e.key === 'Escape' && !document.querySelector('[aria-modal="true"]'))
+        setDrawerOpen(false);
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
@@ -322,10 +323,7 @@ export function ChatLayout() {
       >
         <NavRail
           tab={tab}
-          setTab={(next) => {
-            setTab(next);
-            setDrawerOpen(false);
-          }}
+          setTab={setTab}
           initials={initials}
           isAdmin={user?.role === 'admin'}
           onAdmin={() => navigate('/admin')}

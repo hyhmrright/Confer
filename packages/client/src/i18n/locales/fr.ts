@@ -53,6 +53,7 @@ export const fr: Resources = {
     demoProfile: 'Consultez le manuel fictif X100 avec sources et validation humaine.',
     connected: 'Contact ajouté',
     addContact: 'Ajouter le contact de démonstration',
+    authorizeManual: 'Autoriser la consultation du manuel X100',
     demoScope:
       'Uniquement le manuel X100, pendant deux minutes. Ni mémoires privées ni données clients.',
     demoNeedsGrant:

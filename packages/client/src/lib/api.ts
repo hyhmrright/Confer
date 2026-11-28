@@ -2,6 +2,7 @@ import { apiBase } from './gateway.js';
 
 let accessToken: string | null = null;
 let refreshToken: string | null = null;
+let sessionGeneration = 0;
 let refreshing: Promise<boolean> | null = null;
 let onTokenRefreshed: (() => void) | null = null;
 let onAuthExpired: (() => void) | null = null;
@@ -21,6 +22,9 @@ export function setOnAuthExpired(cb: (() => void) | null) {
 }
 
 export function setToken(token: string | null) {
+  // Explicit login, restore or logout. In-session token rotation stays in refreshOnce.
+  sessionGeneration++;
+  refreshing = null;
   accessToken = token;
 }
 
@@ -39,16 +43,19 @@ export function getToken(): string | null {
 // open tab now refreshes at the same moment. Refreshes are therefore serialised
 // across tabs where the browser can, and a tab whose session another tab has
 // already rotated takes that pair rather than spending its own.
-function tryRefresh(): Promise<boolean> {
+function tryRefresh(generation: number): Promise<boolean> {
+  const refresh = () => generation === sessionGeneration && refreshOnce(generation);
   return navigator.locks
-    ? navigator.locks.request('confer-token-refresh', refreshOnce)
-    : refreshOnce();
+    ? navigator.locks.request('confer-token-refresh', refresh)
+    : Promise.resolve(refresh());
 }
 
-async function refreshOnce(): Promise<boolean> {
+async function refreshOnce(generation: number): Promise<boolean> {
   try {
-    const stored = JSON.parse(localStorage.getItem('confer_auth') ?? 'null');
-    const session = sessionOf(accessToken);
+    const storedAuth = localStorage.getItem('confer_auth');
+    const stored = JSON.parse(storedAuth ?? 'null');
+    const previousAccess = accessToken;
+    const session = sessionOf(previousAccess);
     if (
       stored &&
       session &&
@@ -70,10 +77,15 @@ async function refreshOnce(): Promise<boolean> {
     if (!res.ok) return false;
 
     const data = await res.json();
+    if (generation !== sessionGeneration) return false;
     accessToken = data.access_token;
     refreshToken = data.refresh_token;
 
-    if (stored) {
+    if (
+      stored &&
+      stored.access_token === previousAccess &&
+      localStorage.getItem('confer_auth') === storedAuth
+    ) {
       stored.access_token = data.access_token;
       stored.refresh_token = data.refresh_token;
       localStorage.setItem('confer_auth', JSON.stringify(stored));
@@ -103,7 +115,9 @@ function sessionOf(token: string | null): string | undefined {
 // same way, so onAuthExpired fires here rather than at each of them.
 export function refreshSession(): Promise<boolean> {
   if (!refreshing) {
-    refreshing = tryRefresh().then((ok) => {
+    const generation = sessionGeneration;
+    refreshing = tryRefresh(generation).then((ok) => {
+      if (generation !== sessionGeneration) return false;
       refreshing = null;
       if (!ok) onAuthExpired?.();
       return ok;
@@ -118,6 +132,7 @@ export function refreshSession(): Promise<boolean> {
 // shared by every caller (JSON requests and the multipart upload) so none of
 // them can silently sit on a dead session.
 async function fetchWithAuth(path: string, options: RequestInit): Promise<Response> {
+  const generation = sessionGeneration;
   const withAuthHeader = (): RequestInit => ({
     ...options,
     headers: {
@@ -127,7 +142,7 @@ async function fetchWithAuth(path: string, options: RequestInit): Promise<Respon
   });
 
   const res = await fetch(`${apiBase()}${path}`, withAuthHeader());
-  if (res.status !== 401) return res;
+  if (res.status !== 401 || generation !== sessionGeneration) return res;
 
   if (!refreshToken) {
     onAuthExpired?.();
@@ -135,10 +150,10 @@ async function fetchWithAuth(path: string, options: RequestInit): Promise<Respon
   }
 
   const ok = await refreshSession();
-  if (!ok) return res;
+  if (!ok || generation !== sessionGeneration) return res;
 
   const retry = await fetch(`${apiBase()}${path}`, withAuthHeader());
-  if (retry.status === 401) onAuthExpired?.();
+  if (retry.status === 401 && generation === sessionGeneration) onAuthExpired?.();
   return retry;
 }
 

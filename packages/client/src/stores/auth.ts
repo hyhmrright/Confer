@@ -66,7 +66,7 @@ async function authenticate(
   }
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   accessToken: null,
   refreshToken: null,
@@ -98,9 +98,11 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   refreshUser: async () => {
+    const sessionToken = get().accessToken;
+    if (!sessionToken) return;
     try {
       const data = await api.get<{ user: User }>('/users/me');
-      set((s) => ({ user: data.user ?? s.user }));
+      if (get().accessToken === sessionToken && data.user) set({ user: data.user });
     } catch {
       // ignore
     }

@@ -10,7 +10,7 @@ import { MemoryPage } from './MemoryPage.js';
 import { PanelHeader } from './PanelHeader.js';
 
 /* ── Contacts panel ── */
-function ContactsPanel() {
+function ContactsPanel({ onNavigate }: { onNavigate?: () => void }) {
   const { t } = useTranslation();
   const openDialog = useContactsStore((s) => s.openDialog);
   return (
@@ -21,7 +21,7 @@ function ContactsPanel() {
         onAction={openDialog}
       />
       <div className="flex-1 overflow-y-auto scrollbar-thin">
-        <ContactList />
+        <ContactList onNavigate={onNavigate} />
       </div>
     </div>
   );
@@ -49,7 +49,7 @@ export function Sidebar({
       {tab === 'conversations' ? (
         <ConversationsPanel onNavigate={onNavigate} />
       ) : tab === 'contacts' ? (
-        <ContactsPanel />
+        <ContactsPanel onNavigate={onNavigate} />
       ) : tab === 'memory' ? (
         <MemoryPage />
       ) : (

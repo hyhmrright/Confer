@@ -53,6 +53,7 @@ export const ja: Resources = {
     demoProfile: '架空の X100 マニュアルについて相談し、出典と本人の承認を確認します。',
     connected: '連絡先追加済み',
     addContact: 'デモ連絡先を追加',
+    authorizeManual: 'X100 マニュアルの参照を許可',
     demoScope: 'X100 マニュアルのみ2分間許可します。個人の記憶や顧客情報は含みません。',
     demoNeedsGrant: '質問する前に許可してください。取り消しや期限切れで停止します。',
     demoAsk: 'デモ Agent に質問',

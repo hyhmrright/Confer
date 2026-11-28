@@ -7,7 +7,7 @@ import { EmptyState } from './EmptyState.js';
 import { Bot, Shield, Trash } from './Icons.js';
 import { LoadMore } from './LoadMore.js';
 
-export function ContactList() {
+export function ContactList({ onNavigate }: { onNavigate?: () => void }) {
   const { t } = useTranslation();
   const contacts = useContactsStore((s) => s.contacts);
   const contactsTotal = useContactsStore((s) => s.contactsTotal);
@@ -28,6 +28,7 @@ export function ContactList() {
   const handleStartChat = async (name?: string) => {
     const id = await createConversation(name ? t('contacts.chatName', { name }) : undefined);
     await selectConversation(id);
+    onNavigate?.();
   };
 
   if (contacts.length === 0) {

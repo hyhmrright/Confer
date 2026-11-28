@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 
+import { waitFor } from '@testing-library/react';
+
 // api.ts uses global fetch + localStorage and holds module-level token state.
 // Install an in-memory localStorage shim (bun:test has no DOM).
 if (typeof globalThis.localStorage === 'undefined') {
@@ -193,6 +195,34 @@ describe('api client', () => {
     const refreshCall = fetchMock.mock.calls[1] as [string, RequestInit];
     expect(refreshCall[0]).toBe('/api/v1/auth/refresh');
     expect(JSON.parse(String(refreshCall[1].body)).refresh_token).toBe('refresh-1');
+  });
+
+  test('a late refresh cannot replace the next login or expire its session', async () => {
+    setToken('alice');
+    setRefreshToken('alice-refresh');
+    const response = Promise.withResolvers<Response>();
+    fetchMock.mockReturnValueOnce(response.promise);
+    const refresh = realApiModule.refreshSession();
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    setToken('bob');
+    setRefreshToken('bob-refresh');
+    response.resolve(jsonResponse({ access_token: 'alice-rotated', refresh_token: 'rotated' }));
+    expect(await refresh).toBe(false);
+    expect(realApiModule.getToken()).toBe('bob');
+    expect(authExpired).not.toHaveBeenCalled();
+  });
+
+  test('an old 401 cannot retry a request with the next account', async () => {
+    setToken('alice');
+    const response = Promise.withResolvers<Response>();
+    fetchMock.mockReturnValueOnce(response.promise);
+    const request = api.get('/private');
+    setToken('bob');
+    setRefreshToken('bob-refresh');
+    response.resolve(jsonResponse({}, 401));
+    await expect(request).rejects.toBeInstanceOf(ApiError);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(authExpired).not.toHaveBeenCalled();
   });
 
   test('throws a 401 ApiError when the refresh itself fails', async () => {

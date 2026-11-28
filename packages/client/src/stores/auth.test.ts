@@ -180,6 +180,7 @@ describe('auth store', () => {
   });
 
   test('refreshUser updates the user from /users/me', async () => {
+    useAuthStore.setState({ accessToken: authResponse.access_token, user: authResponse.user });
     const fresh = { id: 'u1', username: 'alice', display_name: 'Alice Updated', did: 'did:web:x' };
     get.mockResolvedValueOnce({ user: fresh });
 
@@ -189,8 +190,27 @@ describe('auth store', () => {
     expect(useAuthStore.getState().user).toEqual(fresh as never);
   });
 
+  for (const switchAccount of [false, true]) {
+    test(`late profile is ignored after ${switchAccount ? 'switching accounts' : 'logout'}`, async () => {
+      post.mockResolvedValueOnce(authResponse);
+      await useAuthStore.getState().login('alice', 'secret');
+      const pending = Promise.withResolvers<unknown>();
+      get.mockReturnValueOnce(pending.promise);
+      const refresh = useAuthStore.getState().refreshUser();
+      useAuthStore.getState().logout();
+      const bob = { id: 'u2', username: 'bob', did: 'did:web:bob' };
+      if (switchAccount) {
+        post.mockResolvedValueOnce({ ...authResponse, access_token: 'access-2', user: bob });
+        await useAuthStore.getState().login('bob', 'secret');
+      }
+      pending.resolve({ user: { ...authResponse.user, role: 'admin' } });
+      await refresh;
+      expect(useAuthStore.getState().user).toEqual(switchAccount ? bob : null);
+    });
+  }
+
   test('refreshUser swallows errors and keeps the existing user', async () => {
-    useAuthStore.setState({ user: authResponse.user as never });
+    useAuthStore.setState({ accessToken: authResponse.access_token, user: authResponse.user });
     get.mockRejectedValueOnce(new Error('network'));
 
     await useAuthStore.getState().refreshUser();

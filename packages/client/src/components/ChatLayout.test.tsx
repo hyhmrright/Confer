@@ -169,14 +169,18 @@ describe('ChatLayout responsive shell', () => {
     expect(hamburger()?.getAttribute('aria-expanded')).toBe('false');
   });
 
-  test('choosing a section from the rail dismisses the drawer', async () => {
+  test('contacts stay visible while opening the add contact dialog', async () => {
     setNarrow(true);
     draw();
     await waitFor(() => expect(get).toHaveBeenCalled());
     fireEvent.click(hamburger() as HTMLElement);
 
     fireEvent.click(screen.getByTitle('Contacts'));
-
-    expect(inertCount()).toBe(0);
+    expect(inertCount()).toBe(OVERLAID);
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+    expect(screen.getByRole('dialog')).toBeDefined();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(inertCount()).toBe(OVERLAID);
   });
 });

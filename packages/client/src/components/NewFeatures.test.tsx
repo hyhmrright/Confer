@@ -41,7 +41,9 @@ describe('public demo agent', () => {
     }) as HTMLButtonElement;
     expect(question.disabled).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: 'Add demo contact' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Authorize' }));
+    expect(question.disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Authorize X100 manual access' }));
+    expect(screen.getByRole('status').textContent).toMatch(/^Expires .*\d/);
     expect(question.disabled).toBe(false);
     fireEvent.click(question);
     expect(screen.getByRole('link', { name: /X100 demo manual/ }).getAttribute('href')).toBe(
@@ -51,10 +53,11 @@ describe('public demo agent', () => {
     expect(screen.getByText(/outside the authorized manual/)).toBeDefined();
     fireEvent.click(screen.getByRole('button', { name: 'Buy one X100' }));
     expect(screen.queryByText('Demo approval recorded. No order was placed.')).toBeNull();
-    fireEvent.click(screen.getAllByRole('button', { name: 'Authorize' })[1] as HTMLElement);
+    fireEvent.click(screen.getByRole('button', { name: 'Authorize' }));
     expect(screen.getByText('Demo approval recorded. No order was placed.')).toBeDefined();
     fireEvent.click(screen.getByRole('button', { name: 'Revoke' }));
     expect(question.disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'Authorize X100 manual access' })).toBeDefined();
     expect(post).not.toHaveBeenCalled();
   });
 });
